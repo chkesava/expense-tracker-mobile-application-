@@ -29,7 +29,7 @@ service cloud.firestore {
     //   accountTransfers,
     //   accountTypes, alerts, borrowingRepayments, borrowings, categories,
     //   categorizationRules, categoryBudgets, epfContributionEvents,
-    //   epfContributions, epfEstablishments, epfProfile,
+    //   epfContributions, epfEstablishments, epfProfile, epfWageHistory,
     //   epfInterestEntries, epfReconciliations, epfTransferEvents,
     //   decisionEvents, decisions, epfTransfers, expenses, feeReviews,
     //   feeSignalDismissals, financialGoals, focus,
@@ -394,6 +394,40 @@ service cloud.firestore {
               || d.employmentStatus in ['current', 'previous']);
       }
 
+      // SPENDLY-389: an effective-dated EPF wage change. Unlike the looser
+      // epfContributions/epfEstablishments rules above, this is new audit
+      // data with a closed field set — `hasOnly` plus a pinned
+      // `createdAtMs` (the `merchantOverrides` pattern) so a client cannot
+      // rewrite which establishment or month a past wage change applied to.
+      function epfWageHistoryWellFormed() {
+        let d = request.resource.data;
+        return d.keys().hasOnly([
+            'establishmentId', 'effectiveFromMonth', 'wage', 'epsEligible',
+            'employeeShareOverride', 'employerShareOverride', 'epsShareOverride',
+            'employerEpfShareOverride', 'rulesVersion', 'notes',
+            'createdAtMs', 'updatedAtMs'
+          ])
+          && d.establishmentId is string && d.establishmentId.size() > 0
+          && d.effectiveFromMonth is string
+          && d.effectiveFromMonth.matches('^[0-9]{4}-[0-9]{2}$')
+          && boundedNonNeg(d.wage)
+          && d.epsEligible is bool
+          && optionalBoundedNonNeg(d, 'employeeShareOverride')
+          && optionalBoundedNonNeg(d, 'employerShareOverride')
+          && optionalBoundedNonNeg(d, 'epsShareOverride')
+          && optionalBoundedNonNeg(d, 'employerEpfShareOverride')
+          && (!d.keys().hasAny(['rulesVersion']) || d.rulesVersion is string)
+          && (!d.keys().hasAny(['notes']) || (d.notes is string && d.notes.size() <= 500))
+          && d.createdAtMs is number
+          && d.updatedAtMs is number;
+      }
+
+      function epfWageHistoryUpdateStable() {
+        return request.resource.data.establishmentId == resource.data.establishmentId
+          && request.resource.data.effectiveFromMonth == resource.data.effectiveFromMonth
+          && request.resource.data.createdAtMs == resource.data.createdAtMs;
+      }
+
       function borrowingWellFormed() {
         let d = request.resource.data;
         return optionalBoundedNonNeg(d, 'principalAmount')
@@ -594,6 +628,13 @@ service cloud.firestore {
       match /epfEstablishments/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && epfEstablishmentWellFormed();
+      }
+      match /epfWageHistory/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid) && epfWageHistoryWellFormed();
+        allow update: if isOwner(uid)
+          && epfWageHistoryWellFormed()
+          && epfWageHistoryUpdateStable();
       }
       match /borrowings/{id} {
         allow read, delete: if isOwner(uid);

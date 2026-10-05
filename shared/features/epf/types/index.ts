@@ -416,6 +416,59 @@ export interface EpfInterestYear {
   rateMissing: boolean;
 }
 
+/* ---------------------------------------------------------------------------
+ * Wage history — SPENDLY-389
+ * ------------------------------------------------------------------------ */
+
+/**
+ * One effective-dated EPF wage — SPENDLY-389.
+ *
+ * Sibling of {@link EpfContributionRule}: the rule table says which statutory
+ * slab applies to a month, this says which wage does. Before this existed,
+ * `wageForProjection` took the latest recorded month's wage and used it for
+ * every future month in one run — there was no way to say "the raise starts
+ * in September" without waiting for September to actually happen.
+ *
+ * Append an entry per change rather than mutating one; `wageForMonth` in
+ * `shared/features/epf/utils/wageHistory.ts` resolves the one in force for a
+ * given month, newest `effectiveFromMonth <= month` wins, exactly as
+ * `findEpfContributionRule` resolves the statutory slab.
+ */
+export interface EpfWageHistoryEntry {
+  id: string;
+  establishmentId: string;
+  /** YYYY-MM, inclusive — the first month this wage applies from. */
+  effectiveFromMonth: string;
+  /** EPF wage (basic + DA), not gross salary. */
+  wage: number;
+  epsEligible: boolean;
+  /**
+   * Explicit overrides for a month this entry projects, when actual payroll
+   * differs from `computeEpfContribution()` — same semantics as
+   * `EpfContribution.overridden`, just applied ahead of time rather than
+   * after the fact.
+   */
+  employeeShareOverride?: number;
+  employerShareOverride?: number;
+  epsShareOverride?: number;
+  employerEpfShareOverride?: number;
+  /** `EpfContributionRule.id` in force when this entry was created, for audit. */
+  rulesVersion?: string;
+  notes?: string;
+  /**
+   * Epoch ms, not a Firestore `serverTimestamp()` — pinned by the security
+   * rule so `establishmentId`/`effectiveFromMonth`/`createdAtMs` cannot be
+   * rewritten after creation, the same pattern `MerchantOverride` uses. A
+   * `serverTimestamp()` sentinel cannot be compared against the stored value
+   * inside a rule until after it resolves, which is too late to pin it.
+   */
+  createdAtMs: number;
+  updatedAtMs: number;
+}
+
+/** Firestore collection name under `users/{uid}`, scoped by `establishmentId`. */
+export const EPF_WAGE_HISTORY_COLLECTION = "epfWageHistory";
+
 /**
  * One observation of the real EPFO balance — KAN-70.
  *

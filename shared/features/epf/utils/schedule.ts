@@ -15,12 +15,14 @@ import type {
   EpfBackfillRow,
   EpfContribution,
   EpfEstablishment,
+  EpfWageHistoryEntry,
 } from "@/shared/features/epf/types";
 import {
   computeEpfContribution,
   contributionMonthsFor,
   isEligibleForAutomatedProcessing,
 } from "@/shared/features/epf/utils/contributions";
+import { wageForMonth } from "@/shared/features/epf/utils/wageHistory";
 import { epfCurrentMonth } from "@/shared/features/epf/utils/epfClock";
 import { isArchived, isOpenEnded } from "@/shared/features/epf/utils";
 import { daysInMonth, isValidMonthKey, shiftMonthKey } from "@/shared/utils/dates";
@@ -304,21 +306,32 @@ export function canOverwriteWithSimulated(
  * Everything one establishment needs written this run.
  *
  * The single entry point for both the Netlify function and the client catch-up.
- * Returns [] when there is no wage to project from.
+ * Returns [] when there is neither a wage-history entry nor any recorded wage
+ * to project from.
  *
  * SPENDLY-19: `isEligibleForAutomatedProcessing` is the write gate. A missing
  * 2019 month is still listed by a loose `monthsToGenerate` floor (old
  * `createdAt`), but it is history — Backfill owns it. Only the current month
  * may be minted as `expected/simulated`. Existing rows are never deleted here.
+ *
+ * SPENDLY-389: the wage is resolved *per month* from `wageHistory`, not once
+ * for the whole run — `wageForMonth` picks the entry in force for each
+ * generated month, so a raise effective partway through the window changes
+ * only the months from that point on. `wageHistory` defaults to `[]`, which
+ * falls back to the old single-wage-for-everything behavior via
+ * `wageForProjection`, so an establishment with no wage-history entries yet
+ * projects exactly as it did before this ticket.
  */
 export function planScheduledContributions(args: {
   establishment: EpfEstablishment;
   allEstablishments: EpfEstablishment[];
   existing: EpfContribution[];
   throughMonth: string;
+  wageHistory?: EpfWageHistoryEntry[];
 }): EpfBackfillRow[] {
-  const wage = wageForProjection(args.existing);
-  if (wage <= 0) return [];
+  const wageHistory = args.wageHistory ?? [];
+  const fallbackWage = wageForProjection(args.existing);
+  if (fallbackWage <= 0 && wageHistory.length === 0) return [];
 
   const byMonth = new Map(args.existing.map((row) => [row.month, row]));
 
@@ -341,7 +354,9 @@ export function planScheduledContributions(args: {
         args.throughMonth
       );
     })
-    .map((month) =>
+    .map((month) => ({ month, wage: wageForMonth(wageHistory, month, fallbackWage) }))
+    .filter(({ wage }) => wage > 0)
+    .map(({ month, wage }) =>
       buildExpectedContribution({
         establishment: args.establishment,
         month,
