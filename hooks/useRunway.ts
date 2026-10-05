@@ -47,6 +47,7 @@ export function useRunway() {
     displayCurrency,
     timezone: appSettings.timezone,
     // Raw inputs, for consumers that derive more from the same data (What If, SPENDLY-387).
+    calendarEvents,
     expenses,
     incomes,
     subscriptions,

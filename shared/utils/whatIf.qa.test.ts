@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import type { Subscription } from "../types/subscription";
 import { WHAT_IF_LIMITS, validateWhatIfAdjustment, type WhatIfAdjustment, type WhatIfBaselineSnapshot } from "../types/whatIf";
 import { occurrencesBetween, type RunwayEvent } from "./runwayEngine";
-import { subscriptionsToRunwayEvents } from "./runwayEvents";
+
 import type { RunwayBaselineResult } from "./runwayBaseline";
 import { buildWhatIfBaselineSnapshot } from "./whatIfBaseline";
 import { buildCashflowAdjustments } from "./whatIfCashflow";
@@ -214,7 +214,7 @@ describe("labelling and accessibility of results", () => {
 
 describe("isolation", () => {
   it("projection and builders never mutate the baseline, scenario or source records", () => {
-    const subs: Subscription[] = [{ id: "s1", name: "Netflix", amount: 649, isActive: true, dayOfMonth: 3, type: "subscription", category: "Entertainment & Hobbies" } as Subscription];
+    const subs: CalendarEvent[] = [{ id: "s1", title: "Netflix", amount: 649, state: "scheduled", direction: "out", date: "2026-10-03", currency: "INR", source: "subscription", burnClass: "essential" } as CalendarEvent];
     const expenses = [{ amount: 100 }];
     const before = JSON.stringify({ subs, expenses });
     const base = buildWhatIfBaselineSnapshot({
@@ -223,8 +223,7 @@ describe("isolation", () => {
       timezone: "Asia/Calcutta",
       liquid: 1000,
       runwayBaseline: { projectionBaseline: { monthlyEarnedIncome: 10, monthlyOutflowByClass: { essential: 5 } } } as unknown as RunwayBaselineResult,
-      subscriptions: subs,
-      bills: [],
+      calendarEvents: subs as any,
       expenses,
       incomes: [],
     });
@@ -233,7 +232,6 @@ describe("isolation", () => {
     runOf(draft, base);
     expect(JSON.stringify({ base, draft })).toBe(frozen);
     expect(JSON.stringify({ subs, expenses })).toBe(before);
-    expect(subscriptionsToRunwayEvents(subs, TODAY)[0].id).toBe("subscription:s1");
   });
 
   it("What If code writes only to whatIfScenarios, through the one store", () => {
@@ -267,8 +265,7 @@ describe("performance on a prepared baseline", () => {
       timezone: "Asia/Calcutta",
       liquid: 500_000,
       runwayBaseline: { projectionBaseline: { monthlyEarnedIncome: 1, monthlyOutflowByClass: {} } } as unknown as RunwayBaselineResult,
-      subscriptions: [],
-      bills: [],
+      calendarEvents: [],
       expenses,
       incomes: expenses.slice(0, 200),
     });
