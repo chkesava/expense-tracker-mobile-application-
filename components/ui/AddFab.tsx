@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
 import { Plus } from "lucide-react-native";
 import Animated, {
   useAnimatedStyle,
@@ -67,50 +67,50 @@ export function AddFab({
   }[size];
 
   return (
-    <AnimatedPressable
-      entering={ZoomIn.springify().damping(15)}
-      onPress={handlePress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      android_ripple={{
-        color: "rgba(255, 255, 255, 0.25)",
-        borderless: false,
-      }}
-      style={[
-        withLabel ? styles.pillButton : styles.circleButton,
-        theme.elevation[3],
-        {
-          backgroundColor: theme.colors.primary,
-        },
-        !withLabel && {
-          width: dimensions.diameter,
-          height: dimensions.diameter,
-          borderRadius: dimensions.diameter / 2,
-        },
-        style,
-        animatedStyle,
-      ]}
-    >
-      <Animated.View style={iconAnimatedStyle}>
-        <Plus size={dimensions.iconSize} color={theme.colors.primaryForeground} strokeWidth={2.5} />
-      </Animated.View>
-      {withLabel ? (
-        <Text
-          style={[
-            styles.label,
-            {
-              color: theme.colors.primaryForeground,
-              fontSize: theme.typography.sm,
-              fontFamily: theme.fontFamily.semibold,
-            },
-          ]}
-        >
-          {label}
-        </Text>
-      ) : null}
-    </AnimatedPressable>
+    <Animated.View entering={Platform.OS === "web" ? undefined : ZoomIn.springify().damping(15)} style={style}>
+      <AnimatedPressable
+        onPress={handlePress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        android_ripple={{
+          color: "rgba(255, 255, 255, 0.25)",
+          borderless: false,
+        }}
+        style={[
+          withLabel ? styles.pillButton : styles.circleButton,
+          theme.elevation[3],
+          {
+            backgroundColor: theme.colors.primary,
+          },
+          !withLabel && {
+            width: dimensions.diameter,
+            height: dimensions.diameter,
+            borderRadius: dimensions.diameter / 2,
+          },
+          animatedStyle,
+        ]}
+      >
+        <Animated.View style={iconAnimatedStyle}>
+          <Plus size={dimensions.iconSize} color={theme.colors.primaryForeground} strokeWidth={2.5} />
+        </Animated.View>
+        {withLabel ? (
+          <Text
+            style={[
+              styles.label,
+              {
+                color: theme.colors.primaryForeground,
+                fontSize: theme.typography.sm,
+                fontFamily: theme.fontFamily.semibold,
+              },
+            ]}
+          >
+            {label}
+          </Text>
+        ) : null}
+      </AnimatedPressable>
+    </Animated.View>
   );
 }
 

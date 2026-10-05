@@ -51,7 +51,7 @@ export function NetWorthWidget({ currency, cashFlow }: NetWorthWidgetProps) {
       subtitle="How much am I worth?"
       icon={<Landmark size={16} color={theme.colors.info} strokeWidth={2.3} />}
       iconTint={surfaces.wash(theme.colors.info)}
-      action={<SectionAction label="Accounts" onPress={() => router.push("/accounts" as never)} />}
+      action={<SectionAction label="Accounts" onPress={() => router.push("/ledger" as never)} />}
     >
       <Amount
         value={netWorth.totalNetWorth}

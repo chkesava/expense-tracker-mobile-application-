@@ -171,7 +171,7 @@ function AppShellInner() {
               }}
             />
             <Stack.Screen
-              name="accounts"
+              name="accounts/[id]"
               options={{
                 animation: "slide_from_right",
               }}
