@@ -37,6 +37,7 @@ service cloud.firestore {
     //   portfolioSettings, portfolioSnapshots, portfolioTransactions,
     //   receivableRepayments, receivables, calendarReminders, goalFundingPlans, runwayOverrides, runwaySettings, spaces,
     //   stats, subscriptions, recurringDismissals, trips, watchlist,
+    //   whatIfScenarios,
     //   merchantOverrides
     //
     // The recursive match keeps a new collection from silently becoming
@@ -251,6 +252,55 @@ service cloud.firestore {
           && d.createdAtMs is number
           && d.updatedAtMs is number
           && (resource == null || d.createdAtMs == resource.data.createdAtMs);
+      }
+
+      // SPENDLY-202. Persisted What-If input only. Calculated output and
+      // copied canonical financial records are intentionally not allowed.
+      // Identity is the document id, so the body carries no `id`. `history`
+      // is a capped trail of lifecycle changes (WHAT_IF_HISTORY_LIMIT);
+      // `lastCalculated` is metadata about the last run, never its output.
+      // The version may not go backwards. Field lists and limits mirror
+      // shared/utils/whatIfScenarios.ts (whatIfScenarios.rules.contract.test.ts).
+      function whatIfLastCalculatedWellFormed(c) {
+        return c is map
+          && c.keys().hasOnly(['atMs', 'engineVersion', 'mode', 'asOfDate'])
+          && c.keys().hasAll(['atMs', 'engineVersion', 'mode', 'asOfDate'])
+          && c.atMs is number && c.atMs >= 0
+          && c.engineVersion is int && c.engineVersion >= 1
+          && c.mode in ['saved', 'current']
+          && c.asOfDate is string && c.asOfDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+      }
+
+      function whatIfScenarioWellFormed() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['name', 'version', 'engineVersion', 'reference', 'durationMonths',
+                                 'adjustments', 'assumptions', 'archived', 'createdAtMs', 'updatedAtMs',
+                                 'history', 'lastCalculated'])
+          && d.keys().hasAll(['name', 'version', 'engineVersion', 'reference', 'durationMonths',
+                              'adjustments', 'assumptions', 'archived', 'createdAtMs', 'updatedAtMs',
+                              'history'])
+          && d.name is string && d.name.size() > 0 && d.name.size() <= 80
+          && d.version is int && d.version >= 1 && d.version <= 1000000
+          && d.engineVersion is int && d.engineVersion == 1
+          && d.reference is map
+          && d.reference.keys().hasOnly(['asOfDate', 'currency', 'timezone', 'sourceVersions'])
+          && d.reference.keys().hasAll(['asOfDate', 'currency', 'timezone', 'sourceVersions'])
+          && d.reference.asOfDate is string
+          && d.reference.asOfDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && d.reference.currency is string && d.reference.currency.size() > 0 && d.reference.currency.size() <= 12
+          && d.reference.timezone is string && d.reference.timezone.size() > 0 && d.reference.timezone.size() <= 64
+          && d.reference.sourceVersions is list && d.reference.sourceVersions.size() <= 20
+          && d.durationMonths is int && d.durationMonths >= 1 && d.durationMonths <= 24
+          && d.adjustments is list && d.adjustments.size() <= 100
+          && d.assumptions is list && d.assumptions.size() <= 100
+          && d.archived is bool
+          && d.createdAtMs is number && d.createdAtMs >= 0
+          && d.updatedAtMs is number && d.updatedAtMs >= d.createdAtMs
+          && d.history is list && d.history.size() >= 1 && d.history.size() <= 20
+          && (!d.keys().hasAny(['lastCalculated']) || whatIfLastCalculatedWellFormed(d.lastCalculated))
+          && (resource == null
+              || (d.createdAtMs == resource.data.createdAtMs
+                  && d.version >= resource.data.version));
       }
 
       // SPENDLY-88. Metadata for a file stored in the private `spendly-files`
@@ -496,6 +546,10 @@ service cloud.firestore {
       match /goalFundingPlans/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && goalFundingPlanWellFormed();
+      }
+      match /whatIfScenarios/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && whatIfScenarioWellFormed();
       }
       match /accountTransfers/{id} {
         allow read, delete: if isOwner(uid);
