@@ -168,7 +168,7 @@ export function ExpenseReferenceDataProvider({
       unsub = onSnapshot(
         query(collection(db, "users", uid, "categories")),
         (snap) => {
-          logQuerySnapshot(path, snap);
+          logQuerySnapshot(path, snap, { feature: "reference", queryShape: "categories" });
           perfEvent("firestore_first_snapshot", {
             collection: "categories",
             docCount: snap.docs.length,
@@ -210,7 +210,7 @@ export function ExpenseReferenceDataProvider({
     const unsub = onSnapshot(
       query(collection(db, "users", uid, "subscriptions"), orderBy("name", "asc")),
       (snap) => {
-        logQuerySnapshot(path, snap);
+        logQuerySnapshot(path, snap, { feature: "reference", queryShape: "subscriptions" });
         perfEvent("firestore_first_snapshot", {
           collection: "subscriptions",
           docCount: snap.docs.length,
@@ -255,7 +255,7 @@ export function ExpenseReferenceDataProvider({
       unsub = onSnapshot(
         query(collection(db, "users", uid, "spaces"), orderBy("name")),
         (snap) => {
-          logQuerySnapshot(path, snap);
+          logQuerySnapshot(path, snap, { feature: "reference", queryShape: "spaces" });
           perfEvent("firestore_first_snapshot", {
             collection: "spaces",
             docCount: snap.docs.length,
@@ -304,7 +304,7 @@ export function ExpenseReferenceDataProvider({
           orderBy("createdAt", "asc")
         ),
         (snap) => {
-          logQuerySnapshot(path, snap);
+          logQuerySnapshot(path, snap, { feature: "reference", queryShape: "categorizationRules" });
           perfEvent("firestore_first_snapshot", {
             collection: "categorizationRules",
             docCount: snap.docs.length,
@@ -348,7 +348,7 @@ export function ExpenseReferenceDataProvider({
         orderBy("month", "desc")
       ),
       (snap) => {
-        logQuerySnapshot(path, snap);
+        logQuerySnapshot(path, snap, { feature: "reference", queryShape: "categoryBudgets" });
         perfEvent("firestore_first_snapshot", {
           collection: "categoryBudgets",
           docCount: snap.docs.length,
@@ -390,7 +390,7 @@ export function ExpenseReferenceDataProvider({
         orderBy("createdAt", "asc")
       ),
       (snap) => {
-        logQuerySnapshot(path, snap);
+        logQuerySnapshot(path, snap, { feature: "reference", queryShape: "financialGoals" });
         perfEvent("firestore_first_snapshot", {
           collection: "financialGoals",
           docCount: snap.docs.length,

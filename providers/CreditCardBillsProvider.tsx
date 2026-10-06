@@ -256,7 +256,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     const unsub = onSnapshot(
       query(collection(db, "users", user.uid, "creditCardBills")),
       (snap) => {
-        logQuerySnapshot(path, snap);
+        logQuerySnapshot(path, snap, { feature: "creditCardBills", queryShape: "creditCardBills" });
         perfEvent("firestore_first_snapshot", {
           collection: "creditCardBills",
           docCount: snap.docs.length,
