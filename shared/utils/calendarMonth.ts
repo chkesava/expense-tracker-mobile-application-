@@ -130,6 +130,7 @@ export const CALENDAR_SOURCE_LABELS: Record<CalendarEvent["source"], string> = {
   investment: "Investment",
   sip: "SIP",
   epf: "EPF",
+  fee: "Fee",
   reminder: "Reminder",
 };
 

@@ -35,6 +35,8 @@ export function calendarEventActions(event: CalendarEvent | null | undefined): C
       return one("View SIP plans");
     case "epf":
       return one("Open EPF");
+    case "fee":
+      return one("View fee & charges");
     case "goal":
       return one("Open goals");
     case "reminder":
