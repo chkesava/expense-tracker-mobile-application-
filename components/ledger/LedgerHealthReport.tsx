@@ -31,7 +31,7 @@ import {
   accountAccentBorder,
 } from "@/components/accounts/accountScreenTheme";
 import { useAccountsContext } from "@/providers/FinanceDataProvider";
-import { useCreditCardBillsContext } from "@/providers/CreditCardBillsProvider";
+import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useExpenseReferenceData } from "@/providers/ExpenseReferenceDataProvider";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useExpenses } from "@/hooks/useExpenses";
@@ -70,7 +70,7 @@ export function LedgerHealthReport({
     useExpenses();
   const { incomes, complete: incomesComplete } = useIncomes();
   const { accounts, accountsLoading, accountTypes } = useAccountsContext();
-  const { bills, billsLoading } = useCreditCardBillsContext();
+  const { bills, billsLoading } = useCreditCardBills();
   const { subscriptions, subscriptionsLoading, spaces, spacesLoading } =
     useExpenseReferenceData();
 

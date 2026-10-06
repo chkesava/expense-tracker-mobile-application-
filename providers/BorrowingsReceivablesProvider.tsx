@@ -10,6 +10,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -119,9 +120,10 @@ export type BorrowingsContextType = {
   deleteRepayment: (repaymentId: string, borrowingId: string) => Promise<boolean>;
   /**
    * SPENDLY-159 — manual close. Not `markSettled`: a paid-off borrowing is
-   * already FULLY_SETTLED by derivation. See the implementation.
+    * already FULLY_SETTLED by derivation. See the implementation.
    */
   closeBorrowing: (id: string) => Promise<boolean>;
+  registerSubscriber: () => () => void;
 };
 
 export type ReceivablesContextType = {
@@ -146,6 +148,7 @@ export type ReceivablesContextType = {
   /** SPENDLY-160 — forgive outstanding interest once the principal is back. */
   waiveInterest: (id: string) => Promise<boolean>;
   cancelReceivable: (id: string) => Promise<boolean>;
+  registerSubscriber: () => () => void;
 };
 
 const BorrowingsContext = createContext<BorrowingsContextType | undefined>(
@@ -189,9 +192,87 @@ export function BorrowingsReceivablesProvider({
     attempt: receivablesAttempt,
   } = useLoadFailure();
 
+  const [shouldListenBorrowings, setShouldListenBorrowings] = useState(false);
+  const borrowingsSubscriberCountRef = useRef(0);
+  const borrowingsTeardownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const registerBorrowingsSubscriber = useCallback(() => {
+    if (borrowingsTeardownTimerRef.current) {
+      clearTimeout(borrowingsTeardownTimerRef.current);
+      borrowingsTeardownTimerRef.current = null;
+    }
+    borrowingsSubscriberCountRef.current += 1;
+    setShouldListenBorrowings(true);
+    return () => {
+      borrowingsSubscriberCountRef.current = Math.max(
+        0,
+        borrowingsSubscriberCountRef.current - 1
+      );
+      if (borrowingsSubscriberCountRef.current === 0) {
+        if (borrowingsTeardownTimerRef.current) {
+          clearTimeout(borrowingsTeardownTimerRef.current);
+        }
+        borrowingsTeardownTimerRef.current = setTimeout(() => {
+          if (borrowingsSubscriberCountRef.current === 0) {
+            setShouldListenBorrowings(false);
+          }
+          borrowingsTeardownTimerRef.current = null;
+        }, 15000);
+      }
+    };
+  }, []);
+
+  const [shouldListenReceivables, setShouldListenReceivables] = useState(false);
+  const receivablesSubscriberCountRef = useRef(0);
+  const receivablesTeardownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const registerReceivablesSubscriber = useCallback(() => {
+    if (receivablesTeardownTimerRef.current) {
+      clearTimeout(receivablesTeardownTimerRef.current);
+      receivablesTeardownTimerRef.current = null;
+    }
+    receivablesSubscriberCountRef.current += 1;
+    setShouldListenReceivables(true);
+    return () => {
+      receivablesSubscriberCountRef.current = Math.max(
+        0,
+        receivablesSubscriberCountRef.current - 1
+      );
+      if (receivablesSubscriberCountRef.current === 0) {
+        if (receivablesTeardownTimerRef.current) {
+          clearTimeout(receivablesTeardownTimerRef.current);
+        }
+        receivablesTeardownTimerRef.current = setTimeout(() => {
+          if (receivablesSubscriberCountRef.current === 0) {
+            setShouldListenReceivables(false);
+          }
+          receivablesTeardownTimerRef.current = null;
+        }, 15000);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (borrowingsTeardownTimerRef.current) {
+        clearTimeout(borrowingsTeardownTimerRef.current);
+      }
+      if (receivablesTeardownTimerRef.current) {
+        clearTimeout(receivablesTeardownTimerRef.current);
+      }
+    };
+  }, []);
+
   // Separate effects so a retry for one collection pair doesn't tear down
   // and re-subscribe the other's listeners.
   useEffect(() => {
+    if (!shouldListenBorrowings) {
+      if (borrowings.length === 0) {
+        setBorrowingsLoading(false);
+      }
+      return;
+    }
+
     const db = getFirestoreDb();
     if (!uid || !db) {
       setBorrowings([]);
@@ -261,9 +342,16 @@ export function BorrowingsReceivablesProvider({
       unsubBorrowings();
       if (unsubBorrowingRepayments) unsubBorrowingRepayments();
     };
-  }, [uid, borrowingsAttempt, setBorrowingsError]);
+  }, [uid, borrowingsAttempt, setBorrowingsError, shouldListenBorrowings]);
 
   useEffect(() => {
+    if (!shouldListenReceivables) {
+      if (receivables.length === 0) {
+        setReceivablesLoading(false);
+      }
+      return;
+    }
+
     const db = getFirestoreDb();
     if (!uid || !db) {
       setReceivables([]);
@@ -334,7 +422,7 @@ export function BorrowingsReceivablesProvider({
       if (unsubReceivables) unsubReceivables();
       if (unsubReceivableRepayments) unsubReceivableRepayments();
     };
-  }, [uid, receivablesAttempt, setReceivablesError]);
+  }, [uid, receivablesAttempt, setReceivablesError, shouldListenReceivables]);
 
   // ─── Borrowings ─────────────────────────────────────────────────────────
 
@@ -1020,6 +1108,7 @@ export function BorrowingsReceivablesProvider({
       addRepayment: addBorrowingRepayment,
       deleteRepayment: deleteBorrowingRepayment,
       closeBorrowing,
+      registerSubscriber: registerBorrowingsSubscriber,
     }),
     [
       borrowings,
@@ -1037,6 +1126,7 @@ export function BorrowingsReceivablesProvider({
       addBorrowingRepayment,
       deleteBorrowingRepayment,
       closeBorrowing,
+      registerBorrowingsSubscriber,
     ]
   );
 
@@ -1059,6 +1149,7 @@ export function BorrowingsReceivablesProvider({
       markSettled: markReceivableSettled,
       waiveInterest: waiveReceivableInterest,
       cancelReceivable,
+      registerSubscriber: registerReceivablesSubscriber,
     }),
     [
       receivables,
@@ -1078,6 +1169,7 @@ export function BorrowingsReceivablesProvider({
       markReceivableSettled,
       waiveReceivableInterest,
       cancelReceivable,
+      registerReceivablesSubscriber,
     ]
   );
 

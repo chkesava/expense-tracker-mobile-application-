@@ -1,12 +1,21 @@
+import { useEffect } from "react";
 import { useCreditCardBillsContext } from "@/providers/CreditCardBillsProvider";
 import type { CreditCardBillStatus } from "@/shared/types/creditCardBill";
 import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 
-export function useCreditCardBills() {
+export function useCreditCardBills(options?: { enabled?: boolean }) {
+  const enabled = options?.enabled !== false;
   const ctx = useCreditCardBillsContext();
+
+  useEffect(() => {
+    if (!enabled) return;
+    return ctx.registerSubscriber?.();
+  }, [enabled, ctx.registerSubscriber]);
+
   return {
     bills: ctx.bills,
     loading: ctx.billsLoading,
+    billsLoading: ctx.billsLoading,
     createBill: ctx.createBill,
     updateBill: ctx.updateBill,
     applyPaymentToBill: ctx.applyPaymentToBill,

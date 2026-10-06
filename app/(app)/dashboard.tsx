@@ -29,9 +29,7 @@ import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
 import { sampleScrollFps, perfEvent } from "@/lib/perf";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useAccounts } from "@/hooks/useAccounts";
-import { useBorrowings } from "@/hooks/useBorrowings";
 import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
-import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useFinancialGoals } from "@/hooks/useFinancialGoals";
 import { useIncomes } from "@/hooks/useIncomes";
@@ -47,7 +45,6 @@ import {
 } from "@/shared/utils/dateDisplay";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Expense } from "@/shared/types/expense";
-import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 import {
   computeExpenseStreak,
   getOrderedDashboardWidgets,
@@ -58,9 +55,7 @@ import { currentMonthKey, formatDateKey, isInMonth } from "@/shared/utils/dates"
 import {
   cashFlowByMonth,
   computeSpendlyBudget,
-  daysUntil,
   remainingCommittedThisMonth,
-  type UpcomingDueItem,
 } from "@/shared/utils/spendlyBudget";
 import { getNextRenewalDate } from "@/shared/utils/subscriptionProcessor";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -112,8 +107,6 @@ export default function DashboardScreen() {
   const { incomes, loading: incomesLoading } = useIncomes();
   const { count: inboxCount } = useSmsReviewInbox();
   const { accounts, loading: accountsLoading } = useAccounts();
-  const { borrowings } = useBorrowings();
-  const { bills } = useCreditCardBills();
   const { subscriptions } = useSubscriptions();
   const { budgets: categoryBudgets } = useCategoryBudgets();
   const { goals } = useFinancialGoals();
@@ -187,35 +180,6 @@ export default function DashboardScreen() {
     () => remainingCommittedThisMonth(recurringDueItems, activeMonth, todayKey),
     [recurringDueItems, activeMonth, todayKey]
   );
-
-  const extraDues = useMemo((): UpcomingDueItem[] => {
-    const accountNameById = new Map(accounts.map((account) => [account.id, account.name]));
-    const cardDues: UpcomingDueItem[] = bills
-      .filter((bill) => OPEN_BILL_STATUSES.includes(bill.status) && bill.remainingAmount > 0)
-      .map((bill) => ({
-        id: bill.id,
-        name: accountNameById.get(bill.accountId) || "Credit card due",
-        amount: bill.remainingAmount,
-        dueDate: bill.dueDate,
-        daysRemaining: daysUntil(bill.dueDate, todayKey),
-        kind: "card" as const,
-      }));
-    const loanDues: UpcomingDueItem[] = borrowings
-      .filter(
-        (row) =>
-          (row.status === "ACTIVE" || row.status === "PARTIALLY_SETTLED" || row.status === "OVERDUE") &&
-          row.dueDate
-      )
-      .map((row) => ({
-        id: row.id || row.lenderName,
-        name: row.lenderName,
-        amount: row.totalOutstanding || row.outstandingPrincipal || row.principalAmount || 0,
-        dueDate: row.dueDate as string,
-        daysRemaining: daysUntil(row.dueDate as string, todayKey),
-        kind: "borrowing" as const,
-      }));
-    return [...cardDues, ...loanDues];
-  }, [accounts, bills, borrowings, todayKey]);
 
   const monthBudget = useMemo(
     () =>
@@ -376,7 +340,6 @@ export default function DashboardScreen() {
             <SubscriptionsWidget
               key="subscriptions"
               currency={displayCurrency}
-              extraDues={extraDues}
             />
           );
 
