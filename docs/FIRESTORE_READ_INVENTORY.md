@@ -34,10 +34,10 @@ Investigation of the snapshot lifecycle, query shapes, and provider implementati
 | `FinanceDataProvider` | `users/{uid}/accountPayments` | `collection` | Deferred (idle) | `[finance]` | Cumulative list of account payments | Medium (~50–200 docs) |
 | `FinanceDataProvider` | `users/{uid}/accountEntries` | `collection` | Deferred (idle) | `[finance]` | Cumulative balance checkpoints | Medium (~50–100 docs) |
 | `FinanceDataProvider` | `users/{uid}/accountTransfers` | `collection` | Deferred (idle) | `[finance]` | Cumulative inter-account transfers | Low (~20–50 docs) |
-| `ExpenseReferenceDataProvider` | `users/{uid}/categories` | `collection` | Deferred (idle) | `[reference]` | Reference list (< 50 docs) | Low |
-| `ExpenseReferenceDataProvider` | `users/{uid}/subscriptions` | `orderBy(name, asc)` | Immediate (startup) | `[reference]` | Active recurring subscriptions | Low (< 25 docs) |
-| `ExpenseReferenceDataProvider` | `users/{uid}/spaces` | `orderBy(name)` | Deferred (idle) | `[reference]` | Spaces reference list | Low (< 10 docs) |
-| `ExpenseReferenceDataProvider` | `users/{uid}/categorizationRules` | `orderBy(createdAt, asc)` | Deferred (idle) | `[reference]` | SMS auto-categorization rules | Low (< 30 docs) |
+| `ExpenseReferenceDataProvider` | `users/{uid}/categories` | `collection, limit(500)` (realtime) | Deferred (idle) | `[reference]` | Reference list (< 50 docs) | Low |
+| `ExpenseReferenceDataProvider` | `users/{uid}/subscriptions` | `orderBy(name, asc), limit(200)` (realtime) | Immediate (startup) | `[reference]` | Active recurring subscriptions | Low (< 25 docs) |
+| `ExpenseReferenceDataProvider` | `users/{uid}/spaces` | `orderBy(name), limit(200)` — **one-shot `getDocs`** (SPENDLY-412), refetched after writes and on foreground if >5min stale | Deferred (idle) | `[reference]` | Spaces reference list | Low (< 10 docs) |
+| `ExpenseReferenceDataProvider` | `users/{uid}/categorizationRules` | `orderBy(createdAt, asc), limit(500)` — **one-shot `getDocs`** (SPENDLY-412), refetched after writes and on foreground if >5min stale | Deferred (idle) | `[reference]` | SMS auto-categorization rules | Low (< 30 docs) |
 | `ExpenseReferenceDataProvider` | `users/{uid}/categoryBudgets` | `orderBy(month, desc)` | Immediate (startup) | `[reference]` | Monthly category budget limits | Medium (~50–100 docs) |
 | `ExpenseReferenceDataProvider` | `users/{uid}/financialGoals` | `orderBy(createdAt, asc)` | Immediate (startup) | `[reference]` | Goals and targets | Low (< 15 docs) |
 | `CreditCardBillsProvider` | `users/{uid}/creditCardBills` | `collection` | On-Demand (active) | `[creditCardBills]` | Mounted only when viewing CC tab/widget | Low (~10–30 docs) |
@@ -73,7 +73,7 @@ Estimated Daily Reads (Single User, 15 App Opens/Day):
 2. **SPENDLY-409 (Remove Unlimited Startup Reads)**: Delete the idle `scheduleIdleWork` unlimited upgrade in `FinanceDataProvider.tsx`. Keep the bounded 300-item window as the active realtime stream.
 3. **SPENDLY-410 (Cursor-Based Ledger Pagination)**: Add `startAfter` cursor-based pagination so historical records load on demand in 50-item pages only when the user scrolls the Journal.
 4. **SPENDLY-411 (Feature-Scoped Listener Lifecycle)**: Ensure secondary domains (EPF, Portfolio, Insurance) never mount listeners until their screens are active.
-5. **SPENDLY-412 (Optimize Reference Data Sync)**: Enforce cache-first hydration and single shared listeners for categories, spaces, and rules.
+5. **SPENDLY-412 (Optimize Reference Data Sync)** — done: `spaces`/`categorizationRules` converted from realtime `onSnapshot` to one-shot `getDocs` (refetched on write and on >5min-stale app foreground); `categories`/`subscriptions` stay realtime (pervasive/correctness-sensitive consumers) but gained defensive `limit(...)` bounds; `lib/ensureCategoryHierarchy.ts` and `services/sms/smsRecurringSync.ts`'s previously-uninstrumented direct reads now emit `logDirectRead`. See `docs/SPENDLY-412-reference-data-sync.md`.
 6. **SPENDLY-413 (Dashboard Summary Optimization)**: Compute monthly aggregates from the bounded active dataset or cached monthly metadata rather than full-collection downloads.
 7. **SPENDLY-414 (AppState Reconnect Debounce)**: Protect against burst re-subscribes on background/foreground transitions.
 8. **SPENDLY-415 & SPENDLY-416 (Read Budgets & Rollout)**: Enforce `< 25 server reads` cold startup budget via automated guardrails.

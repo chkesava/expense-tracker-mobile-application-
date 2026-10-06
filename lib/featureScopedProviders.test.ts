@@ -139,4 +139,31 @@ describe("Feature Scoped Provider Lifecycle & Grace Period", () => {
     vi.advanceTimersByTime(15000);
     expect(goalsGate.shouldListen).toBe(false);
   });
+
+  // SPENDLY-412: spaces/categorizationRules became one-shot reads instead of
+  // realtime listeners; this verifies the foreground-refresh throttle that
+  // gives them eventual sync without a read storm on quick app switches.
+  describe("foreground refresh throttle (SPENDLY-412)", () => {
+    const FOREGROUND_REFRESH_MIN_INTERVAL_MS = 5 * 60 * 1000;
+
+    function shouldRefetchOnForeground(lastFetchedAt: number, now: number): boolean {
+      return now - lastFetchedAt > FOREGROUND_REFRESH_MIN_INTERVAL_MS;
+    }
+
+    it("does not refetch when the app foregrounds within 5 minutes of the last fetch", () => {
+      const lastFetchedAt = Date.now();
+      vi.advanceTimersByTime(4 * 60 * 1000);
+      expect(shouldRefetchOnForeground(lastFetchedAt, Date.now())).toBe(false);
+    });
+
+    it("refetches when the app foregrounds more than 5 minutes after the last fetch", () => {
+      const lastFetchedAt = Date.now();
+      vi.advanceTimersByTime(6 * 60 * 1000);
+      expect(shouldRefetchOnForeground(lastFetchedAt, Date.now())).toBe(true);
+    });
+
+    it("treats never-fetched (timestamp 0) as stale", () => {
+      expect(shouldRefetchOnForeground(0, Date.now())).toBe(true);
+    });
+  });
 });

@@ -6,6 +6,8 @@
 import {
   collection,
   doc,
+  getDocs,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -21,12 +23,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { AppState } from "react-native";
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
 import {
   forgetSnapshotPath,
+  logDirectRead,
   logQuerySnapshot,
 } from "@/lib/firestoreReadDebug";
 import { commitWrite } from "@/lib/firestoreWrite";
@@ -84,6 +88,10 @@ export type ExpenseReferenceData = {
 const ExpenseReferenceDataContext = createContext<ExpenseReferenceData | undefined>(
   undefined
 );
+
+/** SPENDLY-412: minimum gap between foreground-triggered refetches of the
+ * one-shot spaces/categorizationRules collections. */
+const FOREGROUND_REFRESH_MIN_INTERVAL_MS = 5 * 60 * 1000;
 
 export function ExpenseReferenceDataProvider({
   children,
@@ -248,7 +256,10 @@ export function ExpenseReferenceDataProvider({
     const cancelIdle = scheduleIdleWork(() => {
       perfEvent("firestore_listener_start", { collection: "categories" });
       unsub = onSnapshot(
-        query(collection(db, "users", uid, "categories")),
+        // SPENDLY-412: defensive bound — categories are a small, user-curated
+        // list (observed <50 docs), not expected to need the full ledger's
+        // unbounded shape, but a cap keeps a runaway account from paying for it.
+        query(collection(db, "users", uid, "categories"), limit(500)),
         (snap) => {
           logQuerySnapshot(path, snap, { feature: "reference", queryShape: "categories" });
           perfEvent("firestore_first_snapshot", {
@@ -290,7 +301,13 @@ export function ExpenseReferenceDataProvider({
     const path = `users/${uid}/subscriptions`;
     perfEvent("firestore_listener_start", { collection: "subscriptions" });
     const unsub = onSnapshot(
-      query(collection(db, "users", uid, "subscriptions"), orderBy("name", "asc")),
+      // SPENDLY-412: defensive bound (observed <25 docs) — stays realtime,
+      // subscriptions drive the due-subscription auto-posting side effect below.
+      query(
+        collection(db, "users", uid, "subscriptions"),
+        orderBy("name", "asc"),
+        limit(200)
+      ),
       (snap) => {
         logQuerySnapshot(path, snap, { feature: "reference", queryShape: "subscriptions" });
         perfEvent("firestore_first_snapshot", {
@@ -323,6 +340,11 @@ export function ExpenseReferenceDataProvider({
     };
   }, [uid, db, subscriptionsAttempt, setSubscriptionsError]);
 
+  // SPENDLY-412: spaces are a small (observed <10 docs), slow-changing,
+  // non-collaborative list — read-once per session/retry instead of a
+  // standing realtime listener. Refetched explicitly after writes
+  // (hooks/useSpaces.ts) and on app foreground if stale (below).
+  const lastFetchedSpacesAtRef = useRef(0);
   useEffect(() => {
     if (!uid || !db) {
       setSpaces([]);
@@ -331,18 +353,16 @@ export function ExpenseReferenceDataProvider({
     }
     setSpacesLoading(true);
     const path = `users/${uid}/spaces`;
-    let unsub: (() => void) | null = null;
+    let cancelled = false;
     const cancelIdle = scheduleIdleWork(() => {
-      perfEvent("firestore_listener_start", { collection: "spaces" });
-      unsub = onSnapshot(
-        query(collection(db, "users", uid, "spaces"), orderBy("name")),
-        (snap) => {
-          logQuerySnapshot(path, snap, { feature: "reference", queryShape: "spaces" });
-          perfEvent("firestore_first_snapshot", {
-            collection: "spaces",
-            docCount: snap.docs.length,
-            fromCache: snap.metadata.fromCache,
+      getDocs(query(collection(db, "users", uid, "spaces"), orderBy("name"), limit(200)))
+        .then((snap) => {
+          if (cancelled) return;
+          logDirectRead(path, snap.docs.length, snap.metadata.fromCache ? "cache" : "server", {
+            feature: "reference",
+            queryShape: "spaces",
           });
+          lastFetchedSpacesAtRef.current = Date.now();
           setSpaces(
             snap.docs.map((docSnap) => ({
               id: docSnap.id,
@@ -351,24 +371,33 @@ export function ExpenseReferenceDataProvider({
           );
           setSpacesError(null);
           setSpacesLoading(false);
-        },
-        snapshotErrorHandler(
-          "snapshot.spaces",
-          (failure) => {
-            setSpacesError(failure);
-            setSpacesLoading(false);
-          },
-          "Couldn't load your spaces."
-        )
-      );
+        })
+        .catch(
+          snapshotErrorHandler(
+            "snapshot.spaces",
+            (failure) => {
+              if (cancelled) return;
+              setSpacesError(failure);
+              setSpacesLoading(false);
+            },
+            "Couldn't load your spaces."
+          )
+        );
     });
     return () => {
+      cancelled = true;
       cancelIdle();
       forgetSnapshotPath(path);
-      if (unsub) unsub();
     };
   }, [uid, db, spacesAttempt, setSpacesError]);
 
+  // SPENDLY-412: categorizationRules are a small (observed <30 docs),
+  // slow-changing settings list, read only by foreground UI (ExpenseForm
+  // autosuggest, MagicChatModal, the rules-management screen) — read-once
+  // per session/retry instead of a standing realtime listener. Refetched
+  // explicitly after writes (hooks/useCategorizationRules.ts) and on app
+  // foreground if stale (below).
+  const lastFetchedRulesAtRef = useRef(0);
   useEffect(() => {
     if (!uid || !db) {
       setRules([]);
@@ -377,43 +406,63 @@ export function ExpenseReferenceDataProvider({
     }
     setRulesLoading(true);
     const path = `users/${uid}/categorizationRules`;
-    let unsub: (() => void) | null = null;
+    let cancelled = false;
     const cancelIdle = scheduleIdleWork(() => {
-      perfEvent("firestore_listener_start", { collection: "categorizationRules" });
-      unsub = onSnapshot(
+      getDocs(
         query(
           collection(db, "users", uid, "categorizationRules"),
-          orderBy("createdAt", "asc")
-        ),
-        (snap) => {
-          logQuerySnapshot(path, snap, { feature: "reference", queryShape: "categorizationRules" });
-          perfEvent("firestore_first_snapshot", {
-            collection: "categorizationRules",
-            docCount: snap.docs.length,
-            fromCache: snap.metadata.fromCache,
+          orderBy("createdAt", "asc"),
+          limit(500)
+        )
+      )
+        .then((snap) => {
+          if (cancelled) return;
+          logDirectRead(path, snap.docs.length, snap.metadata.fromCache ? "cache" : "server", {
+            feature: "reference",
+            queryShape: "categorizationRules",
           });
+          lastFetchedRulesAtRef.current = Date.now();
           setRules(
             snap.docs.map((d) => ({ id: d.id, ...d.data() } as CategorizationRule))
           );
           setRulesError(null);
           setRulesLoading(false);
-        },
-        snapshotErrorHandler(
-          "snapshot.categorizationRules",
-          (failure) => {
-            setRulesError(failure);
-            setRulesLoading(false);
-          },
-          "Couldn't load your categorization rules."
-        )
-      );
+        })
+        .catch(
+          snapshotErrorHandler(
+            "snapshot.categorizationRules",
+            (failure) => {
+              if (cancelled) return;
+              setRulesError(failure);
+              setRulesLoading(false);
+            },
+            "Couldn't load your categorization rules."
+          )
+        );
     });
     return () => {
+      cancelled = true;
       cancelIdle();
       forgetSnapshotPath(path);
-      if (unsub) unsub();
     };
   }, [uid, db, rulesAttempt, setRulesError]);
+
+  // SPENDLY-412: bounded eventual-sync for the two one-shot collections —
+  // on app foreground, refetch only if the last fetch is stale (5 min),
+  // so backgrounding/foregrounding quickly doesn't cause a read storm.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      const now = Date.now();
+      if (now - lastFetchedSpacesAtRef.current > FOREGROUND_REFRESH_MIN_INTERVAL_MS) {
+        retrySpaces();
+      }
+      if (now - lastFetchedRulesAtRef.current > FOREGROUND_REFRESH_MIN_INTERVAL_MS) {
+        retryRules();
+      }
+    });
+    return () => sub.remove();
+  }, [retrySpaces, retryRules]);
 
   useEffect(() => {
     if (!shouldListenBudgets) {
