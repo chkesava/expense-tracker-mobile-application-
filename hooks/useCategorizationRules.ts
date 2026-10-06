@@ -45,6 +45,9 @@ export const useCategorizationRules = (options?: { enabled?: boolean }) => {
           createdAt: serverTimestamp(),
         }
       );
+      // SPENDLY-412: categorizationRules is a one-shot read, not a realtime
+      // listener — refetch so the shared state reflects this write.
+      retryRules();
       toast.success("Auto-category rule added");
     } catch (err) {
       logError("categorizationRules.addRule", err);
@@ -60,6 +63,7 @@ export const useCategorizationRules = (options?: { enabled?: boolean }) => {
       await deleteDoc(
         doc(db, "users", uid, "categorizationRules", id)
       );
+      retryRules();
       toast.success("Rule deleted");
     } catch (err) {
       logError("categorizationRules.deleteRule", err);

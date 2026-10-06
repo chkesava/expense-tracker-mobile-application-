@@ -9,7 +9,7 @@ Systematically reduce Spendly Firestore document reads from ~24K reads/day to su
 - **SPENDLY-409**: Merged into epic branch
 - **SPENDLY-410**: Merged into epic branch
 - **SPENDLY-411**: Merged into epic branch
-- **SPENDLY-412**: To Do (Optimize Reference Data Sync)
+- **SPENDLY-412**: Implemented on branch `feature/SPENDLY-412-optimize-reference-data-sync` (Optimize Reference Data Sync) — not yet merged into epic branch
 - **SPENDLY-413**: To Do (Dashboard Summary Aggregation)
 - **SPENDLY-414**: To Do (AppState & Reconnect Debounce)
 - **SPENDLY-415**: To Do (Read Budget & Regression Protection)
@@ -21,3 +21,4 @@ Systematically reduce Spendly Firestore document reads from ~24K reads/day to su
 - Removing the background idle upgrade that converts bounded queries into unlimited queries in `FinanceDataProvider.tsx`.
 - Implementing cursor-based pagination for ledger views.
 - Scoping `categoryBudgets`/`financialGoals` listeners to the Active-On-Demand pattern (SPENDLY-411); `categories`/`subscriptions`/`spaces`/`categorizationRules` stay eager because they're read from pervasive ledger surfaces.
+- Converting `spaces`/`categorizationRules` from realtime listeners to one-shot reads with write/foreground-triggered refresh (SPENDLY-412); `categories`/`subscriptions` stay realtime but gained defensive `limit(...)` bounds.

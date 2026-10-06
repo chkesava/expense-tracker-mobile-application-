@@ -3,6 +3,7 @@
  * Dynamic-imports Firebase so vitest never loads it.
  */
 
+import { logDirectRead } from "@/lib/firestoreReadDebug";
 import type { Expense } from "@/shared/types/expense";
 import type { Subscription } from "@/shared/types/subscription";
 import type { SmsWriteReadyEntry } from "./smsAutoAdd";
@@ -269,6 +270,12 @@ async function loadRemoteSubscriptions(uid: string): Promise<Subscription[]> {
   const db = getFirestoreDb();
   if (!db) return [];
   const snap = await getDocs(collection(db, "users", uid, "subscriptions"));
+  logDirectRead(
+    `users/${uid}/subscriptions`,
+    snap.docs.length,
+    snap.metadata.fromCache ? "cache" : "server",
+    { feature: "smsRecurringSync", queryShape: "subscriptions-cache-miss-fallback" }
+  );
   return snap.docs.map((docSnap) => ({
     id: docSnap.id,
     ...(docSnap.data() as Omit<Subscription, "id">),

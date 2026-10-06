@@ -45,6 +45,8 @@ export function useSpaces(options?: { enabled?: boolean }) {
     spacesError,
     retrySpaces,
   } = useExpenseReferenceData();
+  // SPENDLY-412: spaces is a one-shot read, not a realtime listener —
+  // refetch after writes so the shared state reflects the change.
   const spaces = enabled ? sharedSpaces : [];
   const loading = enabled ? spacesLoading : false;
   const error = enabled ? spacesError : null;
@@ -74,6 +76,7 @@ export function useSpaces(options?: { enabled?: boolean }) {
             }),
           { label: "space" }
         );
+        retrySpaces();
         toast.success(writeSavedMessage(outcome, `Space "${input.name}" created`));
         return ref.id;
       } catch (err) {
@@ -82,7 +85,7 @@ export function useSpaces(options?: { enabled?: boolean }) {
         return null;
       }
     },
-    [uid]
+    [uid, retrySpaces]
   );
 
   const updateSpace = useCallback(
@@ -99,6 +102,7 @@ export function useSpaces(options?: { enabled?: boolean }) {
             }),
           { label: "space" }
         );
+        retrySpaces();
         toast.success(writeSavedMessage(outcome, "Space updated"));
         return true;
       } catch (err) {
@@ -107,7 +111,7 @@ export function useSpaces(options?: { enabled?: boolean }) {
         return false;
       }
     },
-    [uid]
+    [uid, retrySpaces]
   );
 
   /**
@@ -150,6 +154,7 @@ export function useSpaces(options?: { enabled?: boolean }) {
           label: "space deletion",
         });
 
+        retrySpaces();
         toast.success(
           writeSavedMessage(outcome, "Space deleted and expenses unlinked")
         );
@@ -160,7 +165,7 @@ export function useSpaces(options?: { enabled?: boolean }) {
         return false;
       }
     },
-    [uid]
+    [uid, retrySpaces]
   );
 
   /**
