@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ShieldAlert, Sparkles, Inbox, ChevronRight } from "lucide-react-native";
@@ -25,7 +25,7 @@ import { LazyMount } from "@/components/common/LazyMount";
 import { ErrorState } from "@/components/common/ErrorState";
 import { WelcomeScreen } from "@/components/onboarding/WelcomeScreen";
 import { PageShell } from "@/components/layout/PageShell";
-import { sampleScrollFps, perfEvent } from "@/lib/perf";
+import { sampleScrollFps, perfEvent, perfMark } from "@/lib/perf";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
@@ -124,9 +124,15 @@ export default function DashboardScreen() {
     retry();
   }, [retry]);
 
+  const dataReadyEmittedRef = useRef(false);
+  const hydratedEmittedRef = useRef(false);
   useEffect(() => {
     if (!expensesLoading && !incomesLoading && !accountsLoading) {
       setRefreshing(false);
+      if (!dataReadyEmittedRef.current) {
+        dataReadyEmittedRef.current = true;
+        perfMark("dashboard_data_ready");
+      }
     }
   }, [expensesLoading, incomesLoading, accountsLoading]);
 
@@ -345,8 +351,23 @@ export default function DashboardScreen() {
     }
 
     const delayMs = 40 + Math.max(0, index) * 40;
+    const isLastWidget = index === displayWidgetIds.length - 1;
     return (
-      <LazyMount key={widgetId} delayMs={delayMs} minHeight={120}>
+      <LazyMount
+        key={widgetId}
+        delayMs={delayMs}
+        minHeight={120}
+        onMount={
+          isLastWidget
+            ? () => {
+                if (!hydratedEmittedRef.current) {
+                  hydratedEmittedRef.current = true;
+                  perfMark("dashboard_hydrated");
+                }
+              }
+            : undefined
+        }
+      >
         {node}
       </LazyMount>
     );

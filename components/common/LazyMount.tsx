@@ -7,6 +7,8 @@ type LazyMountProps = {
   delayMs?: number;
   /** Optional min height placeholder while deferred. */
   minHeight?: number;
+  /** Optional callback fired when the component is mounted. */
+  onMount?: () => void;
 };
 
 /**
@@ -16,6 +18,7 @@ export function LazyMount({
   children,
   delayMs = 0,
   minHeight,
+  onMount,
 }: LazyMountProps) {
   const [ready, setReady] = useState(delayMs === 0 ? false : false);
 
@@ -26,11 +29,17 @@ export function LazyMount({
 
     if (delayMs > 0) {
       timer = setTimeout(() => {
-        if (!cancelled) setReady(true);
+        if (!cancelled) {
+          setReady(true);
+          onMount?.();
+        }
       }, delayMs);
     } else {
       raf = requestAnimationFrame(() => {
-        if (!cancelled) setReady(true);
+        if (!cancelled) {
+          setReady(true);
+          onMount?.();
+        }
       });
     }
 
