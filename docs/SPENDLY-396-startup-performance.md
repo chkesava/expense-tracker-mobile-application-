@@ -9,7 +9,7 @@ Improve Spendly Android startup performance and first-use responsiveness using m
 - **SPENDLY-399**: Merged into epic branch
 - **SPENDLY-400**: Merged into epic branch
 - **SPENDLY-401**: Merged into epic branch
-- **SPENDLY-402**: Completed (feature branch `feature/SPENDLY-402-progressive-critical-first-dashboard`)
+- **SPENDLY-402**: Merged into epic branch
 - **SPENDLY-403**: To Do
 - **SPENDLY-404**: To Do
 - **SPENDLY-405**: To Do
