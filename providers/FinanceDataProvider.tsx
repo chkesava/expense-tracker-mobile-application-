@@ -432,11 +432,12 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
 
     const applyIncomesSnap = makeApplyIncomesSnap(false);
 
-    // SPENDLY-12: first paint is a page, not the lifetime ledger. The idle
-    // upgrade below is the same pattern docs/PERF_BASELINE.md described and
-    // commit 007f649 removed. Do not set loading on the upgrade.
+    // SPENDLY-409: Bounded startup page is the permanent realtime listener.
+    // The automatic idle upgrade to unbounded queries is removed to eliminate
+    // the P0 read explosion (~20K+ unnecessary daily reads). Full history is
+    // paginated on demand via cursor pagination (SPENDLY-410).
     perfEvent("firestore_listener_start", { collection: "expenses" });
-    let expensesUnsub = onSnapshot(
+    const expensesUnsub = onSnapshot(
       query(expensesCol, orderBy("createdAt", "desc"), limit(LEDGER_STAGED_LIMIT)),
       FINANCE_SNAPSHOT_LISTEN_OPTIONS,
       applyExpensesSnap,
@@ -450,7 +451,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       )
     );
     perfEvent("firestore_listener_start", { collection: "incomes" });
-    let incomesUnsub = onSnapshot(
+    const incomesUnsub = onSnapshot(
       query(incomesCol, orderBy("createdAt", "desc"), limit(LEDGER_STAGED_LIMIT)),
       FINANCE_SNAPSHOT_LISTEN_OPTIONS,
       applyIncomesSnap,
@@ -462,40 +463,6 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         },
         "Couldn't load your income."
       )
-    );
-
-    const cancelLedgerUpgrade = scheduleIdleWork(
-      () => {
-        expensesUnsub();
-        expensesUnsub = onSnapshot(
-          query(expensesCol, orderBy("createdAt", "desc")),
-          FINANCE_SNAPSHOT_LISTEN_OPTIONS,
-          makeApplyExpensesSnap(true),
-          snapshotErrorHandler(
-            "snapshot.expenses",
-            (failure) => {
-              setFinanceError(failure);
-              setExpensesLoading(false);
-            },
-            "Couldn't load your expenses."
-          )
-        );
-        incomesUnsub();
-        incomesUnsub = onSnapshot(
-          query(incomesCol, orderBy("createdAt", "desc")),
-          FINANCE_SNAPSHOT_LISTEN_OPTIONS,
-          makeApplyIncomesSnap(true),
-          snapshotErrorHandler(
-            "snapshot.incomes",
-            (failure) => {
-              setFinanceError(failure);
-              setIncomesLoading(false);
-            },
-            "Couldn't load your income."
-          )
-        );
-      },
-      { timeoutMs: 2800, fallbackDelayMs: 1200 }
     );
 
     perfEvent("firestore_listener_start", { collection: "accounts" });
@@ -570,7 +537,6 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     ];
 
     return () => {
-      cancelLedgerUpgrade();
       expensesUnsub();
       incomesUnsub();
       forgetSnapshotPath(expensePath);
