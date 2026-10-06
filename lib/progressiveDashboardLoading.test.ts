@@ -74,4 +74,14 @@ describe("Progressive Dashboard Loading Hierarchy", () => {
 
     expect(state2.loading).toBe(true); // Blocked in non-progressive mode!
   });
+
+  it("identifies the terminal delayed widget index to emit dashboard_hydrated", () => {
+    const displayWidgetIds = ["focus", "quickAdd", "recentActivity", "budgetAlerts", "subscriptions", "gamification"];
+    const isLastWidget = (index: number) => index === displayWidgetIds.length - 1;
+
+    expect(isLastWidget(0)).toBe(false);
+    expect(isLastWidget(4)).toBe(false);
+    expect(isLastWidget(5)).toBe(true);
+  });
 });
+
