@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Receipt } from "lucide-react-native";
 
@@ -24,7 +25,7 @@ export interface RecentActivityWidgetProps {
 
 const PREVIEW_LIMIT = 5;
 
-export function RecentActivityWidget({
+export const RecentActivityWidget = memo(function RecentActivityWidget({
   expenses,
   currency,
   loading = false,
@@ -131,7 +132,7 @@ export function RecentActivityWidget({
       )}
     </Section>
   );
-}
+});
 
 const styles = StyleSheet.create({
   initial: {

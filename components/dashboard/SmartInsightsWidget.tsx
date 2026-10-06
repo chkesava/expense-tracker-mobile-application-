@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
   AlertTriangle,
@@ -53,7 +53,7 @@ function stripLeadingEmoji(text: string): string {
   return text.replace(/^[^\p{L}\p{N}]+/u, "").trim() || text;
 }
 
-export function SmartInsightsWidget({
+export const SmartInsightsWidget = memo(function SmartInsightsWidget({
   expenses,
   monthlyBudget = 0,
   currency,
@@ -136,7 +136,7 @@ export function SmartInsightsWidget({
       })}
     </Section>
   );
-}
+});
 
 const styles = StyleSheet.create({
   list: {

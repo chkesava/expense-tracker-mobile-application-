@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
 import { Landmark, Repeat, Wallet } from "lucide-react-native";
@@ -52,7 +52,7 @@ function dueLabel(days: number): string {
   return `Due in ${days} days`;
 }
 
-export function SubscriptionsWidget({
+export const SubscriptionsWidget = memo(function SubscriptionsWidget({
   currency,
   extraDues: explicitExtraDues,
 }: SubscriptionsWidgetProps) {
@@ -222,7 +222,7 @@ export function SubscriptionsWidget({
       </Pressable>
     </Section>
   );
-}
+});
 
 const styles = StyleSheet.create({
   due: {

@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import {
@@ -22,46 +23,48 @@ export interface QuickAddWidgetProps {
  * Horizontal action rail. One filled primary action, the rest quiet outlined
  * chips so the row reads as a single control group rather than five cards.
  */
-export function QuickAddWidget({ onAddExpense }: QuickAddWidgetProps) {
+export const QuickAddWidget = memo(function QuickAddWidget({ onAddExpense }: QuickAddWidgetProps) {
   const router = useRouter();
   const { theme } = useTheme();
 
-  const go = (path: string) => () => {
-    void haptic.selection();
-    router.push(path as never);
-  };
+  const chips = useMemo(() => {
+    const go = (path: string) => () => {
+      void haptic.selection();
+      router.push(path as never);
+    };
 
-  const chips = [
-    {
-      id: "add",
-      label: "Add",
-      icon: Plus,
-      featured: true,
-      onPress: () => {
-        void haptic.impact();
-        onAddExpense();
+    return [
+      {
+        id: "add",
+        label: "Add",
+        icon: Plus,
+        featured: true,
+        onPress: () => {
+          void haptic.impact();
+          onAddExpense();
+        },
       },
-    },
-    { id: "ledger", label: "Money", icon: Wallet, onPress: go("/ledger") },
-    {
-      id: "insights",
-      label: "Insights",
-      icon: BarChart3,
-      onPress: go("/insights"),
-    },
-    {
-      id: "splits",
-      label: "Split Bills",
-      icon: Users,
-      onPress: go("/vaults?tab=splits"),
-    },
-    {
-      id: "subscriptions",
-      label: "Recurring",
-      icon: Repeat,
-      onPress: go("/ledger?tab=subscriptions"),
-    },
-  ];
+      { id: "ledger", label: "Money", icon: Wallet, onPress: go("/ledger") },
+      {
+        id: "insights",
+        label: "Insights",
+        icon: BarChart3,
+        onPress: go("/insights"),
+      },
+      {
+        id: "splits",
+        label: "Split Bills",
+        icon: Users,
+        onPress: go("/vaults?tab=splits"),
+      },
+      {
+        id: "subscriptions",
+        label: "Recurring",
+        icon: Repeat,
+        onPress: go("/ledger?tab=subscriptions"),
+      },
+    ];
+  }, [router, onAddExpense]);
 
   return (
     <HorizontalSwipeBoundary>
@@ -101,7 +104,7 @@ export function QuickAddWidget({ onAddExpense }: QuickAddWidgetProps) {
       </ScrollView>
     </HorizontalSwipeBoundary>
   );
-}
+});
 
 const styles = StyleSheet.create({
   rail: {

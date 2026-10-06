@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Wallet } from "lucide-react-native";
@@ -11,28 +12,26 @@ import {
   StatusStrip,
   useSurfaces,
 } from "@/components/dashboard/primitives";
+import type { Expense } from "@/shared/types/expense";
+import {
+  computeActiveCategoryBudgets,
+  type CategoryBudgetAlertItem,
+} from "@/shared/utils/dashboardWidgets";
 import {
   budgetStatusMessage,
   type SpendlyBudget,
 } from "@/shared/utils/spendlyBudget";
 import { useTheme } from "@/theme/ThemeProvider";
 
-export interface CategoryBudgetAlertItem {
-  id: string;
-  category: string;
-  subcategory?: string;
-  amount: number;
-  spent: number;
-  pct: number;
-  isOver: boolean;
-  isWarning: boolean;
-}
+export type { CategoryBudgetAlertItem };
 
 export interface BudgetAlertsWidgetProps {
   monthlyBudget: number;
   monthlySpent: number;
   currency: string;
-  activeCategoryBudgets: CategoryBudgetAlertItem[];
+  activeCategoryBudgets?: CategoryBudgetAlertItem[];
+  categoryBudgets?: { id: string; category: string; subcategory?: string; amount: number; month: string }[];
+  monthlyExpenses?: Expense[];
   activeMonth: string;
   budget: SpendlyBudget;
 }
@@ -46,17 +45,29 @@ function statusColorOf(
   return colors.success;
 }
 
-export function BudgetAlertsWidget({
+export const BudgetAlertsWidget = memo(function BudgetAlertsWidget({
   monthlyBudget,
   monthlySpent,
   currency,
-  activeCategoryBudgets,
+  activeCategoryBudgets: explicitActiveCategoryBudgets,
+  categoryBudgets,
+  monthlyExpenses,
   activeMonth,
   budget,
 }: BudgetAlertsWidgetProps) {
   const router = useRouter();
   const { theme } = useTheme();
   const surfaces = useSurfaces();
+
+  const activeCategoryBudgets = useMemo(() => {
+    if (explicitActiveCategoryBudgets !== undefined) {
+      return explicitActiveCategoryBudgets;
+    }
+    if (!categoryBudgets || !monthlyExpenses) {
+      return [];
+    }
+    return computeActiveCategoryBudgets(categoryBudgets, monthlyExpenses, activeMonth);
+  }, [explicitActiveCategoryBudgets, categoryBudgets, monthlyExpenses, activeMonth]);
 
   const statusColor = statusColorOf(budget.status, theme.colors);
   const remainingLabel = budget.isOverBudget ? "Over budget" : "Remaining";
@@ -252,7 +263,7 @@ export function BudgetAlertsWidget({
       ) : null}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   stack: {
