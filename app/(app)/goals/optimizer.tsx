@@ -16,6 +16,7 @@ import { ChipRow, RowSwitch } from "@/components/settings/SettingsControls";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { WhatIfEntryRow } from "@/components/whatIf/WhatIfEntryRow";
+import { WhatIfScenarioPickerSheet } from "@/components/whatIf/WhatIfScenarioPickerSheet";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useGoalFunding } from "@/hooks/useGoalFunding";
 import { useGoalFundingPlans } from "@/hooks/useGoalFundingPlans";
@@ -67,9 +68,16 @@ export default function GoalFundingScreen() {
   const [inputs, setInputs] = useState<GoalPlanInput[]>([]);
   const [editing, setEditing] = useState<string | null>(null);
   const [why, setWhy] = useState<string | null>(null);
+  
+  // SPENDLY-219: What-If scenario integration
+  const [selectedWhatIf, setSelectedWhatIf] = useState<import("@/shared/utils/whatIfScenarios").WhatIfScenario | null>(null);
+  const [whatIfPickerOpen, setWhatIfPickerOpen] = useState(false);
 
   const planned = plannedText.trim() ? Number(plannedText.replace(/,/g, "")) : null;
-  const { today, goals, capacity, historyMonths, loading, error } = useGoalFunding({ plannedMonthly: planned !== null && Number.isFinite(planned) ? planned : null });
+  const { today, goals, capacity, historyMonths, loading, error } = useGoalFunding({
+    plannedMonthly: planned !== null && Number.isFinite(planned) ? planned : null,
+    scenario: selectedWhatIf,
+  });
 
   const allInputs = useMemo(() => inputsForGoals(goals, inputs), [goals, inputs]);
 
@@ -287,7 +295,12 @@ export default function GoalFundingScreen() {
           </View>
         ) : null}
 
-        <WhatIfEntryRow subtitle="Test a monthly saving against your whole budget" template="goal" />
+        <View style={{ gap: theme.space.md }}>
+          <WhatIfEntryRow subtitle="Test a monthly saving against your whole budget" template="goal" />
+          <Button variant="outline" onPress={() => setWhatIfPickerOpen(true)}>
+            {selectedWhatIf ? `Testing scenario: ${selectedWhatIf.name}` : "Test a What-If scenario"}
+          </Button>
+        </View>
 
         <View style={{ gap: theme.space.xs }}>
           <Text style={h2} accessibilityRole="header">
@@ -297,6 +310,16 @@ export default function GoalFundingScreen() {
             <Text key={l} style={muted}>{`• ${l}`}</Text>
           ))}
         </View>
+
+        <WhatIfScenarioPickerSheet
+          isOpen={whatIfPickerOpen}
+          onClose={() => setWhatIfPickerOpen(false)}
+          selectedId={selectedWhatIf?.id ?? null}
+          onSelect={(s) => {
+            setSelectedWhatIf(s);
+            setWhatIfPickerOpen(false);
+          }}
+        />
 
         <GoalPlanInputsSheet
           isOpen={editing !== null}

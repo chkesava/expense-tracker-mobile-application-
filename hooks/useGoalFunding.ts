@@ -8,8 +8,9 @@ import { useSubscriptions } from "@/hooks/useSubscriptions";
 import { useSettings } from "@/providers/SettingsProvider";
 import { todayDateKey } from "@/shared/utils/dates";
 import { snapshotGoals } from "@/shared/utils/goalFundingModel";
-import { goalFundingCapacityFromSources, planningWindow, type CapacityAdjustment } from "@/shared/utils/goalFundingInputs";
+import { goalFundingCapacityFromSources, planningWindow, whatIfToCapacityAdjustments, type CapacityAdjustment } from "@/shared/utils/goalFundingInputs";
 import { buildRunwayBaseline } from "@/shared/utils/runwayBaseline";
+import type { WhatIfScenario } from "@/shared/utils/whatIfScenarios";
 
 /**
  * Everything the Goal Funding Optimizer reads (SPENDLY-219): a read-only
@@ -18,7 +19,12 @@ import { buildRunwayBaseline } from "@/shared/utils/runwayBaseline";
  * the optimizer screen; reads provider data already in memory and writes
  * nothing.
  */
-export function useGoalFunding(options?: { plannedMonthly?: number | null; adjustments?: readonly CapacityAdjustment[]; windowMonths?: number }) {
+export function useGoalFunding(options?: {
+  plannedMonthly?: number | null;
+  adjustments?: readonly CapacityAdjustment[];
+  scenario?: WhatIfScenario | null;
+  windowMonths?: number;
+}) {
   const { settings } = useSettings();
   const today = todayDateKey(settings.timezone);
   const { goals, loading: goalsLoading, error: goalsError } = useFinancialGoals();
@@ -33,17 +39,20 @@ export function useGoalFunding(options?: { plannedMonthly?: number | null; adjus
     [expenses, incomes, subscriptions, today]
   );
   const snapshot = useMemo(() => snapshotGoals(goals), [goals]);
-  const capacity = useMemo(
-    () =>
-      goalFundingCapacityFromSources({
-        baseline: baseline.projectionBaseline,
-        calendarEvents: calendar.events,
-        window,
-        plannedMonthly: options?.plannedMonthly,
-        adjustments: options?.adjustments,
-      }),
-    [baseline, calendar.events, window, options?.plannedMonthly, options?.adjustments]
-  );
+
+  const capacity = useMemo(() => {
+    let adjs = options?.adjustments ? [...options.adjustments] : [];
+    if (options?.scenario) {
+      adjs = adjs.concat(whatIfToCapacityAdjustments(options.scenario.adjustments, calendar.events, window.from ? (options?.windowMonths ?? 3) : 3));
+    }
+    return goalFundingCapacityFromSources({
+      baseline: baseline.projectionBaseline,
+      calendarEvents: calendar.events,
+      window,
+      plannedMonthly: options?.plannedMonthly,
+      adjustments: adjs.length > 0 ? adjs : undefined,
+    });
+  }, [baseline, calendar.events, window, options?.plannedMonthly, options?.adjustments, options?.scenario, options?.windowMonths]);
 
   return {
     today,
