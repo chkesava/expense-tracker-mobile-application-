@@ -1,17 +1,19 @@
 import { useCallback, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
-import { AlertTriangle } from "lucide-react-native";
+import { AlertTriangle, Pencil } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { SkeletonCard } from "@/components/common/Skeleton";
 import { EpfContributionRow } from "@/components/epf/EpfContributionRow";
 import { EpfCreditSheet } from "@/components/epf/EpfCreditSheet";
+import { EpfWageChangeSheet } from "@/components/epf/EpfWageChangeSheet";
 import { Card } from "@/components/ui/Card";
 import { useSpendlyBottomClearance } from "@/components/layout/useSpendlyBottomClearance";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
+import { useEpfWageHistory } from "@/hooks/useEpfWageHistory";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
 import { contributionStatusMeta } from "@/shared/features/epf/utils/contributions";
 import { epfCurrentMonth, epfTodayKey } from "@/shared/features/epf/utils/epfClock";
@@ -60,7 +62,10 @@ export function EpfCurrentContributions({
     markReversed,
   } = useEpfContributions(establishment.id);
 
+  const { history: wageHistory, addWageChange } = useEpfWageHistory(establishment.id);
+
   const [editingMonth, setEditingMonth] = useState<string | null>(null);
+  const [changingWage, setChangingWage] = useState(false);
 
   const money = useCallback((value: number) => formatAmount(value, currency), [currency]);
 
@@ -133,12 +138,27 @@ export function EpfCurrentContributions({
         ListHeaderComponent={
           <View style={styles.header}>
             <Card>
-              <Text style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}>
-                Credited to EPF
-              </Text>
-              <Text style={[styles.summaryValue, { color: theme.colors.foreground }]}>
-                {money(summary.creditedTotal)}
-              </Text>
+              <View style={styles.summaryHeaderRow}>
+                <View style={styles.flex}>
+                  <Text style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}>
+                    Credited to EPF
+                  </Text>
+                  <Text style={[styles.summaryValue, { color: theme.colors.foreground }]}>
+                    {money(summary.creditedTotal)}
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => setChangingWage(true)}
+                  style={[styles.wageChangeButton, { borderColor: theme.colors.border }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Change EPF wage"
+                >
+                  <Pencil size={theme.iconSize.sm} color={theme.colors.primary} />
+                  <Text style={[styles.wageChangeText, { color: theme.colors.primary }]}>
+                    Change wage
+                  </Text>
+                </Pressable>
+              </View>
               <Text style={[styles.summaryHint, { color: theme.colors.mutedForeground }]}>
                 {summary.credited + summary.confirmed} credited · {summary.partial} partial
                 · {summary.awaiting} awaiting · {summary.overdue} overdue ·{" "}
@@ -223,6 +243,18 @@ export function EpfCurrentContributions({
         onMarkMissed={markMissed}
         onMarkReversed={markReversed}
       />
+
+      <EpfWageChangeSheet
+        isOpen={changingWage}
+        onClose={() => setChangingWage(false)}
+        establishment={establishment}
+        currentMonth={currentMonth}
+        currency={currency}
+        history={wageHistory}
+        fallbackWage={latestWage}
+        contributions={contributions}
+        onSave={addWageChange}
+      />
     </View>
   );
 }
@@ -232,9 +264,20 @@ const styles = StyleSheet.create({
   container: { gap: 12, padding: 16 },
   listContent: { padding: 16 },
   header: { gap: 12, marginBottom: 12 },
+  summaryHeaderRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   summaryLabel: { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },
   summaryValue: { fontSize: 24, fontWeight: "700", marginTop: 4 },
   summaryHint: { fontSize: 12, marginTop: 6, lineHeight: 18 },
+  wageChangeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  wageChangeText: { fontSize: 12, fontWeight: "600" },
   notice: {
     flexDirection: "row",
     alignItems: "flex-start",

@@ -15,6 +15,7 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { logWarning } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { useAuth } from "@/providers/AuthProvider";
+import { perfEvent } from "@/lib/perf";
 
 export type SystemSettings = {
   maintenanceMode: boolean;
@@ -64,9 +65,15 @@ export function SystemSettingsProvider({ children }: { children: ReactNode }) {
     }
 
     setLoading(true);
+    perfEvent("firestore_listener_start", { collection: "systemSettings" });
     const unsubscribe = onSnapshot(
       doc(db, "system_settings", "global"),
       (docSnap) => {
+        perfEvent("firestore_first_snapshot", {
+          collection: "systemSettings",
+          docCount: docSnap.exists() ? 1 : 0,
+          fromCache: docSnap.metadata.fromCache,
+        });
         if (docSnap.exists()) {
           setSettings({ ...DEFAULT_SETTINGS, ...(docSnap.data() as Partial<SystemSettings>) });
         } else {

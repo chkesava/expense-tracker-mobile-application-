@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { Chip } from "@/components/ui/Chip";
 import { ChevronDown, TrendingUp } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { Skeleton } from "@/components/common/Skeleton";
 import {
   MetaLabel,
   Section,
@@ -19,6 +20,7 @@ export interface QuickInsightsWidgetProps {
   previousSpent: number;
   previousIncome: number;
   currency: string;
+  loading?: boolean;
   monthLabel?: string;
   onOpenMonthPicker?: () => void;
 }
@@ -31,12 +33,13 @@ function pctChange(current: number, previous: number): number | null {
   return Math.round(((current - previous) / previous) * 100);
 }
 
-export function QuickInsightsWidget({
+export const QuickInsightsWidget = memo(function QuickInsightsWidget({
   monthlySpent,
   monthlyIncome,
   previousSpent,
   previousIncome,
   currency,
+  loading = false,
   monthLabel = "This Month",
   onOpenMonthPicker,
 }: QuickInsightsWidgetProps) {
@@ -127,7 +130,11 @@ export function QuickInsightsWidget({
             ]}
           >
             <MetaLabel>{metric.label}</MetaLabel>
-            {metric.isPercent ? (
+            {loading && monthlySpent === 0 && monthlyIncome === 0 ? (
+              <View style={{ marginVertical: 4 }}>
+                <Skeleton width="80%" height={20} borderRadius={4} />
+              </View>
+            ) : metric.isPercent ? (
               <Text
                 style={[
                   styles.value,
@@ -153,13 +160,13 @@ export function QuickInsightsWidget({
                 }}
               />
             )}
-            <TrendText delta={metric.delta} invert={metric.invert} />
+            {!loading && <TrendText delta={metric.delta} invert={metric.invert} />}
           </View>
         ))}
       </View>
     </Section>
   );
-}
+});
 
 const styles = StyleSheet.create({
   row: {

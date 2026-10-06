@@ -78,3 +78,43 @@ export function sampleScrollFps(
     if (raf) cancelAnimationFrame(raf);
   };
 }
+
+
+export interface PerfMetadata {
+  success?: boolean;
+  cold?: boolean;
+  source?: "cache" | "server" | "local";
+  collection?: string;
+  listenerId?: string;
+  snapshotCount?: number;
+  documentCount?: number;
+  payloadSize?: number;
+  reason?: string;
+  [key: string]: any;
+}
+
+const phaseStarts = new Map<string, number>();
+
+export function perfStart(phase: string): void {
+  if (!ENABLED) return;
+  phaseStarts.set(phase, now());
+}
+
+export function perfEnd(phase: string, meta?: PerfMetadata): void {
+  if (!ENABLED) return;
+  const t = now();
+  const startT = phaseStarts.get(phase);
+  const dur = startT !== undefined ? Math.round(t - startT) : -1;
+  const sinceStart = Math.round(t - appStartMs);
+  
+  const metaStr = meta ? ` ${JSON.stringify(meta)}` : "";
+  console.log(`[perf:end] ${phase} ${dur}ms (total ${sinceStart}ms)${metaStr}`);
+}
+
+export function perfEvent(name: string, meta?: PerfMetadata): void {
+  if (!ENABLED) return;
+  const t = now();
+  const sinceStart = Math.round(t - appStartMs);
+  const metaStr = meta ? ` ${JSON.stringify(meta)}` : "";
+  console.log(`[perf:event] ${name} (total ${sinceStart}ms)${metaStr}`);
+}

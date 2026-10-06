@@ -480,6 +480,110 @@ describe("planScheduledContributions", () => {
     });
     expect(rows).toEqual([]);
   });
+
+  // SPENDLY-389: a wage change applies from its effective month, not to the
+  // whole run uniformly — before this, every generated month in a run used
+  // one wage from `wageForProjection`.
+  describe("with an effective-dated wage history", () => {
+    const multiMonth = establishment({ id: "A", dateJoined: "2026-06-01" });
+    const baseExisting = [contribution({ month: "2026-06", establishmentId: "A", wage: 20000 })];
+    const raise = [
+      {
+        id: "wh-1",
+        establishmentId: "A",
+        effectiveFromMonth: "2026-09",
+        wage: 25000,
+        epsEligible: true,
+        createdAtMs: 1,
+        updatedAtMs: 1,
+      },
+    ];
+
+    // `planScheduledContributions` only ever mints the current month
+    // (`throughMonth` itself) per run — so each month is checked with its own
+    // call, the same way the existing single-wage tests above do.
+    it("keeps the old wage for a month before the effective month", () => {
+      const rows = planScheduledContributions({
+        establishment: multiMonth,
+        allEstablishments: [multiMonth],
+        existing: baseExisting,
+        throughMonth: "2026-08",
+        wageHistory: raise,
+      });
+      expect(rows.map((row) => row.month)).toEqual(["2026-08"]);
+      expect(rows[0].wage).toBe(20000);
+    });
+
+    it("applies the new wage from its effective month onward", () => {
+      const rows = planScheduledContributions({
+        establishment: multiMonth,
+        allEstablishments: [multiMonth],
+        existing: baseExisting,
+        throughMonth: "2026-09",
+        wageHistory: raise,
+      });
+      expect(rows.map((row) => row.month)).toEqual(["2026-09"]);
+      expect(rows[0].wage).toBe(25000);
+    });
+
+    it("keeps the new wage for a later month still", () => {
+      const rows = planScheduledContributions({
+        establishment: multiMonth,
+        allEstablishments: [multiMonth],
+        existing: baseExisting,
+        throughMonth: "2026-10",
+        wageHistory: raise,
+      });
+      expect(rows.map((row) => row.month)).toEqual(["2026-10"]);
+      expect(rows[0].wage).toBe(25000);
+    });
+
+    it("picks the right slab across multiple wage changes", () => {
+      const twoRaises = [
+        ...raise,
+        {
+          id: "wh-2",
+          establishmentId: "A",
+          effectiveFromMonth: "2027-01",
+          wage: 30000,
+          epsEligible: true,
+          createdAtMs: 2,
+          updatedAtMs: 2,
+        },
+      ];
+      expect(
+        planScheduledContributions({
+          establishment: multiMonth,
+          allEstablishments: [multiMonth],
+          existing: baseExisting,
+          throughMonth: "2026-12",
+          wageHistory: twoRaises,
+        })[0]?.wage
+      ).toBe(25000);
+      expect(
+        planScheduledContributions({
+          establishment: multiMonth,
+          allEstablishments: [multiMonth],
+          existing: baseExisting,
+          throughMonth: "2027-01",
+          wageHistory: twoRaises,
+        })[0]?.wage
+      ).toBe(30000);
+    });
+
+    it("falls back to the latest recorded wage when no entry applies yet", () => {
+      const rows = planScheduledContributions({
+        establishment: current,
+        allEstablishments: [current],
+        existing: [contribution({ month: "2026-06", establishmentId: "A", wage: 25000 })],
+        throughMonth: "2026-08",
+        wageHistory: [
+          { id: "wh-1", establishmentId: "A", effectiveFromMonth: "2027-01", wage: 30000, epsEligible: true, createdAtMs: 1, updatedAtMs: 1 },
+        ],
+      });
+      expect(rows.every((row) => row.wage === 25000)).toBe(true);
+    });
+  });
 });
 
 describe("isSchedulable", () => {

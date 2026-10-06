@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Activity, Flame, Trophy } from "lucide-react-native";
 
@@ -25,7 +26,7 @@ const BADGE_ICONS: Record<string, typeof Trophy> = {
   saver_pro: Trophy,
 };
 
-export function GamificationWidget({
+export const GamificationWidget = memo(function GamificationWidget({
   streak = 0,
   budgetHealthScore = 85,
 }: GamificationWidgetProps) {
@@ -146,7 +147,7 @@ export function GamificationWidget({
       </View>
     </Section>
   );
-}
+});
 
 const styles = StyleSheet.create({
   body: {

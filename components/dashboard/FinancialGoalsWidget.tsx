@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Calendar, Lightbulb, Sprout, Target } from "lucide-react-native";
@@ -19,7 +20,7 @@ export interface FinancialGoalsWidgetProps {
   currency: string;
 }
 
-export function FinancialGoalsWidget({
+export const FinancialGoalsWidget = memo(function FinancialGoalsWidget({
   goals,
   currency,
 }: FinancialGoalsWidgetProps) {
@@ -139,7 +140,7 @@ export function FinancialGoalsWidget({
       </Pressable>
     </Section>
   );
-}
+});
 
 const styles = StyleSheet.create({
   ctaText: {

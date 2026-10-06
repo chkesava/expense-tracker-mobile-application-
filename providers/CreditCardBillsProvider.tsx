@@ -33,6 +33,7 @@ import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useSettings } from "@/providers/SettingsProvider";
+import { perfEvent } from "@/lib/perf";
 import {
   AUTO_CREDIT_CARD_BILL_REMINDER_FREQUENCY,
   DEFAULT_BILL_REMINDER_FREQUENCY,
@@ -119,6 +120,7 @@ type CreditCardBillsContextType = {
   recalculateBill: (billId: string) => Promise<boolean>;
   snoozeBillReminder: (billId: string, days?: number) => Promise<boolean>;
   refreshReminderSchedules: () => Promise<void>;
+  registerSubscriber: () => () => void;
 };
 
 const CreditCardBillsContext = createContext<
@@ -200,7 +202,47 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     didInitialAutoGenerate.current = false;
   }, [user?.uid]);
 
+  const [shouldListen, setShouldListen] = useState(false);
+  const subscriberCountRef = useRef(0);
+  const teardownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const registerSubscriber = useCallback(() => {
+    if (teardownTimerRef.current) {
+      clearTimeout(teardownTimerRef.current);
+      teardownTimerRef.current = null;
+    }
+    subscriberCountRef.current += 1;
+    setShouldListen(true);
+    return () => {
+      subscriberCountRef.current = Math.max(0, subscriberCountRef.current - 1);
+      if (subscriberCountRef.current === 0) {
+        if (teardownTimerRef.current) clearTimeout(teardownTimerRef.current);
+        teardownTimerRef.current = setTimeout(() => {
+          if (subscriberCountRef.current === 0) {
+            setShouldListen(false);
+          }
+          teardownTimerRef.current = null;
+        }, 15000);
+      }
+    };
+  }, []);
+
   useEffect(() => {
+    return () => {
+      if (teardownTimerRef.current) {
+        clearTimeout(teardownTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!shouldListen) {
+      if (bills.length === 0) {
+        setBillsLoading(false);
+      }
+      return;
+    }
+
     const db = getFirestoreDb();
     if (!user || !db) {
       setBills([]);
@@ -210,10 +252,16 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
 
     setBillsLoading(true);
     const path = `users/${user.uid}/creditCardBills`;
+    perfEvent("firestore_listener_start", { collection: "creditCardBills" });
     const unsub = onSnapshot(
       query(collection(db, "users", user.uid, "creditCardBills")),
       (snap) => {
         logQuerySnapshot(path, snap);
+        perfEvent("firestore_first_snapshot", {
+          collection: "creditCardBills",
+          docCount: snap.docs.length,
+          fromCache: snap.metadata.fromCache,
+        });
         setBills(
           snap.docs.map((d) => {
             const data = d.data() as Partial<CreditCardBill>;
@@ -248,7 +296,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       forgetSnapshotPath(path);
       unsub();
     };
-  }, [user?.uid, timezone]);
+  }, [user?.uid, timezone, shouldListen]);
 
   const writeReminderLog = useCallback(
     async (entry: Omit<CreditCardBillReminderLog, "id" | "sentAt" | "channel">) => {
@@ -966,6 +1014,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       recalculateBill,
       snoozeBillReminder,
       refreshReminderSchedules,
+      registerSubscriber,
     }),
     [
       bills,
@@ -981,6 +1030,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       recalculateBill,
       snoozeBillReminder,
       refreshReminderSchedules,
+      registerSubscriber,
     ]
   );
 

@@ -27,8 +27,8 @@ export function CalendarNotificationSync() {
   const today = todayDateKey(settings.timezone);
   const { reminders } = useCalendarReminders({ enabled: prefs.remindersEnabled });
   const { subscriptions } = useSubscriptions();
-  const { borrowings } = useBorrowings();
-  const { receivables } = useReceivables();
+  const { borrowings } = useBorrowings({ enabled: Boolean(prefs.duesEnabled) });
+  const { receivables } = useReceivables({ enabled: Boolean(prefs.duesEnabled) });
 
   const plan = useMemo(() => {
     if (!active) return [];

@@ -1,8 +1,9 @@
 import { useMemo } from "react";
 
+import { useBorrowings } from "@/hooks/useBorrowings";
 import { useFinancialGoals } from "@/hooks/useFinancialGoals";
+import { useReceivables } from "@/hooks/useReceivables";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
-import { useBorrowingsContext, useReceivablesContext } from "@/providers/BorrowingsReceivablesProvider";
 import { useAccountsContext, useExpensesContext, useIncomesContext } from "@/providers/FinanceDataProvider";
 import type { DecisionLinkSources } from "@/shared/utils/decisionLinks";
 
@@ -14,8 +15,8 @@ export function useDecisionLinkSources(): DecisionLinkSources {
   const { expenses, expensesComplete, financeError } = useExpensesContext();
   const { incomes, incomesComplete } = useIncomesContext();
   const { accounts, accountsLoading, payments, paymentsLoading, transfers, transfersLoading, entries, entriesLoading } = useAccountsContext();
-  const borrowingsCtx = useBorrowingsContext();
-  const receivablesCtx = useReceivablesContext();
+  const borrowingsCtx = useBorrowings();
+  const receivablesCtx = useReceivables();
   const { goals, loading: goalsLoading, error: goalsError } = useFinancialGoals();
   const { subscriptions, loading: subsLoading, error: subsError } = useSubscriptions();
 

@@ -69,6 +69,8 @@ function testBuildEnv(host) {
   }
   const buildEnv = { ...process.env };
   // Drop anything EXPO_PUBLIC_* inherited from the shell, then set ours.
+  // Keep EXPO_PUBLIC_PERF_MARKS so performance instrumentation works in benchmarks.
+  const perfMarks = buildEnv['EXPO_PUBLIC_PERF_MARKS'];
   for (const key of Object.keys(buildEnv)) {
     if (key.startsWith('EXPO_PUBLIC_')) delete buildEnv[key];
   }
@@ -76,6 +78,7 @@ function testBuildEnv(host) {
     ...buildEnv,
     EXPO_NO_DOTENV: '1',
     EXPO_PUBLIC_PRODUCT: 'expense',
+    ...(perfMarks ? { EXPO_PUBLIC_PERF_MARKS: perfMarks } : {}),
     [LOCAL_TEST_ENV_KEY]: host,
     MYAPP_RELEASE_STORE_PASSWORD: signing.storePassword,
     MYAPP_RELEASE_KEY_PASSWORD: signing.keyPassword,

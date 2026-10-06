@@ -1,8 +1,10 @@
+import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Receipt } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
+import { Skeleton } from "@/components/common/Skeleton";
 import {
   DataRow,
   RowGlyph,
@@ -16,15 +18,17 @@ import { useTheme } from "@/theme/ThemeProvider";
 export interface RecentActivityWidgetProps {
   expenses: Expense[];
   currency: string;
+  loading?: boolean;
   onEditExpense: (expense: Expense) => void;
   onViewAll: () => void;
 }
 
 const PREVIEW_LIMIT = 5;
 
-export function RecentActivityWidget({
+export const RecentActivityWidget = memo(function RecentActivityWidget({
   expenses,
   currency,
+  loading = false,
   onEditExpense,
   onViewAll,
 }: RecentActivityWidgetProps) {
@@ -37,7 +41,11 @@ export function RecentActivityWidget({
   return (
     <Section
       title="Recent Transactions"
-      subtitle={`${expenses.length} total recorded`}
+      subtitle={
+        loading && expenses.length === 0
+          ? "Loading transactions..."
+          : `${expenses.length} total recorded`
+      }
       icon={<Receipt size={16} color={theme.colors.primary} strokeWidth={2.3} />}
       iconTint={surfaces.wash(theme.colors.primary)}
       action={hasMore ? <SectionAction label="View all" onPress={onViewAll} /> : null}
@@ -49,7 +57,31 @@ export function RecentActivityWidget({
         ) : null
       }
     >
-      {recentTransactions.length === 0 ? (
+      {loading && recentTransactions.length === 0 ? (
+        <View style={{ gap: 14, paddingVertical: 8 }}>
+          {[1, 2, 3].map((key) => (
+            <View
+              key={key}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
+              >
+                <Skeleton width={34} height={34} borderRadius={10} />
+                <View style={{ gap: 6 }}>
+                  <Skeleton width={120} height={14} borderRadius={4} />
+                  <Skeleton width={70} height={10} borderRadius={3} />
+                </View>
+              </View>
+              <Skeleton width={60} height={16} borderRadius={4} />
+            </View>
+          ))}
+        </View>
+      ) : recentTransactions.length === 0 ? (
         <EmptyState
           illustration="expenses"
           compact
@@ -100,7 +132,7 @@ export function RecentActivityWidget({
       )}
     </Section>
   );
-}
+});
 
 const styles = StyleSheet.create({
   initial: {

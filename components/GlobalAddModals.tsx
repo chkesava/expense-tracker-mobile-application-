@@ -29,8 +29,8 @@ export function GlobalAddModals() {
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
   const { addInvestment } = useInvestments({ enabled: false });
-  const { createReceivable } = useReceivables();
-  const { createBorrowing } = useBorrowings();
+  const { createReceivable } = useReceivables({ enabled: false });
+  const { createBorrowing } = useBorrowings({ enabled: false });
   const {
     isTransferOpen,
     setIsTransferOpen,

@@ -43,6 +43,7 @@ import { useAccounts } from "@/hooks/useAccounts";
 import { useSmsRecurringSync } from "@/hooks/useSmsRecurringSync";
 import { isRoutableNotification } from "@/shared/utils/calendarNotifications";
 import { logWarning } from "@/lib/errors";
+import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 
 /**
  * `getLastNotificationResponseAsync` keeps returning the launch tap for the
@@ -102,19 +103,22 @@ export function SmsReceiverProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const [storedPrefs, status] = await Promise.all([
-        loadSmsAutomationPrefs(),
-        loadSmsInboundStatus(),
-        syncPermission(),
-      ]);
-      if (cancelled) return;
-      setPrefs(storedPrefs);
-      setInboundStatus(status);
-      setReady(true);
-    })();
+    const cancelIdle = scheduleIdleWork(() => {
+      (async () => {
+        const [storedPrefs, status] = await Promise.all([
+          loadSmsAutomationPrefs(),
+          loadSmsInboundStatus(),
+          syncPermission(),
+        ]);
+        if (cancelled) return;
+        setPrefs(storedPrefs);
+        setInboundStatus(status);
+        setReady(true);
+      })();
+    });
     return () => {
       cancelled = true;
+      cancelIdle();
     };
   }, [syncPermission]);
 
