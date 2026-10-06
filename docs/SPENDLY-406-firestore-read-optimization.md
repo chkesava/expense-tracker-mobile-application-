@@ -8,7 +8,7 @@ Systematically reduce Spendly Firestore document reads from ~24K reads/day to su
 - **SPENDLY-408**: Merged into epic branch
 - **SPENDLY-409**: Merged into epic branch
 - **SPENDLY-410**: Merged into epic branch
-- **SPENDLY-411**: Implemented on branch `feature/SPENDLY-411-feature-scoped-listeners` (Feature-Scoped Listener Lifecycle) — not yet merged into epic branch
+- **SPENDLY-411**: Merged into epic branch
 - **SPENDLY-412**: To Do (Optimize Reference Data Sync)
 - **SPENDLY-413**: To Do (Dashboard Summary Aggregation)
 - **SPENDLY-414**: To Do (AppState & Reconnect Debounce)
