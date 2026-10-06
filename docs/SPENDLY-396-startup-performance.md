@@ -12,7 +12,7 @@ Improve Spendly Android startup performance and first-use responsiveness using m
 - **SPENDLY-402**: Merged into epic branch
 - **SPENDLY-403**: Merged into epic branch
 - **SPENDLY-404**: Merged into epic branch
-- **SPENDLY-405**: To Do
+- **SPENDLY-405**: In Review (QA Validation & Rollout Sign-off Completed)
 
 ## Decisions
 - Instrumented critical startup phases, Firestore listeners, and snapshot deliveries using the updated `lib/perf.ts` system (SPENDLY-397).
@@ -23,3 +23,5 @@ Improve Spendly Android startup performance and first-use responsiveness using m
 - Implemented a 5-stage progressive critical-first dashboard loading architecture (SPENDLY-402). Eliminated the monolithic `<DashboardSkeleton />` screen takeover in favor of granular, inline widget shimmer states (`SafeToSpendWidget`, `RecentActivityWidget`, `QuickInsightsWidget`). Re-aligned critical widgets above the fold (`focus`, `quickAdd`, `recentActivity`) while staggering secondary widgets (`budgetAlerts`, `subscriptions`, `topCategories`, `overview`, `financialGoals`, `gamification`) via `LazyMount`. Added progressive hydration to `useUnifiedNetWorth` to render liquid bank balance immediately from accounts while deferring heavy secondary valuations (stocks, EPF, loans) to idle.
 - Optimized React rendering and JS thread work on the Dashboard (SPENDLY-403). Extracted root derived financial calculations (`activeCategoryBudgets`, `computeExpenseStreak`, and `budgetHealthScore`) out of `DashboardScreen` root render loop and encapsulated category budget derivation inside `BudgetAlertsWidget` using the new `computeActiveCategoryBudgets` utility. Wrapped all dashboard widgets (`BudgetAlertsWidget`, `GamificationWidget`, `SafeToSpendWidget`, `RecentActivityWidget`, `QuickAddWidget`, `QuickInsightsWidget`, `NetWorthWidget`, `TopCategoriesWidget`, `FinancialGoalsWidget`, `SubscriptionsWidget`, `SmartInsightsWidget`, `DashboardWelcome`, `SetupChecklistWidget`) in `React.memo`. Memoized navigation callbacks and array allocations to prevent cascade re-renders.
 - Formalized quantitative performance budgets and anti-pattern guardrails (SPENDLY-404). Extended `docs/PERF_BASELINE.md` into an enforceable performance contract defining pass/warn/fail thresholds for cold startup, splash dismissal, critical dashboard data, and full hydration. Added automated static and architectural guardrail script `scripts/verify-performance-budgets.js` (`npm run perf:verify`), preventing global feature-scoped provider mounts, un-deferred reference listeners, unbounded startup queries, and unmemoized dashboard widgets, wired into `npm run release:verify`. Instrumented `dashboard_data_ready` and `dashboard_hydrated` milestone marks in `app/(app)/dashboard.tsx`.
+- Conducted exhaustive QA validation across 13 matrix scenarios, audited financial accuracy and offline cache resilience, and prepared release notes for v1.4.0 in `docs/STARTUP_PERF_QA_ROLLOUT.md` (SPENDLY-405).
+
