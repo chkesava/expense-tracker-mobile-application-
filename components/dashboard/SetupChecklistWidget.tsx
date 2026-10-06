@@ -19,7 +19,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 
-export function SetupChecklistWidget() {
+export const SetupChecklistWidget = React.memo(function SetupChecklistWidget() {
   const {
     steps,
     completedCount,
@@ -166,7 +166,7 @@ export function SetupChecklistWidget() {
       </Section>
     </Animated.View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrap: {

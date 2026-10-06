@@ -303,8 +303,6 @@ export default function AppLayout() {
     return <MaintenanceScreen />;
   }
 
-  const showGate = settingsLoading || roleLoading;
-
   return (
     <PrivacyLock>
       <SpendlyUIScope>
@@ -326,22 +324,6 @@ export default function AppLayout() {
         </ExpenseReferenceDataProvider>
       </FinanceDataProvider>
       </SpendlyUIScope>
-      {showGate ? (
-        <View
-          pointerEvents="auto"
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: theme.colors.background,
-              zIndex: 20,
-            },
-          ]}
-        >
-          <ActivityIndicator color={theme.colors.primary} />
-        </View>
-      ) : null}
     </PrivacyLock>
   );
 }

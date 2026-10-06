@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
 import { Landmark, Repeat, Wallet } from "lucide-react-native";
@@ -12,10 +12,18 @@ import {
   SectionAction,
   useSurfaces,
 } from "@/components/dashboard/primitives";
+import { useAccounts } from "@/hooks/useAccounts";
+import { useBorrowings } from "@/hooks/useBorrowings";
+import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
+import { useSettings } from "@/providers/SettingsProvider";
+import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 import type { Subscription } from "@/shared/types/subscription";
+import { formatDateKey } from "@/shared/utils/dates";
+import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import {
   amountDueWithinDays,
+  daysUntil,
   duesWithinDays,
   type UpcomingDueItem,
 } from "@/shared/utils/spendlyBudget";
@@ -44,14 +52,75 @@ function dueLabel(days: number): string {
   return `Due in ${days} days`;
 }
 
-export function SubscriptionsWidget({
+export const SubscriptionsWidget = memo(function SubscriptionsWidget({
   currency,
-  extraDues = [],
+  extraDues: explicitExtraDues,
 }: SubscriptionsWidgetProps) {
   const { push } = useRouter();
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const { subscriptions } = useSubscriptions();
+
+  const shouldLoadExtraDues = explicitExtraDues === undefined;
+  const [extraDuesActive, setExtraDuesActive] = useState(false);
+
+  useEffect(() => {
+    if (!shouldLoadExtraDues) return;
+    return scheduleIdleWork(() => setExtraDuesActive(true));
+  }, [shouldLoadExtraDues]);
+
+  const { bills } = useCreditCardBills({
+    enabled: shouldLoadExtraDues && extraDuesActive,
+  });
+  const { borrowings } = useBorrowings({
+    enabled: shouldLoadExtraDues && extraDuesActive,
+  });
+  const { accounts } = useAccounts();
+  const { settings } = useSettings();
+  const todayKey = formatDateKey(new Date(), settings.timezone);
+
+  const derivedExtraDues = useMemo((): UpcomingDueItem[] => {
+    if (!extraDuesActive) return [];
+    const accountNameById = new Map(
+      accounts.map((account) => [account.id, account.name])
+    );
+    const cardDues: UpcomingDueItem[] = bills
+      .filter(
+        (bill) =>
+          OPEN_BILL_STATUSES.includes(bill.status) && bill.remainingAmount > 0
+      )
+      .map((bill) => ({
+        id: bill.id,
+        name: accountNameById.get(bill.accountId) || "Credit card due",
+        amount: bill.remainingAmount,
+        dueDate: bill.dueDate,
+        daysRemaining: daysUntil(bill.dueDate, todayKey),
+        kind: "card" as const,
+      }));
+    const loanDues: UpcomingDueItem[] = borrowings
+      .filter(
+        (row) =>
+          (row.status === "ACTIVE" ||
+            row.status === "PARTIALLY_SETTLED" ||
+            row.status === "OVERDUE") &&
+          row.dueDate
+      )
+      .map((row) => ({
+        id: row.id || row.lenderName,
+        name: row.lenderName,
+        amount:
+          row.totalOutstanding ||
+          row.outstandingPrincipal ||
+          row.principalAmount ||
+          0,
+        dueDate: row.dueDate as string,
+        daysRemaining: daysUntil(row.dueDate as string, todayKey),
+        kind: "borrowing" as const,
+      }));
+    return [...cardDues, ...loanDues];
+  }, [extraDuesActive, accounts, bills, borrowings, todayKey]);
+
+  const extraDues = explicitExtraDues ?? derivedExtraDues;
 
   const commitments = useMemo(() => {
     return computeMonthlyCommitments(subscriptions);
@@ -153,7 +222,7 @@ export function SubscriptionsWidget({
       </Pressable>
     </Section>
   );
-}
+});
 
 const styles = StyleSheet.create({
   due: {

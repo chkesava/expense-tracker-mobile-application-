@@ -46,6 +46,7 @@ import type { Space } from "@/shared/types/space";
 import type { Subscription } from "@/shared/types/subscription";
 import { parseLocalDate, todayDateKey } from "@/shared/utils/dates";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
+import { perfEvent } from "@/lib/perf";
 import {
   evaluateSubscriptionDue,
   planDueSubscriptionPosts,
@@ -161,28 +162,38 @@ export function ExpenseReferenceDataProvider({
     }
     setCategoriesLoading(true);
     const path = `users/${uid}/categories`;
-    const unsub = onSnapshot(
-      query(collection(db, "users", uid, "categories")),
-      (snap) => {
-        logQuerySnapshot(path, snap);
-        setCategories(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() } as Category))
-        );
-        setCategoriesError(null);
-        setCategoriesLoading(false);
-      },
-      snapshotErrorHandler(
-        "snapshot.categories",
-        (failure) => {
-          setCategoriesError(failure);
+    let unsub: (() => void) | null = null;
+    const cancelIdle = scheduleIdleWork(() => {
+      perfEvent("firestore_listener_start", { collection: "categories" });
+      unsub = onSnapshot(
+        query(collection(db, "users", uid, "categories")),
+        (snap) => {
+          logQuerySnapshot(path, snap);
+          perfEvent("firestore_first_snapshot", {
+            collection: "categories",
+            docCount: snap.docs.length,
+            fromCache: snap.metadata.fromCache,
+          });
+          setCategories(
+            snap.docs.map((d) => ({ id: d.id, ...d.data() } as Category))
+          );
+          setCategoriesError(null);
           setCategoriesLoading(false);
         },
-        "Couldn't load your categories."
-      )
-    );
+        snapshotErrorHandler(
+          "snapshot.categories",
+          (failure) => {
+            setCategoriesError(failure);
+            setCategoriesLoading(false);
+          },
+          "Couldn't load your categories."
+        )
+      );
+    });
     return () => {
+      cancelIdle();
       forgetSnapshotPath(path);
-      unsub();
+      if (unsub) unsub();
     };
   }, [uid, db, categoriesAttempt, setCategoriesError]);
 
@@ -195,10 +206,16 @@ export function ExpenseReferenceDataProvider({
     }
     setSubscriptionsLoading(true);
     const path = `users/${uid}/subscriptions`;
+    perfEvent("firestore_listener_start", { collection: "subscriptions" });
     const unsub = onSnapshot(
       query(collection(db, "users", uid, "subscriptions"), orderBy("name", "asc")),
       (snap) => {
         logQuerySnapshot(path, snap);
+        perfEvent("firestore_first_snapshot", {
+          collection: "subscriptions",
+          docCount: snap.docs.length,
+          fromCache: snap.metadata.fromCache,
+        });
         const list = snap.docs.map((docSnap) => ({
           id: docSnap.id,
           ...(docSnap.data() as Omit<Subscription, "id">),
@@ -232,31 +249,41 @@ export function ExpenseReferenceDataProvider({
     }
     setSpacesLoading(true);
     const path = `users/${uid}/spaces`;
-    const unsub = onSnapshot(
-      query(collection(db, "users", uid, "spaces"), orderBy("name")),
-      (snap) => {
-        logQuerySnapshot(path, snap);
-        setSpaces(
-          snap.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...(docSnap.data() as Omit<Space, "id">),
-          }))
-        );
-        setSpacesError(null);
-        setSpacesLoading(false);
-      },
-      snapshotErrorHandler(
-        "snapshot.spaces",
-        (failure) => {
-          setSpacesError(failure);
+    let unsub: (() => void) | null = null;
+    const cancelIdle = scheduleIdleWork(() => {
+      perfEvent("firestore_listener_start", { collection: "spaces" });
+      unsub = onSnapshot(
+        query(collection(db, "users", uid, "spaces"), orderBy("name")),
+        (snap) => {
+          logQuerySnapshot(path, snap);
+          perfEvent("firestore_first_snapshot", {
+            collection: "spaces",
+            docCount: snap.docs.length,
+            fromCache: snap.metadata.fromCache,
+          });
+          setSpaces(
+            snap.docs.map((docSnap) => ({
+              id: docSnap.id,
+              ...(docSnap.data() as Omit<Space, "id">),
+            }))
+          );
+          setSpacesError(null);
           setSpacesLoading(false);
         },
-        "Couldn't load your spaces."
-      )
-    );
+        snapshotErrorHandler(
+          "snapshot.spaces",
+          (failure) => {
+            setSpacesError(failure);
+            setSpacesLoading(false);
+          },
+          "Couldn't load your spaces."
+        )
+      );
+    });
     return () => {
+      cancelIdle();
       forgetSnapshotPath(path);
-      unsub();
+      if (unsub) unsub();
     };
   }, [uid, db, spacesAttempt, setSpacesError]);
 
@@ -268,31 +295,41 @@ export function ExpenseReferenceDataProvider({
     }
     setRulesLoading(true);
     const path = `users/${uid}/categorizationRules`;
-    const unsub = onSnapshot(
-      query(
-        collection(db, "users", uid, "categorizationRules"),
-        orderBy("createdAt", "asc")
-      ),
-      (snap) => {
-        logQuerySnapshot(path, snap);
-        setRules(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() } as CategorizationRule))
-        );
-        setRulesError(null);
-        setRulesLoading(false);
-      },
-      snapshotErrorHandler(
-        "snapshot.categorizationRules",
-        (failure) => {
-          setRulesError(failure);
+    let unsub: (() => void) | null = null;
+    const cancelIdle = scheduleIdleWork(() => {
+      perfEvent("firestore_listener_start", { collection: "categorizationRules" });
+      unsub = onSnapshot(
+        query(
+          collection(db, "users", uid, "categorizationRules"),
+          orderBy("createdAt", "asc")
+        ),
+        (snap) => {
+          logQuerySnapshot(path, snap);
+          perfEvent("firestore_first_snapshot", {
+            collection: "categorizationRules",
+            docCount: snap.docs.length,
+            fromCache: snap.metadata.fromCache,
+          });
+          setRules(
+            snap.docs.map((d) => ({ id: d.id, ...d.data() } as CategorizationRule))
+          );
+          setRulesError(null);
           setRulesLoading(false);
         },
-        "Couldn't load your categorization rules."
-      )
-    );
+        snapshotErrorHandler(
+          "snapshot.categorizationRules",
+          (failure) => {
+            setRulesError(failure);
+            setRulesLoading(false);
+          },
+          "Couldn't load your categorization rules."
+        )
+      );
+    });
     return () => {
+      cancelIdle();
       forgetSnapshotPath(path);
-      unsub();
+      if (unsub) unsub();
     };
   }, [uid, db, rulesAttempt, setRulesError]);
 
@@ -304,6 +341,7 @@ export function ExpenseReferenceDataProvider({
     }
     setBudgetsLoading(true);
     const path = `users/${uid}/categoryBudgets`;
+    perfEvent("firestore_listener_start", { collection: "categoryBudgets" });
     const unsub = onSnapshot(
       query(
         collection(db, "users", uid, "categoryBudgets"),
@@ -311,6 +349,11 @@ export function ExpenseReferenceDataProvider({
       ),
       (snap) => {
         logQuerySnapshot(path, snap);
+        perfEvent("firestore_first_snapshot", {
+          collection: "categoryBudgets",
+          docCount: snap.docs.length,
+          fromCache: snap.metadata.fromCache,
+        });
         setBudgets(
           snap.docs.map((d) => ({ id: d.id, ...d.data() } as CategoryBudget))
         );
@@ -340,6 +383,7 @@ export function ExpenseReferenceDataProvider({
     }
     setGoalsLoading(true);
     const path = `users/${uid}/financialGoals`;
+    perfEvent("firestore_listener_start", { collection: "financialGoals" });
     const unsub = onSnapshot(
       query(
         collection(db, "users", uid, "financialGoals"),
@@ -347,6 +391,11 @@ export function ExpenseReferenceDataProvider({
       ),
       (snap) => {
         logQuerySnapshot(path, snap);
+        perfEvent("firestore_first_snapshot", {
+          collection: "financialGoals",
+          docCount: snap.docs.length,
+          fromCache: snap.metadata.fromCache,
+        });
         setGoals(
           snap.docs.map((d) => ({ id: d.id, ...d.data() } as FinancialGoal))
         );

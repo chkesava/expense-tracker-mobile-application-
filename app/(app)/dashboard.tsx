@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ShieldAlert, Sparkles, Inbox, ChevronRight } from "lucide-react-native";
@@ -25,13 +25,10 @@ import { LazyMount } from "@/components/common/LazyMount";
 import { ErrorState } from "@/components/common/ErrorState";
 import { WelcomeScreen } from "@/components/onboarding/WelcomeScreen";
 import { PageShell } from "@/components/layout/PageShell";
-import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
-import { sampleScrollFps } from "@/lib/perf";
+import { sampleScrollFps, perfEvent, perfMark } from "@/lib/perf";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useAccounts } from "@/hooks/useAccounts";
-import { useBorrowings } from "@/hooks/useBorrowings";
 import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
-import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useFinancialGoals } from "@/hooks/useFinancialGoals";
 import { useIncomes } from "@/hooks/useIncomes";
@@ -47,9 +44,7 @@ import {
 } from "@/shared/utils/dateDisplay";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Expense } from "@/shared/types/expense";
-import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 import {
-  computeExpenseStreak,
   getOrderedDashboardWidgets,
   type DashboardWidgetId,
 } from "@/shared/utils/dashboardWidgets";
@@ -58,23 +53,20 @@ import { currentMonthKey, formatDateKey, isInMonth } from "@/shared/utils/dates"
 import {
   cashFlowByMonth,
   computeSpendlyBudget,
-  daysUntil,
   remainingCommittedThisMonth,
-  type UpcomingDueItem,
 } from "@/shared/utils/spendlyBudget";
 import { getNextRenewalDate } from "@/shared/utils/subscriptionProcessor";
 import { useTheme } from "@/theme/ThemeProvider";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
-/** First viewport: Safe to Spend, then Budget + Forecast. */
-const HERO_WIDGETS: DashboardWidgetId[] = ["focus", "budgetAlerts"];
+/** Critical first-viewport widgets: Safe to Spend, Quick Add, and Recent Activity. */
+const HERO_WIDGETS: DashboardWidgetId[] = ["focus", "recentActivity"];
 
 const ABOVE_FOLD_WIDGETS: DashboardWidgetId[] = [
   "focus",
-  "budgetAlerts",
-  "subscriptions",
-  "overview",
+  "quickAdd",
+  "recentActivity",
 ];
 
 function getPreviousMonthKey(month: string): string {
@@ -112,14 +104,13 @@ export default function DashboardScreen() {
   const { incomes, loading: incomesLoading } = useIncomes();
   const { count: inboxCount } = useSmsReviewInbox();
   const { accounts, loading: accountsLoading } = useAccounts();
-  const { borrowings } = useBorrowings();
-  const { bills } = useCreditCardBills();
   const { subscriptions } = useSubscriptions();
   const { budgets: categoryBudgets } = useCategoryBudgets();
   const { goals } = useFinancialGoals();
   const { markScreenVisited } = useSetupProgress();
 
   useEffect(() => {
+    perfEvent("dashboard_mounted");
     markScreenVisited("dashboard");
   }, [markScreenVisited]);
 
@@ -133,9 +124,15 @@ export default function DashboardScreen() {
     retry();
   }, [retry]);
 
+  const dataReadyEmittedRef = useRef(false);
+  const hydratedEmittedRef = useRef(false);
   useEffect(() => {
     if (!expensesLoading && !incomesLoading && !accountsLoading) {
       setRefreshing(false);
+      if (!dataReadyEmittedRef.current) {
+        dataReadyEmittedRef.current = true;
+        perfMark("dashboard_data_ready");
+      }
     }
   }, [expensesLoading, incomesLoading, accountsLoading]);
 
@@ -187,35 +184,6 @@ export default function DashboardScreen() {
     [recurringDueItems, activeMonth, todayKey]
   );
 
-  const extraDues = useMemo((): UpcomingDueItem[] => {
-    const accountNameById = new Map(accounts.map((account) => [account.id, account.name]));
-    const cardDues: UpcomingDueItem[] = bills
-      .filter((bill) => OPEN_BILL_STATUSES.includes(bill.status) && bill.remainingAmount > 0)
-      .map((bill) => ({
-        id: bill.id,
-        name: accountNameById.get(bill.accountId) || "Credit card due",
-        amount: bill.remainingAmount,
-        dueDate: bill.dueDate,
-        daysRemaining: daysUntil(bill.dueDate, todayKey),
-        kind: "card" as const,
-      }));
-    const loanDues: UpcomingDueItem[] = borrowings
-      .filter(
-        (row) =>
-          (row.status === "ACTIVE" || row.status === "PARTIALLY_SETTLED" || row.status === "OVERDUE") &&
-          row.dueDate
-      )
-      .map((row) => ({
-        id: row.id || row.lenderName,
-        name: row.lenderName,
-        amount: row.totalOutstanding || row.outstandingPrincipal || row.principalAmount || 0,
-        dueDate: row.dueDate as string,
-        daysRemaining: daysUntil(row.dueDate as string, todayKey),
-        kind: "borrowing" as const,
-      }));
-    return [...cardDues, ...loanDues];
-  }, [accounts, bills, borrowings, todayKey]);
-
   const monthBudget = useMemo(
     () =>
       computeSpendlyBudget({
@@ -228,58 +196,17 @@ export default function DashboardScreen() {
     [settings.monthlyBudget, monthlySpent, activeMonth, todayKey, remainingCommitted]
   );
 
-  const cashFlow = useMemo(
-    () => cashFlowByMonth(expenses, incomes, activeMonth, 6),
-    [expenses, incomes, activeMonth]
-  );
+  const isOverviewEnabled = useMemo(() => {
+    return (
+      settings.dashboardOrder.length === 0 ||
+      settings.dashboardOrder.includes("overview")
+    );
+  }, [settings.dashboardOrder]);
 
-  const activeCategoryBudgets = useMemo(() => {
-    const monthBudgets = categoryBudgets.filter((b) => b.month === activeMonth);
-    if (monthBudgets.length === 0) return [];
-
-    const spendingByCat = new Map<string, number>();
-    monthlyExpenses.forEach((e) => {
-      const key = e.subcategory
-        ? `${e.category}::${e.subcategory}`
-        : e.category;
-      spendingByCat.set(key, (spendingByCat.get(key) || 0) + (e.amount || 0));
-      if (e.subcategory) {
-        spendingByCat.set(
-          e.category,
-          (spendingByCat.get(e.category) || 0) + (e.amount || 0)
-        );
-      }
-    });
-
-    return monthBudgets.map((b) => {
-      const key = b.subcategory
-        ? `${b.category}::${b.subcategory}`
-        : b.category;
-      const spent = spendingByCat.get(key) || 0;
-      const pct =
-        b.amount > 0 ? Math.min(100, Math.round((spent / b.amount) * 100)) : 0;
-      return {
-        ...b,
-        spent,
-        pct,
-        isOver: spent > b.amount,
-        isWarning: pct >= 80 && spent <= b.amount,
-      };
-    });
-  }, [categoryBudgets, activeMonth, monthlyExpenses]);
-
-  const loggingStreak = useMemo(() => {
-    return computeExpenseStreak(expenses, todayKey);
-  }, [expenses, todayKey]);
-
-  const budgetHealthScore = useMemo(() => {
-    if (!settings.monthlyBudget || settings.monthlyBudget <= 0) return 85;
-    const ratio = monthlySpent / settings.monthlyBudget;
-    if (ratio <= 0.8) return 95;
-    if (ratio <= 1.0) return 80;
-    if (ratio <= 1.2) return 55;
-    return 35;
-  }, [monthlySpent, settings.monthlyBudget]);
+  const cashFlow = useMemo(() => {
+    if (!isOverviewEnabled) return [];
+    return cashFlowByMonth(expenses, incomes, activeMonth, 6);
+  }, [isOverviewEnabled, expenses, incomes, activeMonth]);
 
   const orderedWidgetIds = useMemo(() => {
     return getOrderedDashboardWidgets(
@@ -296,12 +223,27 @@ export default function DashboardScreen() {
     return [...hero, ...rest];
   }, [orderedWidgetIds]);
 
-  const isLoading = expensesLoading || incomesLoading || accountsLoading;
-
-  const handleEditExpense = (expense: Expense) => {
+  const handleEditExpense = useCallback((expense: Expense) => {
     setEditingExpense(expense);
     setIsAddExpenseOpen(true);
-  };
+  }, [setEditingExpense, setIsAddExpenseOpen]);
+
+  const handleOpenAddSheet = useCallback(() => {
+    setIsAddSheetOpen(true);
+  }, [setIsAddSheetOpen]);
+
+  const handleOpenMonthPicker = useCallback(() => {
+    setIsMonthDrawerOpen(true);
+  }, [setIsMonthDrawerOpen]);
+
+  const handleViewLedger = useCallback(() => {
+    router.push("/ledger");
+  }, [router]);
+
+  const activeMonthChipLabel = useMemo(
+    () => formatMonthChipLabel(activeMonth, settings.dateFormat),
+    [activeMonth, settings.dateFormat]
+  );
 
   const renderWidget = (widgetId: DashboardWidgetId, index: number) => {
     const node = (() => {
@@ -319,7 +261,7 @@ export default function DashboardScreen() {
           return (
             <QuickAddWidget
               key="quickAdd"
-              onAddExpense={() => setIsAddSheetOpen(true)}
+              onAddExpense={handleOpenAddSheet}
             />
           );
 
@@ -330,7 +272,8 @@ export default function DashboardScreen() {
               monthlyBudget={settings.monthlyBudget}
               monthlySpent={monthlySpent}
               currency={displayCurrency}
-              activeCategoryBudgets={activeCategoryBudgets}
+              categoryBudgets={categoryBudgets}
+              monthlyExpenses={monthlyExpenses}
               activeMonth={activeMonth}
               budget={monthBudget}
             />
@@ -352,8 +295,9 @@ export default function DashboardScreen() {
               key="recentActivity"
               expenses={expenses}
               currency={displayCurrency}
+              loading={expensesLoading && expenses.length === 0}
               onEditExpense={handleEditExpense}
-              onViewAll={() => router.push("/ledger")}
+              onViewAll={handleViewLedger}
             />
           );
 
@@ -375,7 +319,6 @@ export default function DashboardScreen() {
             <SubscriptionsWidget
               key="subscriptions"
               currency={displayCurrency}
-              extraDues={extraDues}
             />
           );
 
@@ -385,6 +328,7 @@ export default function DashboardScreen() {
               key="focus"
               budget={monthBudget}
               currency={displayCurrency}
+              loading={expensesLoading && accountsLoading && accounts.length === 0}
             />
           );
 
@@ -392,8 +336,6 @@ export default function DashboardScreen() {
           return (
             <GamificationWidget
               key="gamification"
-              streak={loggingStreak}
-              budgetHealthScore={budgetHealthScore}
             />
           );
 
@@ -409,8 +351,23 @@ export default function DashboardScreen() {
     }
 
     const delayMs = 40 + Math.max(0, index) * 40;
+    const isLastWidget = index === displayWidgetIds.length - 1;
     return (
-      <LazyMount key={widgetId} delayMs={delayMs} minHeight={120}>
+      <LazyMount
+        key={widgetId}
+        delayMs={delayMs}
+        minHeight={120}
+        onMount={
+          isLastWidget
+            ? () => {
+                if (!hydratedEmittedRef.current) {
+                  hydratedEmittedRef.current = true;
+                  perfMark("dashboard_hydrated");
+                }
+              }
+            : undefined
+        }
+      >
         {node}
       </LazyMount>
     );
@@ -426,8 +383,8 @@ export default function DashboardScreen() {
       onScrollBeginDrag={() => sampleScrollFps("dashboard")}
     >
       <DashboardWelcome
-        monthLabel={formatMonthChipLabel(activeMonth, settings.dateFormat)}
-        onOpenMonthPicker={() => setIsMonthDrawerOpen(true)}
+        monthLabel={activeMonthChipLabel}
+        onOpenMonthPicker={handleOpenMonthPicker}
       />
 
       {isDuress ? (
@@ -538,9 +495,7 @@ export default function DashboardScreen() {
       <WelcomeScreen />
       <SetupChecklistWidget />
 
-      {isLoading && expenses.length === 0 && accounts.length === 0 ? (
-        <DashboardSkeleton />
-      ) : financeError && expenses.length === 0 && accounts.length === 0 ? (
+      {financeError && expenses.length === 0 && accounts.length === 0 ? (
         <ErrorState
           title="Couldn't load your transactions"
           description={financeError.message}
@@ -554,8 +509,9 @@ export default function DashboardScreen() {
             previousSpent={previousSpent}
             previousIncome={previousIncome}
             currency={displayCurrency}
-            monthLabel={formatMonthChipLabel(activeMonth, settings.dateFormat)}
-            onOpenMonthPicker={() => setIsMonthDrawerOpen(true)}
+            loading={expensesLoading && monthlySpent === 0 && monthlyIncome === 0}
+            monthLabel={activeMonthChipLabel}
+            onOpenMonthPicker={handleOpenMonthPicker}
           />
           {displayWidgetIds.map((widgetId, index) => (
             <View key={widgetId}>
@@ -563,23 +519,27 @@ export default function DashboardScreen() {
               {index === insertInsightsAfter ||
               (insertInsightsAfter < 0 && index === 0) ? (
                 <View style={styles.quickInsightsSlot}>
-                  <SmartInsightsWidget
-                    expenses={expenses}
-                    monthlyBudget={settings.monthlyBudget}
-                    currency={displayCurrency}
-                    todayKey={todayKey}
-                  />
+                  <LazyMount delayMs={120}>
+                    <SmartInsightsWidget
+                      expenses={expenses}
+                      monthlyBudget={settings.monthlyBudget}
+                      currency={displayCurrency}
+                      todayKey={todayKey}
+                    />
+                  </LazyMount>
                 </View>
               ) : null}
             </View>
           ))}
           {displayWidgetIds.length === 0 ? (
-            <SmartInsightsWidget
-              expenses={expenses}
-              monthlyBudget={settings.monthlyBudget}
-              currency={displayCurrency}
-              todayKey={todayKey}
-            />
+            <LazyMount delayMs={120}>
+              <SmartInsightsWidget
+                expenses={expenses}
+                monthlyBudget={settings.monthlyBudget}
+                currency={displayCurrency}
+                todayKey={todayKey}
+              />
+            </LazyMount>
           ) : null}
         </View>
       )}

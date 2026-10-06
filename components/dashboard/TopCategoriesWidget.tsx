@@ -64,7 +64,7 @@ function AnimatedCategoryBar({
   );
 }
 
-export function TopCategoriesWidget({
+export const TopCategoriesWidget = React.memo(function TopCategoriesWidget({
   expenses,
   currency,
   activeMonth,
@@ -162,7 +162,7 @@ export function TopCategoriesWidget({
       })}
     </Section>
   );
-}
+});
 
 const styles = StyleSheet.create({
   list: {

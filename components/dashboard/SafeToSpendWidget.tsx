@@ -1,7 +1,9 @@
+import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Wallet } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { Skeleton } from "@/components/common/Skeleton";
 import {
   MetaLabel,
   Section,
@@ -17,6 +19,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 export interface SafeToSpendWidgetProps {
   budget: SpendlyBudget;
   currency: string;
+  loading?: boolean;
 }
 
 function statusTone(status: SpendlyBudget["status"]) {
@@ -25,7 +28,11 @@ function statusTone(status: SpendlyBudget["status"]) {
   return "positive" as const;
 }
 
-export function SafeToSpendWidget({ budget, currency }: SafeToSpendWidgetProps) {
+export const SafeToSpendWidget = memo(function SafeToSpendWidget({
+  budget,
+  currency,
+  loading = false,
+}: SafeToSpendWidgetProps) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const tone = statusTone(budget.status);
@@ -45,60 +52,83 @@ export function SafeToSpendWidget({ budget, currency }: SafeToSpendWidgetProps) 
     >
       <View style={styles.hero}>
         <MetaLabel>Per remaining day</MetaLabel>
-        <Amount
-          value={budget.safeToSpendDaily}
-          currency={currency}
-          ghostable
-          style={{
-            fontSize: 32,
-            lineHeight: 38,
-            letterSpacing: -1,
-            fontFamily: theme.fontFamily.bold,
-            color: theme.colors.foreground,
-          }}
-        />
-        <Text
-          style={[
-            styles.perDay,
-            { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium },
-          ]}
-        >
-          / day
-        </Text>
+        {loading ? (
+          <View style={{ marginVertical: 4 }}>
+            <Skeleton width={140} height={36} borderRadius={8} />
+          </View>
+        ) : (
+          <Amount
+            value={budget.safeToSpendDaily}
+            currency={currency}
+            ghostable
+            style={{
+              fontSize: 32,
+              lineHeight: 38,
+              letterSpacing: -1,
+              fontFamily: theme.fontFamily.bold,
+              color: theme.colors.foreground,
+            }}
+          />
+        )}
+        {!loading && (
+          <Text
+            style={[
+              styles.perDay,
+              {
+                color: theme.colors.mutedForeground,
+                fontFamily: theme.fontFamily.medium,
+              },
+            ]}
+          >
+            / day
+          </Text>
+        )}
       </View>
 
       <View style={styles.metaRow}>
         <View style={styles.metaItem}>
           <MetaLabel>Flexible remaining</MetaLabel>
-          <Amount
-            value={budget.flexibleRemaining}
-            currency={currency}
-            ghostable
-            style={{
-              fontSize: 15,
-              fontFamily: theme.fontFamily.semibold,
-              color: theme.colors.foreground,
-            }}
-          />
+          {loading ? (
+            <Skeleton width={80} height={18} borderRadius={4} />
+          ) : (
+            <Amount
+              value={budget.flexibleRemaining}
+              currency={currency}
+              ghostable
+              style={{
+                fontSize: 15,
+                fontFamily: theme.fontFamily.semibold,
+                color: theme.colors.foreground,
+              }}
+            />
+          )}
         </View>
         <View style={[styles.metaItem, styles.metaRight]}>
           <MetaLabel>Days left</MetaLabel>
-          <Text
-            style={{
-              fontSize: 15,
-              fontFamily: theme.fontFamily.semibold,
-              color: theme.colors.foreground,
-            }}
-          >
-            {budget.daysLeft}
-          </Text>
+          {loading ? (
+            <Skeleton width={40} height={18} borderRadius={4} />
+          ) : (
+            <Text
+              style={{
+                fontSize: 15,
+                fontFamily: theme.fontFamily.semibold,
+                color: theme.colors.foreground,
+              }}
+            >
+              {budget.daysLeft}
+            </Text>
+          )}
         </View>
       </View>
 
-      <StatusStrip tone={tone} message={budgetStatusMessage(budget)} />
+      {loading ? (
+        <Skeleton width="100%" height={24} borderRadius={6} />
+      ) : (
+        <StatusStrip tone={tone} message={budgetStatusMessage(budget)} />
+      )}
     </Section>
   );
-}
+});
 
 const styles = StyleSheet.create({
   hero: {

@@ -32,7 +32,7 @@ import { UpdateAvailableSheet } from "@/components/UpdateAvailableSheet";
 import { webWidthConstraintStyle } from "@/components/common/WebWidthConstraint";
 import { isPermissionError, logWarning } from "@/lib/errors";
 import { installGlobalErrorHandlers } from "@/lib/globalErrorHandler";
-import { perfMark } from "@/lib/perf";
+import { perfMark, perfStart, perfEnd } from "@/lib/perf";
 import { bindQueryClientToNetwork } from "@/lib/queryNetworkBinding";
 import { ToastProvider } from "@/lib/toast";
 import { AppDialogProvider } from "@/providers/AppDialogProvider";
@@ -144,6 +144,7 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
 
   // Parallel: SecureStore + theme/first-launch AsyncStorage
   useEffect(() => {
+    perfStart("local_stores_init");
     let cancelled = false;
     Promise.all([
       // expo-secure-store has no web implementation, so getItemAsync always
@@ -157,6 +158,7 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
     ]).finally(() => {
       if (!cancelled) {
         setLocalStoresReady(true);
+        perfEnd("local_stores_init", { success: true });
         perfMark("local_stores_ready");
       }
     });
@@ -167,8 +169,10 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
 
   const navigationRef = useNavigationContainerRef();
   useEffect(() => {
+    perfStart("navigation_init");
     if (navigationRef?.isReady()) {
       setNavigationReady(true);
+      perfEnd("navigation_init", { success: true });
       perfMark("navigation_ready");
       return;
     }
@@ -176,6 +180,7 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
       if (navigationRef?.isReady()) {
         setNavigationReady(true);
         clearInterval(interval);
+        perfEnd("navigation_init", { success: true });
         perfMark("navigation_ready");
       }
     }, 50);
@@ -195,23 +200,20 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(timer);
   }, []);
 
-  // Critical path: auth + fonts + local stores + nav (not settings/userDoc)
+  // Critical path: auth + fonts (local stores and nav are NOT critical)
   useEffect(() => {
-    const criticalPathReady =
-      !authLoading && localStoresReady && navigationReady && fontsSettled;
+    const criticalPathReady = !authLoading && fontsSettled;
     if (criticalPathReady || readyTimedOut) {
       if (readyTimedOut && !criticalPathReady) {
         logWarning("app.startupTimeout", new Error("Startup gates did not settle"), {
           authLoading,
-          localStoresReady,
-          navigationReady,
           fontsSettled,
         });
       }
       setAppIsReady(true);
       perfMark("app_ready");
     }
-  }, [authLoading, localStoresReady, navigationReady, fontsSettled, readyTimedOut]);
+  }, [authLoading, fontsSettled, readyTimedOut]);
 
   useEffect(() => {
     if (ACTIVE_PRODUCT === "ganesh") {

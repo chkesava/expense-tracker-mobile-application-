@@ -1,8 +1,10 @@
+import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Landmark } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { Skeleton } from "@/components/common/Skeleton";
 import {
   MetaLabel,
   Section,
@@ -18,11 +20,11 @@ export interface NetWorthWidgetProps {
   cashFlow: MonthCashFlow[];
 }
 
-export function NetWorthWidget({ currency, cashFlow }: NetWorthWidgetProps) {
+export const NetWorthWidget = memo(function NetWorthWidget({ currency, cashFlow }: NetWorthWidgetProps) {
   const router = useRouter();
   const { theme } = useTheme();
   const surfaces = useSurfaces();
-  const netWorth = useUnifiedNetWorth();
+  const netWorth = useUnifiedNetWorth({ progressive: true });
 
   const maxAbs = Math.max(1, ...cashFlow.map((row) => Math.abs(row.net)));
   const lines = [
@@ -48,26 +50,36 @@ export function NetWorthWidget({ currency, cashFlow }: NetWorthWidgetProps) {
   return (
     <Section
       title="Net Worth"
-      subtitle="How much am I worth?"
+      subtitle={
+        netWorth.secondaryLoading
+          ? "Updating valuations..."
+          : "How much am I worth?"
+      }
       icon={<Landmark size={16} color={theme.colors.info} strokeWidth={2.3} />}
       iconTint={surfaces.wash(theme.colors.info)}
       action={<SectionAction label="Accounts" onPress={() => router.push("/ledger" as never)} />}
     >
-      <Amount
-        value={netWorth.totalNetWorth}
-        currency={currency}
-        ghostable
-        style={{
-          fontSize: 28,
-          lineHeight: 34,
-          letterSpacing: -0.8,
-          fontFamily: theme.fontFamily.bold,
-          color:
-            netWorth.totalNetWorth >= 0
-              ? theme.colors.foreground
-              : theme.colors.destructive,
-        }}
-      />
+      {netWorth.loading ? (
+        <View style={{ marginVertical: 4 }}>
+          <Skeleton width={160} height={34} borderRadius={8} />
+        </View>
+      ) : (
+        <Amount
+          value={netWorth.totalNetWorth}
+          currency={currency}
+          ghostable
+          style={{
+            fontSize: 28,
+            lineHeight: 34,
+            letterSpacing: -0.8,
+            fontFamily: theme.fontFamily.bold,
+            color:
+              netWorth.totalNetWorth >= 0
+                ? theme.colors.foreground
+                : theme.colors.destructive,
+          }}
+        />
+      )}
 
       <View style={styles.lines}>
         {lines.map((line) => (
@@ -121,7 +133,7 @@ export function NetWorthWidget({ currency, cashFlow }: NetWorthWidgetProps) {
       </View>
     </Section>
   );
-}
+});
 
 const styles = StyleSheet.create({
   lines: {
