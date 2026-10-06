@@ -45,7 +45,6 @@ import {
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Expense } from "@/shared/types/expense";
 import {
-  computeExpenseStreak,
   getOrderedDashboardWidgets,
   type DashboardWidgetId,
 } from "@/shared/utils/dashboardWidgets";
@@ -203,54 +202,6 @@ export default function DashboardScreen() {
     return cashFlowByMonth(expenses, incomes, activeMonth, 6);
   }, [isOverviewEnabled, expenses, incomes, activeMonth]);
 
-  const activeCategoryBudgets = useMemo(() => {
-    const monthBudgets = categoryBudgets.filter((b) => b.month === activeMonth);
-    if (monthBudgets.length === 0) return [];
-
-    const spendingByCat = new Map<string, number>();
-    monthlyExpenses.forEach((e) => {
-      const key = e.subcategory
-        ? `${e.category}::${e.subcategory}`
-        : e.category;
-      spendingByCat.set(key, (spendingByCat.get(key) || 0) + (e.amount || 0));
-      if (e.subcategory) {
-        spendingByCat.set(
-          e.category,
-          (spendingByCat.get(e.category) || 0) + (e.amount || 0)
-        );
-      }
-    });
-
-    return monthBudgets.map((b) => {
-      const key = b.subcategory
-        ? `${b.category}::${b.subcategory}`
-        : b.category;
-      const spent = spendingByCat.get(key) || 0;
-      const pct =
-        b.amount > 0 ? Math.min(100, Math.round((spent / b.amount) * 100)) : 0;
-      return {
-        ...b,
-        spent,
-        pct,
-        isOver: spent > b.amount,
-        isWarning: pct >= 80 && spent <= b.amount,
-      };
-    });
-  }, [categoryBudgets, activeMonth, monthlyExpenses]);
-
-  const loggingStreak = useMemo(() => {
-    return computeExpenseStreak(expenses, todayKey);
-  }, [expenses, todayKey]);
-
-  const budgetHealthScore = useMemo(() => {
-    if (!settings.monthlyBudget || settings.monthlyBudget <= 0) return 85;
-    const ratio = monthlySpent / settings.monthlyBudget;
-    if (ratio <= 0.8) return 95;
-    if (ratio <= 1.0) return 80;
-    if (ratio <= 1.2) return 55;
-    return 35;
-  }, [monthlySpent, settings.monthlyBudget]);
-
   const orderedWidgetIds = useMemo(() => {
     return getOrderedDashboardWidgets(
       settings.dashboardOrder,
@@ -266,10 +217,27 @@ export default function DashboardScreen() {
     return [...hero, ...rest];
   }, [orderedWidgetIds]);
 
-  const handleEditExpense = (expense: Expense) => {
+  const handleEditExpense = useCallback((expense: Expense) => {
     setEditingExpense(expense);
     setIsAddExpenseOpen(true);
-  };
+  }, [setEditingExpense, setIsAddExpenseOpen]);
+
+  const handleOpenAddSheet = useCallback(() => {
+    setIsAddSheetOpen(true);
+  }, [setIsAddSheetOpen]);
+
+  const handleOpenMonthPicker = useCallback(() => {
+    setIsMonthDrawerOpen(true);
+  }, [setIsMonthDrawerOpen]);
+
+  const handleViewLedger = useCallback(() => {
+    router.push("/ledger");
+  }, [router]);
+
+  const activeMonthChipLabel = useMemo(
+    () => formatMonthChipLabel(activeMonth, settings.dateFormat),
+    [activeMonth, settings.dateFormat]
+  );
 
   const renderWidget = (widgetId: DashboardWidgetId, index: number) => {
     const node = (() => {
@@ -287,7 +255,7 @@ export default function DashboardScreen() {
           return (
             <QuickAddWidget
               key="quickAdd"
-              onAddExpense={() => setIsAddSheetOpen(true)}
+              onAddExpense={handleOpenAddSheet}
             />
           );
 
@@ -298,7 +266,8 @@ export default function DashboardScreen() {
               monthlyBudget={settings.monthlyBudget}
               monthlySpent={monthlySpent}
               currency={displayCurrency}
-              activeCategoryBudgets={activeCategoryBudgets}
+              categoryBudgets={categoryBudgets}
+              monthlyExpenses={monthlyExpenses}
               activeMonth={activeMonth}
               budget={monthBudget}
             />
@@ -322,7 +291,7 @@ export default function DashboardScreen() {
               currency={displayCurrency}
               loading={expensesLoading && expenses.length === 0}
               onEditExpense={handleEditExpense}
-              onViewAll={() => router.push("/ledger")}
+              onViewAll={handleViewLedger}
             />
           );
 
@@ -361,8 +330,6 @@ export default function DashboardScreen() {
           return (
             <GamificationWidget
               key="gamification"
-              streak={loggingStreak}
-              budgetHealthScore={budgetHealthScore}
             />
           );
 
@@ -395,8 +362,8 @@ export default function DashboardScreen() {
       onScrollBeginDrag={() => sampleScrollFps("dashboard")}
     >
       <DashboardWelcome
-        monthLabel={formatMonthChipLabel(activeMonth, settings.dateFormat)}
-        onOpenMonthPicker={() => setIsMonthDrawerOpen(true)}
+        monthLabel={activeMonthChipLabel}
+        onOpenMonthPicker={handleOpenMonthPicker}
       />
 
       {isDuress ? (
@@ -522,8 +489,8 @@ export default function DashboardScreen() {
             previousIncome={previousIncome}
             currency={displayCurrency}
             loading={expensesLoading && monthlySpent === 0 && monthlyIncome === 0}
-            monthLabel={formatMonthChipLabel(activeMonth, settings.dateFormat)}
-            onOpenMonthPicker={() => setIsMonthDrawerOpen(true)}
+            monthLabel={activeMonthChipLabel}
+            onOpenMonthPicker={handleOpenMonthPicker}
           />
           {displayWidgetIds.map((widgetId, index) => (
             <View key={widgetId}>

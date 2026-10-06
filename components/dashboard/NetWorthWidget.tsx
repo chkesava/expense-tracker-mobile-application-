@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Landmark } from "lucide-react-native";
@@ -19,7 +20,7 @@ export interface NetWorthWidgetProps {
   cashFlow: MonthCashFlow[];
 }
 
-export function NetWorthWidget({ currency, cashFlow }: NetWorthWidgetProps) {
+export const NetWorthWidget = memo(function NetWorthWidget({ currency, cashFlow }: NetWorthWidgetProps) {
   const router = useRouter();
   const { theme } = useTheme();
   const surfaces = useSurfaces();
@@ -132,7 +133,7 @@ export function NetWorthWidget({ currency, cashFlow }: NetWorthWidgetProps) {
       </View>
     </Section>
   );
-}
+});
 
 const styles = StyleSheet.create({
   lines: {

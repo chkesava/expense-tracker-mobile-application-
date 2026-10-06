@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Calendar, Wallet } from "lucide-react-native";
 
@@ -16,7 +17,7 @@ function greetingForHour(hour: number): string {
  * Compact dashboard hero. Deliberately lightweight — it establishes identity
  * and the active month, then hands vertical space to the data below.
  */
-export function DashboardWelcome({
+export const DashboardWelcome = memo(function DashboardWelcome({
   monthLabel,
   onOpenMonthPicker,
 }: {
@@ -131,7 +132,7 @@ export function DashboardWelcome({
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Wallet } from "lucide-react-native";
 
@@ -27,7 +28,7 @@ function statusTone(status: SpendlyBudget["status"]) {
   return "positive" as const;
 }
 
-export function SafeToSpendWidget({
+export const SafeToSpendWidget = memo(function SafeToSpendWidget({
   budget,
   currency,
   loading = false,
@@ -127,7 +128,7 @@ export function SafeToSpendWidget({
       )}
     </Section>
   );
-}
+});
 
 const styles = StyleSheet.create({
   hero: {

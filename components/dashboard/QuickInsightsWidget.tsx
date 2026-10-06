@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { Chip } from "@/components/ui/Chip";
@@ -33,7 +33,7 @@ function pctChange(current: number, previous: number): number | null {
   return Math.round(((current - previous) / previous) * 100);
 }
 
-export function QuickInsightsWidget({
+export const QuickInsightsWidget = memo(function QuickInsightsWidget({
   monthlySpent,
   monthlyIncome,
   previousSpent,
@@ -166,7 +166,7 @@ export function QuickInsightsWidget({
       </View>
     </Section>
   );
-}
+});
 
 const styles = StyleSheet.create({
   row: {
