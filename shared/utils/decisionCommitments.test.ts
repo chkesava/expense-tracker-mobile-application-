@@ -6,7 +6,6 @@ import {
   addCommitment,
   commitmentProgress,
   commitmentState,
-  decisionCalendarEvents,
   dueStateFor,
   followUps,
   removeCommitment,
@@ -16,6 +15,7 @@ import {
   validateCommitmentDraft,
 } from "./decisionCommitments";
 import { buildDecisionWrite, newDecisionDraft, validateDecision } from "./decisionModel";
+import { decisionEvents } from "./calendarSources";
 
 const TODAY = "2026-10-02";
 const c = (id: string, over: Partial<DecisionCommitment> = {}): DecisionCommitment => ({ id, text: `Do ${id}`, status: "open", ...over });
@@ -101,8 +101,13 @@ describe("follow-ups and calendar events", () => {
   });
 
   it("produces calendar events only for real dates on live decisions", () => {
-    const events = decisionCalendarEvents(decisions);
-    expect(events.map((e) => e.id)).toEqual(["decision:a:review", "decision:b:3", "decision:a:1", "decision:b:review"]);
-    expect(events.every((e) => /^\d{4}-\d{2}-\d{2}$/.test(e.date) && e.href.startsWith("/decisions/"))).toBe(true);
+    const ctx = { range: { from: "2026-09-01", to: "2026-12-31" }, today: TODAY, currency: "INR" };
+    const events = decisionEvents(decisions, ctx);
+    
+    // Sort events exactly as they were returned before to match expectations
+    const sorted = [...events].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+    
+    expect(sorted.map((e) => e.refId)).toEqual(["a:review", "b:3", "a:1", "b:review"]);
+    expect(sorted.every((e) => /^\d{4}-\d{2}-\d{2}$/.test(e.date) && e.href?.startsWith("/decisions/"))).toBe(true);
   });
 });

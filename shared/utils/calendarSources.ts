@@ -350,6 +350,59 @@ export function epfEvents(contributions: readonly EpfContribution[], employerNam
   return out;
 }
 
+
+import type { MoneyDecision } from "../types/decision";
+
+export function decisionEvents(decisions: readonly MoneyDecision[], ctx: CalendarContext): CalendarEvent[] {
+  const out: CalendarEvent[] = [];
+  
+  for (const d of decisions) {
+    if (d.status === "archived" || d.status === "draft") continue;
+    
+    // 1. Review dates
+    if (d.reviewDate && (d.status === "decided" || d.status === "tracking")) {
+      if (inRange(d.reviewDate, ctx.range)) {
+        out.push(
+          event(ctx, {
+            source: "decision",
+            refId: `${d.id}:review`,
+            date: d.reviewDate,
+            title: `Review: ${d.title}`,
+            amount: null,
+            direction: "neutral",
+            state: d.reviewDate < ctx.today ? "overdue" : "scheduled",
+            actionable: true,
+            href: `/decisions/${d.id}`,
+          })
+        );
+      }
+    }
+
+    // 2. Commitments (actions)
+    for (const c of d.commitments) {
+      if (c.status !== "open" || !c.targetDate) continue;
+      if (inRange(c.targetDate, ctx.range)) {
+        out.push(
+          event(ctx, {
+            source: "decision",
+            refId: `${d.id}:${c.id}`,
+            date: c.targetDate,
+            title: c.text,
+            subtitle: `Decision: ${d.title}${c.owner ? ` (Owner: ${c.owner})` : ""}`,
+            amount: null,
+            direction: "neutral",
+            state: c.targetDate < ctx.today ? "overdue" : "scheduled",
+            actionable: true,
+            href: `/decisions/${d.id}`,
+          })
+        );
+      }
+    }
+  }
+
+  return out;
+}
+
 import type { FeePattern } from "./feePatterns";
 
 export function feeEvents(patterns: readonly FeePattern[], ctx: CalendarContext): CalendarEvent[] {
@@ -388,6 +441,7 @@ export function feeEvents(patterns: readonly FeePattern[], ctx: CalendarContext)
           href: "/fees",
         })
       );
+
     }
   }
 

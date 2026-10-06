@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useCalendarReminders } from "@/hooks/useCalendarReminders";
+import { useDecisions } from "@/hooks/useDecisions";
 import { useBorrowings } from "@/hooks/useBorrowings";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -46,6 +47,7 @@ export function useFinancialCalendar(range: CalendarRange, options?: { includeCa
   const { plans, loading: sipLoading, error: sipError } = useSipPlans();
   const { contributions, loading: epfLoading, error: epfError } = useEpfAllContributions();
   const { establishments } = useEpf();
+  const { decisions, loading: decisionsLoading, error: decisionsError } = useDecisions();
   const { uid, reminders, loading: remindersLoading, error: remindersError } = useCalendarReminders();
 
   // SPENDLY-320: Known fees from derived intelligence
@@ -69,6 +71,7 @@ export function useFinancialCalendar(range: CalendarRange, options?: { includeCa
     investment: status(investmentsLoading, investmentsError),
     sip: status(sipLoading, sipError),
     epf: status(epfLoading, epfError),
+    decision: status(decisionsLoading, decisionsError),
     fee: status(feeLoading, feeError),
     reminder: status(remindersLoading, remindersError),
   };
@@ -88,11 +91,12 @@ export function useFinancialCalendar(range: CalendarRange, options?: { includeCa
       sipPlans: plans,
       epfContributions: contributions,
       epfEmployerNames: employerNames,
+      decisions,
       feePatterns,
       reminders,
       extraEvents: options?.extraEvents,
     }),
-    [bills, cardNames, subscriptions, borrowingsCtx.borrowings, receivablesCtx.receivables, incomes, goals, investments, plans, contributions, employerNames, feePatterns, reminders, options?.extraEvents]
+    [bills, cardNames, subscriptions, borrowingsCtx.borrowings, receivablesCtx.receivables, incomes, goals, investments, plans, contributions, employerNames, decisions, feePatterns, reminders, options?.extraEvents]
   );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const stableStatus = useMemo(() => sourceStatus, [statusKey]);

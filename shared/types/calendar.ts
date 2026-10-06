@@ -19,6 +19,7 @@ export const CALENDAR_SOURCES = [
   "investment",
   "sip",
   "epf",
+  "decision",
   "fee",
   "reminder",
 ] as const;

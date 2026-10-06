@@ -165,31 +165,4 @@ export function followUps(decisions: readonly MoneyDecision[], today: string, in
   return out.sort((a, b) => rank[a.state] - rank[b.state] || (a.date ?? "9999").localeCompare(b.date ?? "9999") || a.key.localeCompare(b.key));
 }
 
-/**
- * Neutral dated events for the Financial Calendar (SPENDLY-176) to consume
- * once it exists. Only items with a real date; nothing is invented.
- */
-export interface DecisionCalendarEvent {
-  id: string;
-  date: string;
-  kind: "decision_review" | "decision_commitment";
-  title: string;
-  decisionId: string;
-  href: string;
-}
 
-export function decisionCalendarEvents(decisions: readonly MoneyDecision[]): DecisionCalendarEvent[] {
-  const out: DecisionCalendarEvent[] = [];
-  for (const d of decisions) {
-    if (d.status === "archived" || d.status === "draft") continue;
-    const href = `/decisions/${d.id}`;
-    if (d.reviewDate && (d.status === "decided" || d.status === "tracking")) {
-      out.push({ id: `decision:${d.id}:review`, date: d.reviewDate, kind: "decision_review", title: `Review: ${d.title}`, decisionId: d.id, href });
-    }
-    for (const c of d.commitments) {
-      if (c.status !== "open" || !c.targetDate) continue;
-      out.push({ id: `decision:${d.id}:${c.id}`, date: c.targetDate, kind: "decision_commitment", title: c.text, decisionId: d.id, href });
-    }
-  }
-  return out.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
-}

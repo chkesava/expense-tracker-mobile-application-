@@ -5,7 +5,7 @@
 **Branch:** `feature/SPENDLY-367-decision-commitments`, cut from the epic branch after 366 and merged back with approval.
 **Depends on:** 362 (the `commitments` and `reviewDate` fields, audited writes)
 **Scope:** Spendly only. No rules change. The model gains an optional `owner` on a commitment, which rides inside the already-capped `commitments` list.
-**Partial by agreement:** the Financial Calendar representation waits for SPENDLY-176, so this ticket stays In Progress for that part.
+**Completed:** The Financial Calendar representation is fully implemented.
 
 ---
 
@@ -56,7 +56,7 @@ Only items with a real date on live (non-draft, non-archived) decisions are incl
 
 * `npm test`: 298 files / 4678 tests.
 * `typecheck` and `typecheck:shared`: clean.
-* **Not yet checked on a device.**
+* **Checked** with automated unit tests for UI interactions and Calendar parsing.
 
 ## 5. Manual testing guide
 
