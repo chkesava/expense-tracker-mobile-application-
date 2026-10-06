@@ -5,13 +5,16 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  query,
   serverTimestamp,
   updateDoc,
+  where,
   writeBatch,
 } from "firebase/firestore";
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { logDirectRead } from "@/lib/firestoreReadDebug";
 import { useExpenses } from "@/hooks/useExpenses";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
@@ -208,15 +211,30 @@ export const useCategories = () => {
               id: expense.id,
               data: expense,
             }))
-          : (await getDocs(collection(db, "users", uid, "expenses"))).docs.map(
-              (expenseDoc) => ({
+          : await (async () => {
+              const q =
+                cat.kind === "subcategory"
+                  ? query(
+                      collection(db, "users", uid, "expenses"),
+                      where("subcategory", "==", oldName)
+                    )
+                  : query(
+                      collection(db, "users", uid, "expenses"),
+                      where("category", "==", oldName)
+                    );
+              const snap = await getDocs(q);
+              logDirectRead(`users/${uid}/expenses`, snap.docs.length, "server", {
+                feature: "categories",
+                queryShape: cat.kind === "subcategory" ? "where(subcategory)" : "where(category)",
+              });
+              return snap.docs.map((expenseDoc) => ({
                 id: expenseDoc.id,
                 data: expenseDoc.data() as {
                   category?: string;
                   subcategory?: string;
                 },
-              })
-            );
+              }));
+            })();
         let batch = writeBatch(db);
         let ops = 0;
         const flush = async () => {
@@ -375,15 +393,25 @@ export const useCategories = () => {
             id: expense.id,
             data: expense,
           }))
-        : (await getDocs(collection(db, "users", uid, "expenses"))).docs.map(
-            (expenseDoc) => ({
+        : await (async () => {
+            const snap = await getDocs(
+              query(
+                collection(db, "users", uid, "expenses"),
+                where("category", "==", source.name)
+              )
+            );
+            logDirectRead(`users/${uid}/expenses`, snap.docs.length, "server", {
+              feature: "categories-merge",
+              queryShape: "where(category)",
+            });
+            return snap.docs.map((expenseDoc) => ({
               id: expenseDoc.id,
               data: expenseDoc.data() as {
                 category?: string;
                 subcategory?: string;
               },
-            })
-          );
+            }));
+          })();
       for (const row of expenseRows) {
         if (!row.id) continue;
         const data = row.data;
@@ -401,9 +429,22 @@ export const useCategories = () => {
 
       const budgetRows = !budgetsLoading
         ? budgets
-        : (await getDocs(collection(db, "users", uid, "categoryBudgets"))).docs.map(
-            (b) => ({ id: b.id, ...(b.data() as { category?: string }) })
-          );
+        : await (async () => {
+            const snap = await getDocs(
+              query(
+                collection(db, "users", uid, "categoryBudgets"),
+                where("category", "==", source.name)
+              )
+            );
+            logDirectRead(`users/${uid}/categoryBudgets`, snap.docs.length, "server", {
+              feature: "categories-merge",
+              queryShape: "where(category)",
+            });
+            return snap.docs.map((b) => ({
+              id: b.id,
+              ...(b.data() as { category?: string }),
+            }));
+          })();
       for (const b of budgetRows) {
         if (b.category === source.name) {
           batch.update(doc(db, "users", uid, "categoryBudgets", b.id), {
