@@ -35,11 +35,13 @@ import { LedgerSectionTabs } from "@/components/ledger/LedgerSectionTabs";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageListStateScroll } from "@/components/layout/PageListStateScroll";
 import { PageShell } from "@/components/layout/PageShell";
+import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
+import { useLedgerPagination } from "@/hooks/useLedgerPagination";
 import { useLedgerState, type LedgerTab } from "@/providers/LedgerStateProvider";
 import { useModals } from "@/providers/ModalProvider";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -130,6 +132,14 @@ export default function LedgerScreen() {
     retry: retryIncomes,
   } = useIncomes();
   const { accounts } = useAccounts();
+  const {
+    hasMore: hasMoreLedger,
+    isFetchingMore: isFetchingMoreLedger,
+    loadMore: loadMoreLedger,
+    hasMoreIncomes,
+    isFetchingMoreIncomes,
+    loadMoreIncomes,
+  } = useLedgerPagination();
   // SPENDLY-111: the type name is what tells a credit card from a bank, so a
   // card purchase is never counted as cash leaving an account.
   const { accountTypes } = useAccountTypes();
@@ -608,7 +618,7 @@ export default function LedgerScreen() {
               { color: theme.colors.foreground },
             ]}
           >
-            Still loading your full history
+            Showing recent transactions
           </Text>
           <Text
             style={[
@@ -616,9 +626,24 @@ export default function LedgerScreen() {
               { color: theme.colors.mutedForeground },
             ]}
           >
-            Showing your most recent transactions. Results may be
-            incomplete, and totals stay hidden, until the rest loads.
+            Displaying the latest {journal.records.length} transactions. Scroll down or tap below to load older history.
           </Text>
+          {hasMoreLedger ? (
+            <View style={{ marginTop: 8, flexDirection: "row" }}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isFetchingMoreLedger}
+                onPress={() => {
+                  void loadMoreLedger(expensesTab === "income" ? "incomes" : "all");
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: "600", color: theme.colors.primary }}>
+                  {isFetchingMoreLedger ? "Loading older..." : "Load older transactions (+50)"}
+                </Text>
+              </Button>
+            </View>
+          ) : null}
         </View>
       ) : null}
       <JournalPeriodSummary
@@ -725,6 +750,16 @@ export default function LedgerScreen() {
                   cashFlowById={ledgerComplete ? cashFlowById : undefined}
                   refreshing={refreshing}
                   onRefresh={handleRefresh}
+                  onEndReached={() => {
+                    if (hasMoreLedger && !isFetchingMoreLedger) {
+                      void loadMoreLedger("all");
+                    }
+                  }}
+                  hasMore={hasMoreLedger}
+                  isFetchingMore={isFetchingMoreLedger}
+                  onLoadMore={() => {
+                    void loadMoreLedger("all");
+                  }}
                   onEditExpense={(exp) => {
                     setEditingExpense(exp);
                     setIsAddExpenseOpen(true);
@@ -789,6 +824,16 @@ export default function LedgerScreen() {
                   cashFlowById={ledgerComplete ? cashFlowById : undefined}
                   refreshing={refreshing}
                   onRefresh={handleRefresh}
+                  onEndReached={() => {
+                    if (hasMoreIncomes && !isFetchingMoreIncomes) {
+                      void loadMoreIncomes();
+                    }
+                  }}
+                  hasMore={hasMoreIncomes}
+                  isFetchingMore={isFetchingMoreIncomes}
+                  onLoadMore={() => {
+                    void loadMoreIncomes();
+                  }}
                   onEditIncome={(inc) => {
                     setEditingIncome(inc);
                     setIsAddExpenseOpen(true);
