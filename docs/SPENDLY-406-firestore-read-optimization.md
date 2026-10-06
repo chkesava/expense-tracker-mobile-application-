@@ -9,7 +9,7 @@ Systematically reduce Spendly Firestore document reads from ~24K reads/day to su
 - **SPENDLY-409**: Merged into epic branch
 - **SPENDLY-410**: Merged into epic branch
 - **SPENDLY-411**: Merged into epic branch
-- **SPENDLY-412**: Implemented on branch `feature/SPENDLY-412-optimize-reference-data-sync` (Optimize Reference Data Sync) — not yet merged into epic branch
+- **SPENDLY-412**: Merged into epic branch
 - **SPENDLY-413**: To Do (Dashboard Summary Aggregation)
 - **SPENDLY-414**: To Do (AppState & Reconnect Debounce)
 - **SPENDLY-415**: To Do (Read Budget & Regression Protection)
