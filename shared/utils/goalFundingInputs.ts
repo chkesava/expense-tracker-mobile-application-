@@ -82,3 +82,51 @@ export function goalFundingCapacityFromSources(input: {
   const capacity = buildFundingCapacity({ baseline: input.baseline, events: inWindow, window: input.window, plannedMonthly: input.plannedMonthly });
   return applyCapacityAdjustments(capacity, input.adjustments ?? []);
 }
+
+/**
+ * Converts a What-If scenario into a set of monthly capacity adjustments.
+ * One-time adjustments within the window are amortized over the window months.
+ */
+export function whatIfToCapacityAdjustments(
+  adjustments: readonly import("../types/whatIf").WhatIfAdjustment[],
+  calendarEvents: readonly CalendarEvent[],
+  windowMonths: number
+): CapacityAdjustment[] {
+  const result: CapacityAdjustment[] = [];
+  const safeMonths = Math.max(1, windowMonths);
+
+  for (const adj of adjustments) {
+    let monthlyDelta = 0;
+
+    const getRemovedAmount = () => {
+      if (!adj.sourceRef) return 0;
+      const ev = calendarEvents.find((e) => e.id === adj.sourceRef!.refId || e.id.includes(adj.sourceRef!.refId));
+      // Removing an outflow (direction "out") adds capacity. Removing an inflow subtracts capacity.
+      if (ev && ev.amount !== null) return ev.amount * (ev.direction === "out" ? 1 : -1);
+      return 0;
+    };
+
+    if (adj.operation === "add") {
+      const amt = adj.amount * (adj.direction === "in" ? 1 : -1);
+      monthlyDelta = adj.schedule.kind === "monthly" ? amt : adj.schedule.kind === "once" ? amt / safeMonths : 0;
+    } else if (adj.operation === "remove") {
+      monthlyDelta = getRemovedAmount();
+    } else if (adj.operation === "replace") {
+      const removed = getRemovedAmount();
+      const amt = adj.amount * (adj.direction === "in" ? 1 : -1);
+      const added = adj.schedule.kind === "monthly" ? amt : adj.schedule.kind === "once" ? amt / safeMonths : 0;
+      monthlyDelta = removed + added;
+    }
+
+    if (monthlyDelta !== 0) {
+      result.push({
+        id: adj.id,
+        label: adj.label,
+        monthlyDelta: roundMoney(monthlyDelta),
+        source: "what_if",
+      });
+    }
+  }
+
+  return result;
+}
