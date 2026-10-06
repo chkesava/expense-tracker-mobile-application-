@@ -17,6 +17,7 @@ import { getFirestoreDb } from "@/lib/firebase";
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
 import { useAuth } from "@/providers/AuthProvider";
 import type { UserRole } from "@/shared/types/user";
+import { perfEvent } from "@/lib/perf";
 
 type UserDocContextType = {
   data: DocumentData | null;
@@ -69,10 +70,16 @@ export function UserDocProvider({ children }: { children: ReactNode }) {
     setError(null);
     setObservedUid(null);
 
+    perfEvent("firestore_listener_start", { collection: "userDoc" });
     const ref = doc(db, "users", uid);
     const unsub = onSnapshot(
       ref,
       (snap) => {
+        perfEvent("firestore_first_snapshot", {
+          collection: "userDoc",
+          docCount: snap.exists() ? 1 : 0,
+          fromCache: snap.metadata.fromCache,
+        });
         if (snap.exists()) {
           setData(snap.data());
           setExists(true);

@@ -33,6 +33,7 @@ import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useSettings } from "@/providers/SettingsProvider";
+import { perfEvent } from "@/lib/perf";
 import {
   AUTO_CREDIT_CARD_BILL_REMINDER_FREQUENCY,
   DEFAULT_BILL_REMINDER_FREQUENCY,
@@ -210,10 +211,16 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
 
     setBillsLoading(true);
     const path = `users/${user.uid}/creditCardBills`;
+    perfEvent("firestore_listener_start", { collection: "creditCardBills" });
     const unsub = onSnapshot(
       query(collection(db, "users", user.uid, "creditCardBills")),
       (snap) => {
         logQuerySnapshot(path, snap);
+        perfEvent("firestore_first_snapshot", {
+          collection: "creditCardBills",
+          docCount: snap.docs.length,
+          fromCache: snap.metadata.fromCache,
+        });
         setBills(
           snap.docs.map((d) => {
             const data = d.data() as Partial<CreditCardBill>;
