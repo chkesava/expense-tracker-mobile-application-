@@ -12,6 +12,7 @@ import {
   StatusStrip,
   useSurfaces,
 } from "@/components/dashboard/primitives";
+import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
 import type { Expense } from "@/shared/types/expense";
 import {
   computeActiveCategoryBudgets,
@@ -30,7 +31,6 @@ export interface BudgetAlertsWidgetProps {
   monthlySpent: number;
   currency: string;
   activeCategoryBudgets?: CategoryBudgetAlertItem[];
-  categoryBudgets?: { id: string; category: string; subcategory?: string; amount: number; month: string }[];
   monthlyExpenses?: Expense[];
   activeMonth: string;
   budget: SpendlyBudget;
@@ -50,7 +50,6 @@ export const BudgetAlertsWidget = memo(function BudgetAlertsWidget({
   monthlySpent,
   currency,
   activeCategoryBudgets: explicitActiveCategoryBudgets,
-  categoryBudgets,
   monthlyExpenses,
   activeMonth,
   budget,
@@ -58,6 +57,9 @@ export const BudgetAlertsWidget = memo(function BudgetAlertsWidget({
   const router = useRouter();
   const { theme } = useTheme();
   const surfaces = useSurfaces();
+  const { budgets: categoryBudgets } = useCategoryBudgets({
+    enabled: explicitActiveCategoryBudgets === undefined,
+  });
 
   const activeCategoryBudgets = useMemo(() => {
     if (explicitActiveCategoryBudgets !== undefined) {

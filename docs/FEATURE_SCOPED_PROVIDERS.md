@@ -58,7 +58,13 @@ SPENDLY-401 establishes an **Active-On-Demand Lifecycle Pattern** for feature-sc
 - Initial AsyncStorage reads (`loadSmsAutomationPrefs`, `loadSmsInboundStatus`) and native permission check (`syncPermission`) are scheduled via `scheduleIdleWork`.
 - Prevents React Native bridge contention during cold app boot.
 
-### 4. `SubscriptionsWidget.tsx` & `DashboardScreen`
+### 4. `ExpenseReferenceDataProvider.tsx` — `categoryBudgets` & `financialGoals` (SPENDLY-411)
+- Of the six collections `ExpenseReferenceDataProvider` owns (`categories`, `subscriptions`, `spaces`, `categorizationRules`, `categoryBudgets`, `financialGoals`), only `categoryBudgets`/`financialGoals` are read exclusively from optional, user-configurable dashboard widgets and per-screen planning hooks. The other four are read from pervasive, always-mounted surfaces (`ExpenseList`, `ExpenseForm`) or drive an app-wide background job (subscription auto-posting), so they stay eager.
+- `categoryBudgets`/`financialGoals` listeners are gated by `shouldListenBudgets`/`shouldListenGoals`, each with its own `registerBudgetsSubscriber()`/`registerGoalsSubscriber()` ref-counted gate and 15s grace-period teardown — the same dual-gate shape as `BorrowingsReceivablesProvider`'s `borrowings`/`receivables` pair, so retrying one never tears down the other.
+- `useCategoryBudgets(options?: { enabled?: boolean })` and `useFinancialGoals(options?: { enabled?: boolean })` register a subscriber on mount and unregister on unmount, matching `useBorrowings`/`useCreditCardBills`.
+- `BudgetAlertsWidget.tsx` and `FinancialGoalsWidget.tsx` now self-fetch via these hooks (same pattern as `SubscriptionsWidget.tsx`) instead of `app/(app)/dashboard.tsx` hoisting the hooks and passing data down as props. This means the listener only starts when the widget is actually in the user's `displayWidgetIds` (both ship enabled by default) — a dashboard with either widget removed via Settings attaches zero `categoryBudgets`/`financialGoals` listeners.
+
+### 5. `SubscriptionsWidget.tsx` & `DashboardScreen`
 - `DashboardScreen` (`app/(app)/dashboard.tsx`) is completely decoupled from `useBorrowings` and `useCreditCardBills`.
 - Upcoming credit card and borrowing dues calculation is encapsulated inside `SubscriptionsWidget.tsx`.
 - `SubscriptionsWidget` defers subscribing to `useCreditCardBills` and `useBorrowings` until idle via `scheduleIdleWork`.
@@ -80,3 +86,6 @@ SPENDLY-401 establishes an **Active-On-Demand Lifecycle Pattern** for feature-sc
    - Switch between Borrowings and Receivables or open and close an Add modal within 15 seconds.
    - Verify listeners do not repeatedly teardown and recreate.
    - Remain on Dashboard for >15 seconds without visiting Borrowings; verify listener is cleanly detached.
+4. **Budgets/Goals Verification (SPENDLY-411)**:
+   - In Settings, remove "Budget Alerts" and "Financial Goals" from the dashboard widget order, then cold-launch. Confirm no `firestore_listener_start` events fire for `categoryBudgets`/`financialGoals`.
+   - Re-enable the widgets (or visit Settings → Budgets / Settings → Goals directly). Confirm the listener starts and data loads correctly, and that add/update/delete for both budgets and goals still works.

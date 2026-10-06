@@ -11,19 +11,18 @@ import {
   useSurfaces,
 } from "@/components/dashboard/primitives";
 import { Button } from "@/components/ui/Button";
+import { useFinancialGoals } from "@/hooks/useFinancialGoals";
 import { haptic } from "@/lib/haptics";
-import type { FinancialGoal } from "@/shared/types/expense";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export interface FinancialGoalsWidgetProps {
-  goals: FinancialGoal[];
   currency: string;
 }
 
 export const FinancialGoalsWidget = memo(function FinancialGoalsWidget({
-  goals,
   currency,
 }: FinancialGoalsWidgetProps) {
+  const { goals } = useFinancialGoals();
   const router = useRouter();
   const { theme } = useTheme();
   const surfaces = useSurfaces();
