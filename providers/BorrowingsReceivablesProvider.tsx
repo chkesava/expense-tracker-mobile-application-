@@ -35,6 +35,8 @@ import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
+import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
+import { perfEvent } from "@/lib/perf";
 import type { Borrowing, BorrowingRepayment } from "@/shared/types/borrowing";
 import type { Receivable, ReceivableRepayment } from "@/shared/types/receivable";
 import {
@@ -201,9 +203,15 @@ export function BorrowingsReceivablesProvider({
     setBorrowingsLoading(true);
     const base = ["users", uid] as const;
 
+    perfEvent("firestore_listener_start", { collection: "borrowings" });
     const unsubBorrowings = onSnapshot(
       query(collection(db, ...base, "borrowings"), orderBy("borrowedDate", "desc")),
       (snapshot) => {
+        perfEvent("firestore_first_snapshot", {
+          collection: "borrowings",
+          docCount: snapshot.docs.length,
+          fromCache: snapshot.metadata.fromCache,
+        });
         setBorrowings(
           snapshot.docs.map((docSnap) => ({
             id: docSnap.id,
@@ -223,25 +231,35 @@ export function BorrowingsReceivablesProvider({
       )
     );
 
-    const unsubBorrowingRepayments = onSnapshot(
-      query(
-        collection(db, ...base, "borrowingRepayments"),
-        orderBy("date", "desc")
-      ),
-      (snapshot) => {
-        setBorrowingRepayments(
-          snapshot.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...(docSnap.data() as Omit<BorrowingRepayment, "id">),
-          }))
-        );
-      },
-      (err) => logWarning("snapshot.borrowing.repayments", err)
-    );
+    let unsubBorrowingRepayments: (() => void) | null = null;
+    const cancelIdle = scheduleIdleWork(() => {
+      perfEvent("firestore_listener_start", { collection: "borrowingRepayments" });
+      unsubBorrowingRepayments = onSnapshot(
+        query(
+          collection(db, ...base, "borrowingRepayments"),
+          orderBy("date", "desc")
+        ),
+        (snapshot) => {
+          perfEvent("firestore_first_snapshot", {
+            collection: "borrowingRepayments",
+            docCount: snapshot.docs.length,
+            fromCache: snapshot.metadata.fromCache,
+          });
+          setBorrowingRepayments(
+            snapshot.docs.map((docSnap) => ({
+              id: docSnap.id,
+              ...(docSnap.data() as Omit<BorrowingRepayment, "id">),
+            }))
+          );
+        },
+        (err) => logWarning("snapshot.borrowing.repayments", err)
+      );
+    });
 
     return () => {
+      cancelIdle();
       unsubBorrowings();
-      unsubBorrowingRepayments();
+      if (unsubBorrowingRepayments) unsubBorrowingRepayments();
     };
   }, [uid, borrowingsAttempt, setBorrowingsError]);
 
@@ -256,48 +274,65 @@ export function BorrowingsReceivablesProvider({
 
     setReceivablesLoading(true);
     const base = ["users", uid] as const;
+    let unsubReceivables: (() => void) | null = null;
+    let unsubReceivableRepayments: (() => void) | null = null;
 
-    const unsubReceivables = onSnapshot(
-      query(collection(db, ...base, "receivables"), orderBy("lentDate", "desc")),
-      (snapshot) => {
-        setReceivables(
-          snapshot.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...(docSnap.data() as Omit<Receivable, "id">),
-          }))
-        );
-        setReceivablesError(null);
-        setReceivablesLoading(false);
-      },
-      snapshotErrorHandler(
-        "snapshot.receivables",
-        (failure) => {
-          setReceivablesError(failure);
+    const cancelIdle = scheduleIdleWork(() => {
+      perfEvent("firestore_listener_start", { collection: "receivables" });
+      unsubReceivables = onSnapshot(
+        query(collection(db, ...base, "receivables"), orderBy("lentDate", "desc")),
+        (snapshot) => {
+          perfEvent("firestore_first_snapshot", {
+            collection: "receivables",
+            docCount: snapshot.docs.length,
+            fromCache: snapshot.metadata.fromCache,
+          });
+          setReceivables(
+            snapshot.docs.map((docSnap) => ({
+              id: docSnap.id,
+              ...(docSnap.data() as Omit<Receivable, "id">),
+            }))
+          );
+          setReceivablesError(null);
           setReceivablesLoading(false);
         },
-        "Couldn't load your receivables."
-      )
-    );
+        snapshotErrorHandler(
+          "snapshot.receivables",
+          (failure) => {
+            setReceivablesError(failure);
+            setReceivablesLoading(false);
+          },
+          "Couldn't load your receivables."
+        )
+      );
 
-    const unsubReceivableRepayments = onSnapshot(
-      query(
-        collection(db, ...base, "receivableRepayments"),
-        orderBy("date", "desc")
-      ),
-      (snapshot) => {
-        setReceivableRepayments(
-          snapshot.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...(docSnap.data() as Omit<ReceivableRepayment, "id">),
-          }))
-        );
-      },
-      (err) => logWarning("snapshot.receivable.repayments", err)
-    );
+      perfEvent("firestore_listener_start", { collection: "receivableRepayments" });
+      unsubReceivableRepayments = onSnapshot(
+        query(
+          collection(db, ...base, "receivableRepayments"),
+          orderBy("date", "desc")
+        ),
+        (snapshot) => {
+          perfEvent("firestore_first_snapshot", {
+            collection: "receivableRepayments",
+            docCount: snapshot.docs.length,
+            fromCache: snapshot.metadata.fromCache,
+          });
+          setReceivableRepayments(
+            snapshot.docs.map((docSnap) => ({
+              id: docSnap.id,
+              ...(docSnap.data() as Omit<ReceivableRepayment, "id">),
+            }))
+          );
+        },
+        (err) => logWarning("snapshot.receivable.repayments", err)
+      );
+    });
 
     return () => {
-      unsubReceivables();
-      unsubReceivableRepayments();
+      cancelIdle();
+      if (unsubReceivables) unsubReceivables();
+      if (unsubReceivableRepayments) unsubReceivableRepayments();
     };
   }, [uid, receivablesAttempt, setReceivablesError]);
 
