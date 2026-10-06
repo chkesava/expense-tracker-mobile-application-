@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   addDoc,
   collection,
@@ -22,11 +23,17 @@ export const useCategoryBudgets = (options?: { enabled?: boolean }) => {
     budgetsLoading,
     budgetsError,
     retryBudgets,
+    registerBudgetsSubscriber,
   } = useExpenseReferenceData();
   const budgets = enabled ? sharedBudgets : [];
   const loading = enabled ? budgetsLoading : false;
   const error = enabled ? budgetsError : null;
   const retry = retryBudgets;
+
+  useEffect(() => {
+    if (!enabled) return;
+    return registerBudgetsSubscriber?.();
+  }, [enabled, registerBudgetsSubscriber]);
 
   const addBudget = async (
     category: string,

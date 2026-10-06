@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   addDoc,
   collection,
@@ -23,11 +24,17 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
     goalsLoading,
     goalsError,
     retryGoals,
+    registerGoalsSubscriber,
   } = useExpenseReferenceData();
   const goals = enabled ? sharedGoals : [];
   const loading = enabled ? goalsLoading : false;
   const error = enabled ? goalsError : null;
   const retry = retryGoals;
+
+  useEffect(() => {
+    if (!enabled) return;
+    return registerGoalsSubscriber?.();
+  }, [enabled, registerGoalsSubscriber]);
 
   const addGoal = async (
     name: string,

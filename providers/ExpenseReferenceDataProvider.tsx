@@ -73,10 +73,12 @@ export type ExpenseReferenceData = {
   budgetsLoading: boolean;
   budgetsError: LoadFailure | null;
   retryBudgets: () => void;
+  registerBudgetsSubscriber: () => () => void;
   goals: FinancialGoal[];
   goalsLoading: boolean;
   goalsError: LoadFailure | null;
   retryGoals: () => void;
+  registerGoalsSubscriber: () => () => void;
 };
 
 const ExpenseReferenceDataContext = createContext<ExpenseReferenceData | undefined>(
@@ -149,6 +151,86 @@ export function ExpenseReferenceDataProvider({
   const skippedAccountToastShown = useRef(false);
   const subscriptionsRef = useRef(subscriptions);
   subscriptionsRef.current = subscriptions;
+
+  // SPENDLY-411: budgets/goals are only read from optional, user-configurable
+  // dashboard widgets and per-screen planning hooks — unlike categories/
+  // subscriptions/spaces/categorizationRules, nothing pervasive depends on
+  // them, so they get the same Active-On-Demand gating as Credit Cards/
+  // Borrowings/Receivables (SPENDLY-401) instead of listening unconditionally.
+  const [shouldListenBudgets, setShouldListenBudgets] = useState(false);
+  const budgetsSubscriberCountRef = useRef(0);
+  const budgetsTeardownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+
+  const registerBudgetsSubscriber = useCallback(() => {
+    if (budgetsTeardownTimerRef.current) {
+      clearTimeout(budgetsTeardownTimerRef.current);
+      budgetsTeardownTimerRef.current = null;
+    }
+    budgetsSubscriberCountRef.current += 1;
+    setShouldListenBudgets(true);
+    return () => {
+      budgetsSubscriberCountRef.current = Math.max(
+        0,
+        budgetsSubscriberCountRef.current - 1
+      );
+      if (budgetsSubscriberCountRef.current === 0) {
+        if (budgetsTeardownTimerRef.current) {
+          clearTimeout(budgetsTeardownTimerRef.current);
+        }
+        budgetsTeardownTimerRef.current = setTimeout(() => {
+          if (budgetsSubscriberCountRef.current === 0) {
+            setShouldListenBudgets(false);
+          }
+          budgetsTeardownTimerRef.current = null;
+        }, 15000);
+      }
+    };
+  }, []);
+
+  const [shouldListenGoals, setShouldListenGoals] = useState(false);
+  const goalsSubscriberCountRef = useRef(0);
+  const goalsTeardownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+
+  const registerGoalsSubscriber = useCallback(() => {
+    if (goalsTeardownTimerRef.current) {
+      clearTimeout(goalsTeardownTimerRef.current);
+      goalsTeardownTimerRef.current = null;
+    }
+    goalsSubscriberCountRef.current += 1;
+    setShouldListenGoals(true);
+    return () => {
+      goalsSubscriberCountRef.current = Math.max(
+        0,
+        goalsSubscriberCountRef.current - 1
+      );
+      if (goalsSubscriberCountRef.current === 0) {
+        if (goalsTeardownTimerRef.current) {
+          clearTimeout(goalsTeardownTimerRef.current);
+        }
+        goalsTeardownTimerRef.current = setTimeout(() => {
+          if (goalsSubscriberCountRef.current === 0) {
+            setShouldListenGoals(false);
+          }
+          goalsTeardownTimerRef.current = null;
+        }, 15000);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (budgetsTeardownTimerRef.current) {
+        clearTimeout(budgetsTeardownTimerRef.current);
+      }
+      if (goalsTeardownTimerRef.current) {
+        clearTimeout(goalsTeardownTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     skippedAccountToastShown.current = false;
@@ -334,6 +416,12 @@ export function ExpenseReferenceDataProvider({
   }, [uid, db, rulesAttempt, setRulesError]);
 
   useEffect(() => {
+    if (!shouldListenBudgets) {
+      if (budgets.length === 0) {
+        setBudgetsLoading(false);
+      }
+      return;
+    }
     if (!uid || !db) {
       setBudgets([]);
       setBudgetsLoading(false);
@@ -373,9 +461,15 @@ export function ExpenseReferenceDataProvider({
       forgetSnapshotPath(path);
       unsub();
     };
-  }, [uid, db, budgetsAttempt, setBudgetsError]);
+  }, [uid, db, budgetsAttempt, setBudgetsError, shouldListenBudgets]);
 
   useEffect(() => {
+    if (!shouldListenGoals) {
+      if (goals.length === 0) {
+        setGoalsLoading(false);
+      }
+      return;
+    }
     if (!uid || !db) {
       setGoals([]);
       setGoalsLoading(false);
@@ -415,7 +509,7 @@ export function ExpenseReferenceDataProvider({
       forgetSnapshotPath(path);
       unsub();
     };
-  }, [uid, db, goalsAttempt, setGoalsError]);
+  }, [uid, db, goalsAttempt, setGoalsError, shouldListenGoals]);
 
   const processDueSubscriptions = useCallback(async () => {
     const database = getFirestoreDb();
@@ -508,10 +602,12 @@ export function ExpenseReferenceDataProvider({
       budgetsLoading,
       budgetsError,
       retryBudgets,
+      registerBudgetsSubscriber,
       goals,
       goalsLoading,
       goalsError,
       retryGoals,
+      registerGoalsSubscriber,
     }),
     [
       categories,
@@ -534,10 +630,12 @@ export function ExpenseReferenceDataProvider({
       budgetsLoading,
       budgetsError,
       retryBudgets,
+      registerBudgetsSubscriber,
       goals,
       goalsLoading,
       goalsError,
       retryGoals,
+      registerGoalsSubscriber,
     ]
   );
 

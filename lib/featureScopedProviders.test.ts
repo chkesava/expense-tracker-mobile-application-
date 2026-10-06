@@ -79,4 +79,64 @@ describe("Feature Scoped Provider Lifecycle & Grace Period", () => {
     vi.advanceTimersByTime(15000);
     expect(shouldListen).toBe(false);
   });
+
+  // SPENDLY-411: categoryBudgets/financialGoals in ExpenseReferenceDataProvider
+  // use two independent gates (like BorrowingsReceivablesProvider's borrowings/
+  // receivables pair) so retrying or tearing down one never affects the other.
+  it("keeps two independently-gated listeners from interfering with each other", () => {
+    function makeGate() {
+      let subscriberCount = 0;
+      let shouldListen = false;
+      let teardownTimer: NodeJS.Timeout | null = null;
+
+      const registerSubscriber = () => {
+        if (teardownTimer) {
+          clearTimeout(teardownTimer);
+          teardownTimer = null;
+        }
+        subscriberCount += 1;
+        shouldListen = true;
+        return () => {
+          subscriberCount = Math.max(0, subscriberCount - 1);
+          if (subscriberCount === 0) {
+            if (teardownTimer) clearTimeout(teardownTimer);
+            teardownTimer = setTimeout(() => {
+              if (subscriberCount === 0) {
+                shouldListen = false;
+              }
+              teardownTimer = null;
+            }, 15000);
+          }
+        };
+      };
+
+      return {
+        registerSubscriber,
+        get shouldListen() {
+          return shouldListen;
+        },
+      };
+    }
+
+    const budgetsGate = makeGate();
+    const goalsGate = makeGate();
+
+    const unmountBudgets = budgetsGate.registerSubscriber();
+    expect(budgetsGate.shouldListen).toBe(true);
+    expect(goalsGate.shouldListen).toBe(false);
+
+    const unmountGoals = goalsGate.registerSubscriber();
+    expect(goalsGate.shouldListen).toBe(true);
+
+    // Tearing down budgets starts its own grace period and must not touch goals.
+    unmountBudgets();
+    expect(budgetsGate.shouldListen).toBe(true); // still in grace period
+    vi.advanceTimersByTime(15000);
+    expect(budgetsGate.shouldListen).toBe(false);
+    expect(goalsGate.shouldListen).toBe(true); // untouched
+
+    unmountGoals();
+    vi.advanceTimersByTime(15000);
+    expect(goalsGate.shouldListen).toBe(false);
+  });
 });
