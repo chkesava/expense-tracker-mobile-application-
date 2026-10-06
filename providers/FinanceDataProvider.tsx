@@ -368,7 +368,10 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         if (!expensesHydratedRef.current) {
           perfEvent("firestore_first_snapshot", { collection: "expenses", docCount: snap.docs.length });
         }
-        logQuerySnapshot(expensePath, snap);
+        logQuerySnapshot(expensePath, snap, {
+          feature: "finance",
+          queryShape: fromFullQuery ? "unlimited" : `limit=${LEDGER_STAGED_LIMIT}`,
+        });
         const { items, pendingWrites } = foldLedgerSnapshot<Expense>(snap.docs, {
           activeOnly: true,
         });
@@ -403,7 +406,10 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             fromCache: snap.metadata.fromCache,
           });
         }
-        logQuerySnapshot(incomePath, snap);
+        logQuerySnapshot(incomePath, snap, {
+          feature: "finance",
+          queryShape: fromFullQuery ? "unlimited" : `limit=${LEDGER_STAGED_LIMIT}`,
+        });
         const { items, pendingWrites } = foldLedgerSnapshot<Income>(snap.docs, {
           activeOnly: true,
         });
@@ -499,7 +505,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         query(collection(db, ...base, "accounts")),
         FINANCE_SNAPSHOT_LISTEN_OPTIONS,
         (snap) => {
-          logQuerySnapshot(accountPath, snap);
+          logQuerySnapshot(accountPath, snap, { feature: "finance", queryShape: "accounts" });
           perfEvent("firestore_first_snapshot", {
             collection: "accounts",
             docCount: snap.docs.length,
@@ -532,7 +538,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         query(collection(db, ...base, "accountTypes")),
         FINANCE_SNAPSHOT_LISTEN_OPTIONS,
         (snap) => {
-          logQuerySnapshot(accountTypePath, snap);
+          logQuerySnapshot(accountTypePath, snap, { feature: "finance", queryShape: "accountTypes" });
           perfEvent("firestore_first_snapshot", {
             collection: "accountTypes",
             docCount: snap.docs.length,
@@ -597,7 +603,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             query(collection(db, ...base, "accountPayments")),
             FINANCE_SNAPSHOT_LISTEN_OPTIONS,
             (snap) => {
-              logQuerySnapshot(paymentPath, snap);
+              logQuerySnapshot(paymentPath, snap, { feature: "finance", queryShape: "accountPayments" });
               const { items, pendingWrites } = foldLedgerSnapshot<AccountPayment>(snap.docs);
               if (shouldApplySnapshotDocs(snap, paymentsHydrated)) {
                 setPayments(sortLedgerByDateDesc(items));
@@ -622,7 +628,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             query(collection(db, ...base, "accountEntries")),
             FINANCE_SNAPSHOT_LISTEN_OPTIONS,
             (snap) => {
-              logQuerySnapshot(entryPath, snap);
+              logQuerySnapshot(entryPath, snap, { feature: "finance", queryShape: "accountEntries" });
               const { items, pendingWrites } = foldLedgerSnapshot<AccountEntry>(snap.docs);
               if (shouldApplySnapshotDocs(snap, entriesHydrated)) {
                 setEntries(sortLedgerByDateDesc(items));
@@ -647,7 +653,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             query(collection(db, ...base, "accountTransfers")),
             FINANCE_SNAPSHOT_LISTEN_OPTIONS,
             (snap) => {
-              logQuerySnapshot(transferPath, snap);
+              logQuerySnapshot(transferPath, snap, { feature: "finance", queryShape: "accountTransfers" });
               const { items, pendingWrites } = foldLedgerSnapshot<AccountTransfer>(snap.docs);
               if (shouldApplySnapshotDocs(snap, transfersHydrated)) {
                 setTransfers(sortLedgerByDateDesc(items));

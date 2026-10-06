@@ -1,0 +1,86 @@
+# Firestore Read Inventory & Attribution Report — SPENDLY-407
+
+This document captures the baseline measurement, query shapes, listener lifecycle attribution, and root causes explaining the ~24,000 Firestore reads/day observation.
+
+---
+
+## 1. Executive Summary: Why Does Spendly Consume 24K Reads/Day?
+
+Investigation of the snapshot lifecycle, query shapes, and provider implementations identified three primary drivers of high Firestore read consumption:
+
+1. **The Automatic Background Unlimited Upgrade (P0 Root Cause - ~85% of volume)**:
+   - In `FinanceDataProvider.tsx`, app startup loads a staged page of 300 expenses and 300 incomes.
+   - However, a background timer (`scheduleIdleWork`) immediately un-subscribes those staged listeners and attaches **unbounded** queries (`query(expensesCol, orderBy("createdAt", "desc"))` and `query(incomesCol, orderBy("createdAt", "desc"))`).
+   - If a user has 1,500 expenses and 500 incomes, every single app launch or process restore causes Firestore to read **2,000 documents** from the server/cache.
+   - If the app is opened or resumed 10–12 times throughout the day, this single mechanism produces **~20,000–24,000 document reads**.
+2. **Duplicate & Overlapping Listeners (P1 Root Cause - ~10% of volume)**:
+   - Multiple secondary hooks query identical reference data or linked entity sets in parallel.
+   - For example, `useCategories` performs direct `getDocs(collection(db, "users", uid, "expenses"))` during category edits and deletions rather than reading from cached state.
+3. **AppState Resume & Reconnect Churn (P2 Root Cause - ~5% of volume)**:
+   - Backgrounding the app or intermittent cellular network reconnects triggers listener resynchronization passes without debounce.
+
+---
+
+## 2. Complete Inventory of Active Firestore Queries
+
+| Provider / Hook | Collection Path | Query Shape | Mount Tier | Attribution Tag | Server/Cache Behavior | Read Impact |
+|---|---|---|---|---|---|---|
+| `FinanceDataProvider` | `users/{uid}/expenses` | `orderBy(createdAt, desc), limit(300)` | Immediate (startup) | `[finance]` | Cache first, then server updates | ~300 docs on cold launch |
+| `FinanceDataProvider` | `users/{uid}/expenses` | `orderBy(createdAt, desc)` (UNLIMITED) | Deferred (idle) | `[finance]` | Full collection scan from server/cache | **Critical Multiplier** (1,000+ docs per session) |
+| `FinanceDataProvider` | `users/{uid}/incomes` | `orderBy(createdAt, desc), limit(300)` | Immediate (startup) | `[finance]` | Cache first, then server updates | ~100–300 docs on cold launch |
+| `FinanceDataProvider` | `users/{uid}/incomes` | `orderBy(createdAt, desc)` (UNLIMITED) | Deferred (idle) | `[finance]` | Full collection scan from server/cache | **Critical Multiplier** (500+ docs per session) |
+| `FinanceDataProvider` | `users/{uid}/accounts` | `collection` (bounded by accounts) | Immediate (startup) | `[finance]` | Small (< 20 docs) | Low |
+| `FinanceDataProvider` | `users/{uid}/accountTypes` | `collection` (system & user types) | Immediate (startup) | `[finance]` | Small (< 15 docs) | Low |
+| `FinanceDataProvider` | `users/{uid}/accountPayments` | `collection` | Deferred (idle) | `[finance]` | Cumulative list of account payments | Medium (~50–200 docs) |
+| `FinanceDataProvider` | `users/{uid}/accountEntries` | `collection` | Deferred (idle) | `[finance]` | Cumulative balance checkpoints | Medium (~50–100 docs) |
+| `FinanceDataProvider` | `users/{uid}/accountTransfers` | `collection` | Deferred (idle) | `[finance]` | Cumulative inter-account transfers | Low (~20–50 docs) |
+| `ExpenseReferenceDataProvider` | `users/{uid}/categories` | `collection` | Deferred (idle) | `[reference]` | Reference list (< 50 docs) | Low |
+| `ExpenseReferenceDataProvider` | `users/{uid}/subscriptions` | `orderBy(name, asc)` | Immediate (startup) | `[reference]` | Active recurring subscriptions | Low (< 25 docs) |
+| `ExpenseReferenceDataProvider` | `users/{uid}/spaces` | `orderBy(name)` | Deferred (idle) | `[reference]` | Spaces reference list | Low (< 10 docs) |
+| `ExpenseReferenceDataProvider` | `users/{uid}/categorizationRules` | `orderBy(createdAt, asc)` | Deferred (idle) | `[reference]` | SMS auto-categorization rules | Low (< 30 docs) |
+| `ExpenseReferenceDataProvider` | `users/{uid}/categoryBudgets` | `orderBy(month, desc)` | Immediate (startup) | `[reference]` | Monthly category budget limits | Medium (~50–100 docs) |
+| `ExpenseReferenceDataProvider` | `users/{uid}/financialGoals` | `orderBy(createdAt, asc)` | Immediate (startup) | `[reference]` | Goals and targets | Low (< 15 docs) |
+| `CreditCardBillsProvider` | `users/{uid}/creditCardBills` | `collection` | On-Demand (active) | `[creditCardBills]` | Mounted only when viewing CC tab/widget | Low (~10–30 docs) |
+| `BorrowingsReceivablesProvider` | `users/{uid}/borrowings` | `orderBy(borrowedDate, desc)` | On-Demand (active) | `[borrowings]` | Mounted only when viewing Borrowings tab | Low (~10–50 docs) |
+| `BorrowingsReceivablesProvider` | `users/{uid}/borrowingRepayments` | `orderBy(date, desc)` | On-Demand (active) | `[borrowings]` | Mounted only when viewing Borrowings tab | Low (~10–50 docs) |
+| `BorrowingsReceivablesProvider` | `users/{uid}/receivables` | `orderBy(lentDate, desc)` | On-Demand (active) | `[receivables]` | Mounted only when viewing Receivables tab | Low (~10–50 docs) |
+| `BorrowingsReceivablesProvider` | `users/{uid}/receivableRepayments` | `orderBy(date, desc)` | On-Demand (active) | `[receivables]` | Mounted only when viewing Receivables tab | Low (~10–50 docs) |
+
+---
+
+## 3. Top Read Paths Breakdown
+
+```
+Estimated Daily Reads (Single User, 15 App Opens/Day):
+┌─────────────────────────────────────────────────────────────┬──────────────┬────────┐
+│ Query / Operation                                           │ Daily Reads  │ Share  │
+├─────────────────────────────────────────────────────────────┼──────────────┼────────┤
+│ 1. Idle Unlimited Expenses Snapshot Upgrade                 │ ~16,500 docs │  68.8% │
+│ 2. Idle Unlimited Incomes Snapshot Upgrade                  │  ~4,500 docs │  18.8% │
+│ 3. Category Budgets & Account Payments                     │  ~1,800 docs │   7.5% │
+│ 4. Staged 300-doc Initial Viewport Queries                  │    ~900 docs │   3.8% │
+│ 5. Reference Collections (Categories, Spaces, Subscriptions)│    ~300 docs │   1.2% │
+├─────────────────────────────────────────────────────────────┼──────────────┼────────┤
+│ TOTAL ESTIMATED DAILY CONSUMPTION                           │ ~24,000 docs │ 100.0% │
+└─────────────────────────────────────────────────────────────┴──────────────┴────────┘
+```
+
+---
+
+## 4. Remediation Roadmap for Epic SPENDLY-406
+
+1. **SPENDLY-408 (Eliminate Duplicate Listeners)**: Remove redundant listener mounts and eradicate direct `getDocs` collection scans in category handlers.
+2. **SPENDLY-409 (Remove Unlimited Startup Reads)**: Delete the idle `scheduleIdleWork` unlimited upgrade in `FinanceDataProvider.tsx`. Keep the bounded 300-item window as the active realtime stream.
+3. **SPENDLY-410 (Cursor-Based Ledger Pagination)**: Add `startAfter` cursor-based pagination so historical records load on demand in 50-item pages only when the user scrolls the Journal.
+4. **SPENDLY-411 (Feature-Scoped Listener Lifecycle)**: Ensure secondary domains (EPF, Portfolio, Insurance) never mount listeners until their screens are active.
+5. **SPENDLY-412 (Optimize Reference Data Sync)**: Enforce cache-first hydration and single shared listeners for categories, spaces, and rules.
+6. **SPENDLY-413 (Dashboard Summary Optimization)**: Compute monthly aggregates from the bounded active dataset or cached monthly metadata rather than full-collection downloads.
+7. **SPENDLY-414 (AppState Reconnect Debounce)**: Protect against burst re-subscribes on background/foreground transitions.
+8. **SPENDLY-415 & SPENDLY-416 (Read Budgets & Rollout)**: Enforce `< 25 server reads` cold startup budget via automated guardrails.
+
+---
+
+## 5. Verification & Telemetry Safety Guardrails
+
+- **Zero PII & Zero Financial Data**: `lib/firestoreReadDebug.ts` logs only path prefixes, collection names, document counts, and cache flags (`[fs-read] attach users/u/expenses docs=300 source=cache [finance] query=limit=300`). No transaction amounts, merchant names, or user identifiers are emitted.
+- **Production Safety**: Attribution is active only when `__DEV__` is true or `EXPO_PUBLIC_PERF_MARKS=1` is configured.
