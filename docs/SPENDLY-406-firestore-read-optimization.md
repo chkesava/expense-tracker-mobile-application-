@@ -4,7 +4,7 @@
 Systematically reduce Spendly Firestore document reads from ~24K reads/day to sustainable, budgeted usage while preserving Firebase as the backend, realtime synchronization, offline behavior, financial correctness, and security.
 
 ## State
-- **SPENDLY-407**: In Review (Attribution & Inventory Completed)
+- **SPENDLY-407**: Merged into epic branch
 - **SPENDLY-408**: To Do (Audit & Eliminate Duplicate Listeners)
 - **SPENDLY-409**: To Do (Remove Unlimited Startup Reads)
 - **SPENDLY-410**: To Do (Implement Cursor-Based Ledger Pagination)
