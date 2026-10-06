@@ -41,8 +41,8 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
   const displayCurrency = useDisplayCurrency();
   const { settings, setExportYear } = useSettings();
 
-  const { expenses, complete: expensesComplete } = useExpenses();
-  const { incomes, complete: incomesComplete } = useIncomes();
+  const { expenses, complete: expensesComplete, loadAll: loadAllExpenses } = useExpenses();
+  const { incomes, complete: incomesComplete, loadAll: loadAllIncomes } = useIncomes();
   /**
    * SPENDLY-113 — `loading` goes false on the staged 300-row page, so anything
    * gated on it could ship a silently truncated file. These are the real flags.
@@ -93,23 +93,7 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
     return { expenses, incomes };
   }, [expenses, incomes, scope, selectedYearStr, currentMonth]);
 
-  const handleExport = async () => {
-    if (!system.allowDataExport) {
-      appDialog.alert(
-        "Export Disabled",
-        "Data export is currently disabled by system policy."
-      );
-      return;
-    }
-
-    if (!ledgerComplete) {
-      appDialog.alert(
-        "Still loading your full history",
-        "Exporting now would leave rows out. Try again in a moment."
-      );
-      return;
-    }
-
+  const executeExport = async () => {
     setIsExporting(true);
     try {
       let content = "";
@@ -153,6 +137,47 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
     } finally {
       setIsExporting(false);
     }
+  };
+
+  const handleExport = async () => {
+    if (!system.allowDataExport) {
+      appDialog.alert(
+        "Export Disabled",
+        "Data export is currently disabled by system policy."
+      );
+      return;
+    }
+
+    if (!ledgerComplete) {
+      appDialog.alert(
+        "Load full history?",
+        "Your full history has not been loaded yet. Would you like to load all historical transactions to include them in the export?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Load & Export",
+            style: "default",
+            onPress: () => {
+              void (async () => {
+                setIsExporting(true);
+                try {
+                  await Promise.all([loadAllExpenses(), loadAllIncomes()]);
+                  await executeExport();
+                } catch (err) {
+                  logWarning("exportDataModal.loadAll", err);
+                  toast.error(friendlyErrorMessage(err, "Could not load full history."));
+                } finally {
+                  setIsExporting(false);
+                }
+              })();
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    await executeExport();
   };
 
   return (

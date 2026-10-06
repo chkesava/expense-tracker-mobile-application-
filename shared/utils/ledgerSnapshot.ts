@@ -12,6 +12,9 @@ import { isActiveLedgerRow } from "@/shared/utils/ledgerRow";
 /** First-paint page size for expenses/incomes. Full history loads after idle. */
 export const LEDGER_STAGED_LIMIT = 300;
 
+/** Page size for historical cursor pagination queries (SPENDLY-410). */
+export const LEDGER_PAGE_SIZE = 50;
+
 /**
  * SPENDLY-97: is a staged snapshot already the whole ledger?
  *

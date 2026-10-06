@@ -5,6 +5,7 @@ import {
   FINANCE_SNAPSHOT_LISTEN_OPTIONS,
   isMetadataOnlySnapshot,
   isStagedPageComplete,
+  LEDGER_PAGE_SIZE,
   LEDGER_STAGED_LIMIT,
   shouldApplySnapshotDocs,
   sortLedgerByDateDesc,
@@ -26,9 +27,10 @@ function doc(
   };
 }
 
-describe("LEDGER_STAGED_LIMIT", () => {
-  it("is the restored first-paint page, not the whole history", () => {
+describe("LEDGER_STAGED_LIMIT and LEDGER_PAGE_SIZE (SPENDLY-410)", () => {
+  it("uses 300 for staged first-paint page and 50 for cursor pagination", () => {
     expect(LEDGER_STAGED_LIMIT).toBe(300);
+    expect(LEDGER_PAGE_SIZE).toBe(50);
   });
 });
 

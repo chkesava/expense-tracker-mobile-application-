@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   InteractionManager,
   Pressable,
   RefreshControl,
@@ -81,6 +82,16 @@ export interface ExpenseListProps {
   onRefresh?: () => void;
   listHeader?: React.ReactNode;
   emptyState?: React.ReactNode;
+  /** SPENDLY-410: Callback when end of list is reached during scroll */
+  onEndReached?: () => void;
+  /** SPENDLY-410: Threshold for onEndReached (default 0.3) */
+  onEndReachedThreshold?: number;
+  /** SPENDLY-410: True if more historical pages exist */
+  hasMore?: boolean;
+  /** SPENDLY-410: True while fetching the next page */
+  isFetchingMore?: boolean;
+  /** SPENDLY-410: Explicit trigger to load older transactions */
+  onLoadMore?: () => void;
 }
 
 type CombinedTransaction =
@@ -123,6 +134,11 @@ export function ExpenseList({
   onRefresh,
   listHeader,
   emptyState,
+  onEndReached,
+  onEndReachedThreshold,
+  hasMore,
+  isFetchingMore,
+  onLoadMore,
 }: ExpenseListProps) {
   const router = useRouter();
   const { theme } = useTheme();
@@ -635,6 +651,55 @@ export function ExpenseList({
     [selectedTx, payments, entries, spaces]
   );
 
+  const renderListFooter = useCallback(() => {
+    if (isFetchingMore) {
+      return (
+        <View style={styles.paginationFooter}>
+          <ActivityIndicator size="small" color={theme.colors.primary} />
+          <Text
+            style={[
+              styles.paginationFooterText,
+              { color: theme.colors.mutedForeground },
+            ]}
+          >
+            Loading older transactions...
+          </Text>
+        </View>
+      );
+    }
+    if (hasMore && onLoadMore) {
+      return (
+        <View style={styles.paginationFooter}>
+          <Pressable
+            onPress={() => {
+              void haptic.selection();
+              onLoadMore();
+            }}
+            style={[
+              styles.loadMoreButton,
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Load older transactions"
+          >
+            <Text
+              style={[
+                styles.loadMoreButtonText,
+                { color: theme.colors.primary },
+              ]}
+            >
+              Load older transactions
+            </Text>
+          </Pressable>
+        </View>
+      );
+    }
+    return null;
+  }, [isFetchingMore, hasMore, onLoadMore, theme]);
+
   return (
     <>
       {isSelecting ? (
@@ -805,6 +870,9 @@ export function ExpenseList({
           )
         }
         renderItem={renderListItem}
+        onEndReached={onEndReached}
+        onEndReachedThreshold={onEndReachedThreshold ?? 0.3}
+        ListFooterComponent={renderListFooter}
       />
 
       <AssignToSpaceModal
@@ -1228,5 +1296,26 @@ const styles = StyleSheet.create({
   },
   detailActionFlex: {
     flex: 1,
+  },
+  paginationFooter: {
+    paddingVertical: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  paginationFooterText: {
+    fontSize: 13,
+  },
+  loadMoreButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadMoreButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
   },
 });
