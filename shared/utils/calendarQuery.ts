@@ -27,6 +27,7 @@ import {
   borrowingEvents,
   cardBillEvents,
   epfEvents,
+  feeEvents,
   goalEvents,
   incomeEvents,
   investmentEvents,
@@ -58,6 +59,8 @@ export interface CalendarData {
   sipPlans: readonly SipPlan[];
   epfContributions: readonly EpfContribution[];
   epfEmployerNames: ReadonlyMap<string, string>;
+  /** SPENDLY-320: Fee patterns. */
+  feePatterns?: readonly import("./feePatterns").FeePattern[];
   /** User reminders (SPENDLY-183). */
   reminders?: readonly CalendarReminder[];
   /** Events from other features (later fee/decision/runway sources). */
@@ -98,8 +101,9 @@ const SOURCE_ORDER: Record<CalendarSource, number> = {
   income: 6,
   investment: 7,
   epf: 8,
-  goal: 9,
-  reminder: 10,
+  fee: 9,
+  goal: 10,
+  reminder: 11,
 };
 const DIRECTION_ORDER = { out: 0, in: 1, neutral: 2 } as const;
 
@@ -136,6 +140,7 @@ function collect(ctx: CalendarContext, data: CalendarData): CalendarEvent[] {
     ...investmentEvents(data.investments, ctx),
     ...sipEvents(data.sipPlans, ctx),
     ...epfEvents(data.epfContributions, data.epfEmployerNames, ctx),
+    ...feeEvents(data.feePatterns ?? [], ctx),
     ...reminderEvents(data.reminders ?? [], ctx),
     ...(data.extraEvents ?? []).filter((e) => e.date >= ctx.range.from && e.date <= ctx.range.to),
   ];
