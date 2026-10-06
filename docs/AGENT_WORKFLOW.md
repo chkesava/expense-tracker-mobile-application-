@@ -81,6 +81,7 @@ Report failures honestly, with their output. Never skip hooks.
   - User data lives at `users/{uid}/...`.
   - Writes go through `commitMutations` (the offline outbox) plus `writeSavedMessage`.
   - Listeners use `useLoadFailure`, `snapshotErrorHandler` and `forgetSnapshotPath`.
+  - **Firebase Efficiency (SPENDLY-406 Standard):** Use on-time render and no pre-fetch. Do not mount collection listeners unconditionally at the top of a screen if the data is only used in a modal, bottom sheet, or sub-view. Only mount the listener (triggering the Firebase read) when the specific UI component requiring the data is rendered.
 - **Firestore rules:**
   - A new collection gets a strict validated rule: `isOwner`, `hasOnly`/`hasAll`, and pinned `createdAtMs`. Keep it out of the catch-all list.
   - Back it with emulator tests (`firestore/*.rules.test.ts`) and TS↔rules contract tests.

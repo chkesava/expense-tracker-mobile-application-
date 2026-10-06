@@ -38,7 +38,7 @@ describe("contract", () => {
   });
 
   it("documents every source and state", () => {
-    expect(CALENDAR_SOURCES).toHaveLength(12);
+    expect(CALENDAR_SOURCES).toHaveLength(13);
     expect(CALENDAR_STATES).toContain("projected");
   });
 

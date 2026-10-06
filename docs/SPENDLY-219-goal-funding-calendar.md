@@ -2,12 +2,11 @@
 
 **Ticket:** [SPENDLY-219](https://kesavach.atlassian.net/browse/SPENDLY-219) (Story)
 **Epic:** [SPENDLY-213](https://kesavach.atlassian.net/browse/SPENDLY-213). See the [epic record](SPENDLY-213-goal-funding-optimizer.md).
-**Branch:** `feature/SPENDLY-219-goal-funding-calendar`, cut from the epic branch after 217; the calendar part was merged back with approval.
+**Branch:** `feature/SPENDLY-219-what-if-goal-funding`, cut from the epic branch `feature/SPENDLY-213-goal-funding-completion`.
 
-**Status:** split by decision (2026-10-03).
-- **The Financial Calendar part is done here.**
-- **The What-If part is on hold for SPENDLY-195.** Only its hook point exists.
-- 219 stays In Progress until What-If lands.
+**Status:** Completed.
+- **The Financial Calendar part** was completed previously.
+- **The What-If part** is now complete (uses `whatIfToCapacityAdjustments` and Firebase efficiency SPENDLY-406 lazy loading).
 
 ---
 
@@ -32,25 +31,22 @@
 
 **Changes in commitments update funding automatically,** because the capacity is computed from live data. Tested: adding an EMI lowers capacity by its monthly share; pausing it restores capacity.
 
-## 2. What-If hook (on hold for SPENDLY-195)
-`CapacityAdjustment { id, label, monthlyDelta, source: "what_if" | "user" }` is the contract the What-If Simulator will feed. `applyCapacityAdjustments`:
-- adds the deltas on top of the **real** capacity and keeps `baseMonthly` alongside;
-- sets **`hypothetical: true`**, so the UI labels the figure a what-if;
-- ignores zero or invalid deltas, and never adjusts **unknown** capacity;
-- can push capacity negative, and says so;
-- never writes anything, and never changes the real figure.
-
-Until SPENDLY-195 exists, only adjustments the user types in a plan (220) use this.
+## 2. What-If inputs (built)
+- `whatIfToCapacityAdjustments` maps a What-If scenario's adjustments to `CapacityAdjustment` records natively understood by `goalFundingCapacityFromSources`.
+- Adding/changing commitments, removing calendar events, or altering income/expenses all correctly alter the `monthlyDelta`.
+- The Goal Funding Optimizer now includes a **What-If Scenario Picker**.
+- **Firebase Efficiency (SPENDLY-406):** The `useWhatIfScenarios` listener is only mounted when the picker sheet is opened, meaning zero pre-fetching occurs on the Optimizer screen until requested.
+- When applied, the capacity changes are strictly hypothetical and do not alter actual goal definitions.
 
 ## 3. Acceptance criteria
 | Criterion | Status |
 |---|---|
 | Calendar data is used without duplicate records | Done: events are read through the 178 query (deduped); nothing is written |
-| What-If assumptions stay hypothetical | Hook done: `hypothetical` flag, base figure kept. **What-If itself waits for SPENDLY-195** |
-| Changes in commitments update available funding | Done and tested (EMI added, then paused) |
+| What-If assumptions stay hypothetical | Done: `hypothetical` flag used, base figure kept, UI explicitly marks scenario |
+| Changes in commitments update available funding | Done |
 | Scenario results stay isolated | Done: pure functions, no writes |
 | Cancelled and completed events handled | Done and tested |
 | Unknown and uncertain inputs shown | Done: amountless commitments listed; unknown capacity stays null |
 | No real record modified | Done and tested |
 
-**Tests:** `goalFundingInputs.test.ts`, 7 tests.
+**Tests:** `goalFundingInputs.test.ts` updated.

@@ -9,6 +9,7 @@ import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpf } from "@/hooks/useEpf";
 import { useEpfAllContributions } from "@/hooks/useEpfAllContributions";
+import { useFeeIntelligence } from "@/hooks/useFeeIntelligence";
 import { useFinancialGoals } from "@/hooks/useFinancialGoals";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useInvestments } from "@/hooks/useInvestments";
@@ -20,6 +21,7 @@ import type { CalendarEvent, CalendarRange, CalendarSource } from "@/shared/type
 import { getAccountKind } from "@/shared/utils/accountKind";
 import { queryCalendar, type CalendarData, type CalendarSourceStatus } from "@/shared/utils/calendarQuery";
 import { todayDateKey } from "@/shared/utils/dates";
+import { detectFeePatterns } from "@/shared/utils/feePatterns";
 
 const status = (loading: boolean, error?: unknown): CalendarSourceStatus => (error ? "error" : loading ? "loading" : "ready");
 
@@ -48,6 +50,10 @@ export function useFinancialCalendar(range: CalendarRange, options?: { includeCa
   const { decisions, loading: decisionsLoading, error: decisionsError } = useDecisions();
   const { uid, reminders, loading: remindersLoading, error: remindersError } = useCalendarReminders();
 
+  // SPENDLY-320: Known fees from derived intelligence
+  const { result: feeResult, loading: feeLoading, error: feeError } = useFeeIntelligence();
+  const feePatterns = useMemo(() => (feeResult ? detectFeePatterns(feeResult.records, today) : []), [feeResult, today]);
+
   const cardNames = useMemo(() => {
     const typeName = new Map(accountTypes.map((t) => [t.id, t.name]));
     return new Map(accounts.filter((a) => getAccountKind(typeName.get(a.typeId) ?? "") === "credit").map((a) => [a.id, a.name]));
@@ -66,6 +72,7 @@ export function useFinancialCalendar(range: CalendarRange, options?: { includeCa
     sip: status(sipLoading, sipError),
     epf: status(epfLoading, epfError),
     decision: status(decisionsLoading, decisionsError),
+    fee: status(feeLoading, feeError),
     reminder: status(remindersLoading, remindersError),
   };
   const statusKey = JSON.stringify(sourceStatus);
@@ -85,10 +92,11 @@ export function useFinancialCalendar(range: CalendarRange, options?: { includeCa
       epfContributions: contributions,
       epfEmployerNames: employerNames,
       decisions,
+      feePatterns,
       reminders,
       extraEvents: options?.extraEvents,
     }),
-    [bills, cardNames, subscriptions, borrowingsCtx.borrowings, receivablesCtx.receivables, incomes, goals, investments, plans, contributions, employerNames, decisions, reminders, options?.extraEvents]
+    [bills, cardNames, subscriptions, borrowingsCtx.borrowings, receivablesCtx.receivables, incomes, goals, investments, plans, contributions, employerNames, decisions, feePatterns, reminders, options?.extraEvents]
   );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const stableStatus = useMemo(() => sourceStatus, [statusKey]);

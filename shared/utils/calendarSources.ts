@@ -350,6 +350,7 @@ export function epfEvents(contributions: readonly EpfContribution[], employerNam
   return out;
 }
 
+
 import type { MoneyDecision } from "../types/decision";
 
 export function decisionEvents(decisions: readonly MoneyDecision[], ctx: CalendarContext): CalendarEvent[] {
@@ -396,6 +397,51 @@ export function decisionEvents(decisions: readonly MoneyDecision[], ctx: Calenda
           })
         );
       }
+    }
+  }
+
+  return out;
+}
+
+import type { FeePattern } from "./feePatterns";
+
+export function feeEvents(patterns: readonly FeePattern[], ctx: CalendarContext): CalendarEvent[] {
+  const out: CalendarEvent[] = [];
+  const start = ctx.range.from > ctx.today ? ctx.range.from : ctx.today;
+  if (start > ctx.range.to) return out;
+
+  for (const pattern of patterns) {
+    if (!pattern.regular || pattern.mayHaveStopped || pattern.cadence === "irregular") continue;
+
+    const intervalMonths = pattern.cadence === "yearly" ? 12 : pattern.cadence === "quarterly" ? 3 : 1;
+    const [, , d] = pattern.lastSeen.split("-").map(Number);
+    const schedule: RunwaySchedule = {
+      kind: "monthly",
+      firstDate: pattern.lastSeen,
+      dayOfMonth: d,
+      intervalMonths,
+    };
+
+    for (const date of occurrencesBetween(schedule, start, ctx.range.to)) {
+      // Don't predict a fee on or before the day we last saw it charged.
+      if (date <= pattern.lastSeen) continue;
+
+      out.push(
+        event(ctx, {
+          source: "fee",
+          refId: pattern.id,
+          date,
+          title: "Expected fee",
+          subtitle: `${pattern.provider} (${pattern.feeType.replace(/_/g, " ")})`,
+          amount: pattern.typicalAmount,
+          currency: ctx.currency,
+          direction: "out",
+          state: "expected",
+          actionable: false,
+          href: "/fees",
+        })
+      );
+
     }
   }
 

@@ -37,6 +37,8 @@ export function calendarEventActions(event: CalendarEvent | null | undefined): C
       return one("Open EPF");
     case "decision":
       return one("View decision", event.href);
+    case "fee":
+      return one("View fee & charges");
     case "goal":
       return one("Open goals");
     case "reminder":

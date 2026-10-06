@@ -20,6 +20,7 @@ export const CALENDAR_SOURCES = [
   "sip",
   "epf",
   "decision",
+  "fee",
   "reminder",
 ] as const;
 export type CalendarSource = (typeof CALENDAR_SOURCES)[number];
