@@ -25,7 +25,6 @@ import { LazyMount } from "@/components/common/LazyMount";
 import { ErrorState } from "@/components/common/ErrorState";
 import { WelcomeScreen } from "@/components/onboarding/WelcomeScreen";
 import { PageShell } from "@/components/layout/PageShell";
-import { DashboardSkeleton } from "@/components/ui/DashboardSkeleton";
 import { sampleScrollFps, perfEvent } from "@/lib/perf";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useAccounts } from "@/hooks/useAccounts";
@@ -62,14 +61,13 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
-/** First viewport: Safe to Spend, then Budget + Forecast. */
-const HERO_WIDGETS: DashboardWidgetId[] = ["focus", "budgetAlerts"];
+/** Critical first-viewport widgets: Safe to Spend, Quick Add, and Recent Activity. */
+const HERO_WIDGETS: DashboardWidgetId[] = ["focus", "recentActivity"];
 
 const ABOVE_FOLD_WIDGETS: DashboardWidgetId[] = [
   "focus",
-  "budgetAlerts",
-  "subscriptions",
-  "overview",
+  "quickAdd",
+  "recentActivity",
 ];
 
 function getPreviousMonthKey(month: string): string {
@@ -193,10 +191,17 @@ export default function DashboardScreen() {
     [settings.monthlyBudget, monthlySpent, activeMonth, todayKey, remainingCommitted]
   );
 
-  const cashFlow = useMemo(
-    () => cashFlowByMonth(expenses, incomes, activeMonth, 6),
-    [expenses, incomes, activeMonth]
-  );
+  const isOverviewEnabled = useMemo(() => {
+    return (
+      settings.dashboardOrder.length === 0 ||
+      settings.dashboardOrder.includes("overview")
+    );
+  }, [settings.dashboardOrder]);
+
+  const cashFlow = useMemo(() => {
+    if (!isOverviewEnabled) return [];
+    return cashFlowByMonth(expenses, incomes, activeMonth, 6);
+  }, [isOverviewEnabled, expenses, incomes, activeMonth]);
 
   const activeCategoryBudgets = useMemo(() => {
     const monthBudgets = categoryBudgets.filter((b) => b.month === activeMonth);
@@ -261,8 +266,6 @@ export default function DashboardScreen() {
     return [...hero, ...rest];
   }, [orderedWidgetIds]);
 
-  const isLoading = expensesLoading || incomesLoading || accountsLoading;
-
   const handleEditExpense = (expense: Expense) => {
     setEditingExpense(expense);
     setIsAddExpenseOpen(true);
@@ -317,6 +320,7 @@ export default function DashboardScreen() {
               key="recentActivity"
               expenses={expenses}
               currency={displayCurrency}
+              loading={expensesLoading && expenses.length === 0}
               onEditExpense={handleEditExpense}
               onViewAll={() => router.push("/ledger")}
             />
@@ -349,6 +353,7 @@ export default function DashboardScreen() {
               key="focus"
               budget={monthBudget}
               currency={displayCurrency}
+              loading={expensesLoading && accountsLoading && accounts.length === 0}
             />
           );
 
@@ -502,9 +507,7 @@ export default function DashboardScreen() {
       <WelcomeScreen />
       <SetupChecklistWidget />
 
-      {isLoading && expenses.length === 0 && accounts.length === 0 ? (
-        <DashboardSkeleton />
-      ) : financeError && expenses.length === 0 && accounts.length === 0 ? (
+      {financeError && expenses.length === 0 && accounts.length === 0 ? (
         <ErrorState
           title="Couldn't load your transactions"
           description={financeError.message}
@@ -518,6 +521,7 @@ export default function DashboardScreen() {
             previousSpent={previousSpent}
             previousIncome={previousIncome}
             currency={displayCurrency}
+            loading={expensesLoading && monthlySpent === 0 && monthlyIncome === 0}
             monthLabel={formatMonthChipLabel(activeMonth, settings.dateFormat)}
             onOpenMonthPicker={() => setIsMonthDrawerOpen(true)}
           />
@@ -527,23 +531,27 @@ export default function DashboardScreen() {
               {index === insertInsightsAfter ||
               (insertInsightsAfter < 0 && index === 0) ? (
                 <View style={styles.quickInsightsSlot}>
-                  <SmartInsightsWidget
-                    expenses={expenses}
-                    monthlyBudget={settings.monthlyBudget}
-                    currency={displayCurrency}
-                    todayKey={todayKey}
-                  />
+                  <LazyMount delayMs={120}>
+                    <SmartInsightsWidget
+                      expenses={expenses}
+                      monthlyBudget={settings.monthlyBudget}
+                      currency={displayCurrency}
+                      todayKey={todayKey}
+                    />
+                  </LazyMount>
                 </View>
               ) : null}
             </View>
           ))}
           {displayWidgetIds.length === 0 ? (
-            <SmartInsightsWidget
-              expenses={expenses}
-              monthlyBudget={settings.monthlyBudget}
-              currency={displayCurrency}
-              todayKey={todayKey}
-            />
+            <LazyMount delayMs={120}>
+              <SmartInsightsWidget
+                expenses={expenses}
+                monthlyBudget={settings.monthlyBudget}
+                currency={displayCurrency}
+                todayKey={todayKey}
+              />
+            </LazyMount>
           ) : null}
         </View>
       )}
