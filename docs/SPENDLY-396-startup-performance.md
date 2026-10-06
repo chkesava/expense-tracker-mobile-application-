@@ -12,7 +12,7 @@ Improve Spendly Android startup performance and first-use responsiveness using m
 - **SPENDLY-402**: Merged into epic branch
 - **SPENDLY-403**: Merged into epic branch
 - **SPENDLY-404**: Merged into epic branch
-- **SPENDLY-405**: In Review (QA Validation & Rollout Sign-off Completed)
+- **SPENDLY-405**: Merged into epic branch
 
 ## Decisions
 - Instrumented critical startup phases, Firestore listeners, and snapshot deliveries using the updated `lib/perf.ts` system (SPENDLY-397).
