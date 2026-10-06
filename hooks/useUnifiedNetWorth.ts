@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccounts } from "@/hooks/useAccounts";
@@ -16,6 +16,7 @@ import { useReceivables } from "@/hooks/useReceivables";
 import { useSettings } from "@/providers/SettingsProvider";
 import { todayDateKey } from "@/shared/utils/dates";
 import { composeNetWorth } from "@/shared/utils/netWorth";
+import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 
 export interface UnifiedNetWorthSummary {
   /** Sum of all positive non-credit bank/cash balances */
@@ -52,11 +53,32 @@ export interface UnifiedNetWorthSummary {
   totalLiabilities: number;
   /** Net Worth = Total Assets - Total Liabilities */
   totalNetWorth: number;
-  /** Loading state across all underlying data providers */
+  /** Loading state across core data providers */
   loading: boolean;
+  /** True when secondary providers (stocks, EPF, loans) are still hydrating */
+  secondaryLoading?: boolean;
 }
 
-export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
+export interface UseUnifiedNetWorthOptions {
+  /**
+   * If true, liquid bank balance from accounts renders immediately,
+   * while secondary providers (loans, cards, stocks, EPF) defer their
+   * listener attachments until after startup idle.
+   */
+  progressive?: boolean;
+}
+
+export function useUnifiedNetWorth(
+  options?: UseUnifiedNetWorthOptions
+): UnifiedNetWorthSummary {
+  const isProgressive = Boolean(options?.progressive);
+  const [secondaryReady, setSecondaryReady] = useState(!isProgressive);
+
+  useEffect(() => {
+    if (!isProgressive) return;
+    return scheduleIdleWork(() => setSecondaryReady(true));
+  }, [isProgressive]);
+
   const { accounts, loading: accountsLoading } = useAccounts();
   const { accountTypes, loading: typesLoading } = useAccountTypes();
   const { expenses, loading: expensesLoading } = useExpenses();
@@ -69,17 +91,21 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     repayments: borrowingRepayments,
     portfolio: borrowingPortfolio,
     loading: borrowingsLoading,
-  } = useBorrowings();
-  const { bills, loading: billsLoading } = useCreditCardBills();
+  } = useBorrowings({ enabled: secondaryReady });
+  const { bills, loading: billsLoading } = useCreditCardBills({
+    enabled: secondaryReady,
+  });
   const {
     receivables,
     repayments: receivableRepayments,
     portfolio: receivablePortfolio,
     loading: receivablesLoading,
-  } = useReceivables();
+  } = useReceivables({ enabled: secondaryReady });
   const { settings } = useSettings();
   const today = todayDateKey(settings.timezone);
-  const { investments, loading: investmentsLoading } = useInvestments();
+  const { investments, loading: investmentsLoading } = useInvestments({
+    enabled: secondaryReady,
+  });
   const {
     holdings,
     cashBalance: investmentCashBalance,
@@ -159,14 +185,17 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     ]
   );
 
-  const loading =
+  const coreLoading =
     accountsLoading ||
     typesLoading ||
     expensesLoading ||
     incomesLoading ||
     entriesLoading ||
     paymentsLoading ||
-    transfersLoading ||
+    transfersLoading;
+
+  const secondaryLoading =
+    !secondaryReady ||
     borrowingsLoading ||
     receivablesLoading ||
     investmentsLoading ||
@@ -175,8 +204,11 @@ export function useUnifiedNetWorth(): UnifiedNetWorthSummary {
     billsLoading ||
     epfLoading;
 
+  const loading = isProgressive ? coreLoading : coreLoading || secondaryLoading;
+
   return {
     ...summary,
     loading,
+    secondaryLoading,
   };
 }
