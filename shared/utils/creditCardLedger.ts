@@ -1,6 +1,6 @@
 import type { Account, AccountPayment, Expense } from "../types/expense";
 import { isCashbackPayment } from "../types/expense";
-import type { CreditCardBill } from "../types/creditCardBill";
+import type { CreditCardBill, CreditCardBillStatus } from "../types/creditCardBill";
 import {
   CREDIT_CARD_PAYMENT_WINDOW_DAYS,
   OPEN_BILL_STATUSES,
@@ -15,7 +15,12 @@ import {
   isDateKeyInInclusiveRange,
   normalizeBillGenerationDay,
 } from "./billingCycle";
-import { daysBetweenDateKeys } from "./creditCardBillStatus";
+import {
+  computeCreditCardBillStatus,
+  computeRemainingAmount,
+  daysBetweenDateKeys,
+} from "./creditCardBillStatus";
+import { autoCreditCardBillDocId } from "./autoCreditCardBills";
 import {
   billDateForMonth,
   parseLocalDate,
@@ -663,6 +668,7 @@ export function collectCreditBillAllocationPatches(input: {
 }): CreditBillAllocationPatch[] {
   const patches: CreditBillAllocationPatch[] = [];
   const billById = new Map(input.bills.map((bill) => [bill.id, bill]));
+  const today = input.today || todayDateKey();
 
   for (const account of input.accounts) {
     if (!input.isCreditAccount(account)) continue;
@@ -699,10 +705,33 @@ export function collectCreditBillAllocationPatches(input: {
       }
 
       const newIds = ledgerIds.filter((id) => !storedIds.includes(id));
-      if (newIds.length === 0 && statement.paid <= storedPaid) continue;
+      const nextAmountPaid = Math.max(storedPaid, statement.paid);
+      // A bill can be fully linked and correctly paid yet still carry a stale
+      // `status` (e.g. written before a later recompute convention existed, or
+      // left behind by a duplicate-bill merge) — the stored status field is
+      // otherwise trusted as-is forever (see CreditCardBillsProvider's
+      // snapshot mapper), so nothing else ever corrects it. Force a patch
+      // whenever the status computed from the reconciled amount disagrees
+      // with what's stored, even if amountPaid/paymentIds need no change.
+      // Only forces a patch for the "should be settled but isn't stored that
+      // way" direction — a pure date-driven transition (e.g. UPCOMING ->
+      // OVERDUE for a bill nobody has paid) is not this function's concern.
+      const computedStatus = computeCreditCardBillStatus({
+        today,
+        dueDate: bill.dueDate || statement.dueDate,
+        amountPaid: nextAmountPaid,
+        statementAmount: Number(bill.statementAmount) || 0,
+      });
+      const statusStale =
+        bill.status !== "CANCELLED" &&
+        computedStatus !== bill.status &&
+        (computedStatus === "PAID" || computedStatus === "PARTIALLY_PAID");
+      if (newIds.length === 0 && nextAmountPaid <= storedPaid && !statusStale) {
+        continue;
+      }
       patches.push({
         billId: statement.billId,
-        amountPaid: Math.max(storedPaid, statement.paid),
+        amountPaid: nextAmountPaid,
         paymentIds: [...storedIds, ...newIds],
         paymentDate: statement.lastPaymentDate,
       });
@@ -710,6 +739,111 @@ export function collectCreditBillAllocationPatches(input: {
   }
 
   return patches;
+}
+
+export type DuplicateCreditCardBillSlice = Pick<
+  CreditCardBill,
+  "id" | "accountId" | "statementDate" | "dueDate" | "statementAmount" | "status"
+> &
+  Partial<Pick<CreditCardBill, "amountPaid" | "paymentIds">>;
+
+export type CreditBillDuplicateResolution = {
+  /** The single doc every future write/read should treat as this cycle's bill. */
+  canonicalId: string;
+  /** Only present when the canonical doc's stored fields need to change. */
+  canonicalPatch?: {
+    amountPaid: number;
+    paymentIds: string[];
+    status: CreditCardBillStatus;
+    remainingAmount: number;
+  };
+  /** Non-canonical docs for the same cycle to mark CANCELLED (never deleted). */
+  cancelIds: string[];
+};
+
+/**
+ * SPENDLY-417/SPENDLY-45: two docs for the same accountId+statementDate can
+ * exist (duplicate generation, a manual bill alongside an auto one, etc).
+ * Reconciliation (`collectCreditBillAllocationPatches`) and the ledger only
+ * ever claim *one* doc per window, so a payment linked to the other duplicate
+ * never corrects it — it sits at its original `amountPaid`/`status` forever,
+ * which is how an already-paid cycle keeps showing as OVERDUE. This merges
+ * every duplicate group onto one canonical doc (the deterministic auto-bill
+ * id when one exists in the group, so future generation keeps writing to it)
+ * and cancels the rest. Never deletes a doc or touches `AccountPayment`s, and
+ * is idempotent: re-running after a merge finds nothing left to resolve.
+ */
+export function collectCreditBillDuplicateResolutions(
+  bills: DuplicateCreditCardBillSlice[],
+  today?: string
+): CreditBillDuplicateResolution[] {
+  const resolveToday = today || todayDateKey();
+  const groups = new Map<string, DuplicateCreditCardBillSlice[]>();
+  for (const bill of bills) {
+    if (!bill.id || !bill.accountId || !bill.statementDate) continue;
+    if (bill.status === "CANCELLED") continue;
+    const key = `${bill.accountId}:${bill.statementDate}`;
+    const group = groups.get(key);
+    if (group) group.push(bill);
+    else groups.set(key, [bill]);
+  }
+
+  const resolutions: CreditBillDuplicateResolution[] = [];
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+
+    const deterministicId = autoCreditCardBillDocId(
+      group[0].accountId,
+      group[0].statementDate
+    );
+    const canonical =
+      group.find((bill) => bill.id === deterministicId) ||
+      [...group].sort(
+        (a, b) =>
+          (Number(b.amountPaid) || 0) - (Number(a.amountPaid) || 0) ||
+          a.id.localeCompare(b.id)
+      )[0];
+
+    const amountPaid = Math.max(
+      ...group.map((bill) => Number(bill.amountPaid) || 0)
+    );
+    const paymentIds = [
+      ...new Set(group.flatMap((bill) => (bill.paymentIds || []).filter(Boolean))),
+    ];
+    const status = computeCreditCardBillStatus({
+      today: resolveToday,
+      dueDate: canonical.dueDate,
+      amountPaid,
+      statementAmount: Number(canonical.statementAmount) || 0,
+    });
+    const remainingAmount = computeRemainingAmount(
+      Number(canonical.statementAmount) || 0,
+      amountPaid
+    );
+
+    const canonicalStoredIds = (canonical.paymentIds || []).filter(Boolean);
+    const canonicalUnchanged =
+      (Number(canonical.amountPaid) || 0) === amountPaid &&
+      canonical.status === status &&
+      canonicalStoredIds.length === paymentIds.length &&
+      canonicalStoredIds.every((id) => paymentIds.includes(id));
+
+    const cancelIds = group
+      .filter((bill) => bill.id !== canonical.id)
+      .map((bill) => bill.id);
+
+    if (cancelIds.length === 0 && canonicalUnchanged) continue;
+
+    resolutions.push({
+      canonicalId: canonical.id,
+      canonicalPatch: canonicalUnchanged
+        ? undefined
+        : { amountPaid, paymentIds, status, remainingAmount },
+      cancelIds,
+    });
+  }
+
+  return resolutions;
 }
 
 /** Oldest statement still owing, for defaulting a payment target. */
