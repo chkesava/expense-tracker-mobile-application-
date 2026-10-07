@@ -28,9 +28,7 @@ import { PageShell } from "@/components/layout/PageShell";
 import { sampleScrollFps, perfEvent, perfMark } from "@/lib/perf";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useAccounts } from "@/hooks/useAccounts";
-import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
 import { useExpenses } from "@/hooks/useExpenses";
-import { useFinancialGoals } from "@/hooks/useFinancialGoals";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
 import { useSmsReviewInbox } from "@/hooks/useSmsReviewInbox";
@@ -53,7 +51,9 @@ import { currentMonthKey, formatDateKey, isInMonth } from "@/shared/utils/dates"
 import {
   cashFlowByMonth,
   computeSpendlyBudget,
+  oldestTrustedCashFlowMonth,
   remainingCommittedThisMonth,
+  trimToTrustedCashFlow,
 } from "@/shared/utils/spendlyBudget";
 import { getNextRenewalDate } from "@/shared/utils/subscriptionProcessor";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -100,13 +100,17 @@ export default function DashboardScreen() {
   const { setIsAddExpenseOpen, setIsAddSheetOpen, setEditingExpense } =
     useModalActions();
 
-  const { expenses, loading: expensesLoading, error: financeError, retry } = useExpenses();
-  const { incomes, loading: incomesLoading } = useIncomes();
+  const {
+    expenses,
+    loading: expensesLoading,
+    complete: expensesComplete,
+    error: financeError,
+    retry,
+  } = useExpenses();
+  const { incomes, loading: incomesLoading, complete: incomesComplete } = useIncomes();
   const { count: inboxCount } = useSmsReviewInbox();
   const { accounts, loading: accountsLoading } = useAccounts();
   const { subscriptions } = useSubscriptions();
-  const { budgets: categoryBudgets } = useCategoryBudgets();
-  const { goals } = useFinancialGoals();
   const { markScreenVisited } = useSetupProgress();
 
   useEffect(() => {
@@ -205,8 +209,18 @@ export default function DashboardScreen() {
 
   const cashFlow = useMemo(() => {
     if (!isOverviewEnabled) return [];
-    return cashFlowByMonth(expenses, incomes, activeMonth, 6);
-  }, [isOverviewEnabled, expenses, incomes, activeMonth]);
+    const flow = cashFlowByMonth(expenses, incomes, activeMonth, 6);
+    // SPENDLY-413: the ledger is permanently staged to a recent-first page
+    // (SPENDLY-409) — trim any leading months this session's data can't
+    // vouch for instead of showing them as a fabricated zero.
+    const cutoff = oldestTrustedCashFlowMonth(
+      expenses,
+      incomes,
+      expensesComplete,
+      incomesComplete
+    );
+    return trimToTrustedCashFlow(flow, cutoff);
+  }, [isOverviewEnabled, expenses, incomes, expensesComplete, incomesComplete, activeMonth]);
 
   const orderedWidgetIds = useMemo(() => {
     return getOrderedDashboardWidgets(
@@ -272,7 +286,6 @@ export default function DashboardScreen() {
               monthlyBudget={settings.monthlyBudget}
               monthlySpent={monthlySpent}
               currency={displayCurrency}
-              categoryBudgets={categoryBudgets}
               monthlyExpenses={monthlyExpenses}
               activeMonth={activeMonth}
               budget={monthBudget}
@@ -305,7 +318,6 @@ export default function DashboardScreen() {
           return (
             <FinancialGoalsWidget
               key="financialGoals"
-              goals={goals}
               currency={displayCurrency}
             />
           );

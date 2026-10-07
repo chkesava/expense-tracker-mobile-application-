@@ -6,6 +6,8 @@
 import {
   collection,
   doc,
+  getDocs,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -21,12 +23,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { AppState } from "react-native";
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
 import {
   forgetSnapshotPath,
+  logDirectRead,
   logQuerySnapshot,
 } from "@/lib/firestoreReadDebug";
 import { commitWrite } from "@/lib/firestoreWrite";
@@ -73,15 +77,21 @@ export type ExpenseReferenceData = {
   budgetsLoading: boolean;
   budgetsError: LoadFailure | null;
   retryBudgets: () => void;
+  registerBudgetsSubscriber: () => () => void;
   goals: FinancialGoal[];
   goalsLoading: boolean;
   goalsError: LoadFailure | null;
   retryGoals: () => void;
+  registerGoalsSubscriber: () => () => void;
 };
 
 const ExpenseReferenceDataContext = createContext<ExpenseReferenceData | undefined>(
   undefined
 );
+
+/** SPENDLY-412: minimum gap between foreground-triggered refetches of the
+ * one-shot spaces/categorizationRules collections. */
+const FOREGROUND_REFRESH_MIN_INTERVAL_MS = 5 * 60 * 1000;
 
 export function ExpenseReferenceDataProvider({
   children,
@@ -150,6 +160,86 @@ export function ExpenseReferenceDataProvider({
   const subscriptionsRef = useRef(subscriptions);
   subscriptionsRef.current = subscriptions;
 
+  // SPENDLY-411: budgets/goals are only read from optional, user-configurable
+  // dashboard widgets and per-screen planning hooks — unlike categories/
+  // subscriptions/spaces/categorizationRules, nothing pervasive depends on
+  // them, so they get the same Active-On-Demand gating as Credit Cards/
+  // Borrowings/Receivables (SPENDLY-401) instead of listening unconditionally.
+  const [shouldListenBudgets, setShouldListenBudgets] = useState(false);
+  const budgetsSubscriberCountRef = useRef(0);
+  const budgetsTeardownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+
+  const registerBudgetsSubscriber = useCallback(() => {
+    if (budgetsTeardownTimerRef.current) {
+      clearTimeout(budgetsTeardownTimerRef.current);
+      budgetsTeardownTimerRef.current = null;
+    }
+    budgetsSubscriberCountRef.current += 1;
+    setShouldListenBudgets(true);
+    return () => {
+      budgetsSubscriberCountRef.current = Math.max(
+        0,
+        budgetsSubscriberCountRef.current - 1
+      );
+      if (budgetsSubscriberCountRef.current === 0) {
+        if (budgetsTeardownTimerRef.current) {
+          clearTimeout(budgetsTeardownTimerRef.current);
+        }
+        budgetsTeardownTimerRef.current = setTimeout(() => {
+          if (budgetsSubscriberCountRef.current === 0) {
+            setShouldListenBudgets(false);
+          }
+          budgetsTeardownTimerRef.current = null;
+        }, 15000);
+      }
+    };
+  }, []);
+
+  const [shouldListenGoals, setShouldListenGoals] = useState(false);
+  const goalsSubscriberCountRef = useRef(0);
+  const goalsTeardownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+
+  const registerGoalsSubscriber = useCallback(() => {
+    if (goalsTeardownTimerRef.current) {
+      clearTimeout(goalsTeardownTimerRef.current);
+      goalsTeardownTimerRef.current = null;
+    }
+    goalsSubscriberCountRef.current += 1;
+    setShouldListenGoals(true);
+    return () => {
+      goalsSubscriberCountRef.current = Math.max(
+        0,
+        goalsSubscriberCountRef.current - 1
+      );
+      if (goalsSubscriberCountRef.current === 0) {
+        if (goalsTeardownTimerRef.current) {
+          clearTimeout(goalsTeardownTimerRef.current);
+        }
+        goalsTeardownTimerRef.current = setTimeout(() => {
+          if (goalsSubscriberCountRef.current === 0) {
+            setShouldListenGoals(false);
+          }
+          goalsTeardownTimerRef.current = null;
+        }, 15000);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (budgetsTeardownTimerRef.current) {
+        clearTimeout(budgetsTeardownTimerRef.current);
+      }
+      if (goalsTeardownTimerRef.current) {
+        clearTimeout(goalsTeardownTimerRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     skippedAccountToastShown.current = false;
   }, [uid]);
@@ -166,9 +256,12 @@ export function ExpenseReferenceDataProvider({
     const cancelIdle = scheduleIdleWork(() => {
       perfEvent("firestore_listener_start", { collection: "categories" });
       unsub = onSnapshot(
-        query(collection(db, "users", uid, "categories")),
+        // SPENDLY-412: defensive bound — categories are a small, user-curated
+        // list (observed <50 docs), not expected to need the full ledger's
+        // unbounded shape, but a cap keeps a runaway account from paying for it.
+        query(collection(db, "users", uid, "categories"), limit(500)),
         (snap) => {
-          logQuerySnapshot(path, snap);
+          logQuerySnapshot(path, snap, { feature: "reference", queryShape: "categories" });
           perfEvent("firestore_first_snapshot", {
             collection: "categories",
             docCount: snap.docs.length,
@@ -208,9 +301,15 @@ export function ExpenseReferenceDataProvider({
     const path = `users/${uid}/subscriptions`;
     perfEvent("firestore_listener_start", { collection: "subscriptions" });
     const unsub = onSnapshot(
-      query(collection(db, "users", uid, "subscriptions"), orderBy("name", "asc")),
+      // SPENDLY-412: defensive bound (observed <25 docs) — stays realtime,
+      // subscriptions drive the due-subscription auto-posting side effect below.
+      query(
+        collection(db, "users", uid, "subscriptions"),
+        orderBy("name", "asc"),
+        limit(200)
+      ),
       (snap) => {
-        logQuerySnapshot(path, snap);
+        logQuerySnapshot(path, snap, { feature: "reference", queryShape: "subscriptions" });
         perfEvent("firestore_first_snapshot", {
           collection: "subscriptions",
           docCount: snap.docs.length,
@@ -241,6 +340,11 @@ export function ExpenseReferenceDataProvider({
     };
   }, [uid, db, subscriptionsAttempt, setSubscriptionsError]);
 
+  // SPENDLY-412: spaces are a small (observed <10 docs), slow-changing,
+  // non-collaborative list — read-once per session/retry instead of a
+  // standing realtime listener. Refetched explicitly after writes
+  // (hooks/useSpaces.ts) and on app foreground if stale (below).
+  const lastFetchedSpacesAtRef = useRef(0);
   useEffect(() => {
     if (!uid || !db) {
       setSpaces([]);
@@ -249,18 +353,16 @@ export function ExpenseReferenceDataProvider({
     }
     setSpacesLoading(true);
     const path = `users/${uid}/spaces`;
-    let unsub: (() => void) | null = null;
+    let cancelled = false;
     const cancelIdle = scheduleIdleWork(() => {
-      perfEvent("firestore_listener_start", { collection: "spaces" });
-      unsub = onSnapshot(
-        query(collection(db, "users", uid, "spaces"), orderBy("name")),
-        (snap) => {
-          logQuerySnapshot(path, snap);
-          perfEvent("firestore_first_snapshot", {
-            collection: "spaces",
-            docCount: snap.docs.length,
-            fromCache: snap.metadata.fromCache,
+      getDocs(query(collection(db, "users", uid, "spaces"), orderBy("name"), limit(200)))
+        .then((snap) => {
+          if (cancelled) return;
+          logDirectRead(path, snap.docs.length, snap.metadata.fromCache ? "cache" : "server", {
+            feature: "reference",
+            queryShape: "spaces",
           });
+          lastFetchedSpacesAtRef.current = Date.now();
           setSpaces(
             snap.docs.map((docSnap) => ({
               id: docSnap.id,
@@ -269,24 +371,33 @@ export function ExpenseReferenceDataProvider({
           );
           setSpacesError(null);
           setSpacesLoading(false);
-        },
-        snapshotErrorHandler(
-          "snapshot.spaces",
-          (failure) => {
-            setSpacesError(failure);
-            setSpacesLoading(false);
-          },
-          "Couldn't load your spaces."
-        )
-      );
+        })
+        .catch(
+          snapshotErrorHandler(
+            "snapshot.spaces",
+            (failure) => {
+              if (cancelled) return;
+              setSpacesError(failure);
+              setSpacesLoading(false);
+            },
+            "Couldn't load your spaces."
+          )
+        );
     });
     return () => {
+      cancelled = true;
       cancelIdle();
       forgetSnapshotPath(path);
-      if (unsub) unsub();
     };
   }, [uid, db, spacesAttempt, setSpacesError]);
 
+  // SPENDLY-412: categorizationRules are a small (observed <30 docs),
+  // slow-changing settings list, read only by foreground UI (ExpenseForm
+  // autosuggest, MagicChatModal, the rules-management screen) — read-once
+  // per session/retry instead of a standing realtime listener. Refetched
+  // explicitly after writes (hooks/useCategorizationRules.ts) and on app
+  // foreground if stale (below).
+  const lastFetchedRulesAtRef = useRef(0);
   useEffect(() => {
     if (!uid || !db) {
       setRules([]);
@@ -295,45 +406,71 @@ export function ExpenseReferenceDataProvider({
     }
     setRulesLoading(true);
     const path = `users/${uid}/categorizationRules`;
-    let unsub: (() => void) | null = null;
+    let cancelled = false;
     const cancelIdle = scheduleIdleWork(() => {
-      perfEvent("firestore_listener_start", { collection: "categorizationRules" });
-      unsub = onSnapshot(
+      getDocs(
         query(
           collection(db, "users", uid, "categorizationRules"),
-          orderBy("createdAt", "asc")
-        ),
-        (snap) => {
-          logQuerySnapshot(path, snap);
-          perfEvent("firestore_first_snapshot", {
-            collection: "categorizationRules",
-            docCount: snap.docs.length,
-            fromCache: snap.metadata.fromCache,
+          orderBy("createdAt", "asc"),
+          limit(500)
+        )
+      )
+        .then((snap) => {
+          if (cancelled) return;
+          logDirectRead(path, snap.docs.length, snap.metadata.fromCache ? "cache" : "server", {
+            feature: "reference",
+            queryShape: "categorizationRules",
           });
+          lastFetchedRulesAtRef.current = Date.now();
           setRules(
             snap.docs.map((d) => ({ id: d.id, ...d.data() } as CategorizationRule))
           );
           setRulesError(null);
           setRulesLoading(false);
-        },
-        snapshotErrorHandler(
-          "snapshot.categorizationRules",
-          (failure) => {
-            setRulesError(failure);
-            setRulesLoading(false);
-          },
-          "Couldn't load your categorization rules."
-        )
-      );
+        })
+        .catch(
+          snapshotErrorHandler(
+            "snapshot.categorizationRules",
+            (failure) => {
+              if (cancelled) return;
+              setRulesError(failure);
+              setRulesLoading(false);
+            },
+            "Couldn't load your categorization rules."
+          )
+        );
     });
     return () => {
+      cancelled = true;
       cancelIdle();
       forgetSnapshotPath(path);
-      if (unsub) unsub();
     };
   }, [uid, db, rulesAttempt, setRulesError]);
 
+  // SPENDLY-412: bounded eventual-sync for the two one-shot collections —
+  // on app foreground, refetch only if the last fetch is stale (5 min),
+  // so backgrounding/foregrounding quickly doesn't cause a read storm.
   useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      const now = Date.now();
+      if (now - lastFetchedSpacesAtRef.current > FOREGROUND_REFRESH_MIN_INTERVAL_MS) {
+        retrySpaces();
+      }
+      if (now - lastFetchedRulesAtRef.current > FOREGROUND_REFRESH_MIN_INTERVAL_MS) {
+        retryRules();
+      }
+    });
+    return () => sub.remove();
+  }, [retrySpaces, retryRules]);
+
+  useEffect(() => {
+    if (!shouldListenBudgets) {
+      if (budgets.length === 0) {
+        setBudgetsLoading(false);
+      }
+      return;
+    }
     if (!uid || !db) {
       setBudgets([]);
       setBudgetsLoading(false);
@@ -348,7 +485,7 @@ export function ExpenseReferenceDataProvider({
         orderBy("month", "desc")
       ),
       (snap) => {
-        logQuerySnapshot(path, snap);
+        logQuerySnapshot(path, snap, { feature: "reference", queryShape: "categoryBudgets" });
         perfEvent("firestore_first_snapshot", {
           collection: "categoryBudgets",
           docCount: snap.docs.length,
@@ -373,9 +510,15 @@ export function ExpenseReferenceDataProvider({
       forgetSnapshotPath(path);
       unsub();
     };
-  }, [uid, db, budgetsAttempt, setBudgetsError]);
+  }, [uid, db, budgetsAttempt, setBudgetsError, shouldListenBudgets]);
 
   useEffect(() => {
+    if (!shouldListenGoals) {
+      if (goals.length === 0) {
+        setGoalsLoading(false);
+      }
+      return;
+    }
     if (!uid || !db) {
       setGoals([]);
       setGoalsLoading(false);
@@ -390,7 +533,7 @@ export function ExpenseReferenceDataProvider({
         orderBy("createdAt", "asc")
       ),
       (snap) => {
-        logQuerySnapshot(path, snap);
+        logQuerySnapshot(path, snap, { feature: "reference", queryShape: "financialGoals" });
         perfEvent("firestore_first_snapshot", {
           collection: "financialGoals",
           docCount: snap.docs.length,
@@ -415,7 +558,7 @@ export function ExpenseReferenceDataProvider({
       forgetSnapshotPath(path);
       unsub();
     };
-  }, [uid, db, goalsAttempt, setGoalsError]);
+  }, [uid, db, goalsAttempt, setGoalsError, shouldListenGoals]);
 
   const processDueSubscriptions = useCallback(async () => {
     const database = getFirestoreDb();
@@ -508,10 +651,12 @@ export function ExpenseReferenceDataProvider({
       budgetsLoading,
       budgetsError,
       retryBudgets,
+      registerBudgetsSubscriber,
       goals,
       goalsLoading,
       goalsError,
       retryGoals,
+      registerGoalsSubscriber,
     }),
     [
       categories,
@@ -534,10 +679,12 @@ export function ExpenseReferenceDataProvider({
       budgetsLoading,
       budgetsError,
       retryBudgets,
+      registerBudgetsSubscriber,
       goals,
       goalsLoading,
       goalsError,
       retryGoals,
+      registerGoalsSubscriber,
     ]
   );
 

@@ -36,8 +36,12 @@ import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
-import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import { perfEvent } from "@/lib/perf";
+import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
+import {
+  forgetSnapshotPath,
+  logQuerySnapshot,
+} from "@/lib/firestoreReadDebug";
 import type { Borrowing, BorrowingRepayment } from "@/shared/types/borrowing";
 import type { Receivable, ReceivableRepayment } from "@/shared/types/receivable";
 import {
@@ -284,10 +288,14 @@ export function BorrowingsReceivablesProvider({
     setBorrowingsLoading(true);
     const base = ["users", uid] as const;
 
+    const borrowingsPath = `users/${uid}/borrowings`;
+    const borrowingRepaymentsPath = `users/${uid}/borrowingRepayments`;
+
     perfEvent("firestore_listener_start", { collection: "borrowings" });
     const unsubBorrowings = onSnapshot(
       query(collection(db, ...base, "borrowings"), orderBy("borrowedDate", "desc")),
       (snapshot) => {
+        logQuerySnapshot(borrowingsPath, snapshot, { feature: "borrowings", queryShape: "borrowings" });
         perfEvent("firestore_first_snapshot", {
           collection: "borrowings",
           docCount: snapshot.docs.length,
@@ -321,6 +329,10 @@ export function BorrowingsReceivablesProvider({
           orderBy("date", "desc")
         ),
         (snapshot) => {
+          logQuerySnapshot(borrowingRepaymentsPath, snapshot, {
+            feature: "borrowings",
+            queryShape: "borrowingRepayments",
+          });
           perfEvent("firestore_first_snapshot", {
             collection: "borrowingRepayments",
             docCount: snapshot.docs.length,
@@ -339,6 +351,8 @@ export function BorrowingsReceivablesProvider({
 
     return () => {
       cancelIdle();
+      forgetSnapshotPath(borrowingsPath);
+      forgetSnapshotPath(borrowingRepaymentsPath);
       unsubBorrowings();
       if (unsubBorrowingRepayments) unsubBorrowingRepayments();
     };
@@ -362,6 +376,8 @@ export function BorrowingsReceivablesProvider({
 
     setReceivablesLoading(true);
     const base = ["users", uid] as const;
+    const receivablesPath = `users/${uid}/receivables`;
+    const receivableRepaymentsPath = `users/${uid}/receivableRepayments`;
     let unsubReceivables: (() => void) | null = null;
     let unsubReceivableRepayments: (() => void) | null = null;
 
@@ -370,6 +386,10 @@ export function BorrowingsReceivablesProvider({
       unsubReceivables = onSnapshot(
         query(collection(db, ...base, "receivables"), orderBy("lentDate", "desc")),
         (snapshot) => {
+          logQuerySnapshot(receivablesPath, snapshot, {
+            feature: "receivables",
+            queryShape: "receivables",
+          });
           perfEvent("firestore_first_snapshot", {
             collection: "receivables",
             docCount: snapshot.docs.length,
@@ -401,6 +421,10 @@ export function BorrowingsReceivablesProvider({
           orderBy("date", "desc")
         ),
         (snapshot) => {
+          logQuerySnapshot(receivableRepaymentsPath, snapshot, {
+            feature: "receivables",
+            queryShape: "receivableRepayments",
+          });
           perfEvent("firestore_first_snapshot", {
             collection: "receivableRepayments",
             docCount: snapshot.docs.length,
@@ -419,6 +443,8 @@ export function BorrowingsReceivablesProvider({
 
     return () => {
       cancelIdle();
+      forgetSnapshotPath(receivablesPath);
+      forgetSnapshotPath(receivableRepaymentsPath);
       if (unsubReceivables) unsubReceivables();
       if (unsubReceivableRepayments) unsubReceivableRepayments();
     };

@@ -261,6 +261,59 @@ describe("stocks", () => {
   });
 });
 
+describe("liquidBalanceMayBePartial (SPENDLY-413)", () => {
+  it("is false when the ledger is complete, even with no balance baseline", () => {
+    const result = composeNetWorth(
+      inputs({
+        accounts: [account("a", SAVINGS, 50_000)],
+        expensesComplete: true,
+        incomesComplete: true,
+      })
+    );
+    expect(result.liquidBalanceMayBePartial).toBe(false);
+  });
+
+  it("is false when every non-credit account has an effective balance baseline, even if the ledger is staged", () => {
+    const result = composeNetWorth(
+      inputs({
+        accounts: [
+          { ...account("a", SAVINGS, 50_000), balanceAsOfDate: "2026-01-01" },
+        ],
+        expensesComplete: false,
+        incomesComplete: true,
+      })
+    );
+    expect(result.liquidBalanceMayBePartial).toBe(false);
+  });
+
+  it("is true when a non-credit account has no baseline and the ledger is staged", () => {
+    const result = composeNetWorth(
+      inputs({
+        accounts: [account("a", SAVINGS, 50_000)],
+        expensesComplete: false,
+        incomesComplete: true,
+      })
+    );
+    expect(result.liquidBalanceMayBePartial).toBe(true);
+  });
+
+  it("ignores credit card accounts (they never need the bank-balance replay)", () => {
+    const result = composeNetWorth(
+      inputs({
+        accounts: [account("c", CREDIT, 0)],
+        expensesComplete: false,
+        incomesComplete: false,
+      })
+    );
+    expect(result.liquidBalanceMayBePartial).toBe(false);
+  });
+
+  it("defaults to complete (no flag) when the caller omits the completeness inputs", () => {
+    const result = composeNetWorth(inputs({ accounts: [account("a", SAVINGS, 50_000)] }));
+    expect(result.liquidBalanceMayBePartial).toBe(false);
+  });
+});
+
 describe("borrowings and receivables sit on opposite sides", () => {
   it("counts borrowings as a liability", () => {
     const result = composeNetWorth(inputs({ borrowingOutstanding: 30_000 }));

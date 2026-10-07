@@ -31,6 +31,10 @@ import { ProductSplashOverlay } from "product-splash-overlay";
 import { UpdateAvailableSheet } from "@/components/UpdateAvailableSheet";
 import { webWidthConstraintStyle } from "@/components/common/WebWidthConstraint";
 import { isPermissionError, logWarning } from "@/lib/errors";
+import {
+  getFirestoreReadStats,
+  resetFirestoreReadDebug,
+} from "@/lib/firestoreReadDebug";
 import { installGlobalErrorHandlers } from "@/lib/globalErrorHandler";
 import { perfMark, perfStart, perfEnd } from "@/lib/perf";
 import { bindQueryClientToNetwork } from "@/lib/queryNetworkBinding";
@@ -50,6 +54,17 @@ import { themeUsesDarkPalette, THEME_STORAGE_KEY } from "@/theme/tokens";
 
 // Uncaught throws / unhandled rejections — installed before any provider mounts.
 installGlobalErrorHandlers();
+
+// SPENDLY-415: start each cold launch's Firestore read-attribution stats from
+// zero (otherwise Fast Refresh/hot reload during development would keep
+// accumulating into the same counters), and expose them to the dev console
+// so a representative session can be checked against docs/SPENDLY-415-read-budget.md
+// without a dedicated debug screen. Stripped entirely outside __DEV__.
+if (__DEV__) {
+  resetFirestoreReadDebug();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (global as any).spendlyReadStats = getFirestoreReadStats;
+}
 
 /** Longest the splash screen may block the UI before we show it regardless. */
 const SPLASH_TIMEOUT_MS = 10_000;

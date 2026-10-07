@@ -7,7 +7,9 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  startAfter,
   where,
+  type QueryDocumentSnapshot,
   type QuerySnapshot,
 } from "firebase/firestore";
 import {
@@ -62,6 +64,7 @@ import {
   FINANCE_SNAPSHOT_LISTEN_OPTIONS,
   foldLedgerSnapshot,
   isStagedPageComplete,
+  LEDGER_PAGE_SIZE,
   LEDGER_STAGED_LIMIT,
   shouldApplySnapshotDocs,
   sortLedgerByDateDesc,
@@ -69,6 +72,7 @@ import {
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
 import {
   forgetSnapshotPath,
+  logDirectRead,
   logQuerySnapshot,
 } from "@/lib/firestoreReadDebug";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
@@ -98,6 +102,17 @@ export type ExpensesContextType = {
   pendingSyncCount: number;
   /** True when data is being served from local cache (offline or first-load). */
   isFromCache: boolean;
+  /** SPENDLY-410: True if older historical expenses can be fetched via cursor. */
+  hasMoreExpenses: boolean;
+  /** SPENDLY-410: True while a cursor pagination page is in flight. */
+  isFetchingMoreExpenses: boolean;
+  /** SPENDLY-410: Loads the next batch of 50 older expenses using cursor pagination. */
+  loadMoreExpenses: () => Promise<void>;
+  /** SPENDLY-410: Loads all remaining historical expenses on demand. */
+  loadAllExpenses: () => Promise<void>;
+  /** Local ledger mutation helper for optimistic updates. */
+  removeExpense: (id: string) => void;
+  updateExpense: (id: string, updates: Partial<Expense>) => void;
 };
 
 export type IncomesContextType = {
@@ -111,6 +126,17 @@ export type IncomesContextType = {
   incomesComplete: boolean;
   financeError: LoadFailure | null;
   retryFinanceData: () => void;
+  /** SPENDLY-410: True if older historical incomes can be fetched via cursor. */
+  hasMoreIncomes: boolean;
+  /** SPENDLY-410: True while a cursor pagination page is in flight. */
+  isFetchingMoreIncomes: boolean;
+  /** SPENDLY-410: Loads the next batch of 50 older incomes using cursor pagination. */
+  loadMoreIncomes: () => Promise<void>;
+  /** SPENDLY-410: Loads all remaining historical incomes on demand. */
+  loadAllIncomes: () => Promise<void>;
+  /** Local ledger mutation helper for optimistic updates. */
+  removeIncome: (id: string) => void;
+  updateIncome: (id: string, updates: Partial<Income>) => void;
 };
 
 export type AccountsContextType = {
@@ -206,12 +232,65 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     retry: retryFinanceData,
     attempt: financeAttempt,
   } = useLoadFailure();
-  const [expenses, setExpenses] = useState<Expense[]>([]);
+  // ─── Realtime vs Paginated Ledger State ─────────────────────────────────────
+  const [realtimeExpenses, setRealtimeExpenses] = useState<Expense[]>([]);
+  const [paginatedExpenses, setPaginatedExpenses] = useState<Expense[]>([]);
+  const realtimeExpensesRef = useRef<Expense[]>([]);
+  const paginatedExpensesRef = useRef<Expense[]>([]);
+  useEffect(() => {
+    realtimeExpensesRef.current = realtimeExpenses;
+  }, [realtimeExpenses]);
+  useEffect(() => {
+    paginatedExpensesRef.current = paginatedExpenses;
+  }, [paginatedExpenses]);
+
+  const lastExpenseDocRef = useRef<QueryDocumentSnapshot | null>(null);
   const [expensesLoading, setExpensesLoading] = useState(true);
   const [expensesComplete, setExpensesComplete] = useState(false);
-  const [incomes, setIncomes] = useState<Income[]>([]);
+  const [hasMoreExpenses, setHasMoreExpenses] = useState(false);
+  const [isFetchingMoreExpenses, setIsFetchingMoreExpenses] = useState(false);
+  const hasMoreExpensesRef = useRef(false);
+  useEffect(() => {
+    hasMoreExpensesRef.current = hasMoreExpenses;
+  }, [hasMoreExpenses]);
+
+  const [realtimeIncomes, setRealtimeIncomes] = useState<Income[]>([]);
+  const [paginatedIncomes, setPaginatedIncomes] = useState<Income[]>([]);
+  const realtimeIncomesRef = useRef<Income[]>([]);
+  const paginatedIncomesRef = useRef<Income[]>([]);
+  useEffect(() => {
+    realtimeIncomesRef.current = realtimeIncomes;
+  }, [realtimeIncomes]);
+  useEffect(() => {
+    paginatedIncomesRef.current = paginatedIncomes;
+  }, [paginatedIncomes]);
+
+  const lastIncomeDocRef = useRef<QueryDocumentSnapshot | null>(null);
   const [incomesLoading, setIncomesLoading] = useState(true);
   const [incomesComplete, setIncomesComplete] = useState(false);
+  const [hasMoreIncomes, setHasMoreIncomes] = useState(false);
+  const [isFetchingMoreIncomes, setIsFetchingMoreIncomes] = useState(false);
+  const hasMoreIncomesRef = useRef(false);
+  useEffect(() => {
+    hasMoreIncomesRef.current = hasMoreIncomes;
+  }, [hasMoreIncomes]);
+
+  // Combined expenses: realtime snapshot wins on matching id; paginated rows append
+  const expenses = useMemo<Expense[]>(() => {
+    if (paginatedExpenses.length === 0) return realtimeExpenses;
+    const realtimeIds = new Set(realtimeExpenses.map((e) => e.id));
+    const older = paginatedExpenses.filter((e) => e.id && !realtimeIds.has(e.id));
+    return [...realtimeExpenses, ...older];
+  }, [realtimeExpenses, paginatedExpenses]);
+
+  // Combined incomes: realtime snapshot wins on matching id; paginated rows append
+  const incomes = useMemo<Income[]>(() => {
+    if (paginatedIncomes.length === 0) return realtimeIncomes;
+    const realtimeIds = new Set(realtimeIncomes.map((i) => i.id));
+    const older = paginatedIncomes.filter((i) => i.id && !realtimeIds.has(i.id));
+    return [...realtimeIncomes, ...older];
+  }, [realtimeIncomes, paginatedIncomes]);
+
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(true);
   const accountsRef = useRef(accounts);
@@ -304,8 +383,16 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!uid || !db) {
-      setExpenses([]);
-      setIncomes([]);
+      setRealtimeExpenses([]);
+      setPaginatedExpenses([]);
+      setRealtimeIncomes([]);
+      setPaginatedIncomes([]);
+      lastExpenseDocRef.current = null;
+      lastIncomeDocRef.current = null;
+      setHasMoreExpenses(false);
+      setHasMoreIncomes(false);
+      setIsFetchingMoreExpenses(false);
+      setIsFetchingMoreIncomes(false);
       setAccounts([]);
       setAccountTypes([]);
       setPayments([]);
@@ -368,12 +455,33 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         if (!expensesHydratedRef.current) {
           perfEvent("firestore_first_snapshot", { collection: "expenses", docCount: snap.docs.length });
         }
-        logQuerySnapshot(expensePath, snap);
+        logQuerySnapshot(expensePath, snap, {
+          feature: "finance",
+          queryShape: fromFullQuery ? "unlimited" : `limit=${LEDGER_STAGED_LIMIT}`,
+        });
         const { items, pendingWrites } = foldLedgerSnapshot<Expense>(snap.docs, {
           activeOnly: true,
         });
         if (shouldApplySnapshotDocs(snap, expensesHydratedRef.current)) {
-          setExpenses(items);
+          // If docs that were in the previous realtime snapshot were pushed out past the limit,
+          // preserve them in paginatedExpenses so no docs disappear when new ones arrive
+          if (realtimeExpensesRef.current.length > 0 && paginatedExpensesRef.current.length > 0) {
+            const newRealtimeIds = new Set(items.map((e) => e.id));
+            const pushedOut = realtimeExpensesRef.current.filter((e) => e.id && !newRealtimeIds.has(e.id));
+            if (pushedOut.length > 0) {
+              setPaginatedExpenses((prev) => {
+                const prevIds = new Set(prev.map((e) => e.id));
+                const additions = pushedOut.filter((e) => e.id && !prevIds.has(e.id));
+                return additions.length > 0 ? [...additions, ...prev] : prev;
+              });
+            }
+          }
+
+          setRealtimeExpenses(items);
+
+          if (snap.docs.length > 0 && paginatedExpensesRef.current.length === 0) {
+            lastExpenseDocRef.current = snap.docs[snap.docs.length - 1];
+          }
         }
         pendingExpensesCountRef.current = pendingWrites;
         updatePendingSyncCount();
@@ -385,8 +493,12 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         // A cache-served *unlimited* snapshot is still the entire local
         // ledger — the same rows every screen renders — so it counts as
         // complete. Only the short-page shortcut demands a server snapshot.
-        if (fromFullQuery || isStagedPageComplete(snap)) {
+        const isComplete = fromFullQuery || isStagedPageComplete(snap);
+        if (isComplete) {
           setExpensesComplete(true);
+          setHasMoreExpenses(false);
+        } else if (!expensesComplete) {
+          setHasMoreExpenses(true);
         }
       };
 
@@ -403,12 +515,33 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             fromCache: snap.metadata.fromCache,
           });
         }
-        logQuerySnapshot(incomePath, snap);
+        logQuerySnapshot(incomePath, snap, {
+          feature: "finance",
+          queryShape: fromFullQuery ? "unlimited" : `limit=${LEDGER_STAGED_LIMIT}`,
+        });
         const { items, pendingWrites } = foldLedgerSnapshot<Income>(snap.docs, {
           activeOnly: true,
         });
         if (shouldApplySnapshotDocs(snap, incomesHydratedRef.current)) {
-          setIncomes(items);
+          // If docs that were in the previous realtime snapshot were pushed out past the limit,
+          // preserve them in paginatedIncomes so no docs disappear when new ones arrive
+          if (realtimeIncomesRef.current.length > 0 && paginatedIncomesRef.current.length > 0) {
+            const newRealtimeIds = new Set(items.map((i) => i.id));
+            const pushedOut = realtimeIncomesRef.current.filter((i) => i.id && !newRealtimeIds.has(i.id));
+            if (pushedOut.length > 0) {
+              setPaginatedIncomes((prev) => {
+                const prevIds = new Set(prev.map((i) => i.id));
+                const additions = pushedOut.filter((i) => i.id && !prevIds.has(i.id));
+                return additions.length > 0 ? [...additions, ...prev] : prev;
+              });
+            }
+          }
+
+          setRealtimeIncomes(items);
+
+          if (snap.docs.length > 0 && paginatedIncomesRef.current.length === 0) {
+            lastIncomeDocRef.current = snap.docs[snap.docs.length - 1];
+          }
         }
         pendingIncomesCountRef.current = pendingWrites;
         updatePendingSyncCount();
@@ -419,18 +552,23 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         // A cache-served *unlimited* snapshot is still the entire local ledger,
         // so it counts as complete. Only the short-page shortcut demands a
         // server snapshot.
-        if (fromFullQuery || isStagedPageComplete(snap)) {
+        const isComplete = fromFullQuery || isStagedPageComplete(snap);
+        if (isComplete) {
           setIncomesComplete(true);
+          setHasMoreIncomes(false);
+        } else if (!incomesComplete) {
+          setHasMoreIncomes(true);
         }
       };
 
     const applyIncomesSnap = makeApplyIncomesSnap(false);
 
-    // SPENDLY-12: first paint is a page, not the lifetime ledger. The idle
-    // upgrade below is the same pattern docs/PERF_BASELINE.md described and
-    // commit 007f649 removed. Do not set loading on the upgrade.
+    // SPENDLY-409: Bounded startup page is the permanent realtime listener.
+    // The automatic idle upgrade to unbounded queries is removed to eliminate
+    // the P0 read explosion (~20K+ unnecessary daily reads). Full history is
+    // paginated on demand via cursor pagination (SPENDLY-410).
     perfEvent("firestore_listener_start", { collection: "expenses" });
-    let expensesUnsub = onSnapshot(
+    const expensesUnsub = onSnapshot(
       query(expensesCol, orderBy("createdAt", "desc"), limit(LEDGER_STAGED_LIMIT)),
       FINANCE_SNAPSHOT_LISTEN_OPTIONS,
       applyExpensesSnap,
@@ -444,7 +582,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       )
     );
     perfEvent("firestore_listener_start", { collection: "incomes" });
-    let incomesUnsub = onSnapshot(
+    const incomesUnsub = onSnapshot(
       query(incomesCol, orderBy("createdAt", "desc"), limit(LEDGER_STAGED_LIMIT)),
       FINANCE_SNAPSHOT_LISTEN_OPTIONS,
       applyIncomesSnap,
@@ -458,40 +596,6 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       )
     );
 
-    const cancelLedgerUpgrade = scheduleIdleWork(
-      () => {
-        expensesUnsub();
-        expensesUnsub = onSnapshot(
-          query(expensesCol, orderBy("createdAt", "desc")),
-          FINANCE_SNAPSHOT_LISTEN_OPTIONS,
-          makeApplyExpensesSnap(true),
-          snapshotErrorHandler(
-            "snapshot.expenses",
-            (failure) => {
-              setFinanceError(failure);
-              setExpensesLoading(false);
-            },
-            "Couldn't load your expenses."
-          )
-        );
-        incomesUnsub();
-        incomesUnsub = onSnapshot(
-          query(incomesCol, orderBy("createdAt", "desc")),
-          FINANCE_SNAPSHOT_LISTEN_OPTIONS,
-          makeApplyIncomesSnap(true),
-          snapshotErrorHandler(
-            "snapshot.incomes",
-            (failure) => {
-              setFinanceError(failure);
-              setIncomesLoading(false);
-            },
-            "Couldn't load your income."
-          )
-        );
-      },
-      { timeoutMs: 2800, fallbackDelayMs: 1200 }
-    );
-
     perfEvent("firestore_listener_start", { collection: "accounts" });
     perfEvent("firestore_listener_start", { collection: "accountTypes" });
     const unsubscribers = [
@@ -499,7 +603,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         query(collection(db, ...base, "accounts")),
         FINANCE_SNAPSHOT_LISTEN_OPTIONS,
         (snap) => {
-          logQuerySnapshot(accountPath, snap);
+          logQuerySnapshot(accountPath, snap, { feature: "finance", queryShape: "accounts" });
           perfEvent("firestore_first_snapshot", {
             collection: "accounts",
             docCount: snap.docs.length,
@@ -532,7 +636,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         query(collection(db, ...base, "accountTypes")),
         FINANCE_SNAPSHOT_LISTEN_OPTIONS,
         (snap) => {
-          logQuerySnapshot(accountTypePath, snap);
+          logQuerySnapshot(accountTypePath, snap, { feature: "finance", queryShape: "accountTypes" });
           perfEvent("firestore_first_snapshot", {
             collection: "accountTypes",
             docCount: snap.docs.length,
@@ -564,7 +668,6 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     ];
 
     return () => {
-      cancelLedgerUpgrade();
       expensesUnsub();
       incomesUnsub();
       forgetSnapshotPath(expensePath);
@@ -597,7 +700,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             query(collection(db, ...base, "accountPayments")),
             FINANCE_SNAPSHOT_LISTEN_OPTIONS,
             (snap) => {
-              logQuerySnapshot(paymentPath, snap);
+              logQuerySnapshot(paymentPath, snap, { feature: "finance", queryShape: "accountPayments" });
               const { items, pendingWrites } = foldLedgerSnapshot<AccountPayment>(snap.docs);
               if (shouldApplySnapshotDocs(snap, paymentsHydrated)) {
                 setPayments(sortLedgerByDateDesc(items));
@@ -622,7 +725,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             query(collection(db, ...base, "accountEntries")),
             FINANCE_SNAPSHOT_LISTEN_OPTIONS,
             (snap) => {
-              logQuerySnapshot(entryPath, snap);
+              logQuerySnapshot(entryPath, snap, { feature: "finance", queryShape: "accountEntries" });
               const { items, pendingWrites } = foldLedgerSnapshot<AccountEntry>(snap.docs);
               if (shouldApplySnapshotDocs(snap, entriesHydrated)) {
                 setEntries(sortLedgerByDateDesc(items));
@@ -647,7 +750,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             query(collection(db, ...base, "accountTransfers")),
             FINANCE_SNAPSHOT_LISTEN_OPTIONS,
             (snap) => {
-              logQuerySnapshot(transferPath, snap);
+              logQuerySnapshot(transferPath, snap, { feature: "finance", queryShape: "accountTransfers" });
               const { items, pendingWrites } = foldLedgerSnapshot<AccountTransfer>(snap.docs);
               if (shouldApplySnapshotDocs(snap, transfersHydrated)) {
                 setTransfers(sortLedgerByDateDesc(items));
@@ -1296,6 +1399,158 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // ─── Cursor-Based Ledger Pagination & Local Mutations ───────────────────────
+
+  const loadMoreExpenses = useCallback(async () => {
+    const u = userRef.current;
+    const database = getFirestoreDb();
+    if (!u || !database || isFetchingMoreExpenses || !hasMoreExpensesRef.current) return;
+    const cursor = lastExpenseDocRef.current;
+    if (!cursor) return;
+
+    setIsFetchingMoreExpenses(true);
+    try {
+      const expensesCol = collection(database, "users", u.uid, "expenses");
+      const q = query(
+        expensesCol,
+        orderBy("createdAt", "desc"),
+        startAfter(cursor),
+        limit(LEDGER_PAGE_SIZE)
+      );
+      const snap = await getDocs(q);
+      logDirectRead(
+        `users/${u.uid}/expenses`,
+        snap.docs.length,
+        snap.metadata.fromCache ? "cache" : "server",
+        {
+          feature: "ledger_pagination",
+          queryShape: `startAfter limit=${LEDGER_PAGE_SIZE}`,
+        }
+      );
+
+      if (snap.docs.length > 0) {
+        lastExpenseDocRef.current = snap.docs[snap.docs.length - 1];
+      }
+      if (snap.docs.length < LEDGER_PAGE_SIZE) {
+        setHasMoreExpenses(false);
+        setExpensesComplete(true);
+      }
+
+      const { items: newItems } = foldLedgerSnapshot<Expense>(snap.docs, {
+        activeOnly: true,
+      });
+
+      setPaginatedExpenses((prev) => {
+        const existingIds = new Set([
+          ...realtimeExpensesRef.current.map((e) => e.id),
+          ...prev.map((e) => e.id),
+        ]);
+        const toAdd = newItems.filter((e) => e.id && !existingIds.has(e.id));
+        return [...prev, ...toAdd];
+      });
+    } catch (err) {
+      logError("financeProvider.loadMoreExpenses", err);
+      toast.error(friendlyErrorMessage(err, "Failed to load older expenses"));
+    } finally {
+      setIsFetchingMoreExpenses(false);
+    }
+  }, [isFetchingMoreExpenses]);
+
+  const loadAllExpenses = useCallback(async () => {
+    while (hasMoreExpensesRef.current) {
+      await loadMoreExpenses();
+    }
+  }, [loadMoreExpenses]);
+
+  const removeExpense = useCallback((id: string) => {
+    setRealtimeExpenses((prev) => prev.filter((e) => e.id !== id));
+    setPaginatedExpenses((prev) => prev.filter((e) => e.id !== id));
+  }, []);
+
+  const updateExpense = useCallback((id: string, updates: Partial<Expense>) => {
+    setRealtimeExpenses((prev) =>
+      prev.map((e) => (e.id === id ? ({ ...e, ...updates } as Expense) : e))
+    );
+    setPaginatedExpenses((prev) =>
+      prev.map((e) => (e.id === id ? ({ ...e, ...updates } as Expense) : e))
+    );
+  }, []);
+
+  const loadMoreIncomes = useCallback(async () => {
+    const u = userRef.current;
+    const database = getFirestoreDb();
+    if (!u || !database || isFetchingMoreIncomes || !hasMoreIncomesRef.current) return;
+    const cursor = lastIncomeDocRef.current;
+    if (!cursor) return;
+
+    setIsFetchingMoreIncomes(true);
+    try {
+      const incomesCol = collection(database, "users", u.uid, "incomes");
+      const q = query(
+        incomesCol,
+        orderBy("createdAt", "desc"),
+        startAfter(cursor),
+        limit(LEDGER_PAGE_SIZE)
+      );
+      const snap = await getDocs(q);
+      logDirectRead(
+        `users/${u.uid}/incomes`,
+        snap.docs.length,
+        snap.metadata.fromCache ? "cache" : "server",
+        {
+          feature: "ledger_pagination",
+          queryShape: `startAfter limit=${LEDGER_PAGE_SIZE}`,
+        }
+      );
+
+      if (snap.docs.length > 0) {
+        lastIncomeDocRef.current = snap.docs[snap.docs.length - 1];
+      }
+      if (snap.docs.length < LEDGER_PAGE_SIZE) {
+        setHasMoreIncomes(false);
+        setIncomesComplete(true);
+      }
+
+      const { items: newItems } = foldLedgerSnapshot<Income>(snap.docs, {
+        activeOnly: true,
+      });
+
+      setPaginatedIncomes((prev) => {
+        const existingIds = new Set([
+          ...realtimeIncomesRef.current.map((i) => i.id),
+          ...prev.map((i) => i.id),
+        ]);
+        const toAdd = newItems.filter((i) => i.id && !existingIds.has(i.id));
+        return [...prev, ...toAdd];
+      });
+    } catch (err) {
+      logError("financeProvider.loadMoreIncomes", err);
+      toast.error(friendlyErrorMessage(err, "Failed to load older incomes"));
+    } finally {
+      setIsFetchingMoreIncomes(false);
+    }
+  }, [isFetchingMoreIncomes]);
+
+  const loadAllIncomes = useCallback(async () => {
+    while (hasMoreIncomesRef.current) {
+      await loadMoreIncomes();
+    }
+  }, [loadMoreIncomes]);
+
+  const removeIncome = useCallback((id: string) => {
+    setRealtimeIncomes((prev) => prev.filter((i) => i.id !== id));
+    setPaginatedIncomes((prev) => prev.filter((i) => i.id !== id));
+  }, []);
+
+  const updateIncome = useCallback((id: string, updates: Partial<Income>) => {
+    setRealtimeIncomes((prev) =>
+      prev.map((i) => (i.id === id ? ({ ...i, ...updates } as Income) : i))
+    );
+    setPaginatedIncomes((prev) =>
+      prev.map((i) => (i.id === id ? ({ ...i, ...updates } as Income) : i))
+    );
+  }, []);
+
   // ─── Memoized Values ─────────────────────────────────────────────────────────
 
   const expensesValue = useMemo<ExpensesContextType>(
@@ -1307,6 +1562,12 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       retryFinanceData,
       pendingSyncCount,
       isFromCache,
+      hasMoreExpenses,
+      isFetchingMoreExpenses,
+      loadMoreExpenses,
+      loadAllExpenses,
+      removeExpense,
+      updateExpense,
     }),
     [
       expenses,
@@ -1316,6 +1577,12 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       retryFinanceData,
       pendingSyncCount,
       isFromCache,
+      hasMoreExpenses,
+      isFetchingMoreExpenses,
+      loadMoreExpenses,
+      loadAllExpenses,
+      removeExpense,
+      updateExpense,
     ]
   );
 
@@ -1326,8 +1593,26 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       incomesComplete,
       financeError,
       retryFinanceData,
+      hasMoreIncomes,
+      isFetchingMoreIncomes,
+      loadMoreIncomes,
+      loadAllIncomes,
+      removeIncome,
+      updateIncome,
     }),
-    [incomes, incomesLoading, incomesComplete, financeError, retryFinanceData]
+    [
+      incomes,
+      incomesLoading,
+      incomesComplete,
+      financeError,
+      retryFinanceData,
+      hasMoreIncomes,
+      isFetchingMoreIncomes,
+      loadMoreIncomes,
+      loadAllIncomes,
+      removeIncome,
+      updateIncome,
+    ]
   );
 
   const typeNameById = useMemo(() => {

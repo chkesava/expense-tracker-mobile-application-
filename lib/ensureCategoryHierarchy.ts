@@ -9,6 +9,7 @@ import {
   type Firestore,
   type WriteBatch,
 } from "firebase/firestore";
+import { logDirectRead } from "@/lib/firestoreReadDebug";
 import {
   CATEGORY_TAXONOMY,
   V1_PARENT_MAP,
@@ -66,6 +67,12 @@ async function ensureCategoryHierarchyOnce(
   const version = currentVersion ?? 0;
 
   const categoriesSnap = await getDocs(collection(db, "users", uid, "categories"));
+  logDirectRead(
+    `users/${uid}/categories`,
+    categoriesSnap.docs.length,
+    categoriesSnap.metadata.fromCache ? "cache" : "server",
+    { feature: "categoryHierarchy", queryShape: "categories" }
+  );
   const existing: CategoryDoc[] = categoriesSnap.docs.map((d) => ({
     id: d.id,
     ...(d.data() as Omit<CategoryDoc, "id">),
@@ -225,6 +232,12 @@ async function upsertDefaultTaxonomy(
 
 async function reparentCustomSubsOntoMappedParents(db: Firestore, uid: string) {
   const snap = await getDocs(collection(db, "users", uid, "categories"));
+  logDirectRead(
+    `users/${uid}/categories`,
+    snap.docs.length,
+    snap.metadata.fromCache ? "cache" : "server",
+    { feature: "categoryHierarchy", queryShape: "categories" }
+  );
   const docs: CategoryDoc[] = snap.docs.map((d) => ({
     id: d.id,
     ...(d.data() as Omit<CategoryDoc, "id">),
@@ -301,6 +314,12 @@ async function remapNamedPairs(
   subcollection: "categoryBudgets" | "categorizationRules"
 ) {
   const snap = await getDocs(collection(db, "users", uid, subcollection));
+  logDirectRead(
+    `users/${uid}/${subcollection}`,
+    snap.docs.length,
+    snap.metadata.fromCache ? "cache" : "server",
+    { feature: "categoryHierarchy", queryShape: subcollection }
+  );
   const writer = createBatchWriter(db);
 
   for (const row of snap.docs) {
@@ -325,6 +344,12 @@ async function remapNamedPairs(
 
 async function remapSubscriptions(db: Firestore, uid: string) {
   const snap = await getDocs(collection(db, "users", uid, "subscriptions"));
+  logDirectRead(
+    `users/${uid}/subscriptions`,
+    snap.docs.length,
+    snap.metadata.fromCache ? "cache" : "server",
+    { feature: "categoryHierarchy", queryShape: "subscriptions" }
+  );
   const writer = createBatchWriter(db);
 
   for (const row of snap.docs) {

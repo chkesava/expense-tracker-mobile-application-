@@ -147,6 +147,64 @@ export function cashFlowByMonth(
   });
 }
 
+/**
+ * SPENDLY-413: the ledger listeners are permanently bounded to a staged
+ * recent-first page (SPENDLY-409) — `cashFlowByMonth` happily buckets
+ * whatever is in that array, so a month that simply fell outside the staged
+ * window renders identically to a month with zero real activity. This finds
+ * the oldest month `cashFlowByMonth` can actually trust, so the caller can
+ * trim fabricated-zero months off instead of showing them as real.
+ *
+ * Returns `null` when both arrays are known-complete (the whole ledger, not
+ * just a staged page) — meaning every month is trustworthy, no trim needed.
+ * Otherwise returns the later (more recent) of each array's oldest present
+ * month: a `limit()`-bounded, most-recent-first query's oldest included doc
+ * is the truncation boundary, and that boundary month itself may only be
+ * partially represented, so it is excluded by the caller as well (see
+ * `cashFlowByMonth` consumers — a month is trustworthy only when it is
+ * strictly after this cutoff).
+ */
+export function oldestTrustedCashFlowMonth(
+  expenses: Array<{ amount?: number; month?: string; date?: string }>,
+  incomes: Array<{ amount?: number; month?: string; date?: string }>,
+  expensesComplete: boolean,
+  incomesComplete: boolean
+): string | null {
+  const oldestMonth = (
+    rows: Array<{ month?: string; date?: string }>,
+    complete: boolean
+  ): string | null => {
+    if (complete) return null;
+    let min: string | null = null;
+    for (const row of rows) {
+      const key = monthOf(row);
+      if (!key) continue;
+      if (min === null || key < min) min = key;
+    }
+    return min;
+  };
+
+  const expensesCutoff = oldestMonth(expenses, expensesComplete);
+  const incomesCutoff = oldestMonth(incomes, incomesComplete);
+  if (!expensesCutoff) return incomesCutoff;
+  if (!incomesCutoff) return expensesCutoff;
+  return expensesCutoff > incomesCutoff ? expensesCutoff : incomesCutoff;
+}
+
+/**
+ * Trims `cashFlowByMonth`'s fixed-length result down to only the trailing
+ * months that are strictly after `oldestTrustedCashFlowMonth`'s cutoff —
+ * i.e. drops leading months this session's staged data cannot vouch for,
+ * instead of showing them as a fabricated zero.
+ */
+export function trimToTrustedCashFlow(
+  cashFlow: MonthCashFlow[],
+  cutoffMonth: string | null
+): MonthCashFlow[] {
+  if (!cutoffMonth) return cashFlow;
+  return cashFlow.filter((row) => row.month > cutoffMonth);
+}
+
 export type UpcomingDueKind = "subscription" | "card" | "borrowing";
 
 export type UpcomingDueItem = {

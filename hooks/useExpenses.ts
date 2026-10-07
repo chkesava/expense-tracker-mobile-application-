@@ -9,6 +9,12 @@ export function useExpenses() {
     retryFinanceData,
     pendingSyncCount,
     isFromCache,
+    hasMoreExpenses,
+    isFetchingMoreExpenses,
+    loadMoreExpenses,
+    loadAllExpenses,
+    removeExpense,
+    updateExpense,
   } = useExpensesContext();
   return {
     expenses,
@@ -24,5 +30,15 @@ export function useExpenses() {
     retry: retryFinanceData,
     pendingSyncCount,
     isFromCache,
+    /** SPENDLY-410: True if older historical expenses can be fetched via cursor. */
+    hasMore: hasMoreExpenses,
+    /** SPENDLY-410: True while fetching older expenses. */
+    isFetchingMore: isFetchingMoreExpenses,
+    /** SPENDLY-410: Loads the next batch of 50 older expenses. */
+    loadMore: loadMoreExpenses,
+    /** SPENDLY-410: Loads all remaining historical expenses on demand. */
+    loadAll: loadAllExpenses,
+    removeExpense,
+    updateExpense,
   };
 }
