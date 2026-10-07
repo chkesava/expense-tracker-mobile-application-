@@ -38,6 +38,6 @@ This story ships the safety net instead: fix what's provably wrong or misleading
 
 ## Left alone, and why
 
-- **Per-account running-balance summary** — the ticket's actual "denormalized summary" ask. Needs a new account field, `increment()` wiring at every balance-affecting write site, a one-time backfill (dry-run first, shared prod Firebase, no staging), and a rebuild/reconciliation path. Recommended as its own follow-up ticket rather than being squeezed into this one.
+- **Per-account running-balance summary** — the ticket's actual "denormalized summary" ask. Needs a new account field, `increment()` wiring at every balance-affecting write site, a one-time backfill (dry-run first, shared prod Firebase, no staging), and a rebuild/reconciliation path. Tracked as **SPENDLY-418** rather than being squeezed into this one.
 - `TopCategoriesWidget`, `QuickInsightsWidget`, `SafeToSpendWidget`, `GamificationWidget` — already correctly scoped (month-bounded, or already using the incremental-with-floor pattern for streaks that `hooks/useGamification.ts` documents). No changes needed.
 - No Firestore rules/schema changes, no new collections, no migration script.
