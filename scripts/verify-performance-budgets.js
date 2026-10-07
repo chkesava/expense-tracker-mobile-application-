@@ -12,6 +12,130 @@ const fs = require('fs');
 const path = require('path');
 const { ROOT_DIR, failFast } = require('./common');
 
+/**
+ * SPENDLY-415: every `onSnapshot(` call's nearest `collection(db, ...)` /
+ * `collection(db, ...spread, "name")` argument, by Firestore collection name.
+ * A static heuristic (not a parser) — good enough to catch an accidental
+ * second listener on the same collection from a different provider file.
+ */
+function findOnSnapshotCollections(content) {
+  const names = new Set();
+  const callRe = /onSnapshot\(/g;
+  let match;
+  while ((match = callRe.exec(content))) {
+    const window = content.slice(match.index, match.index + 400);
+    const collMatch = window.match(/collection\(\s*db\s*,[^)]*?"([a-zA-Z0-9_]+)"\s*\)/);
+    if (collMatch) names.add(collMatch[1]);
+  }
+  return names;
+}
+
+/**
+ * SPENDLY-415: flags a Firestore collection name subscribed via `onSnapshot`
+ * in more than one `providers/*.tsx` file — each collection in this app is
+ * meant to have exactly one shared listener (SPENDLY-408 verified this; this
+ * check keeps it true as the codebase grows).
+ */
+function verifyNoDuplicateListeners() {
+  const providersDir = path.join(ROOT_DIR, 'providers');
+  if (!fs.existsSync(providersDir)) return [];
+
+  const ownerByCollection = new Map();
+  const violations = [];
+
+  for (const file of fs.readdirSync(providersDir)) {
+    if (!file.endsWith('.tsx')) continue;
+    const filePath = path.join(providersDir, file);
+    const content = fs.readFileSync(filePath, 'utf8');
+    for (const name of findOnSnapshotCollections(content)) {
+      const existingFile = ownerByCollection.get(name);
+      if (existingFile && existingFile !== file) {
+        violations.push({
+          rule: 'Duplicate Firestore Listener',
+          error: `Collection "${name}" has onSnapshot listeners in both ${existingFile} and ${file}`,
+          why: 'Two independent listeners on the same collection double the read cost and can race on writes.',
+          fix: `Share one listener for "${name}" through a single provider/context instead of subscribing again in ${file}.`,
+        });
+      } else {
+        ownerByCollection.set(name, file);
+      }
+    }
+  }
+
+  return violations;
+}
+
+/**
+ * SPENDLY-415: regression guard for the Active-On-Demand gating added by
+ * SPENDLY-401/411 — a provider silently losing its `register*Subscriber`
+ * gate would revert to an unconditional listener with no other signal.
+ */
+function verifyOnDemandGatingPresent() {
+  const violations = [];
+  const expectations = [
+    { file: 'providers/CreditCardBillsProvider.tsx', symbol: 'registerSubscriber' },
+    { file: 'providers/BorrowingsReceivablesProvider.tsx', symbol: 'registerBorrowingsSubscriber' },
+    { file: 'providers/BorrowingsReceivablesProvider.tsx', symbol: 'registerReceivablesSubscriber' },
+    { file: 'providers/ExpenseReferenceDataProvider.tsx', symbol: 'registerBudgetsSubscriber' },
+    { file: 'providers/ExpenseReferenceDataProvider.tsx', symbol: 'registerGoalsSubscriber' },
+  ];
+
+  for (const { file, symbol } of expectations) {
+    const filePath = path.join(ROOT_DIR, file);
+    if (!fs.existsSync(filePath)) continue;
+    const content = fs.readFileSync(filePath, 'utf8');
+    if (!content.includes(symbol)) {
+      violations.push({
+        rule: 'Missing On-Demand Listener Gate',
+        error: `${symbol} no longer appears in ${file}`,
+        why: 'This collection relies on ref-counted on-demand gating (SPENDLY-401/411) instead of an always-on listener; losing the gate silently reverts it to eager.',
+        fix: `Restore the ${symbol} ref-counted gate in ${file}, or update this guardrail if the collection was deliberately changed back to eager with a documented reason.`,
+      });
+    }
+  }
+
+  return violations;
+}
+
+/**
+ * SPENDLY-415: regression guard for the `limit(...)` bounds SPENDLY-412 added
+ * to the reference-data queries in `ExpenseReferenceDataProvider.tsx`.
+ */
+function verifyReferenceQueriesBounded() {
+  const violations = [];
+  const filePath = path.join(ROOT_DIR, 'providers', 'ExpenseReferenceDataProvider.tsx');
+  if (!fs.existsSync(filePath)) return violations;
+  const content = fs.readFileSync(filePath, 'utf8');
+
+  const boundedCollections = ['categories', 'subscriptions', 'spaces', 'categorizationRules'];
+  for (const col of boundedCollections) {
+    if (!isCollectionQueryBounded(content, col)) {
+      violations.push({
+        rule: 'Un-bounded Reference Query',
+        error: `Collection "${col}" query in ExpenseReferenceDataProvider.tsx has no limit(...) nearby`,
+        why: 'Reference collections are small and stable by design (SPENDLY-412); losing the bound removes a cheap guardrail against a runaway account.',
+        fix: `Add a limit(...) to the "${col}" query in ExpenseReferenceDataProvider.tsx.`,
+      });
+    }
+  }
+
+  return violations;
+}
+
+/**
+ * SPENDLY-415: true if `collection(db, "users", uid, "<col>")` is followed
+ * closely by a `limit(...)` call. Anchored on the actual collection() call
+ * site, not just any mention of the name (the perfEvent/logQuerySnapshot
+ * attribution tags also carry the bare collection name as a string).
+ */
+function isCollectionQueryBounded(content, col) {
+  const collRe = new RegExp(`collection\\(\\s*db\\s*,\\s*"users"\\s*,\\s*uid\\s*,\\s*"${col}"\\s*\\)`);
+  const collMatch = content.match(collRe);
+  if (!collMatch) return true; // collection not present at all — not this check's concern
+  const window = content.slice(collMatch.index, collMatch.index + 200);
+  return /limit\(\d+\)/.test(window);
+}
+
 function verifyStartupGuardrails() {
   console.log('⚡ [Verify Performance] Checking startup performance budgets and anti-pattern guardrails...');
 
@@ -103,6 +227,18 @@ function verifyStartupGuardrails() {
     }
   }
 
+  // 5. Guardrail (SPENDLY-415): no two provider files share an onSnapshot
+  //    listener on the same collection.
+  violations.push(...verifyNoDuplicateListeners());
+
+  // 6. Guardrail (SPENDLY-415): on-demand listener gates (SPENDLY-401/411)
+  //    are still present where they were added.
+  violations.push(...verifyOnDemandGatingPresent());
+
+  // 7. Guardrail (SPENDLY-415): reference-data queries stay bounded
+  //    (SPENDLY-412).
+  violations.push(...verifyReferenceQueriesBounded());
+
   if (violations.length > 0) {
     console.error(`\n❌ Found ${violations.length} startup performance budget violation(s):`);
     for (const v of violations) {
@@ -126,4 +262,11 @@ if (require.main === module) {
   verifyStartupGuardrails();
 }
 
-module.exports = { verifyStartupGuardrails };
+module.exports = {
+  verifyStartupGuardrails,
+  verifyNoDuplicateListeners,
+  verifyOnDemandGatingPresent,
+  verifyReferenceQueriesBounded,
+  findOnSnapshotCollections,
+  isCollectionQueryBounded,
+};
