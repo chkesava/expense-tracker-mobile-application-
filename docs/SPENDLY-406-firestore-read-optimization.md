@@ -11,7 +11,7 @@ Systematically reduce Spendly Firestore document reads from ~24K reads/day to su
 - **SPENDLY-411**: Merged into epic branch
 - **SPENDLY-412**: Merged into epic branch
 - **SPENDLY-413**: Merged into epic branch (safety-net scope; full balance-summary follow-up tracked separately)
-- **SPENDLY-414**: Implemented on branch `feature/SPENDLY-414-appstate-reconnect-debounce` (AppState & Reconnect Debounce, audit-only — no read amplification found) — not yet merged into epic branch
+- **SPENDLY-414**: Merged into epic branch (audit-only — no read amplification found)
 - **SPENDLY-415**: To Do (Read Budget & Regression Protection)
 - **SPENDLY-416**: To Do (QA Matrix, Correctness & Rollout Sign-Off)
 - **SPENDLY-418**: To Do (Per-Account Running Balance Summary — follow-up from SPENDLY-413's `liquidBalanceMayBePartial` finding)
