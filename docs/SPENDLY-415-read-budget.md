@@ -29,14 +29,14 @@ All numbers are **server reads** (cache reads are free and excluded) and assume 
 | `incomes` | ≤300 | Staged page (SPENDLY-409) |
 | `accounts` | <20 | Small bounded collection (SPENDLY-407 inventory) |
 | `accountTypes` | <15 | Small bounded collection (SPENDLY-407 inventory) |
-| `categories` | ≤500 (observed <50) | Bounded `limit(500)` (SPENDLY-412) |
+| `categories` | ≤500 (**measured ~287 on device, SPENDLY-416** — corrected from an earlier, never-measured "<50" estimate) | Bounded `limit(500)` (SPENDLY-412). The default taxonomy (`shared/data/categoryTaxonomy.ts`) seeds ~287 category+subcategory docs via `ensureCategoryHierarchy` on first login, and this is the permanent steady-state size, not a one-time cost. `ensureCategoryHierarchy` also does its own unconditional `getDocs(categories)` on every login (another ~287), before checking whether a taxonomy upsert is actually needed — so the true per-cold-launch cost for `categories` is ~574 docs, not ~50-100. See `docs/SPENDLY-416-qa-rollout.md` Finding F2. |
 | `subscriptions` | ≤200 (observed <25) | Bounded `limit(200)` (SPENDLY-412) |
 | `categoryBudgets`, `financialGoals` | 0, unless their dashboard widgets are enabled | On-demand gated (SPENDLY-411) |
 | `spaces`, `categorizationRules` | 0 | One-shot, deferred past first paint (SPENDLY-412) — first read happens whichever pervasive screen (`ExpenseForm`/`ExpenseList`) mounts first, not necessarily at cold launch |
 | `creditCardBills`, `borrowings`, `borrowingRepayments`, `receivables`, `receivableRepayments` | 0 | On-demand gated (SPENDLY-401), dashboard decoupled (`SubscriptionsWidget` idle-defers) |
 | EPF, Investments, SIP collections | 0 | Hook-scoped, never mounted outside their own screens |
 
-**Startup ceiling: ~650 server reads** (expenses + incomes + accounts + accountTypes + categories + subscriptions, worst case at their bounds). Typical/expected: well under 200, since most accounts don't hit the 300-doc staged cap and reference collections are usually under 50 total.
+**Startup ceiling: ~885 server reads** (expenses 300 + incomes 4-300 + accounts <20 + accountTypes <15 + categories ~574 [realtime attach + `ensureCategoryHierarchy`'s own read] + subscriptions ≤200, measured on device per SPENDLY-416). Corrected from an earlier, never-measured "~650" estimate — the `categories` figure was the main gap (see the row above). Still a large improvement over the pre-epic baseline: the dominant ~24K/day driver (the unlimited idle-upgrade re-reading the full ledger every app open) is eliminated entirely, regardless of this correction.
 
 ### Dashboard session budget
 
@@ -55,7 +55,7 @@ Startup budget, plus (only if the user has these widgets enabled — both are in
 
 ### Daily active usage target
 
-Using the startup budget's typical case (~150-200 reads/launch) and the baseline's own usage assumption (10-15 opens/day): **~2,000-3,000 reads/day typical**, a large reduction from the pre-epic baseline of **~24,000 reads/day** (`docs/FIRESTORE_READ_INVENTORY.md` §1/§3). This is a rough extrapolation for sanity-checking trend direction, not a billing guarantee — actual usage varies with transaction volume and which features a user opens.
+Using the corrected startup ceiling's typical case (~600-700 reads/launch, dominated by the ~574-doc `categories` cost) and the baseline's own usage assumption (10-15 opens/day): **~6,000-10,000 reads/day typical**, still a material reduction from the pre-epic baseline of **~24,000 reads/day** (`docs/FIRESTORE_READ_INVENTORY.md` §1/§3), though less dramatic than the pre-correction estimate. This is a rough extrapolation for sanity-checking trend direction, not a billing guarantee — actual usage varies with transaction volume and which features a user opens. The remaining largest lever, if further reduction is wanted, is `ensureCategoryHierarchy`'s unconditional `getDocs(categories)` on every login (an optimization opportunity flagged in SPENDLY-416, out of this epic's scope).
 
 ## Warning / fail thresholds and investigation procedure
 
@@ -78,4 +78,4 @@ These are static source-text checks, not a live read count — they catch the sp
 
 ## Exceptions log
 
-None recorded yet. Add an entry here (date, what changed, old budget, new budget, reasoning, approver) whenever a deliberate trade-off raises a budget row above.
+- **2026-10-07 (SPENDLY-416 QA)**: `categories` budget corrected from an estimated "<50 docs" to a measured ~287 docs (574 total per cold launch, including `ensureCategoryHierarchy`'s own read); startup ceiling corrected from ~650 to ~885. Reasoning: the original figure was never actually measured against the real default taxonomy (`shared/data/categoryTaxonomy.ts`); SPENDLY-416's device QA measured it directly via `[fs-read]` logcat output. Not a regression — a documentation correction. See `docs/SPENDLY-416-qa-rollout.md` Finding F2.
