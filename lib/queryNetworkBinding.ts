@@ -25,6 +25,13 @@ export function bindQueryClientToNetwork(): void {
     })
   );
 
+  // SPENDLY-414: this subscribes to every AppState transition, but only the
+  // `true` (active) edge triggers TanStack Query's refetch-on-focus — there is
+  // no Firestore-backed query in this app today (only useMarketQuotes' market
+  // data fetch, gated by its own `staleTime`/`enabled`), so this is currently
+  // inert for the app's Firestore read budget. If a Firestore-backed `useQuery`
+  // is ever added, give it an explicit `staleTime` so this binding can't cause
+  // a read on every foreground.
   focusManager.setEventListener((handleFocus) => {
     const subscription = AppState.addEventListener(
       "change",

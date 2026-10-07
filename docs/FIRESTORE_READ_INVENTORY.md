@@ -16,8 +16,8 @@ Investigation of the snapshot lifecycle, query shapes, and provider implementati
 2. **Duplicate & Overlapping Listeners (P1 Root Cause - ~10% of volume)**:
    - Multiple secondary hooks query identical reference data or linked entity sets in parallel.
    - For example, `useCategories` performs direct `getDocs(collection(db, "users", uid, "expenses"))` during category edits and deletions rather than reading from cached state.
-3. **AppState Resume & Reconnect Churn (P2 Root Cause - ~5% of volume)**:
-   - Backgrounding the app or intermittent cellular network reconnects triggers listener resynchronization passes without debounce.
+3. **AppState Resume & Reconnect Churn (P2 Root Cause - ~5% of volume)** — **resolved, see SPENDLY-414**:
+   - This was the original hypothesis at baseline measurement. SPENDLY-414's full audit (every `AppState.addEventListener` call site, the `NetInfo` reconnect handler, and Firebase Auth's `onAuthStateChanged`) found it no longer holds: no code path anywhere tears down and recreates an `onSnapshot` listener on foreground, reconnect, or auth token refresh. The one AppState handler that does trigger a Firestore read (`ExpenseReferenceDataProvider`'s spaces/categorizationRules refetch, SPENDLY-412) is already throttled to once per 5 minutes. This P2 driver was addressed incidentally by SPENDLY-409–412's other changes rather than needing its own fix. Full findings: `docs/SPENDLY-414-appstate-reconnect-audit.md`.
 
 ---
 
@@ -75,7 +75,7 @@ Estimated Daily Reads (Single User, 15 App Opens/Day):
 4. **SPENDLY-411 (Feature-Scoped Listener Lifecycle)**: Ensure secondary domains (EPF, Portfolio, Insurance) never mount listeners until their screens are active.
 5. **SPENDLY-412 (Optimize Reference Data Sync)** — done: `spaces`/`categorizationRules` converted from realtime `onSnapshot` to one-shot `getDocs` (refetched on write and on >5min-stale app foreground); `categories`/`subscriptions` stay realtime (pervasive/correctness-sensitive consumers) but gained defensive `limit(...)` bounds; `lib/ensureCategoryHierarchy.ts` and `services/sms/smsRecurringSync.ts`'s previously-uninstrumented direct reads now emit `logDirectRead`. See `docs/SPENDLY-412-reference-data-sync.md`.
 6. **SPENDLY-413 (Dashboard Summary Optimization)** — safety-net scope (confirmed with user): the dashboard doesn't over-fetch (nothing calls `loadAll*`/gates on completeness), but `cashFlowByMonth` and net worth's liquid balance silently assumed more history than the staged page guarantees. Fixed by trimming the cash-flow chart to only trustworthy months (`oldestTrustedCashFlowMonth`/`trimToTrustedCashFlow`) and surfacing a `liquidBalanceMayBePartial` flag on `NetWorthWidget` when an account has no `balanceAsOfDate` baseline and the ledger is staged. The full per-account running-balance summary (the ticket's actual "denormalized summary" ask) is deferred to a follow-up ticket — see `docs/SPENDLY-413-dashboard-summary-optimization.md`.
-7. **SPENDLY-414 (AppState Reconnect Debounce)**: Protect against burst re-subscribes on background/foreground transitions.
+7. **SPENDLY-414 (AppState Reconnect Debounce)** — done: full audit found no unbounded Firestore read amplification from AppState/reconnect/auth-token-refresh transitions (addressed incidentally by SPENDLY-409–412). One defensive code comment added (`lib/queryNetworkBinding.ts`); no behavior changes needed. See `docs/SPENDLY-414-appstate-reconnect-audit.md`.
 8. **SPENDLY-415 & SPENDLY-416 (Read Budgets & Rollout)**: Enforce `< 25 server reads` cold startup budget via automated guardrails.
 
 ---
