@@ -57,6 +57,13 @@ export interface UnifiedNetWorthSummary {
   loading: boolean;
   /** True when secondary providers (stocks, EPF, loans) are still hydrating */
   secondaryLoading?: boolean;
+  /**
+   * SPENDLY-413: true when a non-credit account with no `balanceAsOfDate`
+   * baseline exists while the ledger is only a staged page, not the whole
+   * history — the liquid total may be understated/overstated. Transparency
+   * flag only; the totals themselves are unchanged.
+   */
+  liquidBalanceMayBePartial: boolean;
 }
 
 export interface UseUnifiedNetWorthOptions {
@@ -81,8 +88,16 @@ export function useUnifiedNetWorth(
 
   const { accounts, loading: accountsLoading } = useAccounts();
   const { accountTypes, loading: typesLoading } = useAccountTypes();
-  const { expenses, loading: expensesLoading } = useExpenses();
-  const { incomes, loading: incomesLoading } = useIncomes();
+  const {
+    expenses,
+    loading: expensesLoading,
+    complete: expensesComplete,
+  } = useExpenses();
+  const {
+    incomes,
+    loading: incomesLoading,
+    complete: incomesComplete,
+  } = useIncomes();
   const { entries, loading: entriesLoading } = useAccountEntries();
   const { payments, loading: paymentsLoading } = useAccountPayments();
   const { transfers, loading: transfersLoading } = useAccountTransfers();
@@ -159,6 +174,8 @@ export function useUnifiedNetWorth(
         epfValue,
         epfUnreconciledCount,
         today,
+        expensesComplete,
+        incomesComplete,
       }),
     [
       accounts,
@@ -182,6 +199,8 @@ export function useUnifiedNetWorth(
       epfValue,
       epfUnreconciledCount,
       today,
+      expensesComplete,
+      incomesComplete,
     ]
   );
 

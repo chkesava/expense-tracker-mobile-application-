@@ -81,6 +81,13 @@ export const NetWorthWidget = memo(function NetWorthWidget({ currency, cashFlow 
         />
       )}
 
+      {!netWorth.loading && netWorth.liquidBalanceMayBePartial ? (
+        <MetaLabel style={{ marginTop: 4 }} numberOfLines={2}>
+          Based on recent activity — set an opening balance date on
+          long-running accounts for full accuracy.
+        </MetaLabel>
+      ) : null}
+
       <View style={styles.lines}>
         {lines.map((line) => (
           <View key={line.key} style={styles.line}>
@@ -109,7 +116,11 @@ export const NetWorthWidget = memo(function NetWorthWidget({ currency, cashFlow 
       </View>
 
       <View style={[styles.sparkBlock, { borderTopColor: surfaces.divider }]}>
-        <MetaLabel>Cash movement · last 6 months</MetaLabel>
+        <MetaLabel>
+          {/* SPENDLY-413: cashFlow is trimmed to only the months the staged
+              ledger can vouch for, so the label must never claim more. */}
+          Cash movement · last {cashFlow.length} month{cashFlow.length === 1 ? "" : "s"}
+        </MetaLabel>
         <View style={styles.sparkRow}>
           {cashFlow.map((row) => {
             const height = Math.max(4, Math.round((Math.abs(row.net) / maxAbs) * 28));

@@ -24,6 +24,7 @@ import type { Receivable, ReceivableRepayment } from "@/shared/types/receivable"
 import type { Investment } from "@/shared/types/investment";
 import type { Holding } from "@/shared/features/portfolio/types";
 import {
+  accountNeedsFullLedgerHistory,
   computeBankBalance,
   computeOutstandingCredit,
   type OpenCreditBillSlice,
@@ -70,6 +71,15 @@ export interface NetWorthInputs {
   epfUnreconciledCount: number;
   /** `YYYY-MM-DD` in the user's configured timezone. */
   today: string;
+  /**
+   * SPENDLY-413: false while `expenses`/`incomes` is still the staged
+   * first-paint page, not the whole ledger (SPENDLY-409/410). Used only to
+   * flag `liquidBalanceMayBePartial` — never to gate the arithmetic itself.
+   * Optional so other `NetWorthInputs` consumers (e.g. the runway feature)
+   * are unaffected; omitting it is treated as "complete" (no flag raised).
+   */
+  expensesComplete?: boolean;
+  incomesComplete?: boolean;
 }
 
 export interface NetWorthTotals {
@@ -87,6 +97,13 @@ export interface NetWorthTotals {
   receivableAssets: number;
   totalLiabilities: number;
   totalNetWorth: number;
+  /**
+   * SPENDLY-413: true when at least one non-credit account has no effective
+   * `balanceAsOfDate` baseline (so its balance depends on full ledger
+   * history) while the in-memory ledger is only a staged page. The totals
+   * above are NOT adjusted for this — it's a transparency flag, not a fix.
+   */
+  liquidBalanceMayBePartial: boolean;
 }
 
 export function composeNetWorth(inputs: NetWorthInputs): NetWorthTotals {
@@ -112,11 +129,14 @@ export function composeNetWorth(inputs: NetWorthInputs): NetWorthTotals {
     epfValue,
     epfUnreconciledCount,
     today,
+    expensesComplete = true,
+    incomesComplete = true,
   } = inputs;
 
   let liquidBankAssets = 0;
   let bankOverdraftLiabilities = 0;
   let creditCardLiabilities = 0;
+  let liquidBalanceMayBePartial = false;
 
   accounts.forEach((a) => {
     const typeName = typeMap.get(a.typeId) || "";
@@ -126,6 +146,12 @@ export function composeNetWorth(inputs: NetWorthInputs): NetWorthTotals {
       const usage = computeOutstandingCredit(a, expenses, payments, bills, today);
       creditCardLiabilities += usage.totalOutstanding;
     } else {
+      if (
+        (!expensesComplete || !incomesComplete) &&
+        accountNeedsFullLedgerHistory(a, today)
+      ) {
+        liquidBalanceMayBePartial = true;
+      }
       const bal = computeBankBalance(
         a,
         expenses,
@@ -182,6 +208,7 @@ export function composeNetWorth(inputs: NetWorthInputs): NetWorthTotals {
     bankOverdraftLiabilities,
     borrowingLiabilities,
     receivableAssets,
+    liquidBalanceMayBePartial,
     totalLiabilities,
     totalNetWorth,
   };

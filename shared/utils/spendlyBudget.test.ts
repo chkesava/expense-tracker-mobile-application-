@@ -7,7 +7,9 @@ import {
   computeSpendlyBudget,
   daysUntil,
   duesWithinDays,
+  oldestTrustedCashFlowMonth,
   remainingCommittedThisMonth,
+  trimToTrustedCashFlow,
 } from "./spendlyBudget";
 
 describe("computeSpendlyBudget", () => {
@@ -139,5 +141,57 @@ describe("cashFlowByMonth", () => {
     expect(series.map((row) => row.month)).toEqual(["2026-06", "2026-07", "2026-08"]);
     expect(series[1]).toMatchObject({ income: 7000, spent: 500, net: 6500 });
     expect(series[2]).toMatchObject({ income: 8000, spent: 2000, net: 6000 });
+  });
+});
+
+describe("oldestTrustedCashFlowMonth / trimToTrustedCashFlow (SPENDLY-413)", () => {
+  it("returns null (no cutoff) when both arrays are complete", () => {
+    const cutoff = oldestTrustedCashFlowMonth(
+      [{ amount: 100, month: "2026-08" }],
+      [{ amount: 200, month: "2026-03" }],
+      true,
+      true
+    );
+    expect(cutoff).toBeNull();
+  });
+
+  it("does not trim a six-month series when data is complete", () => {
+    const series = cashFlowByMonth([], [], "2026-08", 6);
+    expect(trimToTrustedCashFlow(series, null)).toHaveLength(6);
+  });
+
+  it("cuts off at the later (more recent) of each array's oldest present month when staged", () => {
+    const expenses = [{ amount: 100, month: "2026-06" }, { amount: 50, month: "2026-08" }];
+    const incomes = [{ amount: 500, month: "2026-07" }, { amount: 300, month: "2026-08" }];
+    // expenses' truncation boundary is 2026-06, incomes' is 2026-07 — the
+    // later one (2026-07) is the real cutoff, since incomes can't vouch for
+    // anything at or before its own truncation boundary.
+    const cutoff = oldestTrustedCashFlowMonth(expenses, incomes, false, false);
+    expect(cutoff).toBe("2026-07");
+  });
+
+  it("trims leading untrustworthy months instead of showing them as a fabricated zero", () => {
+    const series = cashFlowByMonth(
+      [{ amount: 100, month: "2026-08" }],
+      [{ amount: 500, month: "2026-08" }],
+      "2026-08",
+      6
+    );
+    // A user with high volume: the staged page's oldest doc for both
+    // collections happens to be this month, so only this month is trusted.
+    const trimmed = trimToTrustedCashFlow(series, "2026-07");
+    expect(trimmed.map((row) => row.month)).toEqual(["2026-08"]);
+  });
+
+  it("ignores an empty, non-complete array when the other collection sets the cutoff", () => {
+    // expenses genuinely has zero docs this session but isn't marked complete
+    // (e.g. still loading) — only incomes' boundary should drive the cutoff.
+    const cutoff = oldestTrustedCashFlowMonth(
+      [],
+      [{ amount: 500, month: "2026-07" }],
+      false,
+      false
+    );
+    expect(cutoff).toBe("2026-07");
   });
 });
