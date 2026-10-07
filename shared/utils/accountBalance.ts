@@ -117,6 +117,19 @@ function compareActivitiesChronologically(a: AccountActivity, b: AccountActivity
   return a.id.localeCompare(b.id);
 }
 
+/**
+ * SPENDLY-413: true when this non-credit account's balance depends on the
+ * account's FULL expense/income history — i.e. it has no effective
+ * `balanceAsOfDate` baseline to bound `computeBankBalance`'s replay. Used to
+ * surface (not fix) the case where the ledger is only a staged recent page.
+ */
+export function accountNeedsFullLedgerHistory(
+  account: Account,
+  today: string = todayDateKey()
+): boolean {
+  return effectiveBalanceAsOfDate(account.balanceAsOfDate, [], today) === undefined;
+}
+
 export function computeBankBalance(
   account: Account,
   expenses: Expense[],

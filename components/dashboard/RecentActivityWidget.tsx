@@ -44,7 +44,9 @@ export const RecentActivityWidget = memo(function RecentActivityWidget({
       subtitle={
         loading && expenses.length === 0
           ? "Loading transactions..."
-          : `${expenses.length} total recorded`
+          // SPENDLY-413: `expenses.length` is the staged recent-first page
+          // count (SPENDLY-409), not the lifetime total — don't assert one.
+          : "Latest activity"
       }
       icon={<Receipt size={16} color={theme.colors.primary} strokeWidth={2.3} />}
       iconTint={surfaces.wash(theme.colors.primary)}
