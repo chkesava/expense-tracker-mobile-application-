@@ -4,10 +4,15 @@ import type { Account, AccountPayment, Expense } from "../types/expense";
 import {
   buildCreditCardLedger,
   collectCreditBillAllocationPatches,
+  collectCreditBillDuplicateResolutions,
   oldestOpenStatement,
+  type DuplicateCreditCardBillSlice,
   type LedgerBillSlice,
 } from "./creditCardLedger";
-import { AUTO_CREDIT_CARD_BILL_NOTE } from "./autoCreditCardBills";
+import {
+  AUTO_CREDIT_CARD_BILL_NOTE,
+  autoCreditCardBillDocId,
+} from "./autoCreditCardBills";
 
 /**
  * The reported bug, with the user's real numbers. Slice card, statement closes
@@ -540,6 +545,146 @@ describe("collectCreditBillAllocationPatches", () => {
     });
 
     expect(patches).toEqual([]);
+  });
+
+  it("corrects a stale OVERDUE status when the linked amount already covers the bill (SPENDLY-417)", () => {
+    // Fully linked and fully paid, but the `status` field was never
+    // recomputed after the payment landed — it must flip to PAID even though
+    // amountPaid/paymentIds need no change.
+    const patches = collectCreditBillAllocationPatches({
+      accounts: [slice],
+      isCreditAccount: () => true,
+      expenses: [expense("2026-05-05", 4922)],
+      payments: [payment("pay-roar", "2026-06-01", 4922)],
+      bills: [
+        statement("2026-06-01", "2026-05-02", 4922, {
+          amountPaid: 4922,
+          paymentIds: ["pay-roar"],
+          status: "OVERDUE",
+          dueDate: "2026-06-06",
+        }),
+      ],
+      today: "2026-10-07",
+    });
+
+    expect(patches).toEqual([
+      {
+        billId: "bill-2026-06-01",
+        amountPaid: 4922,
+        paymentIds: ["pay-roar"],
+        paymentDate: "2026-06-01",
+      },
+    ]);
+  });
+
+  it("does not force a status patch for a genuinely unpaid bill drifting from UPCOMING to OVERDUE", () => {
+    // Pure date-driven drift on an unpaid bill is not this function's job —
+    // it must stay a no-op so existing behavior around unpaid aging is
+    // unchanged.
+    const patches = collectCreditBillAllocationPatches({
+      accounts: [slice],
+      isCreditAccount: () => true,
+      expenses: [expense("2026-08-05", 6000)],
+      payments: [],
+      bills: [
+        statement("2026-08-20", "2026-07-21", 6000, {
+          amountPaid: 0,
+          paymentIds: [],
+          status: "UPCOMING",
+          dueDate: "2026-08-25",
+        }),
+      ],
+      today: "2026-10-07",
+    });
+
+    expect(patches).toEqual([]);
+  });
+});
+
+describe("collectCreditBillDuplicateResolutions", () => {
+  function duplicateBill(
+    id: string,
+    overrides: Partial<DuplicateCreditCardBillSlice> = {}
+  ): DuplicateCreditCardBillSlice {
+    return {
+      id,
+      accountId: slice.id,
+      statementDate: "2026-06-01",
+      dueDate: "2026-06-06",
+      statementAmount: 4922,
+      status: "OVERDUE",
+      amountPaid: 0,
+      paymentIds: [],
+      ...overrides,
+    };
+  }
+
+  it("merges a paid duplicate onto the deterministic auto-bill id and cancels the stale one (SPENDLY-417)", () => {
+    const autoId = autoCreditCardBillDocId(slice.id, "2026-06-01");
+    const resolutions = collectCreditBillDuplicateResolutions(
+      [
+        // The auto-generated doc: never got the payment, still OVERDUE.
+        duplicateBill(autoId),
+        // A manually entered duplicate that recorded the actual payment.
+        duplicateBill("manual-dup-1", {
+          amountPaid: 4922,
+          paymentIds: ["pay-roar"],
+          status: "PAID",
+        }),
+      ],
+      "2026-10-07"
+    );
+
+    expect(resolutions).toEqual([
+      {
+        canonicalId: autoId,
+        canonicalPatch: {
+          amountPaid: 4922,
+          paymentIds: ["pay-roar"],
+          status: "PAID",
+          remainingAmount: 0,
+        },
+        cancelIds: ["manual-dup-1"],
+      },
+    ]);
+  });
+
+  it("is idempotent: re-running after a merge finds nothing left to resolve", () => {
+    const autoId = autoCreditCardBillDocId(slice.id, "2026-06-01");
+    const resolutions = collectCreditBillDuplicateResolutions(
+      [
+        duplicateBill(autoId, {
+          amountPaid: 4922,
+          paymentIds: ["pay-roar"],
+          status: "PAID",
+        }),
+        duplicateBill("manual-dup-1", { status: "CANCELLED" }),
+      ],
+      "2026-10-07"
+    );
+
+    expect(resolutions).toEqual([]);
+  });
+
+  it("leaves a single bill per cycle untouched", () => {
+    const resolutions = collectCreditBillDuplicateResolutions(
+      [duplicateBill("only-bill")],
+      "2026-10-07"
+    );
+
+    expect(resolutions).toEqual([]);
+  });
+
+  it("never proposes cancelling an already-CANCELLED doc and ignores it when grouping", () => {
+    const resolutions = collectCreditBillDuplicateResolutions(
+      [
+        duplicateBill("bill-a", { status: "CANCELLED" }),
+        duplicateBill("bill-b", { amountPaid: 4922, status: "PAID" }),
+      ],
+      "2026-10-07"
+    );
+
+    expect(resolutions).toEqual([]);
   });
 });
 

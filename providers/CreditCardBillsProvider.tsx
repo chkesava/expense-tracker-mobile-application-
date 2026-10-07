@@ -58,7 +58,10 @@ import {
   previewSettledAutoBillRecalculation,
   type SettledBillRecalculation,
 } from "@/shared/utils/autoCreditCardBills";
-import { collectCreditBillAllocationPatches } from "@/shared/utils/creditCardLedger";
+import {
+  collectCreditBillAllocationPatches,
+  collectCreditBillDuplicateResolutions,
+} from "@/shared/utils/creditCardLedger";
 import { createAutoCreditCardBill } from "@/services/creditCardBills/autoBill";
 import { todayDateKey } from "@/shared/utils/dates";
 import {
@@ -277,14 +280,22 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
                   ? computeRemainingAmount(statementAmount, amountPaid)
                   : Number(data.remainingAmount),
               paymentIds: data.paymentIds ?? [],
+              // CANCELLED is a manual, undoable-only-by-edit override; every
+              // other status is a pure function of amountPaid/dueDate and
+              // must be recomputed on every read, not trusted from storage —
+              // a write path can correctly update `amountPaid` without ever
+              // touching `status` (e.g. an out-of-band payment reconciled
+              // later), and nothing else ever revisits a stored status once
+              // it exists (SPENDLY-417: paid historical bills stuck OVERDUE).
               status:
-                data.status ??
-                computeCreditCardBillStatus({
-                  today: todayDateKey(timezone),
-                  dueDate: data.dueDate || "",
-                  amountPaid,
-                  statementAmount,
-                }),
+                data.status === "CANCELLED"
+                  ? "CANCELLED"
+                  : computeCreditCardBillStatus({
+                      today: todayDateKey(timezone),
+                      dueDate: data.dueDate || "",
+                      amountPaid,
+                      statementAmount,
+                    }),
             } as CreditCardBill;
           })
         );
@@ -505,6 +516,19 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         bills: [...patchedPreview.values()],
         today: todayDateKey(timezone),
       });
+      for (const allocation of previewAllocations) {
+        const existing = patchedPreview.get(allocation.billId);
+        if (!existing) continue;
+        patchedPreview.set(allocation.billId, {
+          ...existing,
+          amountPaid: allocation.amountPaid,
+          paymentIds: allocation.paymentIds,
+        });
+      }
+      const previewDuplicateResolutions = collectCreditBillDuplicateResolutions(
+        [...patchedPreview.values()],
+        todayDateKey(timezone)
+      );
       const fingerprint = JSON.stringify({
         drafts: drafts
           .map(
@@ -522,6 +546,12 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           .map(
             (allocation) =>
               `${allocation.billId}:${allocation.amountPaid}:${allocation.paymentIds.join(",")}`
+          )
+          .sort(),
+        duplicates: previewDuplicateResolutions
+          .map(
+            (resolution) =>
+              `${resolution.canonicalId}:${resolution.canonicalPatch?.amountPaid ?? ""}:${resolution.canonicalPatch?.status ?? ""}:${resolution.cancelIds.join(",")}`
           )
           .sort(),
       });
@@ -642,6 +672,13 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           timezone,
           globalPrefs.enabled
         );
+        patchedBills.set(allocation.billId, {
+          ...existing,
+          amountPaid: allocation.amountPaid,
+          paymentIds: allocation.paymentIds,
+          status: derived.status,
+          remainingAmount: derived.remainingAmount,
+        });
         try {
           await commitWrite(
             () =>
@@ -663,6 +700,55 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           logError("creditCardBills.allocatePayments", err);
         }
       }
+
+      // SPENDLY-417: two docs for the same card+cycle can exist (duplicate
+      // generation, a manual bill alongside an auto one). Reconciliation
+      // above only ever claims one of them, so the other keeps whatever
+      // amountPaid/status it had when created — this is how an already-paid
+      // cycle keeps showing OVERDUE. Merge every duplicate group onto one
+      // canonical doc and cancel the rest; never deletes a doc or a payment.
+      const duplicateResolutions = collectCreditBillDuplicateResolutions(
+        [...patchedBills.values()],
+        todayDateKey(timezone)
+      );
+      for (const resolution of duplicateResolutions) {
+        const canonicalPatch = resolution.canonicalPatch;
+        if (canonicalPatch) {
+          try {
+            await commitWrite(
+              () =>
+                updateDoc(
+                  doc(db, "users", user.uid, "creditCardBills", resolution.canonicalId),
+                  {
+                    amountPaid: canonicalPatch.amountPaid,
+                    paymentIds: canonicalPatch.paymentIds,
+                    status: canonicalPatch.status,
+                    remainingAmount: canonicalPatch.remainingAmount,
+                    updatedAt: serverTimestamp(),
+                  }
+                ),
+              { label: "credit card bill" }
+            );
+          } catch (err) {
+            logError("creditCardBills.mergeDuplicate", err);
+          }
+        }
+        for (const cancelId of resolution.cancelIds) {
+          try {
+            await commitWrite(
+              () =>
+                updateDoc(doc(db, "users", user.uid, "creditCardBills", cancelId), {
+                  status: "CANCELLED",
+                  updatedAt: serverTimestamp(),
+                }),
+              { label: "credit card bill" }
+            );
+          } catch (err) {
+            logError("creditCardBills.cancelDuplicate", err);
+          }
+        }
+      }
+
       lastAutoBillFingerprintRef.current = fingerprint;
     } finally {
       autoGenerateInFlight.current = false;
