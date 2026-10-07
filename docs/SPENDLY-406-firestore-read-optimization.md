@@ -4,17 +4,19 @@
 Systematically reduce Spendly Firestore document reads from ~24K reads/day to sustainable, budgeted usage while preserving Firebase as the backend, realtime synchronization, offline behavior, financial correctness, and security.
 
 ## State
-- **SPENDLY-407**: Merged into epic branch
-- **SPENDLY-408**: Merged into epic branch
-- **SPENDLY-409**: Merged into epic branch
-- **SPENDLY-410**: Merged into epic branch
-- **SPENDLY-411**: Merged into epic branch
-- **SPENDLY-412**: Merged into epic branch
-- **SPENDLY-413**: Merged into epic branch (safety-net scope; full balance-summary follow-up tracked separately)
-- **SPENDLY-414**: Merged into epic branch (audit-only — no read amplification found)
-- **SPENDLY-415**: Merged into epic branch
-- **SPENDLY-416**: Merged into epic branch
-- **SPENDLY-418**: To Do (Per-Account Running Balance Summary — follow-up from SPENDLY-413's `liquidBalanceMayBePartial` finding)
+**Epic merged to `main`** (merge commit `1e1e125`, 2026-10-07).
+
+- **SPENDLY-407**: Done — merged to `main`
+- **SPENDLY-408**: Done — merged to `main`
+- **SPENDLY-409**: Done — merged to `main`
+- **SPENDLY-410**: Done — merged to `main`
+- **SPENDLY-411**: Done — merged to `main`
+- **SPENDLY-412**: Done — merged to `main`
+- **SPENDLY-413**: Done — merged to `main` (safety-net scope; full balance-summary follow-up tracked separately)
+- **SPENDLY-414**: Done — merged to `main` (audit-only — no read amplification found)
+- **SPENDLY-415**: Done — merged to `main`
+- **SPENDLY-416**: Done — merged to `main`
+- **SPENDLY-418**: To Do (Per-Account Running Balance Summary — follow-up from SPENDLY-413's `liquidBalanceMayBePartial` finding; not part of this epic's merge)
 
 ## Decisions
 - Preserving Firebase/Firestore as the sole database architecture; no migration to other backends.
