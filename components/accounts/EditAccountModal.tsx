@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
+import { useAuth } from "@/providers/AuthProvider";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
@@ -24,6 +25,7 @@ import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
+import { rebuildFinancialSummaries } from "@/services/ledger/rebuildFinancialSummaries";
 import type { Account } from "@/shared/types/expense";
 import { getInstitutionById } from "@/shared/data/institutions";
 import {
@@ -65,6 +67,7 @@ export function EditAccountModal({
 }: EditAccountModalProps) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
+  const { user } = useAuth();
   const { addAccount, updateAccount, deleteAccount } = useAccounts();
   const { accountTypes } = useAccountTypes();
   const { expenses } = useExpenses();
@@ -275,6 +278,24 @@ export function EditAccountModal({
     } catch (err) {
       logError("editAccountModal.saveAccount", err);
       toast.error("Failed to save account");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRebuild = async () => {
+    if (!account?.id || !user?.uid) return;
+    try {
+      setSaving(true);
+      const res = await rebuildFinancialSummaries(user.uid, account.id, "apply");
+      if (res.hasVariance) {
+        toast.success("Summaries rebuilt successfully. Mismatches corrected.");
+      } else {
+        toast.success("Summaries are already healthy! No action needed.");
+      }
+    } catch (err: any) {
+      logError(err, "rebuild_summaries");
+      toast.error("Failed to rebuild summaries");
     } finally {
       setSaving(false);
     }
@@ -649,6 +670,16 @@ export function EditAccountModal({
                 ? "Update Account"
                 : "Create Account"}
           </Button>
+
+          {isEditing ? (
+            <Button
+              variant="outline"
+              onPress={handleRebuild}
+              disabled={saving}
+            >
+              Reconcile Summaries
+            </Button>
+          ) : null}
 
           {isEditing ? (
             <Button
