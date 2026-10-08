@@ -23,19 +23,16 @@ export function EpfPortfolioCard() {
   const currency = useDisplayCurrency();
   const { summary, hasProfile, loading } = useEpfNetWorth();
 
-  if (!hasProfile || loading || summary.establishmentCount === 0) return null;
+  if (!hasProfile || loading || !summary || summary.currentBalance === 0) return null;
 
   const rows: { key: string; label: string; value: number; hint?: string }[] = [
-    { key: "employee", label: "Your contributions", value: summary.employeeShare },
-    { key: "employer", label: "Employer's share", value: summary.employerEpfShare },
-    { key: "interest", label: "Interest", value: summary.interest },
+    { key: "employee", label: "Your contributions", value: summary.employeeContributionTotal },
+    { key: "employer", label: "Employer's share", value: summary.employerContributionTotal },
+    { key: "interest", label: "Interest", value: summary.interestTotal },
   ];
 
-  if (summary.netTransfers !== 0) {
-    rows.push({ key: "transfers", label: "Net transfers", value: summary.netTransfers });
-  }
-  if (summary.adjustments !== 0) {
-    rows.push({ key: "adjustments", label: "Adjustments", value: summary.adjustments });
+  if (summary.adjustmentsTotal !== 0) {
+    rows.push({ key: "adjustments", label: "Adjustments", value: summary.adjustmentsTotal });
   }
 
   return (
@@ -46,11 +43,10 @@ export function EpfPortfolioCard() {
         </View>
         <View style={styles.headerText}>
           <Text style={[styles.label, { color: theme.colors.mutedForeground }]}>
-            Total EPF · {summary.establishmentCount} employer
-            {summary.establishmentCount === 1 ? "" : "s"}
+            Total EPF
           </Text>
           <Amount
-            value={summary.total}
+            value={summary.currentBalance}
             currency={currency}
             ghostable
             style={{
@@ -81,34 +77,6 @@ export function EpfPortfolioCard() {
 
       {/* EPS is pension, not provident fund. Showing it inside the balance
           would be exactly the conflation KAN-66 introduced epfCredit to stop. */}
-      {summary.epsShare > 0 ? (
-        <View style={[styles.epsRow, { borderTopColor: theme.colors.border }]}>
-          <View style={styles.epsText}>
-            <Text style={[styles.rowLabel, { color: theme.colors.mutedForeground }]}>
-              Pension (EPS)
-            </Text>
-            <Text style={[styles.epsHint, { color: theme.colors.mutedForeground }]}>
-              Held separately by EPFO — not part of the balance above.
-            </Text>
-          </View>
-          <Amount
-            value={summary.epsShare}
-            currency={currency}
-            ghostable
-            style={{ fontSize: 13, fontWeight: "600", color: theme.colors.mutedForeground }}
-          />
-        </View>
-      ) : null}
-
-      <Text style={[styles.note, { color: theme.colors.mutedForeground }]}>
-        {summary.simulated
-          ? `Simulated from what you have recorded. ${summary.unreconciledCount} month${
-              summary.unreconciledCount === 1 ? "" : "s"
-            } not yet confirmed against your EPFO passbook.`
-          : summary.lastReconciledAt
-            ? `Confirmed against EPFO on ${summary.lastReconciledAt}.`
-            : "Simulated from what you have recorded."}
-      </Text>
     </Card>
   );
 }

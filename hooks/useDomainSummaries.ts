@@ -5,14 +5,13 @@ import { useAuth } from "@/providers/AuthProvider";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import type { InvestmentsSummary, EpfSummary } from "@/shared/types/financialSummary";
 import { forgetSnapshotPath } from "@/lib/firestoreReadDebug";
-import type { LoadFailure } from "@/hooks/useLoadFailure";
 
 export function useInvestmentsSummary() {
   const { user } = useAuth();
   const uid = user?.uid;
   const [summary, setSummary] = useState<InvestmentsSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<LoadFailure | null>(null);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -34,7 +33,7 @@ export function useInvestmentsSummary() {
         setLoading(false);
       },
       snapshotErrorHandler("snapshot.investmentsSummary", (err) => {
-        setError(err);
+        setError(err as unknown as Error);
         setLoading(false);
       })
     );
@@ -52,7 +51,7 @@ export function useEpfSummary() {
   const uid = user?.uid;
   const [summary, setSummary] = useState<EpfSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<LoadFailure | null>(null);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -74,7 +73,7 @@ export function useEpfSummary() {
         setLoading(false);
       },
       snapshotErrorHandler("snapshot.epfSummary", (err) => {
-        setError(err);
+        setError(err as unknown as Error);
         setLoading(false);
       })
     );
