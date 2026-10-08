@@ -2,9 +2,9 @@
 
 ## State
 
-**Epic in progress** — first story underway on `feature/SPENDLY-119-investments-portfolio-management`.
+**Epic in progress** on `feature/SPENDLY-119-investments-portfolio-management`.
 
-- **SPENDLY-419**: In Progress — Portfolio recalibration & historical transaction reconciliation (`feature/SPENDLY-419-portfolio-recalibration`).
+- **SPENDLY-419**: Merged into the epic branch (not yet on `main`) — Portfolio recalibration & historical transaction reconciliation. Production backfill script not yet run.
 - **SPENDLY-420**: To Do — Separate Stock Profile from Holding and persist every BUY transaction. Larger restructuring of the holdings data model; out of scope for SPENDLY-419, which stays inside the current `Holding`/`PortfolioTransaction` shape.
 
 ## Related, already-merged work under this epic (pre-dates this tracker)
