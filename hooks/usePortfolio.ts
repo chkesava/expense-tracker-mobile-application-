@@ -36,6 +36,7 @@ import {
   executeMockSell as commitMockSell,
   overwriteHoldingsPreservingIds,
 } from "@/services/portfolio/investmentCash";
+import { resolveStockProfileId } from "@/shared/features/portfolio/utils/stockProfile";
 import { usePortfolioMutations } from "@/hooks/usePortfolioMutations";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import { todayDateKey } from "@/shared/utils/dates";
@@ -238,6 +239,13 @@ function usePortfolioState(options?: {
    * `fundingSource: "external"` records a holding bought outside the app and moves
    * no cash — the CSV import and the "I already have holdings" onboarding path both
    * rely on that, since those holdings were never funded through the app.
+   *
+   * SPENDLY-420: before creating anything, checks whether the user already
+   * holds this instrument (by its Stock Profile id — computed the same way
+   * whether or not the existing holding has been migrated to carry `profileId`
+   * yet). If so, this is a subsequent buy: it routes into the same atomic
+   * qty/avg-price update + BUY transaction + cash entry that Buy/Sell already
+   * uses, instead of minting a second holding for the same stock.
    */
   const addHolding = useCallback(async (
     holding: CreateHoldingInput,
@@ -253,19 +261,45 @@ function usePortfolioState(options?: {
     if (!user || !db) return null;
     const fundingSource = options?.fundingSource ?? "investment_cash";
     const purchaseAmount = holdingPurchaseAmount(holding.quantity, holding.averageBuyPrice);
+    const date = options?.date ?? (holding.datePurchased || today);
     try {
       if (fundingSource === "investment_cash" && purchaseAmount > 0) {
         // Freeze the legacy scalar as the opening balance before the first ledger
         // entry lands, or that entry would be double-counted against it.
         await ensureCashBaseline(user.uid, settings?.cashBalance ?? 0);
       }
+
+      const profileId = resolveStockProfileId(holding);
+      const existing = holdings.find(
+        (h) => (h.profileId ?? resolveStockProfileId(h)) === profileId
+      );
+
+      if (existing) {
+        const result = await commitMockBuy(user.uid, {
+          holdingId: existing.id,
+          quantity: holding.quantity,
+          price: holding.averageBuyPrice,
+          fees: 0,
+          date,
+          fundingSource,
+          cashEntryId: options?.entryId,
+        });
+        toast.success(
+          writeSavedMessage(
+            result.outcome,
+            result.cashEntryId ? "Added to your holding and cash deducted" : "Added to your holding"
+          )
+        );
+        return existing.id;
+      }
+
       const result = await createHoldingWithCash(user.uid, {
         holding,
         fundingSource,
         purchaseAmount,
         entryId: options?.entryId,
         holdingId: options?.holdingId,
-        date: options?.date ?? (holding.datePurchased || today),
+        date,
         source: options?.source,
       });
       toast.success(
@@ -280,7 +314,7 @@ function usePortfolioState(options?: {
       toast.error(friendlyErrorMessage(error, "Failed to add holding"));
       return null;
     }
-  }, [db, user, settings, today]);
+  }, [db, user, settings, today, holdings]);
 
   const updateHolding = useCallback(async (id: string, updates: Partial<CreateHoldingInput>) => {
     if (!user || !db) return false;

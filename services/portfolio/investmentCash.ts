@@ -40,6 +40,8 @@ import {
   netHoldingCashOutlay,
 } from "@/shared/features/portfolio/utils/investmentCash";
 import { planHoldingOverwrite } from "@/shared/features/portfolio/utils/holdingsOverwrite";
+import { planStockProfileUpserts, resolveStockProfileId } from "@/shared/features/portfolio/utils/stockProfile";
+import type { StockProfileIdentity } from "@/shared/features/portfolio/utils/stockProfile";
 import type { RepairBatchPlan } from "@/shared/features/portfolio/utils/portfolioReconciliation";
 import type {
   Holding,
@@ -99,6 +101,27 @@ function stripUndefined<T extends Record<string, unknown>>(value: T): T {
     if (result[key] === undefined) delete result[key];
   }
   return result;
+}
+
+/**
+ * Upserts a Stock Profile in the same batch as the holding/transaction/cash
+ * writes (SPENDLY-420). The id is deterministic (see `stockProfile.ts`), so
+ * this is always safe to call unconditionally — a retry or a second buy of the
+ * same instrument just re-merges identical identity fields onto the same doc,
+ * never a duplicate profile.
+ */
+function stageStockProfileUpsert(
+  batch: ReturnType<typeof writeBatch>,
+  db: ReturnType<typeof requireDb>,
+  owner: string,
+  profileId: string,
+  identity: StockProfileIdentity
+): void {
+  batch.set(
+    doc(db, "users", owner, "stockProfiles", profileId),
+    stripUndefined({ ...identity, status: "active", updatedAt: serverTimestamp() }),
+    { merge: true }
+  );
 }
 
 /** The signed effect an entry has on the balance. */
@@ -329,6 +352,8 @@ export type CreateHoldingWithCashResult = {
   entryId: string | null;
   /** The matching Order History row — always written, regardless of funding source. */
   transactionId: string;
+  /** The Stock Profile this holding now references (SPENDLY-420). */
+  profileId: string;
   outcome: WriteOutcome;
 };
 
@@ -363,13 +388,28 @@ export async function createHoldingWithCash(
   const transactionId = input.transactionId ?? newId();
   const quantity = Number(input.holding.quantity) || 0;
   const price = Number(input.holding.averageBuyPrice) || 0;
+  const profileId = resolveStockProfileId({
+    symbol: input.holding.symbol,
+    yahooSymbol: input.holding.yahooSymbol,
+    exchange: input.holding.exchange,
+  });
 
   const outcome = await commitWrite(() => {
     const batch = writeBatch(db);
+    stageStockProfileUpsert(batch, db, owner, profileId, {
+      symbol: input.holding.symbol,
+      yahooSymbol: input.holding.yahooSymbol,
+      name: input.holding.name,
+      exchange: input.holding.exchange,
+      instrumentType: input.holding.instrumentType,
+      sector: input.holding.sector,
+      logoUrl: input.holding.logoUrl,
+    });
     batch.set(
       holdingRef,
       stripUndefined({
         ...input.holding,
+        profileId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
@@ -407,6 +447,7 @@ export async function createHoldingWithCash(
         doc(db, "users", owner, "portfolioTransactions", transactionId),
         stripUndefined({
           holdingId,
+          profileId,
           symbol: input.holding.symbol,
           type: "BUY",
           quantity,
@@ -423,7 +464,7 @@ export async function createHoldingWithCash(
     return batch.commit();
   }, { label: "holding" });
 
-  return { holdingId, entryId, transactionId, outcome };
+  return { holdingId, entryId, transactionId, profileId, outcome };
 }
 
 export type InvestmentCashAdjustment = {
@@ -580,10 +621,17 @@ export async function overwriteHoldingsPreservingIds(
   const db = requireDb();
   const owner = requireUid(uid);
   const plan = planHoldingOverwrite(input.existing, input.nextHoldings, input.cashEntries);
+  // SPENDLY-420: one profile per unique instrument across the whole CSV, even
+  // when two rows describe the same stock (a stale export, two lots/brokers).
+  const profileUpserts = planStockProfileUpserts(input.nextHoldings);
 
   const outcome = await commitWrite(() => {
     const batch = writeBatch(db);
     let cacheDelta = 0;
+
+    for (const upsert of profileUpserts) {
+      stageStockProfileUpsert(batch, db, owner, upsert.profileId, upsert.identity);
+    }
 
     for (const id of plan.deleteIds) {
       batch.delete(doc(db, "users", owner, "holdings", id));
@@ -594,6 +642,7 @@ export async function overwriteHoldingsPreservingIds(
         doc(db, "users", owner, "holdings", row.id),
         stripUndefined({
           ...row.holding,
+          profileId: resolveStockProfileId(row.holding),
           updatedAt: serverTimestamp(),
         }),
         { merge: true }
@@ -627,6 +676,7 @@ export async function overwriteHoldingsPreservingIds(
         doc(db, "users", owner, "holdings", holdingId),
         stripUndefined({
           ...holding,
+          profileId: resolveStockProfileId(holding),
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         })
@@ -656,10 +706,18 @@ export type MockTradeInput = {
   /** Reused across retries so a double-submit cannot deduct twice. */
   cashEntryId?: string;
   transactionId?: string;
+  /**
+   * SPENDLY-420: a subsequent buy into an existing holding can also be
+   * externally funded (e.g. the user is recording a top-up they already made
+   * outside the app). Defaults to `investment_cash` — the original behavior —
+   * so every existing caller (`MockTradeModal`) is unaffected.
+   */
+  fundingSource?: HoldingFundingSource;
 };
 
 export type MockTradeResult = {
-  cashEntryId: string;
+  /** Null when the trade was recorded without touching investment cash (SPENDLY-420). */
+  cashEntryId: string | null;
   transactionId: string;
   outcome: WriteOutcome;
 };
@@ -765,9 +823,11 @@ export async function executeMockBuy(
   const db = requireDb();
   const owner = requireUid(uid);
   const cost = mockTradeCost(quantity, price, fees);
+  const fundingSource = input.fundingSource ?? "investment_cash";
+  const deducts = fundingSource === "investment_cash";
   const holdingRef = doc(db, "users", owner, "holdings", input.holdingId);
   const settingsRef = doc(db, "users", owner, "portfolioSettings", SETTINGS_DOC_ID);
-  const cashEntryId = input.cashEntryId ?? newId();
+  const cashEntryId = deducts ? input.cashEntryId ?? newId() : null;
   const transactionId = input.transactionId ?? newId();
 
   const [holdingSnap, settingsSnap, cashEntries] = await Promise.all([
@@ -780,7 +840,7 @@ export async function executeMockBuy(
   const holding = holdingSnap.data() as Omit<Holding, "id">;
   const settings = settingsSnap.data();
   const available = ledgerCashForTrade(settings, cashEntries);
-  if (!canAfford(available, cost).ok) {
+  if (deducts && !canAfford(available, cost).ok) {
     throw new Error("Insufficient cash balance");
   }
 
@@ -797,28 +857,31 @@ export async function executeMockBuy(
       averageBuyPrice,
       updatedAt: serverTimestamp(),
     });
-    batch.set(
-      doc(db, "users", owner, INVESTMENT_CASH_COLLECTION, cashEntryId),
-      buildEntryDoc(
-        {
-          type: "PURCHASE",
-          amount: cost,
-          direction: "debit",
-          date: input.date,
-          holdingId: input.holdingId,
-          symbol: holding.symbol,
-          quantity,
-          price,
-          note: `Bought ${quantity} ${holding.symbol}`,
-          source: "app",
-        },
-        cashEntryId
-      )
-    );
+    if (cashEntryId) {
+      batch.set(
+        doc(db, "users", owner, INVESTMENT_CASH_COLLECTION, cashEntryId),
+        buildEntryDoc(
+          {
+            type: "PURCHASE",
+            amount: cost,
+            direction: "debit",
+            date: input.date,
+            holdingId: input.holdingId,
+            symbol: holding.symbol,
+            quantity,
+            price,
+            note: `Bought ${quantity} ${holding.symbol}`,
+            source: "app",
+          },
+          cashEntryId
+        )
+      );
+    }
     batch.set(
       doc(db, "users", owner, "portfolioTransactions", transactionId),
       stripUndefined({
         holdingId: input.holdingId,
+        profileId: holding.profileId,
         symbol: holding.symbol,
         type: "BUY",
         quantity,
@@ -829,7 +892,7 @@ export async function executeMockBuy(
         createdAt: serverTimestamp(),
       })
     );
-    batch.set(
+    if (deducts) batch.set(
       settingsRef,
       settingsCacheWrite(settings, settingsSnap.exists(), -cost, new Date()),
       { merge: true }
@@ -906,6 +969,7 @@ export async function executeMockSell(
       doc(db, "users", owner, "portfolioTransactions", transactionId),
       stripUndefined({
         holdingId: input.holdingId,
+        profileId: holding.profileId,
         symbol: holding.symbol,
         type: "SELL",
         quantity,

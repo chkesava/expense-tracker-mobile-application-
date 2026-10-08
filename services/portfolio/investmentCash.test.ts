@@ -50,13 +50,14 @@ vi.mock("@/lib/id", () => ({
   newId: () => `id-${++idCounter}`,
 }));
 
-import { getDocs, setDoc, writeBatch } from "firebase/firestore";
+import { getDoc, getDocs, setDoc, writeBatch } from "firebase/firestore";
 
 import {
   applyReconciliationRepairs,
   createHoldingWithCash,
   deleteHoldingWithOptionalRefund,
   ensureCashBaseline,
+  executeMockBuy,
   overwriteHoldingsPreservingIds,
   readAvailableInvestmentCash,
   recordInvestmentCashAdjustment,
@@ -76,6 +77,9 @@ function installBatchRecorder() {
       ({
         set: (ref: FakeRef, data: Record<string, unknown>, options?: { merge?: boolean }) => {
           writes.push({ path: ref.path, data, merge: options?.merge === true });
+        },
+        update: (ref: FakeRef, data: Record<string, unknown>) => {
+          writes.push({ path: ref.path, data, merge: true });
         },
         delete: (ref: FakeRef) => {
           deletes.push(ref.path);
@@ -125,7 +129,19 @@ describe("createHoldingWithCash", () => {
 
     const holdingWrite = writes.find((w) => w.path.includes("/holdings/"));
     expect(holdingWrite?.path).toBe(`users/u1/holdings/${result.holdingId}`);
-    expect(holdingWrite?.data).toMatchObject({ symbol: "INFY", quantity: 12 });
+    expect(holdingWrite?.data).toMatchObject({ symbol: "INFY", quantity: 12, profileId: result.profileId });
+
+    const profileWrite = pathsUnder("stockProfiles")[0];
+    expect(profileWrite.path).toBe(`users/u1/stockProfiles/${result.profileId}`);
+    expect(profileWrite.data).toMatchObject({
+      symbol: "INFY",
+      yahooSymbol: "INFY.NS",
+      name: "Infosys",
+      exchange: "NSE",
+      instrumentType: "stock",
+      status: "active",
+    });
+    expect(profileWrite.merge).toBe(true);
 
     const entryWrite = pathsUnder("investmentCashTransactions")[0];
     expect(entryWrite.path).toBe(`users/u1/investmentCashTransactions/${result.entryId}`);
@@ -166,12 +182,13 @@ describe("createHoldingWithCash", () => {
     expect(result.entryId).toBeNull();
     expect(pathsUnder("investmentCashTransactions")).toHaveLength(0);
     expect(writes.filter((w) => w.path.includes("/portfolioSettings/"))).toHaveLength(0);
-    expect(writes).toHaveLength(2);
+    expect(writes).toHaveLength(3);
 
     const txWrite = pathsUnder("portfolioTransactions")[0];
     expect(txWrite.path).toBe(`users/u1/portfolioTransactions/${result.transactionId}`);
     expect(txWrite.data).toMatchObject({
       holdingId: result.holdingId,
+      profileId: result.profileId,
       symbol: "INFY",
       type: "BUY",
       quantity: 12,
@@ -270,6 +287,45 @@ describe("createHoldingWithCash", () => {
     ).rejects.toThrow("Not authenticated");
     expect(commits).toBe(0);
   });
+
+  // SPENDLY-420 — the stock profile is reused, never duplicated.
+  it("resolves the same profile id for the same instrument across two different holdings", async () => {
+    const first = await createHoldingWithCash("u1", {
+      holding: HOLDING,
+      fundingSource: "investment_cash",
+      purchaseAmount: 6000,
+      date: "2026-09-11",
+    });
+    writes = [];
+    const second = await createHoldingWithCash("u1", {
+      holding: { ...HOLDING, quantity: 5 },
+      fundingSource: "investment_cash",
+      purchaseAmount: 2500,
+      date: "2026-09-12",
+    });
+
+    expect(second.profileId).toBe(first.profileId);
+    // Re-merges the same profile doc rather than minting a second one.
+    expect(pathsUnder("stockProfiles")).toHaveLength(1);
+    expect(pathsUnder("stockProfiles")[0].path).toBe(`users/u1/stockProfiles/${first.profileId}`);
+  });
+
+  it("gives two different instruments two different profile ids", async () => {
+    const infy = await createHoldingWithCash("u1", {
+      holding: HOLDING,
+      fundingSource: "investment_cash",
+      purchaseAmount: 6000,
+      date: "2026-09-11",
+    });
+    const kpit = await createHoldingWithCash("u1", {
+      holding: { ...HOLDING, symbol: "KPITTECH", yahooSymbol: "KPITTECH.NS", name: "KPIT Technologies" },
+      fundingSource: "investment_cash",
+      purchaseAmount: 6000,
+      date: "2026-09-11",
+    });
+
+    expect(infy.profileId).not.toBe(kpit.profileId);
+  });
 });
 
 describe("applyReconciliationRepairs", () => {
@@ -358,6 +414,78 @@ describe("applyReconciliationRepairs", () => {
     const audit = pathsUnder("portfolioReconciliationAudits")[0];
     expect(audit.data).toMatchObject({ findingsCount: 1, repairedCount: 0, skippedCount: 1 });
     expect(result.outcome).toBeDefined();
+  });
+});
+
+describe("executeMockBuy", () => {
+  const EXISTING_HOLDING = {
+    symbol: "INFY",
+    yahooSymbol: "INFY.NS",
+    profileId: "profile_existing",
+    quantity: 10,
+    averageBuyPrice: 400,
+  };
+
+  function mockGetDocByPath(holdingData: Record<string, unknown> | null) {
+    return async (ref: FakeRef) => {
+      if (ref.path.includes("/holdings/")) {
+        return { exists: () => holdingData !== null, data: () => holdingData ?? undefined };
+      }
+      return { exists: () => settingsData !== null, data: () => settingsData ?? undefined };
+    };
+  }
+
+  it("buys more into an existing holding using investment cash by default (unchanged behavior)", async () => {
+    settingsData = { cashBalance: 10000 };
+    vi.mocked(getDoc).mockImplementation(mockGetDocByPath(EXISTING_HOLDING) as never);
+
+    const result = await executeMockBuy("u1", {
+      holdingId: "h1",
+      quantity: 5,
+      price: 420,
+      date: "2026-10-08",
+    });
+
+    expect(result.cashEntryId).not.toBeNull();
+    expect(pathsUnder("investmentCashTransactions")).toHaveLength(1);
+    const settingsWrite = writes.find((w) => w.path.includes("/portfolioSettings/"));
+    expect(settingsWrite?.data.cashBalance).toEqual({ __increment: -2100 });
+  });
+
+  it("buys more into an existing holding with external funding — no cash entry, no balance change, still records the BUY", async () => {
+    settingsData = { cashBalance: 0 };
+    vi.mocked(getDoc).mockImplementation(mockGetDocByPath(EXISTING_HOLDING) as never);
+
+    const result = await executeMockBuy("u1", {
+      holdingId: "h1",
+      quantity: 5,
+      price: 420,
+      date: "2026-10-08",
+      fundingSource: "external",
+    });
+
+    expect(result.cashEntryId).toBeNull();
+    expect(pathsUnder("investmentCashTransactions")).toHaveLength(0);
+    expect(writes.some((w) => w.path.includes("/portfolioSettings/"))).toBe(false);
+
+    const txWrite = pathsUnder("portfolioTransactions")[0];
+    expect(txWrite.data).toMatchObject({
+      holdingId: "h1",
+      profileId: "profile_existing",
+      type: "BUY",
+      quantity: 5,
+      price: 420,
+    });
+  });
+
+  it("stamps the holding's profileId onto the BUY transaction row", async () => {
+    settingsData = { cashBalance: 10000 };
+    vi.mocked(getDoc).mockImplementation(mockGetDocByPath(EXISTING_HOLDING) as never);
+
+    await executeMockBuy("u1", { holdingId: "h1", quantity: 1, price: 420, date: "2026-10-08" });
+
+    const txWrite = pathsUnder("portfolioTransactions")[0];
+    expect(txWrite.data.profileId).toBe("profile_existing");
   });
 });
 
@@ -751,6 +879,49 @@ describe("overwriteHoldingsPreservingIds", () => {
     });
     const settingsWrite = writes.find((w) => w.path.includes("/portfolioSettings/"));
     expect(settingsWrite?.data.cashBalance).toEqual({ __increment: -1000 });
+  });
+
+  // SPENDLY-420 — CSV import also upserts a Stock Profile per unique instrument.
+  it("writes one stock profile for a matched existing holding and attaches its profileId", async () => {
+    const { id: _id, ...fields } = existing;
+    await overwriteHoldingsPreservingIds("u1", {
+      existing: [existing],
+      nextHoldings: [{ ...fields, quantity: 14 }],
+      cashEntries: [],
+      date: "2026-09-18",
+    });
+
+    expect(pathsUnder("stockProfiles")).toHaveLength(1);
+    const holdingWrite = writes.find((w) => w.path === "users/u1/holdings/h1");
+    expect(holdingWrite?.data.profileId).toBe(pathsUnder("stockProfiles")[0].path.split("/").pop());
+  });
+
+  it("dedupes two new CSV rows of the same instrument into one profile, two holdings", async () => {
+    const infy = {
+      symbol: "INFY",
+      yahooSymbol: "INFY.NS",
+      name: "Infosys",
+      exchange: "NSE" as const,
+      instrumentType: "stock" as const,
+      quantity: 5,
+      averageBuyPrice: 1500,
+      broker: "Zerodha" as const,
+    };
+    const infyOtherBroker = { ...infy, broker: "Groww" as const, quantity: 3 };
+
+    await overwriteHoldingsPreservingIds("u1", {
+      existing: [],
+      nextHoldings: [infy, infyOtherBroker],
+      cashEntries: [],
+      date: "2026-09-18",
+    });
+
+    // planHoldingOverwrite still creates two holding docs (it matches 1:1 by
+    // key, so the second row with the same key is itself unmatched against an
+    // empty `existing` set) — the profile-level dedup only collapses the
+    // *profile* write, not the holding count, which is exactly the point: one
+    // reusable profile, independently many positions/lots referencing it.
+    expect(pathsUnder("stockProfiles")).toHaveLength(1);
   });
 });
 
