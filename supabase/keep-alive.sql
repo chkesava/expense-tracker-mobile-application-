@@ -11,22 +11,37 @@
 -- `Supabase Keep Alive` GitHub workflow calls this function every ~3 days.
 -- See docs/SUPABASE_KEEP_ALIVE.md.
 --
--- There is no table here on purpose: the function reads nothing, writes
--- nothing and returns the constant 1. Granting it to `anon` is harmless even
--- though the publishable key ships in the APK -- anyone calling it learns only
--- that the project is awake.
+-- Supabase requires actual compute/storage activity to reset the pause timer.
+-- Pure `select 1` is not enough, so this creates a single-row table to record
+-- the ping. The function is security definer so anon can ping without table access.
 --
 -- ROLLBACK
 -- --------
 --   drop function if exists public.keep_alive();
+--   drop table if exists public._keep_alive_logs;
+
+create table if not exists public._keep_alive_logs (
+  id integer primary key,
+  last_ping timestamp with time zone not null default now()
+);
+
+-- Deny direct access to the table.
+revoke all on table public._keep_alive_logs from public, anon, authenticated;
 
 create or replace function public.keep_alive()
 returns integer
-language sql
-stable
-security invoker
+language plpgsql
+security definer
 set search_path = ''
-as $$ select 1 $$;
+as $$
+begin
+  insert into public._keep_alive_logs (id, last_ping)
+  values (1, now())
+  on conflict (id) do update set last_ping = now();
+  
+  return 1;
+end;
+$$;
 
 -- Supabase's default privileges grant EXECUTE on new public functions to
 -- anon and authenticated; reset to exactly one grantee.

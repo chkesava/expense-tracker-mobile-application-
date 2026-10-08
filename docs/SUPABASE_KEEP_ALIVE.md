@@ -20,10 +20,10 @@ changes, revisit the cadence here rather than calling more often:
 | Workflow | [`.github/workflows/supabase-keep-alive.yml`](../.github/workflows/supabase-keep-alive.yml) |
 | Cadence | `17 6 */3 * *` (06:17 UTC on days 1, 4, 7, ...). GitHub may start it late. |
 | Request | `POST <SUPABASE_URL>/rest/v1/rpc/keep_alive` with the `apikey` header |
-| Database side | `public.keep_alive()` — `select 1`, no table ([`supabase/keep-alive.sql`](../supabase/keep-alive.sql)) |
+| Database side | `public.keep_alive()` — writes to `_keep_alive_logs` ([`supabase/keep-alive.sql`](../supabase/keep-alive.sql)) |
 | Success | HTTP 200 and body `1`. Anything else fails the run. |
 
-It reads no data, writes nothing, and cannot touch user, account or transaction
+It writes a single timestamp to a dummy table because Supabase's compute tracker ignores pure `select 1` statements. It cannot touch user, account or transaction
 records. Nothing in the app polls or keeps Supabase alive.
 
 Scheduling caveats:
@@ -76,5 +76,9 @@ never pause the project.
 
 1. Disable the workflow (Actions → Supabase Keep Alive → ⋯ → Disable), or
    revert the commit.
-2. Optionally `drop function if exists public.keep_alive();` in the SQL editor.
+2. Optionally drop the function and table in the SQL editor:
+   ```sql
+   drop function if exists public.keep_alive();
+   drop table if exists public._keep_alive_logs;
+   ```
 3. Leave the shared secrets alone — the builds use them.
