@@ -37,3 +37,52 @@ export interface NetWorthSummary {
   /** The version of this schema (for future migrations) */
   summaryVersion: number;
 }
+
+/**
+ * Authoritative summary of the user's investment portfolio.
+ * Stored at: users/{uid}/financialSummaries/investments
+ */
+export interface InvestmentsSummary {
+  /** Uninvested cash balance in the Demat / Stocks portfolio */
+  investmentCash: number;
+  /** Snapshot of current holdings market value */
+  holdingsMarketValue: number;
+  /** Total principal invested across active holdings */
+  investedValue: number;
+  /** Snapshot of unrealised P&L based on market value */
+  unrealisedPnL: number;
+  /** Total realised P&L from closed positions (if supported) */
+  realisedPnL: number;
+  /** Number of active distinct holdings */
+  holdingCount: number;
+
+  /** Total of all Fixed Deposit principal */
+  fdPrincipalTotal: number;
+  /** Total of FD current values (including accrued interest) */
+  fdCurrentValue: number;
+  
+  calculatedAt: string | Timestamp;
+  summaryVersion: number;
+}
+
+/**
+ * Authoritative summary of the user's EPF accounts.
+ * Stored at: users/{uid}/financialSummaries/epf
+ */
+export interface EpfSummary {
+  /** Total EPF balance across all establishments */
+  currentBalance: number;
+  /** Total employee contributions */
+  employeeContributionTotal: number;
+  /** Total employer contributions */
+  employerContributionTotal: number;
+  /** Total interest earned */
+  interestTotal: number;
+  /** Total of all reconciliation adjustments */
+  adjustmentsTotal: number;
+  /** YYYY-MM of the last recorded contribution or interest credit */
+  lastCreditPeriod: string | null;
+
+  calculatedAt: string | Timestamp;
+  summaryVersion: number;
+}

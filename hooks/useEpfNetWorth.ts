@@ -23,7 +23,7 @@ import { getFirestoreDb } from "@/lib/firebase";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath } from "@/lib/firestoreReadDebug";
 import { useAuth } from "@/providers/AuthProvider";
-import { useEpf } from "@/hooks/useEpf";
+import { useEpfSummary } from "@/hooks/useDomainSummaries";
 import { useEpfAllContributions } from "@/hooks/useEpfAllContributions";
 import { useEpfInterest } from "@/hooks/useEpfInterest";
 import { useEpfTransfers } from "@/hooks/useEpfTransfers";
@@ -37,78 +37,23 @@ import {
 } from "@/shared/features/epf/utils/portfolio";
 
 export function useEpfNetWorth() {
-  // Duress-aware uid: a duress session must contribute no EPF to net worth.
-  const { user } = useAuth();
-  const uid = user?.uid;
+  const { summary, loading, error } = useEpfSummary();
 
-  // The gate. One document decides whether any of the rest is worth loading.
-  const [hasProfile, setHasProfile] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    const db = getFirestoreDb();
-    if (!uid || !db) {
-      setHasProfile(false);
-      return;
-    }
-
-    const path = `users/${uid}/${EPF_PROFILE_COLLECTION}/${EPF_PROFILE_DOC_ID}`;
-    const unsubscribe = onSnapshot(
-      doc(db, "users", uid, EPF_PROFILE_COLLECTION, EPF_PROFILE_DOC_ID),
-      (snap) => setHasProfile(snap.exists()),
-      snapshotErrorHandler(
-        "snapshot.epfNetWorthProfile",
-        // A failure here must not break net worth for everyone else; treat it
-        // as "no EPF" and let the EPF tab surface the real error.
-        () => setHasProfile(false),
-        "Couldn't load your EPF profile."
-      )
-    );
-
-    return () => {
-      forgetSnapshotPath(path);
-      unsubscribe();
+  if (!summary) {
+    return {
+      epfValue: 0,
+      epfUnreconciledCount: 0,
+      summary: null,
+      hasProfile: false,
+      loading,
     };
-  }, [uid]);
-
-  const enabled = hasProfile === true;
-
-  const { establishments, establishmentsLoading } = useEpf({ enabled });
-  const { contributions, loading: contributionsLoading } = useEpfAllContributions({ enabled });
-  const { transfers, transfersLoading } = useEpfTransfers({ enabled });
-  const { interestEntries, reconciliations, interestLoading } = useEpfInterest({ enabled });
-
-  const summary: EpfPortfolioSummary = useMemo(() => {
-    if (!enabled) {
-      return epfPortfolioSummary({
-        establishments: [],
-        contributions: [],
-        transfers: [],
-        interestEntries: [],
-        adjustments: [],
-      });
-    }
-    return epfPortfolioSummary({
-      establishments,
-      contributions,
-      transfers,
-      interestEntries,
-      adjustments: reconciliations,
-    });
-  }, [enabled, establishments, contributions, transfers, interestEntries, reconciliations]);
-
-  const loading =
-    hasProfile === null ||
-    (enabled &&
-      (establishmentsLoading || contributionsLoading || transfersLoading || interestLoading));
+  }
 
   return {
-    /** What EPF adds to total assets. Zero when the user has no EPF profile. */
-    epfValue: summary.total,
-    /** Credited months not yet confirmed against a passbook. */
-    epfUnreconciledCount: summary.unreconciledCount,
-    /** Full breakdown, for the EPF tab's total card. */
-    summary,
-    hasProfile: enabled,
+    epfValue: summary.currentBalance,
+    epfUnreconciledCount: 0, // This isn't currently materialized in the Phase 5 spec
+    summary: summary,
+    hasProfile: true,
     loading,
   };
 }
