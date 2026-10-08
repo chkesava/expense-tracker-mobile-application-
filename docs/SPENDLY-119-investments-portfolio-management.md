@@ -2,10 +2,12 @@
 
 ## State
 
-**Epic in progress** on `feature/SPENDLY-119-investments-portfolio-management`.
+**Epic complete, merging to `main`.**
 
-- **SPENDLY-419**: Merged into the epic branch (not yet on `main`) — Portfolio recalibration & historical transaction reconciliation. Production backfill script not yet run.
-- **SPENDLY-420**: In Progress (`feature/SPENDLY-420-stock-profile-split`) — Separate Stock Profile from Holding and persist every BUY transaction. Production migration script not yet run.
+- **SPENDLY-419**: Merged into the epic branch — Portfolio recalibration & historical transaction reconciliation. Production backfill script (`scripts/reconcile-portfolio-holdings.js`) not yet run.
+- **SPENDLY-420**: Merged into the epic branch — Separate Stock Profile from Holding and persist every BUY transaction. Production migration script (`scripts/backfill-stock-profiles.js`) not yet run.
+
+**Deploy dependency**: both stories add a new Firestore collection (`portfolioReconciliationAudits`, `stockProfiles`) with its own rule block. `holdings`/`portfolioTransactions` writes now include a `stockProfiles` write in the same batch (`createHoldingWithCash`, `executeMockBuy`/`Sell`, CSV import) — under the currently-live production rules (which don't yet have the `stockProfiles` match block), that write is denied, which fails the **entire batch** atomically. Per `docs/AFTER_MERGE_CHECKLIST.md`'s "ticket only adds a client write" case: **Firestore rules must be deployed before or together with this app release**, not after, or every Add Holding / Buy on the new app build breaks until rules catch up.
 
 ## Related, already-merged work under this epic (pre-dates this tracker)
 
