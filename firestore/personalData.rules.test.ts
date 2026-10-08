@@ -91,6 +91,7 @@ describe("personal tree", () => {
     "epfReconciliations",
     "investmentCashTransactions",
     "holdings",
+    "stockProfiles",
     "creditCardBills",
     "borrowings",
     "borrowingRepayments",
@@ -122,6 +123,7 @@ describe("personal tree", () => {
     "epfContributions",
     "epfWageHistory",
     "holdings",
+    "stockProfiles",
     "creditCardBills",
     "borrowings",
     "receivables",
@@ -333,6 +335,63 @@ describe("personal tree", () => {
         averageBuyPrice: 100,
       })
     );
+  });
+
+  // SPENDLY-420 — the reusable instrument identity a Holding references by profileId.
+  describe("stockProfiles", () => {
+    const profile = {
+      symbol: "KPITTECH",
+      yahooSymbol: "KPITTECH.NS",
+      name: "KPIT Technologies",
+      exchange: "NSE",
+      instrumentType: "stock",
+      status: "active",
+    };
+
+    it("owner creates a well-formed stock profile", async () => {
+      const db = env.authenticatedContext(OWNER).firestore();
+      await assertSucceeds(
+        setDoc(doc(db, "users", OWNER, "stockProfiles", "profile_1"), profile)
+      );
+    });
+
+    it("owner cannot create a stock profile missing required identity fields", async () => {
+      const db = env.authenticatedContext(OWNER).firestore();
+      await assertFails(
+        setDoc(doc(db, "users", OWNER, "stockProfiles", "profile_2"), {
+          symbol: "KPITTECH",
+          exchange: "NSE",
+          instrumentType: "stock",
+          // missing yahooSymbol and name
+        })
+      );
+    });
+
+    it("owner cannot invent an exchange or instrument type", async () => {
+      const db = env.authenticatedContext(OWNER).firestore();
+      await assertFails(
+        setDoc(doc(db, "users", OWNER, "stockProfiles", "profile_3"), {
+          ...profile,
+          exchange: "LSE",
+        })
+      );
+      await assertFails(
+        setDoc(doc(db, "users", OWNER, "stockProfiles", "profile_4"), {
+          ...profile,
+          instrumentType: "bond",
+        })
+      );
+    });
+
+    it("a stranger cannot create or read the owner's stock profile", async () => {
+      const db = env.authenticatedContext(OTHER).firestore();
+      await assertFails(
+        setDoc(doc(db, "users", OWNER, "stockProfiles", "profile_x"), profile)
+      );
+      await assertFails(
+        getDocs(collection(db, "users", OWNER, "stockProfiles"))
+      );
+    });
   });
 
   it("owner writes portfolio settings with a non-negative cashBalance", async () => {
