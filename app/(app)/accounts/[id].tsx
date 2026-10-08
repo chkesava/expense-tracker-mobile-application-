@@ -80,9 +80,6 @@ import {
   transactionHref,
 } from "@/shared/utils/transactionRef";
 import {
-  computeBankBalance,
-  computeOutstandingCredit,
-  getCreditBillHistory,
 } from "@/shared/utils/accountBalance";
 import { buildCashbackHistory } from "@/shared/utils/cashbackHistory";
 import {
@@ -166,7 +163,7 @@ import {
   activityTitle,
   formatActivityDateLabel,
 } from "@/shared/utils/activityDisplay";
-import { currentMonthKey, todayDateKey, toLocalDateKey } from "@/shared/utils/dates";
+import { currentMonthKey, todayDateKey, toLocalDateKey, parseLocalDate, daysBetweenDateKeys } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -309,43 +306,30 @@ export default function AccountDetailScreen() {
 
   const bankBalance = useMemo(() => {
     if (!account || isCreditCard) return 0;
-    return computeBankBalance(
-      account,
-      expenses,
-      incomes,
-      payments,
-      entries,
-      transfers,
-      borrowings,
-      borrowingRepayments,
-      receivables,
-      receivableRepayments,
-      today
-    );
-  }, [
-    account,
-    isCreditCard,
-    expenses,
-    incomes,
-    payments,
-    entries,
-    transfers,
-    borrowings,
-    borrowingRepayments,
-    receivables,
-    receivableRepayments,
-    today,
-  ]);
+    return account.currentBalance ?? 0;
+  }, [account, isCreditCard]);
 
   const creditUsage = useMemo(() => {
     if (!account || !isCreditCard) return null;
-    return computeOutstandingCredit(account, expenses, payments, bills, today);
-  }, [account, isCreditCard, expenses, payments, bills, today]);
+    const limit = account.creditLimit || 0;
+    const nextDate = account.nextDueDate ? parseLocalDate(account.nextDueDate) : new Date();
+    return {
+      unbilledSpend: account.unbilledSpend ?? 0,
+      usedThisCycle: account.unbilledSpend ?? 0,
+      statementDue: account.statementDue ?? 0,
+      totalOutstanding: account.currentOutstanding ?? 0,
+      availableCredit: account.availableCredit ?? limit,
+      daysRemaining: account.nextDueDate ? daysBetweenDateKeys(today, account.nextDueDate) : 0,
+      openCycleStart: account.openCycleStart ?? today,
+      cancelledSpend: 0,
+      cashbackThisCycle: account.cashbackThisCycle ?? 0,
+      oldestOpenRemaining: account.oldestOpenRemaining ?? 0,
+      oldestOpenBillId: account.oldestOpenBillId,
+      nextResetDate: nextDate,
+    };
+  }, [account, isCreditCard, today]);
 
-  const creditBillHistory = useMemo(() => {
-    if (!account || !isCreditCard) return [];
-    return getCreditBillHistory(account, expenses, payments, 4, bills, today);
-  }, [account, isCreditCard, expenses, payments, bills, today]);
+
 
   const openStatementBill = useMemo(() => {
     if (!account || !isCreditCard) return null;
@@ -1049,23 +1033,32 @@ export default function AccountDetailScreen() {
 
   const pastCycleItems = useMemo(() => {
     if (!account || !isCreditCard) return [];
-    const billById = new Map(bills.map((bill) => [bill.id, bill]));
-    return creditBillHistory.map((cycle) => {
-      const matched = cycle.billId ? billById.get(cycle.billId) : undefined;
-      return {
-        id: cycle.id,
-        rangeLabel: `${toLocalDateKey(cycle.cycleStart)} → ${toLocalDateKey(cycle.cycleEnd)}`,
-        billedAmount: cycle.billedAmount,
-        paidAmount: cycle.paidAmount,
-        remainingAmount: cycle.outstandingAmount,
-        paymentDate: matched?.paymentDate,
-        status: cycle.status,
-        cashbackApplied: cycle.cashbackApplied,
-        overdue: matched?.status === "OVERDUE" && cycle.outstandingAmount > 0,
-        billId: cycle.billId,
-      };
-    });
-  }, [account, isCreditCard, creditBillHistory, bills]);
+    return bills
+      .filter((b) => b.accountId === account.id)
+      .sort((a, b) => b.statementDate.localeCompare(a.statementDate))
+      .slice(0, 6)
+      .map((bill) => {
+        const startStr = bill.billingPeriodStart ? toLocalDateKey(parseLocalDate(bill.billingPeriodStart)) : "";
+        const endStr = toLocalDateKey(parseLocalDate(bill.statementDate));
+        let mappedStatus: "unpaid" | "partiallyPaid" | "paid" | "cancelled" = "unpaid";
+        if (bill.status === "PAID") mappedStatus = "paid";
+        else if (bill.status === "PARTIALLY_PAID") mappedStatus = "partiallyPaid";
+        else if (bill.status === "CANCELLED") mappedStatus = "cancelled";
+
+        return {
+          id: bill.id,
+          rangeLabel: startStr ? `${startStr} → ${endStr}` : endStr,
+          billedAmount: bill.statementAmount,
+          paidAmount: bill.amountPaid,
+          remainingAmount: bill.remainingAmount,
+          paymentDate: bill.paymentDate,
+          status: mappedStatus,
+          cashbackApplied: 0,
+          overdue: bill.status === "OVERDUE" && bill.remainingAmount > 0,
+          billId: bill.id,
+        };
+      });
+  }, [account, isCreditCard, bills]);
 
   const cashbackSummary = useMemo(() => {
     if (!account || !isCreditCard) return null;

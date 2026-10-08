@@ -39,8 +39,6 @@ import { useUnifiedNetWorth } from "@/hooks/useUnifiedNetWorth";
 import { useSettings } from "@/providers/SettingsProvider";
 import type { Account } from "@/shared/types/expense";
 import {
-  computeBankBalance,
-  computeOutstandingCredit,
 } from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import { todayDateKey } from "@/shared/utils/dates";
@@ -169,17 +167,14 @@ export function AccountsList() {
     });
   }, [accounts, typeMap]);
 
-  // Outstanding per credit card, computed once. The credit rows used to call
-  // computeOutstandingCredit again while rendering, pricing every card twice.
   const creditOutstandingById = useMemo(() => {
     const map = new Map<string, number>();
     accounts.forEach((a) => {
       if (getAccountKind(typeMap.get(a.typeId) || "") !== "credit") return;
-      const usage = computeOutstandingCredit(a, expenses, payments, bills, today);
-      map.set(a.id, usage.totalOutstanding);
+      map.set(a.id, a.currentOutstanding ?? 0);
     });
     return map;
-  }, [accounts, typeMap, expenses, payments, bills, today]);
+  }, [accounts, typeMap]);
 
   const accountBalances = useMemo(() => {
     const map = new Map<string, number>();
@@ -187,40 +182,13 @@ export function AccountsList() {
       const typeName = typeMap.get(a.typeId) || "";
       const kind = getAccountKind(typeName);
       if (kind === "credit") {
-        map.set(a.id, -(creditOutstandingById.get(a.id) ?? 0));
+        map.set(a.id, -(a.currentOutstanding ?? 0));
       } else {
-        const bal = computeBankBalance(
-          a,
-          expenses,
-          incomes,
-          payments,
-          entries,
-          transfers,
-          borrowings,
-          borrowingRepayments,
-          receivables,
-          receivableRepayments,
-          today
-        );
-        map.set(a.id, bal);
+        map.set(a.id, a.currentBalance ?? 0);
       }
     });
     return map;
-  }, [
-    accounts,
-    typeMap,
-    creditOutstandingById,
-    expenses,
-    incomes,
-    payments,
-    entries,
-    transfers,
-    borrowings,
-    borrowingRepayments,
-    receivables,
-    receivableRepayments,
-    today,
-  ]);
+  }, [accounts, typeMap]);
 
   const groupedAccounts = useMemo(() => {
     const groups: { typeId: string; typeName: string; list: Account[] }[] = [];

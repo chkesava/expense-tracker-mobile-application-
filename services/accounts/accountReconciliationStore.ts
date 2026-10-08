@@ -98,6 +98,15 @@ export async function saveAccountReconciliation(
           createdAt: serverTimestamp(),
         },
       },
+      {
+        op: "update",
+        ref: doc(database, "users", uid, "accounts", input.accountId),
+        data: {
+          balanceReconciliationStatus: input.status,
+          balanceAsOfDate: input.toDate,
+          balanceUpdatedAt: serverTimestamp(),
+        },
+      },
     ],
     { label: "account reconciliation" }
   );

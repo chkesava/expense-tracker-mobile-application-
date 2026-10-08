@@ -111,6 +111,30 @@ export interface Account {
   openingBalance?: number;
   balanceInitialized?: boolean;
   balanceAsOfDate?: string | null;
+  
+  // -- Materialized Account Summary Fields --
+  currentBalance?: number;
+  balanceAsOf?: string;
+  balanceVersion?: number;
+  balanceUpdatedAt?: unknown;
+  balanceReconciliationStatus?: "healthy" | "needs_reconciliation";
+  balanceLastRebuiltAt?: string;
+
+  // -- Materialized Credit-Card Summary Fields --
+  currentOutstanding?: number;
+  statementDue?: number;
+  unbilledSpend?: number;
+  availableCredit?: number;
+  paidThisCycle?: number;
+  cashbackThisCycle?: number;
+  oldestOpenRemaining?: number;
+  oldestOpenBillId?: string;
+  openCycleStart?: string;
+  nextDueDate?: string;
+  summaryAsOf?: string;
+  summaryVersion?: number;
+  summaryReconciliationStatus?: "healthy" | "needs_reconciliation";
+
   /** Legacy mask / last4 storage. Prefer `last4` for matching. */
   accountNumber?: string;
   color?: string;

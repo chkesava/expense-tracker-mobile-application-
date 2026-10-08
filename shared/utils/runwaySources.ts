@@ -3,14 +3,12 @@
  * runway can see, classified with the SPENDLY-205 rules and the user's
  * overrides. Pure — the hook gathers the same inputs as net worth.
  *
- * Amounts reconcile with their sources: bank balances use computeBankBalance,
  * card dues computeOutstandingCredit, investments getInvestmentValuation, and
  * the stock, EPF, receivable and borrowing totals are the net-worth figures.
  * Net worth itself is not changed.
  */
 
 import type { RunwayOverride, RunwayResource, RunwayResourceKind } from "../types/runway";
-import { computeBankBalance, computeOutstandingCredit } from "./accountBalance";
 import { getInvestmentValuation } from "./investmentInterest";
 import { roundMoney } from "./money";
 import type { NetWorthInputs } from "./netWorth";
@@ -49,23 +47,11 @@ export function buildRunwaySources(input: RunwaySourcesInput): RunwaySources {
     const typeName = input.typeMap.get(a.typeId) || "";
     const probe = classifyAccountResource({ account: a, typeName, balance: 0, asOf, displayCurrency });
     if (probe.kind === "credit_card") {
-      const owed = computeOutstandingCredit(a, input.expenses, input.payments, input.bills, input.today).totalOutstanding;
+      const owed = a.currentOutstanding ?? 0;
       resources.push({ ...probe, amount: roundMoney(owed) });
       continue;
     }
-    const balance = computeBankBalance(
-      a,
-      input.expenses,
-      input.incomes,
-      input.payments,
-      input.entries,
-      input.transfers,
-      input.borrowings,
-      input.borrowingRepayments,
-      input.receivables,
-      input.receivableRepayments,
-      input.today
-    );
+    const balance = a.currentBalance ?? 0;
     resources.push(
       classifyResource({
         kind: probe.kind,

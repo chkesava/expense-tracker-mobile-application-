@@ -49,6 +49,10 @@ export type CreditCardBill = {
   recalculatedAt?: string;
   /** Statement amount this bill carried before the last recalculation. */
   previousStatementAmount?: number;
+  
+  // -- Materialized State Versioning --
+  version?: number;
+  
   createdAt?: unknown;
   updatedAt?: unknown;
 };

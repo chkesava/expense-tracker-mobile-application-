@@ -78,6 +78,8 @@ import {
 } from "@/shared/utils/splitMath";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { isActiveLedgerRow } from "@/shared/utils/ledgerRow";
+import { fetchAccountTypes } from "@/services/ledger/fetchAccountTypes";
+import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
 
 async function loadSplitLedgerEntries(
   db: Firestore,
@@ -115,17 +117,22 @@ async function queueSplitReversals(
   originalIds: string[],
   dateKey: string,
   note: string
-): Promise<void> {
+): Promise<{ accountId: string; amountDelta: number }[]> {
   const lookupIds = originalIds.flatMap((id) => [id, reversalEntryDocId(id)]);
   const existing = await loadSplitLedgerEntries(db, uid, lookupIds);
   const originals = existing.filter((row) => originalIds.includes(row.id));
+  const deltas: { accountId: string; amountDelta: number }[] = [];
+  
   for (const original of entriesNeedingReversal(originals, existing)) {
     const reversal = buildSplitReversalEntry({ original, dateKey, note });
     batch.set(doc(db, "users", uid, "accountEntries", reversal.id), {
       ...reversal.entry,
       createdAt: serverTimestamp(),
     });
+    const amountDelta = reversal.entry.direction === "credit" ? Number(reversal.entry.amount) || 0 : -(Number(reversal.entry.amount) || 0);
+    deltas.push({ accountId: String(reversal.entry.accountId || ""), amountDelta });
   }
+  return deltas;
 }
 
 function applyShareSideEffects(
@@ -680,6 +687,20 @@ export function useSplits(options?: { enabled?: boolean }) {
         { settled: built.settled },
         { currency }
       );
+
+      const accountTypes = await fetchAccountTypes(db, uid, [accountId]);
+      const amountDelta = built.entry.direction === "credit" ? Number(built.entry.amount) || 0 : -Number(built.entry.amount) || 0;
+      const balOps = buildAccountBalanceOps(uid, [{
+        accountId,
+        amountDelta,
+        isCreditCard: accountTypes.get(accountId) || false,
+        isUnbilled: true
+      }]);
+      for (const op of balOps) {
+        if ("data" in op) {
+          batch.update(doc(db, (op.ref as any).path), op.data as any);
+        }
+      }
       if (options?.claimId) {
         batch.delete(doc(db, "splitShareClaims", options.claimId));
       }
@@ -713,7 +734,7 @@ export function useSplits(options?: { enabled?: boolean }) {
 
     try {
       const batch = writeBatch(db);
-      await queueSplitReversals(
+      const rawDeltas = await queueSplitReversals(
         batch,
         db,
         uid,
@@ -721,6 +742,23 @@ export function useSplits(options?: { enabled?: boolean }) {
         todayDateKey(timezone),
         `Undo collection — ${split.title}`
       );
+      
+      if (rawDeltas.length > 0) {
+        const accountTypes = await fetchAccountTypes(db, uid, rawDeltas.map(d => d.accountId));
+        const balanceDeltas = rawDeltas.map(d => ({
+          accountId: d.accountId,
+          amountDelta: d.amountDelta,
+          isCreditCard: accountTypes.get(d.accountId) || false,
+          isUnbilled: true
+        }));
+        const balOps = buildAccountBalanceOps(uid, balanceDeltas);
+        for (const op of balOps) {
+          if ("data" in op) {
+          batch.update(doc(db, (op.ref as any).path), op.data as any);
+        }
+        }
+      }
+
       applyShareSideEffects(
         batch,
         db,
@@ -789,6 +827,25 @@ export function useSplits(options?: { enabled?: boolean }) {
         built.splitUpdates,
         { currency }
       );
+
+      let totalDelta = 0;
+      if (built.expense) totalDelta -= Number(built.expense.amount) || 0;
+      if (built.passThroughEntry) totalDelta -= Number(built.passThroughEntry.amount) || 0;
+
+      if (totalDelta !== 0) {
+        const accountTypes = await fetchAccountTypes(db, uid, [payingAccountId]);
+        const balOps = buildAccountBalanceOps(uid, [{
+          accountId: payingAccountId,
+          amountDelta: totalDelta,
+          isCreditCard: accountTypes.get(payingAccountId) || false,
+          isUnbilled: true
+        }]);
+        for (const op of balOps) {
+          if ("data" in op) {
+          batch.update(doc(db, (op.ref as any).path), op.data as any);
+        }
+        }
+      }
       const outcome = await commitWrite(() => batch.commit(), {
         label: "gift purchase",
       });
@@ -1222,7 +1279,7 @@ export function useSplits(options?: { enabled?: boolean }) {
     try {
       const batch = writeBatch(db);
       const linked = linkedLedgerIds(split);
-      await queueSplitReversals(
+      const rawDeltas = await queueSplitReversals(
         batch,
         db,
         uid,
@@ -1231,10 +1288,35 @@ export function useSplits(options?: { enabled?: boolean }) {
         `Split deleted — ${split.title}`
       );
       const deletedAt = new Date().toISOString();
-      for (const expenseId of linked.expenseIds) {
-        batch.update(doc(db, "users", uid, "expenses", expenseId), {
+      const expenseSnaps = await Promise.all(linked.expenseIds.map(eid => import("firebase/firestore").then(m => m.getDoc(doc(db, "users", uid, "expenses", eid)))));
+      
+      for (let i = 0; i < linked.expenseIds.length; i++) {
+        batch.update(doc(db, "users", uid, "expenses", linked.expenseIds[i]), {
           deletedAt,
         });
+        const snap = expenseSnaps[i];
+        if (snap.exists()) {
+          const expenseData = snap.data();
+          if (expenseData.accountId) {
+            rawDeltas.push({ accountId: expenseData.accountId, amountDelta: expenseData.amount });
+          }
+        }
+      }
+
+      if (rawDeltas.length > 0) {
+        const accountTypes = await fetchAccountTypes(db, uid, rawDeltas.map(d => d.accountId));
+        const balanceDeltas = rawDeltas.map(d => ({
+          accountId: d.accountId,
+          amountDelta: d.amountDelta,
+          isCreditCard: accountTypes.get(d.accountId) || false,
+          isUnbilled: true
+        }));
+        const balOps = buildAccountBalanceOps(uid, balanceDeltas);
+        for (const op of balOps) {
+          if ("data" in op) {
+          batch.update(doc(db, (op.ref as any).path), op.data as any);
+        }
+        }
       }
       for (const requestId of linked.paymentRequestIds) {
         batch.update(doc(db, "paymentRequests", requestId), {

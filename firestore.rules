@@ -793,6 +793,27 @@ service cloud.firestore {
         allow create, update: if isOwner(uid) && decisionWellFormed();
       }
 
+      function accountWellFormed() {
+        let d = request.resource.data;
+        return optionalBoundedNumber(d, 'currentBalance')
+          && optionalBoundedNumber(d, 'currentOutstanding')
+          && optionalBoundedNonNeg(d, 'statementDue')
+          && optionalBoundedNumber(d, 'unbilledSpend')
+          && optionalBoundedNumber(d, 'availableCredit')
+          && optionalBoundedNonNeg(d, 'paidThisCycle')
+          && optionalBoundedNonNeg(d, 'cashbackThisCycle')
+          && optionalBoundedNumber(d, 'oldestOpenRemaining')
+          && optionalBoundedNonNeg(d, 'openingBalance')
+          && (!d.keys().hasAny(['balanceVersion']) || d.balanceVersion is number)
+          && (!d.keys().hasAny(['summaryVersion']) || d.summaryVersion is number);
+      }
+
+      match /accounts/{accountId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && accountWellFormed();
+      }
+
+
       // Append-only audit of decision changes: field names and statuses,
       // never content. Mirrors ledgerEvents.
       function decisionEventWellFormed() {
@@ -950,7 +971,7 @@ service cloud.firestore {
       match /{collection}/{document=**} {
         allow read, write: if isOwner(uid)
           && collection in [
-            'accounts', 'accountTypes', 'alerts', 'categories',
+            'accountTypes', 'alerts', 'categories',
             'categorizationRules', 'creditCardBillReminderLogs', 'daily_logs',
             'epfContributionEvents', 'epfProfile', 'epfInterestEntries',
             'epfReconciliations', 'epfTransferEvents', 'epfTransfers',

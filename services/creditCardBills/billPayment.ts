@@ -279,6 +279,20 @@ export async function recordCreditBillPayment(
       },
     });
   }
+  const accountTypes = await import("@/services/ledger/fetchAccountTypes").then(m => m.fetchAccountTypes(db, owner, [input.fromAccountId, input.toAccountId]));
+  const balanceDeltas = [];
+  if (input.sourceType !== "external" && input.fromAccountId) {
+    balanceDeltas.push({ accountId: input.fromAccountId, amountDelta: -input.amount, isCreditCard: false });
+  }
+  if (input.toAccountId) {
+    // Bill payment: reduces outstanding, but does NOT affect unbilled spend.
+    balanceDeltas.push({ accountId: input.toAccountId, amountDelta: input.amount, isCreditCard: true, isUnbilled: false });
+  }
+
+  const { buildAccountBalanceOps } = await import("@/shared/utils/balanceMutations");
+  const balOps = buildAccountBalanceOps(owner, balanceDeltas);
+  ops.push(...balOps);
+
   const outcome = await commitMutations(owner, ops, {
     label: "credit card bill payment",
   });
@@ -354,6 +368,20 @@ export async function voidCreditBillPayment(
       },
     });
   }
+  const accountTypes = await import("@/services/ledger/fetchAccountTypes").then(m => m.fetchAccountTypes(db, owner, [data.fromAccountId, data.toAccountId]));
+  const balanceDeltas = [];
+  if (data.sourceType !== "external" && data.fromAccountId) {
+    balanceDeltas.push({ accountId: data.fromAccountId, amountDelta: Number(data.amount) || 0, isCreditCard: false });
+  }
+  if (data.toAccountId) {
+    // Reversing bill payment: increases outstanding back up, but does NOT affect unbilled spend.
+    balanceDeltas.push({ accountId: data.toAccountId, amountDelta: -Number(data.amount) || 0, isCreditCard: true, isUnbilled: false });
+  }
+
+  const { buildAccountBalanceOps } = await import("@/shared/utils/balanceMutations");
+  const balOps = buildAccountBalanceOps(owner, balanceDeltas);
+  ops.push(...balOps);
+
   const outcome = await commitMutations(owner, ops, {
     label: "credit card bill payment reversal",
   });
@@ -570,6 +598,29 @@ export async function editCreditBillPayment(
       createdAt: serverTimestamp(),
     }),
   });
+
+  const accountTypes = await import("@/services/ledger/fetchAccountTypes").then(m => m.fetchAccountTypes(db, owner, [before.fromAccountId, before.toAccountId, fromAccountId]));
+  const balanceDeltas = [];
+  
+  // Revert before
+  if (before.sourceType !== "external" && before.fromAccountId) {
+    balanceDeltas.push({ accountId: before.fromAccountId, amountDelta: Number(before.amount) || 0, isCreditCard: false });
+  }
+  if (before.toAccountId) {
+    balanceDeltas.push({ accountId: before.toAccountId, amountDelta: -Number(before.amount) || 0, isCreditCard: true, isUnbilled: false });
+  }
+
+  // Apply after
+  if (patch.sourceType !== "external" && fromAccountId) {
+    balanceDeltas.push({ accountId: fromAccountId, amountDelta: -amount, isCreditCard: false });
+  }
+  if (before.toAccountId) { // edit doesn't change toAccountId
+    balanceDeltas.push({ accountId: before.toAccountId, amountDelta: amount, isCreditCard: true, isUnbilled: false });
+  }
+
+  const { buildAccountBalanceOps } = await import("@/shared/utils/balanceMutations");
+  const balOps = buildAccountBalanceOps(owner, balanceDeltas);
+  ops.push(...balOps);
 
   const outcome = await commitMutations(owner, ops, {
     label: "credit card bill payment edit",

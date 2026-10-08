@@ -47,6 +47,8 @@ import type {
   LedgerWriteResult,
 } from "./createLedgerTransaction";
 import { preservedSmsAuditFromRow } from "@/services/sms/smsMatchAudit";
+import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
+import { fetchAccountTypes } from "./fetchAccountTypes";
 
 export {
   ALREADY_REMOVED_LEDGER_MESSAGE,
@@ -264,6 +266,15 @@ export async function updateExpense(
   const after = ledgerEventSnapshot(afterRow);
   const delta = roundMoney(amount - before.amount);
 
+  const accountTypes = await fetchAccountTypes(db, owner, [before.accountId, afterRow.accountId]);
+  const balanceDeltas: { accountId: string, amountDelta: number, isCreditCard: boolean }[] = [];
+  if (before.accountId) {
+    balanceDeltas.push({ accountId: before.accountId, amountDelta: before.amount, isCreditCard: accountTypes.get(before.accountId) || false });
+  }
+  if (afterRow.accountId) {
+    balanceDeltas.push({ accountId: afterRow.accountId, amountDelta: -amount, isCreditCard: accountTypes.get(afterRow.accountId) || false });
+  }
+
   const outcome = await commitMutations(
     owner,
     (() => {
@@ -296,6 +307,8 @@ export async function updateExpense(
         reason: options?.reason,
       });
       applyTripIncrement(ops, db, owner, data, delta);
+      const balOps = buildAccountBalanceOps(owner, balanceDeltas);
+      ops.push(...balOps);
       return ops;
     })(),
     { label: "expense" }
@@ -334,6 +347,15 @@ export async function updateIncome(
   const before = ledgerEventSnapshot(data);
   const after = ledgerEventSnapshot(afterRow);
 
+  const accountTypes = await fetchAccountTypes(db, owner, [before.accountId, afterRow.accountId]);
+  const balanceDeltas: { accountId: string, amountDelta: number, isCreditCard: boolean }[] = [];
+  if (before.accountId) {
+    balanceDeltas.push({ accountId: before.accountId, amountDelta: -before.amount, isCreditCard: accountTypes.get(before.accountId) || false });
+  }
+  if (afterRow.accountId) {
+    balanceDeltas.push({ accountId: afterRow.accountId, amountDelta: amount, isCreditCard: accountTypes.get(afterRow.accountId) || false });
+  }
+
   const outcome = await commitMutations(
     owner,
     (() => {
@@ -361,6 +383,8 @@ export async function updateIncome(
         after,
         reason: options?.reason,
       });
+      const balOps = buildAccountBalanceOps(owner, balanceDeltas);
+      ops.push(...balOps);
       return ops;
     })(),
     { label: "income" }
@@ -385,6 +409,14 @@ async function softDeleteRow(
 
   const before = ledgerEventSnapshot(data);
   const deletedAt = new Date().toISOString();
+
+  const accountTypes = await fetchAccountTypes(db, owner, [before.accountId]);
+  const isCreditCard = before.accountId ? (accountTypes.get(before.accountId) || false) : false;
+  const balanceDeltas: { accountId: string, amountDelta: number, isCreditCard: boolean }[] = [];
+  if (before.accountId) {
+    const deltaAmount = kind === "expense" ? before.amount : -before.amount;
+    balanceDeltas.push({ accountId: before.accountId, amountDelta: deltaAmount, isCreditCard });
+  }
 
   const outcome = await commitMutations(
     owner,
@@ -412,6 +444,8 @@ async function softDeleteRow(
       if (kind === "expense") {
         applyTripIncrement(ops, db, owner, data, -before.amount);
       }
+      const balOps = buildAccountBalanceOps(owner, balanceDeltas);
+      ops.push(...balOps);
       return ops;
     })(),
     { label: "transaction deletion" }
@@ -438,6 +472,14 @@ async function restoreRow(
   assertRemovedAndRestorable(data, options);
 
   const before = ledgerEventSnapshot(data);
+
+  const accountTypes = await fetchAccountTypes(db, owner, [before.accountId]);
+  const isCreditCard = before.accountId ? (accountTypes.get(before.accountId) || false) : false;
+  const balanceDeltas: { accountId: string, amountDelta: number, isCreditCard: boolean }[] = [];
+  if (before.accountId) {
+    const deltaAmount = kind === "expense" ? -before.amount : before.amount;
+    balanceDeltas.push({ accountId: before.accountId, amountDelta: deltaAmount, isCreditCard });
+  }
 
   const outcome = await commitMutations(
     owner,
@@ -469,6 +511,8 @@ async function restoreRow(
         // amount of every restored expense.
         applyTripIncrement(ops, db, owner, data, before.amount);
       }
+      const balOps = buildAccountBalanceOps(owner, balanceDeltas);
+      ops.push(...balOps);
       return ops;
     })(),
     { label: "transaction restore" }
