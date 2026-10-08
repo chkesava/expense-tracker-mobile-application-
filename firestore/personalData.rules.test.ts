@@ -700,6 +700,48 @@ describe("personal tree", () => {
     });
   });
 
+  // SPENDLY-419 — portfolio recalibration audit log: owner-only, append-only.
+  describe("portfolioReconciliationAudits", () => {
+    const auditRun = {
+      runId: "run-1",
+      startedAt: "2026-10-08T00:00:00.000Z",
+      triggeredBy: "self_service",
+      findingsCount: 1,
+      repairedCount: 1,
+      skippedCount: 0,
+      repairs: [],
+      source: "app",
+    };
+
+    it("owner creates and reads a reconciliation audit", async () => {
+      const db = env.authenticatedContext(OWNER).firestore();
+      const ref = doc(db, "users", OWNER, "portfolioReconciliationAudits", "run-1");
+      await assertSucceeds(setDoc(ref, auditRun));
+      await assertSucceeds(getDoc(ref));
+      await assertSucceeds(
+        getDocs(collection(db, "users", OWNER, "portfolioReconciliationAudits"))
+      );
+    });
+
+    it("owner cannot update or delete a reconciliation audit", async () => {
+      const db = env.authenticatedContext(OWNER).firestore();
+      const ref = doc(db, "users", OWNER, "portfolioReconciliationAudits", "run-1");
+      await assertSucceeds(setDoc(ref, auditRun));
+      await assertFails(updateDoc(ref, { repairedCount: 0 }));
+      await assertFails(deleteDoc(ref));
+    });
+
+    it("a stranger cannot create or read the owner's reconciliation audits", async () => {
+      const db = env.authenticatedContext(OTHER).firestore();
+      await assertFails(
+        setDoc(doc(db, "users", OWNER, "portfolioReconciliationAudits", "run-x"), auditRun)
+      );
+      await assertFails(
+        getDocs(collection(db, "users", OWNER, "portfolioReconciliationAudits"))
+      );
+    });
+  });
+
   // SPENDLY-385 — a bill payment correction is one batch: the payment row in
   // place, the bill stamp moved by a delta, and a "payment" ledger event.
   describe("bill payment correction", () => {
