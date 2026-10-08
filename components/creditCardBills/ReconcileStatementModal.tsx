@@ -48,7 +48,7 @@ import {
   categoryFromStatementLine,
 } from "@/shared/utils/statementReview";
 import { planStatementImport } from "@/shared/utils/statementImport";
-import { computeOutstandingCredit } from "@/shared/utils/accountBalance";
+
 import { validateCashbackInput } from "@/shared/utils/cashbackValidate";
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -495,14 +495,8 @@ export function ReconcileStatementModal({
   const outstandingForCashback = useMemo(() => {
     const card = accounts.find((account) => account.id === accountId);
     if (!card) return 0;
-    return computeOutstandingCredit(
-      card,
-      expenses,
-      payments,
-      bills,
-      todayDateKey(settings.timezone)
-    ).totalOutstanding;
-  }, [accounts, accountId, expenses, payments, bills, settings.timezone]);
+    return card.currentOutstanding ?? 0;
+  }, [accounts, accountId]);
 
   const handleRecordCashback = useCallback(
     (amount: number, date: string, merchant: string) => {

@@ -23,7 +23,7 @@ import type {
   CashbackSource,
   Expense,
 } from "@/shared/types/expense";
-import { computeOutstandingCredit } from "@/shared/utils/accountBalance";
+
 import { getAccountKind } from "@/shared/utils/accountKind";
 import { cashbackDocId } from "@/shared/utils/cashbackId";
 import { cashbackAppliedToExpense, validateCashbackInput } from "@/shared/utils/cashbackValidate";
@@ -109,14 +109,10 @@ export function RecordCashbackModal({
 
   const usageInfo = useMemo(() => {
     if (!selectedCard) return null;
-    return computeOutstandingCredit(
-      selectedCard,
-      expenses,
-      payments,
-      bills,
-      todayDateKey(settings.timezone)
-    );
-  }, [selectedCard, expenses, payments, bills, settings.timezone]);
+    return {
+      totalOutstanding: selectedCard.currentOutstanding ?? 0,
+    };
+  }, [selectedCard]);
 
   /** Recent purchases on this card that still have cashback headroom. */
   const linkablePurchases = useMemo(() => {

@@ -18,7 +18,7 @@ import { toast } from "@/lib/toast";
 import { useSettings } from "@/providers/SettingsProvider";
 import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 import type { Account, AccountPayment, AccountType } from "@/shared/types/expense";
-import { computeOutstandingCredit } from "@/shared/utils/accountBalance";
+
 import { getAccountKind } from "@/shared/utils/accountKind";
 import { earliestOpenCreditCardBill } from "@/shared/utils/creditCardBillStatus";
 import { formatDateKey, todayDateKey } from "@/shared/utils/dates";
@@ -114,14 +114,14 @@ export function PayCreditBillModal({
 
   const usageInfo = useMemo(() => {
     if (!selectedCard) return null;
-    return computeOutstandingCredit(
-      selectedCard,
-      expenses,
-      payments,
-      bills,
-      todayDateKey(settings.timezone)
-    );
-  }, [selectedCard, expenses, payments, bills, settings.timezone]);
+    return {
+      unbilledSpend: selectedCard.unbilledSpend ?? 0,
+      statementDue: selectedCard.statementDue ?? 0,
+      outstanding: selectedCard.currentOutstanding ?? 0,
+      oldestOpenRemaining: selectedCard.oldestOpenRemaining ?? 0,
+      oldestOpenBillId: selectedCard.oldestOpenBillId,
+    };
+  }, [selectedCard]);
 
   // Sync default credit card
   useEffect(() => {
@@ -211,7 +211,7 @@ export function PayCreditBillModal({
     // Editing: the outstanding figure already has this payment taken off, so
     // what it may cover is that plus the payment itself.
     const owed = roundMoney(
-      (usageInfo?.totalOutstanding ?? 0) + (initialPayment?.amount ?? 0)
+      (usageInfo?.outstanding ?? 0) + (initialPayment?.amount ?? 0)
     );
     if (owed <= 0) {
       toast.error(

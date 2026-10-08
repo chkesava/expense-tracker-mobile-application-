@@ -25,8 +25,6 @@ import type { Investment } from "@/shared/types/investment";
 import type { Holding } from "@/shared/features/portfolio/types";
 import {
   accountNeedsFullLedgerHistory,
-  computeBankBalance,
-  computeOutstandingCredit,
   type OpenCreditBillSlice,
 } from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
@@ -143,8 +141,7 @@ export function composeNetWorth(inputs: NetWorthInputs): NetWorthTotals {
     const kind = getAccountKind(typeName);
 
     if (kind === "credit") {
-      const usage = computeOutstandingCredit(a, expenses, payments, bills, today);
-      creditCardLiabilities += usage.totalOutstanding;
+      creditCardLiabilities += a.currentOutstanding ?? 0;
     } else {
       if (
         (!expensesComplete || !incomesComplete) &&
@@ -152,18 +149,7 @@ export function composeNetWorth(inputs: NetWorthInputs): NetWorthTotals {
       ) {
         liquidBalanceMayBePartial = true;
       }
-      const bal = computeBankBalance(
-        a,
-        expenses,
-        incomes,
-        payments,
-        entries,
-        transfers,
-        borrowings,
-        borrowingRepayments,
-        receivables,
-        receivableRepayments
-      );
+      const bal = a.currentBalance ?? 0;
       if (bal > 0) {
         liquidBankAssets += bal;
       } else if (bal < 0) {
