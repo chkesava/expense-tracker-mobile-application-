@@ -349,6 +349,20 @@ service cloud.firestore {
           && optionalYmd(d, 'datePurchased');
       }
 
+      // SPENDLY-420: the reusable instrument identity a Holding references by
+      // profileId. Only the fields every write actually sends are required —
+      // nothing here enforces profileId on `holdings` yet, so pre-migration
+      // holdings (no profileId) keep working during rollout.
+      function stockProfileWellFormed() {
+        let d = request.resource.data;
+        return d.symbol is string && d.symbol.size() > 0 && d.symbol.size() <= 40
+          && d.yahooSymbol is string && d.yahooSymbol.size() > 0
+          && d.name is string && d.name.size() > 0 && d.name.size() <= 200
+          && d.exchange in ['NSE', 'BSE', 'US']
+          && d.instrumentType in ['stock', 'etf', 'mutual_fund', 'gold', 'crypto']
+          && (!d.keys().hasAny(['status']) || d.status in ['active', 'inactive']);
+      }
+
       function portfolioSettingsWellFormed() {
         let d = request.resource.data;
         return optionalBoundedNonNeg(d, 'cashBalance')
@@ -593,6 +607,12 @@ service cloud.firestore {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && personalMoneyWellFormed();
       }
+      // SPENDLY-419: append-only audit of portfolio recalibration repairs.
+      // Mirrors ledgerEvents — owner-only, never editable or deletable.
+      match /portfolioReconciliationAudits/{id} {
+        allow read, create: if isOwner(uid);
+        allow update, delete: if false;
+      }
       match /borrowingRepayments/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && personalMoneyWellFormed();
@@ -612,6 +632,10 @@ service cloud.firestore {
       match /holdings/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && holdingWellFormed();
+      }
+      match /stockProfiles/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && stockProfileWellFormed();
       }
       match /portfolioSettings/{id} {
         allow read, delete: if isOwner(uid);

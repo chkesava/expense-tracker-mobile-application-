@@ -59,8 +59,40 @@ export interface PortfolioSettings {
   updatedAt?: unknown;
 }
 
+/**
+ * The reusable identity of a security (SPENDLY-420) — one profile per unique
+ * instrument (matched by ISIN, else yahooSymbol, else exchange+symbol; see
+ * `shared/features/portfolio/utils/stockProfile.ts`), shared by every `Holding`
+ * of that instrument.
+ *
+ * `Holding` still carries its own denormalized copy of these fields too, the
+ * same way `PortfolioTransaction`/`InvestmentCashEntry` already denormalize
+ * `symbol` onto themselves — `StockProfile` is the authoritative, reusable
+ * source (what "select/create" and "reuse" resolve against), not a replacement
+ * for every cached copy. This keeps every existing reader of `Holding`'s
+ * identity fields working unchanged.
+ */
+export interface StockProfile {
+  /** Deterministic: `profile_<hash of the match key>`. Never random. */
+  id: string;
+  symbol: string;
+  yahooSymbol: string;
+  isin?: string;
+  name: string;
+  exchange: Exchange;
+  instrumentType: InstrumentType;
+  currency?: string;
+  sector?: string;
+  logoUrl?: string;
+  status: "active" | "inactive";
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
 export interface Holding {
   id: string;
+  /** Resolves to the `StockProfile` this holding is a position in (SPENDLY-420). */
+  profileId?: string;
   symbol: string;
   yahooSymbol: string;
   name: string;
@@ -82,6 +114,8 @@ export interface Holding {
 export interface PortfolioTransaction {
   id: string;
   holdingId: string;
+  /** Added alongside `holdingId` (SPENDLY-420); optional since older rows predate it. */
+  profileId?: string;
   symbol: string;
   type: TransactionType;
   quantity: number;
