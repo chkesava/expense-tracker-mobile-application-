@@ -58,6 +58,8 @@ import {
   buildAccountWritePayload,
   hydrateAccountIdentity,
 } from "@/shared/utils/accountIdentity";
+import { fetchAccountTypes } from "@/services/ledger/fetchAccountTypes";
+import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { isActiveLedgerRow } from "@/shared/utils/ledgerRow";
 import {
@@ -1268,6 +1270,16 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       }
       try {
         const ref = doc(collection(database, "users", u.uid, "accountEntries"));
+        
+        const accountTypes = await fetchAccountTypes(database, u.uid, [accountId]);
+        const balanceDeltas = [{
+          accountId,
+          amountDelta: direction === "credit" ? amount : -amount,
+          isCreditCard: accountTypes.get(accountId) || false,
+          isUnbilled: true
+        }];
+        const balOps = buildAccountBalanceOps(u.uid, balanceDeltas);
+
         const outcome = await commitMutations(
           u.uid,
           [
@@ -1283,6 +1295,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
                 createdAt: serverTimestamp(),
               },
             },
+            ...balOps,
           ],
           { label: "account entry" }
         );
@@ -1309,9 +1322,24 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const database = getFirestoreDb();
     if (!u || !database) return;
     try {
+      const ref = doc(database, "users", u.uid, "accountEntries", id);
+      const snap = await import("firebase/firestore").then(m => m.getDoc(ref));
+      const balOps = [];
+      if (snap.exists()) {
+        const data = snap.data();
+        const accountTypes = await fetchAccountTypes(database, u.uid, [data.accountId]);
+        const amountDelta = data.direction === "credit" ? -data.amount : data.amount;
+        balOps.push(...buildAccountBalanceOps(u.uid, [{
+          accountId: data.accountId,
+          amountDelta,
+          isCreditCard: accountTypes.get(data.accountId) || false,
+          isUnbilled: true
+        }]));
+      }
+
       const outcome = await commitMutations(
         u.uid,
-        [{ op: "delete", ref: doc(database, "users", u.uid, "accountEntries", id) }],
+        [{ op: "delete", ref }, ...balOps],
         { label: "account entry deletion" }
       );
       toast.success(writeSavedMessage(outcome, "Account entry removed"));
@@ -1353,6 +1381,14 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       }
       try {
         const ref = doc(collection(database, "users", u.uid, "accountTransfers"));
+        
+        const accountTypes = await fetchAccountTypes(database, u.uid, [fromAccountId, toAccountId]);
+        const balanceDeltas = [
+          { accountId: fromAccountId, amountDelta: -amount, isCreditCard: accountTypes.get(fromAccountId) || false },
+          { accountId: toAccountId, amountDelta: amount, isCreditCard: accountTypes.get(toAccountId) || false }
+        ];
+        const balOps = buildAccountBalanceOps(u.uid, balanceDeltas);
+
         const outcome = await commitMutations(
           u.uid,
           [
@@ -1368,6 +1404,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
                 createdAt: serverTimestamp(),
               },
             },
+            ...balOps,
           ],
           { label: "transfer" }
         );
@@ -1387,9 +1424,22 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const database = getFirestoreDb();
     if (!u || !database) return;
     try {
+      const ref = doc(database, "users", u.uid, "accountTransfers", id);
+      const snap = await import("firebase/firestore").then(m => m.getDoc(ref));
+      const balOps = [];
+      if (snap.exists()) {
+        const data = snap.data();
+        const accountTypes = await fetchAccountTypes(database, u.uid, [data.fromAccountId, data.toAccountId]);
+        const balanceDeltas = [
+          { accountId: data.fromAccountId, amountDelta: data.amount, isCreditCard: accountTypes.get(data.fromAccountId) || false },
+          { accountId: data.toAccountId, amountDelta: -data.amount, isCreditCard: accountTypes.get(data.toAccountId) || false }
+        ];
+        balOps.push(...buildAccountBalanceOps(u.uid, balanceDeltas));
+      }
+
       const outcome = await commitMutations(
         u.uid,
-        [{ op: "delete", ref: doc(database, "users", u.uid, "accountTransfers", id) }],
+        [{ op: "delete", ref }, ...balOps],
         { label: "transfer deletion" }
       );
       toast.success(writeSavedMessage(outcome, "Transfer removed"));

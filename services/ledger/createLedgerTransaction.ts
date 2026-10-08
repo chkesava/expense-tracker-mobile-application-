@@ -3,11 +3,12 @@
  * Used by ExpenseForm and SMS import — one write shape, one collection path.
  */
 
-import { collection, doc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, serverTimestamp, getDoc } from "firebase/firestore";
 
 import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";
 import type { WriteOutcome } from "@/lib/firestoreWrite";
+import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
 
 export type CreateExpenseInput = {
   amount: number;
@@ -126,9 +127,25 @@ export async function createExpense(
       : {}),
     createdAt: serverTimestamp(),
   };
+  let isCreditCard = false;
+  if (payload.accountId) {
+    const accountSnap = await getDoc(doc(db, "users", uid, "accounts", payload.accountId));
+    if (accountSnap.exists()) {
+      const data = accountSnap.data();
+      // accountTypeId is canonical, or fall back to checking if name/legacy type implies credit.
+      isCreditCard = data.accountTypeId === "credit_card" || 
+        (data.name || "").toLowerCase().includes("credit");
+    }
+  }
+
+  const expenseOps = [{ op: "set" as const, ref, data, merge: Boolean(options?.id) }];
+  const balanceOps = payload.accountId ? buildAccountBalanceOps(uid, [
+    { accountId: payload.accountId, amountDelta: -payload.amount, isCreditCard }
+  ]) : [];
+
   const outcome = await commitMutations(
     uid,
-    [{ op: "set", ref, data, merge: Boolean(options?.id) }],
+    [...expenseOps, ...balanceOps],
     { label: "expense" }
   );
   return { id: ref.id, outcome };
@@ -169,9 +186,24 @@ export async function createIncome(
       : {}),
     createdAt: serverTimestamp(),
   };
+  let isCreditCard = false;
+  if (payload.accountId) {
+    const accountSnap = await getDoc(doc(db, "users", uid, "accounts", payload.accountId));
+    if (accountSnap.exists()) {
+      const data = accountSnap.data();
+      isCreditCard = data.accountTypeId === "credit_card" || 
+        (data.name || "").toLowerCase().includes("credit");
+    }
+  }
+
+  const incomeOps = [{ op: "set" as const, ref, data, merge: Boolean(options?.id) }];
+  const balanceOps = payload.accountId ? buildAccountBalanceOps(uid, [
+    { accountId: payload.accountId, amountDelta: payload.amount, isCreditCard }
+  ]) : [];
+
   const outcome = await commitMutations(
     uid,
-    [{ op: "set", ref, data, merge: Boolean(options?.id) }],
+    [...incomeOps, ...balanceOps],
     { label: "income" }
   );
   return { id: ref.id, outcome };
