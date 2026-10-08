@@ -1207,3 +1207,109 @@ describe("buildCreditCardLedger — paid close-day spend starts the new cycle", 
     expect(ledger.statementDue).toBe(0);
   });
 });
+
+describe("cashback in current cycle (SPENDLY-432)", () => {
+  const card: Account = {
+    id: "cc-roar",
+    name: "Roar Card",
+    typeId: "t-credit",
+    billGenerationDay: 5,
+    creditLimit: 35000,
+  };
+
+  const cycleSpend = [
+    expense("2026-10-06", 130.0, card.id),
+    expense("2026-10-07", 332.0, card.id),
+  ];
+
+  function cashback(id: string, date: string, amount: number) {
+    const p = payment(id, date, amount, card.id);
+    p.sourceType = "cashback";
+    return p;
+  }
+
+  it("reduces current-cycle unbilled spend exactly once", () => {
+    const ledger = buildCreditCardLedger({
+      account: card,
+      expenses: cycleSpend,
+      payments: [
+        payment("pay-1", "2026-10-06", 929.0, card.id), // Previous bill payment
+        cashback("cb-1", "2026-10-07", 392.29),
+      ],
+      bills: [
+        statement("2026-10-05", "2026-09-06", 929.0, { accountId: card.id }),
+      ],
+      today: "2026-10-08",
+    });
+
+    // 130 + 332 = 462.
+    // 462 - 392.29 = 69.71
+    expect(ledger.unbilledSpend).toBeCloseTo(69.71, 2);
+    // The previous bill was fully paid
+    expect(ledger.statementDue).toBe(0);
+    expect(ledger.totalOutstanding).toBeCloseTo(69.71, 2);
+    expect(ledger.availableCredit).toBeCloseTo(35000 - 69.71, 2);
+  });
+
+  it("handles cashback from another cycle", () => {
+    const ledger = buildCreditCardLedger({
+      account: card,
+      expenses: cycleSpend,
+      payments: [
+        cashback("cb-old", "2026-10-04", 50.0), // Falls in the previous closed cycle
+      ],
+      bills: [
+        statement("2026-10-05", "2026-09-06", 929.0, { accountId: card.id }),
+      ],
+      today: "2026-10-08",
+    });
+
+    // The old cashback reduces the 929 statement down to 879
+    // It does not reduce the 462 unbilled spend of the current cycle.
+    expect(ledger.unbilledSpend).toBe(462);
+    expect(ledger.statementDue).toBe(879);
+    expect(ledger.totalOutstanding).toBe(879 + 462);
+  });
+
+  it("carries over excess cashback from a previous cycle to reduce the current cycle", () => {
+    const ledger = buildCreditCardLedger({
+      account: card,
+      expenses: cycleSpend,
+      payments: [
+        cashback("cb-old-massive", "2026-10-04", 1000.0), // Exceeds the 929 bill
+      ],
+      bills: [
+        statement("2026-10-05", "2026-09-06", 929.0, { accountId: card.id }),
+      ],
+      today: "2026-10-08",
+    });
+
+    // The old cashback completely pays off the 929 statement.
+    // 71 left over. This 71 leftover cashback carries forward to the current cycle.
+    // 462 current spend - 71 leftover cashback = 391
+    expect(ledger.statementDue).toBe(0);
+    expect(ledger.unbilledSpend).toBe(391);
+    expect(ledger.totalOutstanding).toBe(391);
+  });
+
+  it("prevents excess normal payments from carrying forward to reduce unbilled spend", () => {
+    const ledger = buildCreditCardLedger({
+      account: card,
+      expenses: cycleSpend,
+      payments: [
+        payment("pay-old-massive", "2026-10-05", 1000.0, card.id), // Normal payment on close date
+      ],
+      bills: [
+        statement("2026-10-05", "2026-09-06", 929.0, { accountId: card.id }),
+      ],
+      today: "2026-10-08",
+    });
+
+    // The old normal payment completely pays off the 929 statement.
+    // 71 left over. Because it's a normal payment, it is discarded, not carried over.
+    // User cannot pre-pay unbilled spend with a regular payment.
+    expect(ledger.statementDue).toBe(0);
+    expect(ledger.unbilledSpend).toBe(462); // Stays at 462
+    expect(ledger.totalOutstanding).toBe(462);
+  });
+});

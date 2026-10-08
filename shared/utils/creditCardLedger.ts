@@ -424,6 +424,7 @@ export function buildCreditCardLedger(
   // absorb spend charged after the statement closed.
   let cycleCredit = 0;
   let carriedCredit = 0;
+  let carriedCashback = 0;
   for (const payment of cardPayments) {
     let left = payment.amount;
     const isCashback = isCashbackPayment(payment);
@@ -437,10 +438,9 @@ export function buildCreditCardLedger(
     // became carried credit, and was dropped — the generated bill silently
     // went back to gross spend.
     const settles = (statement: WorkingStatement) =>
-      statement.statementDate <= payment.date ||
-      (isCashback &&
-        payment.date >= statement.periodStart &&
-        payment.date <= statement.periodEnd);
+      isCashback
+        ? payment.date >= statement.periodStart && payment.date <= statement.periodEnd
+        : statement.statementDate <= payment.date;
     if (payment.id && linkedPaymentIds.has(payment.id)) {
       for (const statement of working) {
         if (left <= 0) break;
@@ -480,6 +480,9 @@ export function buildCreditCardLedger(
         cycleCredit = roundMoney(cycleCredit + left);
       } else {
         carriedCredit = roundMoney(carriedCredit + left);
+        if (isCashback) {
+          carriedCashback = roundMoney(carriedCashback + left);
+        }
       }
     }
   }
@@ -615,10 +618,14 @@ export function buildCreditCardLedger(
   const creditForVoided = roundMoney(carriedCredit + cycleCredit);
   const cancelledSpend = roundMoney(Math.max(0, voidedSpend - creditForVoided));
 
+  // Preserve cashback that wasn't consumed by voided spend so it can carry forward
+  const remainingCarriedCredit = Math.max(0, carriedCredit - voidedSpend);
+  const forwardCashback = Math.min(carriedCashback, remainingCarriedCredit);
+
   // Only credit paid inside the open cycle may reduce this cycle's spend, and
   // only what is left of it after settling the older cancelled bucket.
   const cycleCreditForOpen = roundMoney(
-    Math.max(0, cycleCredit - Math.max(0, voidedSpend - carriedCredit))
+    Math.max(0, cycleCredit - Math.max(0, voidedSpend - carriedCredit)) + forwardCashback
   );
   const unbilledSpend = roundMoney(
     Math.max(0, openCycleSpend - cycleCreditForOpen)
