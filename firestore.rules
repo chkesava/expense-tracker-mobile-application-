@@ -349,6 +349,15 @@ service cloud.firestore {
           && optionalYmd(d, 'datePurchased');
       }
 
+      function holdingAdjustmentWellFormed() {
+        let d = request.resource.data;
+        return d.type in ['add_missing_acquisition', 'correct_cost_basis']
+          && optionalBoundedNonNeg(d, 'previousQuantity')
+          && optionalBoundedNonNeg(d, 'newQuantity')
+          && optionalBoundedNonNeg(d, 'previousInvestedValue')
+          && optionalBoundedNonNeg(d, 'newInvestedValue');
+      }
+
       // SPENDLY-420: the reusable instrument identity a Holding references by
       // profileId. Only the fields every write actually sends are required —
       // nothing here enforces profileId on `holdings` yet, so pre-migration
@@ -632,6 +641,10 @@ service cloud.firestore {
       match /holdings/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && holdingWellFormed();
+      }
+      match /holdingAdjustments/{id} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && holdingAdjustmentWellFormed();
       }
       match /stockProfiles/{id} {
         allow read, delete: if isOwner(uid);
