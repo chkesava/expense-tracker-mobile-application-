@@ -1,13 +1,17 @@
 import { doc, increment, serverTimestamp } from "firebase/firestore";
 import type { MutationOp } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";
-import type { Account } from "@/shared/types/expense";
+import { buildNetWorthOps } from "./netWorthMutations";
 
 export type BalanceDeltaParams = {
   accountId: string;
-  amountDelta: number; // positive means adding to balance (income), negative means subtracting (expense)
+  amountDelta: number;
   isCreditCard: boolean;
-  isUnbilled?: boolean; // if true, update unbilledSpend as well (e.g. regular expense, not a bill payment)
+  isUnbilled?: boolean;
+  /** The account's balance prior to this mutation. Required for accurate net worth delta calculation if balance crosses zero. */
+  oldBalance?: number;
+  /** The account's outstanding liability prior to this mutation. */
+  oldOutstanding?: number;
 };
 
 export function buildAccountBalanceOps(
@@ -17,7 +21,6 @@ export function buildAccountBalanceOps(
   const db = getFirestoreDb();
   if (!db) return [];
   
-  // Aggregate deltas by accountId
   const aggregated = new Map<string, BalanceDeltaParams>();
   for (const d of deltas) {
     if (!aggregated.has(d.accountId)) {
@@ -25,41 +28,75 @@ export function buildAccountBalanceOps(
     } else {
       const existing = aggregated.get(d.accountId)!;
       existing.amountDelta += d.amountDelta;
-      // If any of the aggregated deltas was unbilled, we might have a problem because we're mixing unbilled and billed.
-      // For simplicity, we assume they are either all unbilled or we don't aggregate them if they differ.
-      // But in practice, a single transaction edit/delete is either unbilled or not.
-      // Wait, let's keep it simple: we shouldn't mix unbilled and billed in the same delta.
       existing.isUnbilled = existing.isUnbilled || d.isUnbilled;
     }
   }
   
-  return Array.from(aggregated.values())
-    .filter(d => d.amountDelta !== 0) // Skip empty deltas
-    .map(({ accountId, amountDelta, isCreditCard, isUnbilled }) => {
-      const ref = doc(db, "users", uid, "accounts", accountId);
-      
-      if (isCreditCard) {
-        const updateData: any = {
-          currentOutstanding: increment(-amountDelta),
-          balanceUpdatedAt: serverTimestamp(),
-        };
-        if (isUnbilled) {
-          updateData.unbilledSpend = increment(-amountDelta);
-        }
-        return {
-          op: "update",
-          ref: { path: ref.path },
-          data: updateData
-        };
-      } else {
-        return {
-          op: "update",
-          ref: { path: ref.path },
-          data: {
-            currentBalance: increment(amountDelta),
-            balanceUpdatedAt: serverTimestamp(),
-          }
-        };
+  const ops: MutationOp[] = [];
+  
+  let totalBankCashDelta = 0;
+  let totalOverdraftDelta = 0;
+  let totalCreditCardDelta = 0;
+
+  for (const d of aggregated.values()) {
+    if (d.amountDelta === 0) continue;
+
+    const ref = doc(db, "users", uid, "accounts", d.accountId);
+    
+    if (d.isCreditCard) {
+      const updateData: any = {
+        currentOutstanding: increment(-d.amountDelta),
+        balanceUpdatedAt: serverTimestamp(),
+      };
+      if (d.isUnbilled) {
+        updateData.unbilledSpend = increment(-d.amountDelta);
       }
+      ops.push({ op: "update", ref: { path: ref.path }, data: updateData });
+
+      // In Spendly, a positive credit card delta (e.g. paying bill) reduces liability.
+      // So outstanding goes down by amountDelta. Thus liability goes down by amountDelta.
+      // Actually wait, amountDelta is the change in "balance". 
+      // For credit cards, if you spend 100, amountDelta is -100.
+      // currentOutstanding gets increment(-(-100)) = +100.
+      // So liability increases by 100.
+      totalCreditCardDelta += -d.amountDelta;
+    } else {
+      ops.push({
+        op: "update",
+        ref: { path: ref.path },
+        data: {
+          currentBalance: increment(d.amountDelta),
+          balanceUpdatedAt: serverTimestamp(),
+        }
+      });
+
+      // Compute Net Worth Deltas for Bank Accounts
+      const oldBal = d.oldBalance ?? 0;
+      const newBal = oldBal + d.amountDelta;
+
+      if (oldBal >= 0 && newBal >= 0) {
+        totalBankCashDelta += d.amountDelta;
+      } else if (oldBal <= 0 && newBal <= 0) {
+        totalOverdraftDelta += Math.abs(newBal) - Math.abs(oldBal);
+      } else if (oldBal > 0 && newBal < 0) {
+        totalBankCashDelta += -oldBal;
+        totalOverdraftDelta += Math.abs(newBal);
+      } else if (oldBal < 0 && newBal > 0) {
+        totalOverdraftDelta += -Math.abs(oldBal);
+        totalBankCashDelta += newBal;
+      }
+    }
+  }
+
+  // Push the net worth ops
+  if (totalBankCashDelta !== 0 || totalOverdraftDelta !== 0 || totalCreditCardDelta !== 0) {
+    const nwOps = buildNetWorthOps(uid, {
+      bankCashTotal: totalBankCashDelta,
+      bankOverdraftLiabilities: totalOverdraftDelta,
+      creditCardLiabilities: totalCreditCardDelta,
     });
+    ops.push(...nwOps);
+  }
+
+  return ops;
 }

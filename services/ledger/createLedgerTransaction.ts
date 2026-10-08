@@ -128,6 +128,8 @@ export async function createExpense(
     createdAt: serverTimestamp(),
   };
   let isCreditCard = false;
+  let oldBalance = 0;
+  let oldOutstanding = 0;
   if (payload.accountId) {
     const accountSnap = await getDoc(doc(db, "users", uid, "accounts", payload.accountId));
     if (accountSnap.exists()) {
@@ -135,12 +137,14 @@ export async function createExpense(
       // accountTypeId is canonical, or fall back to checking if name/legacy type implies credit.
       isCreditCard = data.accountTypeId === "credit_card" || 
         (data.name || "").toLowerCase().includes("credit");
+      oldBalance = data.currentBalance ?? 0;
+      oldOutstanding = data.currentOutstanding ?? 0;
     }
   }
 
   const expenseOps = [{ op: "set" as const, ref, data, merge: Boolean(options?.id) }];
   const balanceOps = payload.accountId ? buildAccountBalanceOps(uid, [
-    { accountId: payload.accountId, amountDelta: -payload.amount, isCreditCard }
+    { accountId: payload.accountId, amountDelta: -payload.amount, isCreditCard, oldBalance, oldOutstanding }
   ]) : [];
 
   const outcome = await commitMutations(
@@ -187,18 +191,22 @@ export async function createIncome(
     createdAt: serverTimestamp(),
   };
   let isCreditCard = false;
+  let oldBalance = 0;
+  let oldOutstanding = 0;
   if (payload.accountId) {
     const accountSnap = await getDoc(doc(db, "users", uid, "accounts", payload.accountId));
     if (accountSnap.exists()) {
       const data = accountSnap.data();
       isCreditCard = data.accountTypeId === "credit_card" || 
         (data.name || "").toLowerCase().includes("credit");
+      oldBalance = data.currentBalance ?? 0;
+      oldOutstanding = data.currentOutstanding ?? 0;
     }
   }
 
   const incomeOps = [{ op: "set" as const, ref, data, merge: Boolean(options?.id) }];
   const balanceOps = payload.accountId ? buildAccountBalanceOps(uid, [
-    { accountId: payload.accountId, amountDelta: payload.amount, isCreditCard }
+    { accountId: payload.accountId, amountDelta: payload.amount, isCreditCard, oldBalance, oldOutstanding }
   ]) : [];
 
   const outcome = await commitMutations(

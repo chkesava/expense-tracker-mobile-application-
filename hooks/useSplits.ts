@@ -693,7 +693,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       const balOps = buildAccountBalanceOps(uid, [{
         accountId,
         amountDelta,
-        isCreditCard: accountTypes.get(accountId) || false,
+        isCreditCard: accountTypes.get(accountId)?.isCreditCard || false, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding,
         isUnbilled: true
       }]);
       for (const op of balOps) {
