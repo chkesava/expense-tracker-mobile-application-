@@ -40,6 +40,7 @@ import {
   netHoldingCashOutlay,
 } from "@/shared/features/portfolio/utils/investmentCash";
 import { planHoldingOverwrite } from "@/shared/features/portfolio/utils/holdingsOverwrite";
+import type { RepairBatchPlan } from "@/shared/features/portfolio/utils/portfolioReconciliation";
 import type {
   Holding,
   InvestmentCashBaseline,
@@ -51,6 +52,7 @@ import type { HoldingFundingSource } from "@/shared/features/portfolio/schemas";
 
 const SETTINGS_DOC_ID = "config";
 export const INVESTMENT_CASH_COLLECTION = "investmentCashTransactions";
+export const RECONCILIATION_AUDIT_COLLECTION = "portfolioReconciliationAudits";
 /** Units below this are treated as a closed holding (not rupee rounding). */
 const HOLDING_QUANTITY_EPS = 1e-9;
 
@@ -315,6 +317,8 @@ export type CreateHoldingWithCashInput = {
   /** Reused across retries to keep the write idempotent. */
   holdingId?: string;
   entryId?: string;
+  /** Reused across retries. Always written — see SPENDLY-419. */
+  transactionId?: string;
   date: string;
   source?: InvestmentCashSource;
 };
@@ -323,18 +327,27 @@ export type CreateHoldingWithCashResult = {
   holdingId: string;
   /** Null when the holding was recorded without touching investment cash. */
   entryId: string | null;
+  /** The matching Order History row — always written, regardless of funding source. */
+  transactionId: string;
   outcome: WriteOutcome;
 };
 
 /**
- * Adds a holding and, when it is funded from investment cash, the PURCHASE entry
- * that consumes it — in one batch, so a holding can never exist without its
- * matching cash movement.
+ * Adds a holding and, in the same batch:
+ *  - when it is funded from investment cash, the PURCHASE entry that consumes it
+ *    (KAN-77 / SPENDLY-46), so a holding can never exist without its matching cash
+ *    movement;
+ *  - always, a `portfolioTransactions` BUY row (SPENDLY-419), so a holding can
+ *    never exist without its matching Order History entry either. Before this fix
+ *    only `executeMockBuy`/`executeMockSell` wrote that row — a holding added here
+ *    (manual add, onboarding, CSV import) had none, which is the root cause behind
+ *    a holding's aggregate quantity disagreeing with its visible trade history.
+ *    `shared/features/portfolio/utils/portfolioReconciliation.ts` backfills this
+ *    row for data written before this fix shipped.
  *
  * `fundingSource: "external"` records a holding bought outside the app (a CSV
- * import, or a portfolio that predates this feature) and moves no cash at all.
- * Without that option a user with no investment cash could not record what they
- * already own.
+ * import, or a portfolio that predates this feature) and moves no cash at all, but
+ * still gets its BUY row — Order History should show it either way.
  */
 export async function createHoldingWithCash(
   uid: string,
@@ -347,6 +360,9 @@ export async function createHoldingWithCash(
   const amount = roundMoney(Math.max(0, Number(input.purchaseAmount) || 0));
   const deducts = input.fundingSource === "investment_cash" && amount > 0;
   const entryId = deducts ? input.entryId ?? newId() : null;
+  const transactionId = input.transactionId ?? newId();
+  const quantity = Number(input.holding.quantity) || 0;
+  const price = Number(input.holding.averageBuyPrice) || 0;
 
   const outcome = await commitWrite(() => {
     const batch = writeBatch(db);
@@ -386,10 +402,28 @@ export async function createHoldingWithCash(
       );
     }
 
+    if (quantity > 0 && price > 0) {
+      batch.set(
+        doc(db, "users", owner, "portfolioTransactions", transactionId),
+        stripUndefined({
+          holdingId,
+          symbol: input.holding.symbol,
+          type: "BUY",
+          quantity,
+          price,
+          fees: 0,
+          broker: input.holding.broker,
+          date: input.date,
+          orderStatus: "executed",
+          createdAt: serverTimestamp(),
+        })
+      );
+    }
+
     return batch.commit();
   }, { label: "holding" });
 
-  return { holdingId, entryId, outcome };
+  return { holdingId, entryId, transactionId, outcome };
 }
 
 export type InvestmentCashAdjustment = {
@@ -896,4 +930,83 @@ export async function executeMockSell(
   }, { label: "mock sell" });
 
   return { cashEntryId, transactionId, outcome };
+}
+
+export type ReconciliationRepairResult = {
+  auditId: string;
+  repairedCount: number;
+  outcome: WriteOutcome;
+};
+
+/**
+ * Applies a `RepairBatchPlan` (SPENDLY-419) in one batch: a `portfolioTransactions`
+ * BUY/SELL row per recoverable finding, preserving the quantity/price/date of the
+ * cash entry it was recovered from, plus one append-only audit doc recording the
+ * run.
+ *
+ * Every finding's `transactionId` is deterministic (minted by
+ * `shared/features/portfolio/utils/portfolioReconciliation.ts`), so retrying with
+ * the same plan `setDoc`s the same paths and never duplicates a repair — the same
+ * idempotency contract as the rest of this file. Only ever touches
+ * `portfolioTransactions` and the audit log; it never creates or adjusts a cash
+ * entry, since every finding here is the "cash exists, transaction doesn't" case —
+ * the opposite direction is never auto-repaired (see `scanHoldingForFindings`).
+ */
+export async function applyReconciliationRepairs(
+  uid: string,
+  plan: RepairBatchPlan,
+  runId: string,
+  options: { triggeredBy: "self_service" | "admin_backfill"; source: "app" | "script" }
+): Promise<ReconciliationRepairResult> {
+  const db = requireDb();
+  const owner = requireUid(uid);
+  const startedAt = new Date().toISOString();
+
+  const outcome = await commitWrite(() => {
+    const batch = writeBatch(db);
+    const repairs: Record<string, unknown>[] = [];
+
+    for (const finding of plan.findings) {
+      const fix = finding.proposedFix;
+      if (!fix || fix.kind !== "create_portfolio_transaction") continue;
+      batch.set(
+        doc(db, "users", owner, "portfolioTransactions", fix.transactionId),
+        stripUndefined({
+          holdingId: finding.holdingId,
+          symbol: finding.symbol,
+          type: fix.quantity >= 0 ? "BUY" : "SELL",
+          quantity: Math.abs(fix.quantity),
+          price: fix.price,
+          fees: 0,
+          date: fix.date,
+          orderStatus: "executed",
+          createdAt: serverTimestamp(),
+        })
+      );
+      repairs.push({
+        findingId: finding.id,
+        holdingId: finding.holdingId,
+        symbol: finding.symbol,
+        type: finding.type,
+        transactionId: fix.transactionId,
+        cashEntryId: fix.sourceCashEntryId,
+      });
+    }
+
+    batch.set(doc(db, "users", owner, RECONCILIATION_AUDIT_COLLECTION, runId), {
+      runId,
+      startedAt,
+      completedAt: serverTimestamp(),
+      triggeredBy: options.triggeredBy,
+      findingsCount: plan.findings.length,
+      repairedCount: repairs.length,
+      skippedCount: plan.findings.length - repairs.length,
+      repairs,
+      source: options.source,
+    });
+
+    return batch.commit();
+  }, { label: "portfolio reconciliation repair" });
+
+  return { auditId: runId, repairedCount: plan.findings.length, outcome };
 }

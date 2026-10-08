@@ -15,12 +15,14 @@ import {
   ArrowUpRight,
   History,
   Landmark,
+  RefreshCw,
   SlidersHorizontal,
   X,
 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { InvestmentCashHistoryModal } from "@/components/portfolio/InvestmentCashHistoryModal";
+import { PortfolioRecalibrationModal } from "@/components/portfolio/PortfolioRecalibrationModal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAccounts } from "@/hooks/useAccounts";
@@ -108,6 +110,7 @@ export function ManageStockCashModal({
   const [loading, setLoading] = useState(false);
 
   const [historyVisible, setHistoryVisible] = useState(false);
+  const [recalibrateVisible, setRecalibrateVisible] = useState(false);
 
   /** Minted once per open so a retried save rewrites the same adjustment. */
   const adjustmentId = React.useRef(newId());
@@ -405,22 +408,41 @@ export function ManageStockCashModal({
               />
             </View>
 
-            <Pressable
-              onPress={() => setHistoryVisible(true)}
-              accessibilityRole="button"
-              style={styles.historyLinkRow}
-            >
-              <History size={14} color={theme.colors.primary} />
-              <Text
-                style={{
-                  fontSize: theme.typography.sm,
-                  fontFamily: theme.fontFamily.bold,
-                  color: theme.colors.primary,
-                }}
+            <View style={styles.linkRow}>
+              <Pressable
+                onPress={() => setHistoryVisible(true)}
+                accessibilityRole="button"
+                style={styles.historyLinkRow}
               >
-                View cash history
-              </Text>
-            </Pressable>
+                <History size={14} color={theme.colors.primary} />
+                <Text
+                  style={{
+                    fontSize: theme.typography.sm,
+                    fontFamily: theme.fontFamily.bold,
+                    color: theme.colors.primary,
+                  }}
+                >
+                  View cash history
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setRecalibrateVisible(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Recalibrate Portfolio"
+                style={styles.historyLinkRow}
+              >
+                <RefreshCw size={14} color={theme.colors.primary} />
+                <Text
+                  style={{
+                    fontSize: theme.typography.sm,
+                    fontFamily: theme.fontFamily.bold,
+                    color: theme.colors.primary,
+                  }}
+                >
+                  Recalibrate Portfolio
+                </Text>
+              </Pressable>
+            </View>
 
             {/* Mode options — full-width stacked chips so labels never overlap */}
             <View style={styles.modeList}>
@@ -773,6 +795,11 @@ export function ManageStockCashModal({
         onClose={() => setHistoryVisible(false)}
         currency={currency}
       />
+
+      <PortfolioRecalibrationModal
+        visible={recalibrateVisible}
+        onClose={() => setRecalibrateVisible(false)}
+      />
     </Modal>
   );
 }
@@ -828,6 +855,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
+  },
+  linkRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 16,
   },
   historyLinkRow: {
     flexDirection: "row",

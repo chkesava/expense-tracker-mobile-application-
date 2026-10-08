@@ -593,6 +593,12 @@ service cloud.firestore {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && personalMoneyWellFormed();
       }
+      // SPENDLY-419: append-only audit of portfolio recalibration repairs.
+      // Mirrors ledgerEvents — owner-only, never editable or deletable.
+      match /portfolioReconciliationAudits/{id} {
+        allow read, create: if isOwner(uid);
+        allow update, delete: if false;
+      }
       match /borrowingRepayments/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && personalMoneyWellFormed();

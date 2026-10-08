@@ -53,6 +53,7 @@ vi.mock("@/lib/id", () => ({
 import { getDocs, setDoc, writeBatch } from "firebase/firestore";
 
 import {
+  applyReconciliationRepairs,
   createHoldingWithCash,
   deleteHoldingWithOptionalRefund,
   ensureCashBaseline,
@@ -63,6 +64,7 @@ import {
   reverseInvestmentCashEntry,
   transferInvestmentCashWithBank,
 } from "./investmentCash";
+import type { ReconciliationFinding, RepairBatchPlan } from "@/shared/features/portfolio/utils/portfolioReconciliation";
 
 let writes: Write[] = [];
 let deletes: string[] = [];
@@ -152,7 +154,7 @@ describe("createHoldingWithCash", () => {
     expect(settingsWrite?.merge).toBe(true);
   });
 
-  it("moves no cash for a holding bought outside the app", async () => {
+  it("moves no cash for a holding bought outside the app, but still writes its BUY row", async () => {
     const result = await createHoldingWithCash("u1", {
       holding: HOLDING,
       fundingSource: "external",
@@ -164,7 +166,39 @@ describe("createHoldingWithCash", () => {
     expect(result.entryId).toBeNull();
     expect(pathsUnder("investmentCashTransactions")).toHaveLength(0);
     expect(writes.filter((w) => w.path.includes("/portfolioSettings/"))).toHaveLength(0);
-    expect(writes).toHaveLength(1);
+    expect(writes).toHaveLength(2);
+
+    const txWrite = pathsUnder("portfolioTransactions")[0];
+    expect(txWrite.path).toBe(`users/u1/portfolioTransactions/${result.transactionId}`);
+    expect(txWrite.data).toMatchObject({
+      holdingId: result.holdingId,
+      symbol: "INFY",
+      type: "BUY",
+      quantity: 12,
+      price: 500,
+      orderStatus: "executed",
+    });
+  });
+
+  it("writes a BUY transaction row alongside the cash entry for a cash-funded holding (SPENDLY-419 root-cause fix)", async () => {
+    const result = await createHoldingWithCash("u1", {
+      holding: HOLDING,
+      fundingSource: "investment_cash",
+      purchaseAmount: 6000,
+      date: "2026-09-11",
+    });
+
+    const txWrite = pathsUnder("portfolioTransactions")[0];
+    expect(txWrite.path).toBe(`users/u1/portfolioTransactions/${result.transactionId}`);
+    expect(txWrite.data).toMatchObject({
+      holdingId: result.holdingId,
+      symbol: "INFY",
+      type: "BUY",
+      quantity: 12,
+      price: 500,
+      date: "2026-09-11",
+      orderStatus: "executed",
+    });
   });
 
   it("moves no cash for a zero-cost purchase", async () => {
@@ -179,9 +213,10 @@ describe("createHoldingWithCash", () => {
     expect(pathsUnder("investmentCashTransactions")).toHaveLength(0);
   });
 
-  // The offline/retry case: the same submit re-sent must not deduct twice.
+  // The offline/retry case: the same submit re-sent must not deduct twice or
+  // duplicate the BUY row.
   it("targets the same doc paths when retried with the same ids", async () => {
-    const ids = { holdingId: "holding-1", entryId: "entry-1" };
+    const ids = { holdingId: "holding-1", entryId: "entry-1", transactionId: "tx-1" };
     const first = await createHoldingWithCash("u1", {
       holding: HOLDING,
       fundingSource: "investment_cash",
@@ -202,6 +237,7 @@ describe("createHoldingWithCash", () => {
 
     expect(second.holdingId).toBe(first.holdingId);
     expect(second.entryId).toBe(first.entryId);
+    expect(second.transactionId).toBe(first.transactionId);
     expect(writes.map((w) => w.path)).toEqual(firstPaths);
   });
 
@@ -233,6 +269,95 @@ describe("createHoldingWithCash", () => {
       })
     ).rejects.toThrow("Not authenticated");
     expect(commits).toBe(0);
+  });
+});
+
+describe("applyReconciliationRepairs", () => {
+  function finding(overrides: Partial<ReconciliationFinding> = {}): ReconciliationFinding {
+    return {
+      id: "missing_buy_recoverable_from_cash:h1:cash1",
+      type: "missing_buy_recoverable_from_cash",
+      holdingId: "h1",
+      symbol: "KPITTECH",
+      action: "auto_repair",
+      detail: { holdingQty: 40, transactionDerivedQty: 30, currentAvgPrice: 492.37 },
+      proposedFix: {
+        kind: "create_portfolio_transaction",
+        transactionId: "recon_tx_h1_cash1",
+        quantity: 10,
+        price: 485,
+        date: "2026-06-15",
+        sourceCashEntryId: "cash1",
+      },
+      ...overrides,
+    };
+  }
+
+  it("writes the backfilled BUY row and an audit doc in one batch", async () => {
+    const plan: RepairBatchPlan = { findings: [finding()] };
+    const result = await applyReconciliationRepairs("u1", plan, "run-1", {
+      triggeredBy: "self_service",
+      source: "app",
+    });
+
+    expect(commits).toBe(1);
+    expect(result.auditId).toBe("run-1");
+
+    const txWrite = pathsUnder("portfolioTransactions")[0];
+    expect(txWrite.path).toBe("users/u1/portfolioTransactions/recon_tx_h1_cash1");
+    expect(txWrite.data).toMatchObject({
+      holdingId: "h1",
+      symbol: "KPITTECH",
+      type: "BUY",
+      quantity: 10,
+      price: 485,
+      date: "2026-06-15",
+      orderStatus: "executed",
+    });
+
+    const audit = pathsUnder("portfolioReconciliationAudits")[0];
+    expect(audit.path).toBe("users/u1/portfolioReconciliationAudits/run-1");
+    expect(audit.data).toMatchObject({
+      runId: "run-1",
+      triggeredBy: "self_service",
+      findingsCount: 1,
+      repairedCount: 1,
+      source: "app",
+    });
+
+    // Never touches the cash ledger or the holding itself — only Order History + audit.
+    expect(pathsUnder("investmentCashTransactions")).toHaveLength(0);
+    expect(pathsUnder("holdings")).toHaveLength(0);
+  });
+
+  it("never duplicates a repair when the same plan and runId are retried (offline-retry case)", async () => {
+    const plan: RepairBatchPlan = { findings: [finding()] };
+    await applyReconciliationRepairs("u1", plan, "run-1", {
+      triggeredBy: "self_service",
+      source: "app",
+    });
+    const firstPaths = writes.map((w) => w.path);
+
+    writes = [];
+    await applyReconciliationRepairs("u1", plan, "run-1", {
+      triggeredBy: "self_service",
+      source: "app",
+    });
+
+    expect(writes.map((w) => w.path)).toEqual(firstPaths);
+  });
+
+  it("skips a finding with no proposed fix without failing the batch", async () => {
+    const plan: RepairBatchPlan = { findings: [finding({ proposedFix: undefined })] };
+    const result = await applyReconciliationRepairs("u1", plan, "run-2", {
+      triggeredBy: "admin_backfill",
+      source: "script",
+    });
+
+    expect(pathsUnder("portfolioTransactions")).toHaveLength(0);
+    const audit = pathsUnder("portfolioReconciliationAudits")[0];
+    expect(audit.data).toMatchObject({ findingsCount: 1, repairedCount: 0, skippedCount: 1 });
+    expect(result.outcome).toBeDefined();
   });
 });
 
