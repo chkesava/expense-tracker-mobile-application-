@@ -329,4 +329,34 @@ describe("account month summary", () => {
       expect(summary.openingBalance).toBe(0);
     });
   });
+  describe("cashback", () => {
+    it("reduces expenses for the month by the cashback amount", () => {
+      const withCashback = enrichAccountActivities(
+        [
+          {
+            id: "expense-1",
+            date: "2026-05-10",
+            amount: 500,
+            type: "debit",
+            linkedExpenseId: "expense-1",
+          },
+          {
+            id: "cashback-1",
+            date: "2026-05-12",
+            amount: 50,
+            type: "credit",
+            isCashback: true,
+          },
+        ],
+        [
+          { id: "expense-1", amount: 500, category: "Shopping", note: "", date: "2026-05-10", month: "2026-05", accountId: "account-c", createdAt: "" } as any
+        ],
+        [],
+        []
+      );
+      const summary = summarizeAccountMonth(withCashback, "2026-05");
+      expect(summary.expenses).toBe(450); // 500 gross - 50 cashback
+      expect(summary.netChange).toBe(-450);
+    });
+  });
 });

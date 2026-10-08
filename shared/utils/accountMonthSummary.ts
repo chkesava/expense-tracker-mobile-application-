@@ -105,7 +105,7 @@ export function summarizeAccountMonth(
   let debits = 0;
 
   for (const record of inMonth) {
-    const { amount, type } = record.activity;
+    const { amount, type, isCashback } = record.activity;
     if (type === "credit") credits += amount;
     else debits += amount;
 
@@ -114,6 +114,10 @@ export function summarizeAccountMonth(
     else if (record.kind === "transfers") {
       if (type === "credit") transfersIn += amount;
       else transfersOut += amount;
+    }
+
+    if (isCashback && type === "credit") {
+      expenses -= amount;
     }
   }
 
