@@ -1275,7 +1275,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         const balanceDeltas = [{
           accountId,
           amountDelta: direction === "credit" ? amount : -amount,
-          isCreditCard: accountTypes.get(accountId) || false,
+          isCreditCard: accountTypes.get(accountId)?.isCreditCard || false, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding,
           isUnbilled: true
         }];
         const balOps = buildAccountBalanceOps(u.uid, balanceDeltas);
@@ -1332,7 +1332,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         balOps.push(...buildAccountBalanceOps(u.uid, [{
           accountId: data.accountId,
           amountDelta,
-          isCreditCard: accountTypes.get(data.accountId) || false,
+          isCreditCard: accountTypes.get(accountId)?.isCreditCard || false, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding,
           isUnbilled: true
         }]));
       }
@@ -1384,8 +1384,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         
         const accountTypes = await fetchAccountTypes(database, u.uid, [fromAccountId, toAccountId]);
         const balanceDeltas = [
-          { accountId: fromAccountId, amountDelta: -amount, isCreditCard: accountTypes.get(fromAccountId) || false },
-          { accountId: toAccountId, amountDelta: amount, isCreditCard: accountTypes.get(toAccountId) || false }
+          { accountId: fromAccountId, amountDelta: -amount, isCreditCard: accountTypes.get(accountId)?.isCreditCard || false, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding },
+          { accountId: toAccountId, amountDelta: amount, isCreditCard: accountTypes.get(accountId)?.isCreditCard || false, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding }
         ];
         const balOps = buildAccountBalanceOps(u.uid, balanceDeltas);
 
@@ -1431,8 +1431,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         const data = snap.data();
         const accountTypes = await fetchAccountTypes(database, u.uid, [data.fromAccountId, data.toAccountId]);
         const balanceDeltas = [
-          { accountId: data.fromAccountId, amountDelta: data.amount, isCreditCard: accountTypes.get(data.fromAccountId) || false },
-          { accountId: data.toAccountId, amountDelta: -data.amount, isCreditCard: accountTypes.get(data.toAccountId) || false }
+          { accountId: data.fromAccountId, amountDelta: data.amount, isCreditCard: accountTypes.get(accountId)?.isCreditCard || false, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding },
+          { accountId: data.toAccountId, amountDelta: -data.amount, isCreditCard: accountTypes.get(accountId)?.isCreditCard || false, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding }
         ];
         balOps.push(...buildAccountBalanceOps(u.uid, balanceDeltas));
       }
