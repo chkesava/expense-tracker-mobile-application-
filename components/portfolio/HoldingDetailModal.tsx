@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ChevronLeft, Info } from "lucide-react-native";
+import { ChevronLeft, Info, MoreHorizontal } from "lucide-react-native";
 
 import {
   ACCOUNT_GREEN,
@@ -29,6 +29,8 @@ import { computeHoldingXirr } from "@/shared/utils/portfolioXirr";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { HoldingAdjustmentModal } from "./HoldingAdjustmentModal";
+import { useState } from "react";
 
 const INSTRUMENT_COLORS: Record<InstrumentType | string, string> = {
   stock: "#3B82F6",
@@ -40,6 +42,7 @@ const INSTRUMENT_COLORS: Record<InstrumentType | string, string> = {
 
 const SELL_BG = "#FF5A3D";
 const BUY_BG = "#00B386";
+const ADJUST_BG = "#64748B";
 
 function pnlColor(value: number, isDark: boolean, muted: string) {
   if (value > 0) return isDark ? ACCOUNT_GREEN : "#16A34A";
@@ -87,13 +90,15 @@ export function HoldingDetailModal({
   const muted = theme.colors.mutedForeground;
   const symbol = currencySymbol(currency);
   const asOfDate = todayDateKey();
+  
+  const [isAdjustVisible, setIsAdjustVisible] = useState(false);
 
   const trades = useMemo(
     () =>
       transactions
         .filter(
           (tx) =>
-            (tx.type === "BUY" || tx.type === "SELL") &&
+            (tx.type === "BUY" || tx.type === "SELL" || tx.type === "ADJUSTMENT") &&
             tx.orderStatus !== "cancelled" &&
             tx.orderStatus !== "pending"
         )
@@ -169,7 +174,18 @@ export function HoldingDetailModal({
           >
             Holding details
           </Text>
-          <View style={styles.iconBtn} />
+          <Pressable
+            onPress={() => {
+              void haptic.selection();
+              setIsAdjustVisible(true);
+            }}
+            hitSlop={8}
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Adjust holding"
+          >
+            <MoreHorizontal size={24} color={theme.colors.foreground} />
+          </Pressable>
         </View>
 
         <ScrollView
@@ -327,19 +343,33 @@ export function HoldingDetailModal({
                       <Text
                         style={[
                           styles.historyType,
-                          { color: buy ? BUY_BG : SELL_BG },
+                          { color: buy ? BUY_BG : tx.type === "ADJUSTMENT" ? ADJUST_BG : SELL_BG },
                         ]}
                       >
-                        {tx.type}
+                        {tx.type === "ADJUSTMENT" ? "ADJ" : tx.type}
                       </Text>
-                      <Text style={[styles.historyMeta, { color: muted }]}>
-                        {formatQuantity(tx.quantity)} @{" "}
-                      </Text>
-                      <Amount
-                        value={tx.price}
-                        currency={currency}
-                        style={[styles.historyMeta, { color: muted }]}
-                      />
+                      {tx.type === "ADJUSTMENT" ? (
+                        <Text style={[styles.historyMeta, { color: muted }]}>
+                          Cost base:{" "}
+                          <Amount
+                            value={tx.price}
+                            currency={currency}
+                            prefix={tx.price > 0 ? "+" : ""}
+                            style={{ color: muted }}
+                          />
+                        </Text>
+                      ) : (
+                        <>
+                          <Text style={[styles.historyMeta, { color: muted }]}>
+                            {formatQuantity(tx.quantity)} @{" "}
+                          </Text>
+                          <Amount
+                            value={tx.price}
+                            currency={currency}
+                            style={[styles.historyMeta, { color: muted }]}
+                          />
+                        </>
+                      )}
                     </View>
                     <Text style={[styles.historyDate, { color: muted }]}>
                       {formatDisplayDate(tx.date, settings.dateFormat)}
@@ -393,6 +423,14 @@ export function HoldingDetailModal({
           </Pressable>
         </View>
       </View>
+      {isAdjustVisible && (
+        <HoldingAdjustmentModal
+          visible={isAdjustVisible}
+          holding={holding}
+          currency={currency}
+          onClose={() => setIsAdjustVisible(false)}
+        />
+      )}
     </Modal>
   );
 }

@@ -89,7 +89,9 @@ export type VerifyResult = {
 
 function executedBuysAndSells(transactions: PortfolioTransaction[]): PortfolioTransaction[] {
   return transactions.filter(
-    (tx) => (tx.type === "BUY" || tx.type === "SELL") && tx.orderStatus !== "cancelled"
+    (tx) =>
+      (tx.type === "BUY" || tx.type === "SELL" || tx.type === "ADJUSTMENT") &&
+      tx.orderStatus !== "cancelled"
   );
 }
 
@@ -103,6 +105,9 @@ function transactionDerivedQuantity(transactions: PortfolioTransaction[]): numbe
 
 function transactionDerivedCost(transactions: PortfolioTransaction[]): number {
   const total = transactions.reduce((sum, tx) => {
+    if (tx.type === "ADJUSTMENT") {
+      return sum + (Number(tx.price) || 0);
+    }
     const cost = (Number(tx.quantity) || 0) * (Number(tx.price) || 0);
     return tx.type === "SELL" ? sum - cost : sum + cost;
   }, 0);

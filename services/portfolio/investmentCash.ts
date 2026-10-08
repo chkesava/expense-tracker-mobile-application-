@@ -139,7 +139,7 @@ function cashBaselineFields(amount: number, now: Date): InvestmentCashBaseline {
   };
 }
 
-function buildEntryDoc(
+export function buildEntryDoc(
   input: InvestmentCashEntryInput,
   correlationId: string
 ): Record<string, unknown> {
@@ -722,7 +722,7 @@ export type MockTradeResult = {
   outcome: WriteOutcome;
 };
 
-function mockTradeCost(quantity: number, price: number, fees: number): number {
+export function mockTradeCost(quantity: number, price: number, fees: number): number {
   return roundMoney(quantity * price + fees);
 }
 
@@ -742,7 +742,7 @@ function asCashEntry(
  * Before the baseline exists the ledger is empty by construction, so the scalar
  * is the only figure that is not double-counting.
  */
-function ledgerCashForTrade(
+export function ledgerCashForTrade(
   settings: Record<string, unknown> | undefined,
   entries: InvestmentCashEntry[]
 ): number {
@@ -751,7 +751,7 @@ function ledgerCashForTrade(
   return computeInvestmentCashBalance(baseline, entries);
 }
 
-async function loadCashEntries(uid: string): Promise<InvestmentCashEntry[]> {
+export async function loadCashEntries(uid: string): Promise<InvestmentCashEntry[]> {
   const db = requireDb();
   const snapshot = await getDocs(
     collection(db, "users", uid, INVESTMENT_CASH_COLLECTION)

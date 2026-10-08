@@ -2,7 +2,35 @@ export type Exchange = "NSE" | "BSE" | "US";
 
 export type InstrumentType = "stock" | "etf" | "mutual_fund" | "gold" | "crypto";
 
-export type TransactionType = "BUY" | "SELL" | "BONUS" | "SPLIT" | "DIVIDEND";
+export type TransactionType = "BUY" | "SELL" | "BONUS" | "SPLIT" | "DIVIDEND" | "ADJUSTMENT";
+
+export type HoldingAdjustmentType = "add_missing_acquisition" | "correct_cost_basis";
+
+export interface HoldingAdjustmentAudit {
+  id: string;
+  holdingId: string;
+  profileId?: string;
+  userId: string;
+  type: HoldingAdjustmentType;
+  
+  previousQuantity: number;
+  previousAveragePrice: number;
+  previousInvestedValue: number;
+  
+  newQuantity: number;
+  newAveragePrice: number;
+  newInvestedValue: number;
+  
+  transactionIds: string[];
+  cashEntryIds: string[];
+  
+  reason: string;
+  fundingSource?: "investment_cash" | "external" | "other";
+  sourceNote?: string;
+  
+  createdAt?: unknown;
+  createdBy: "user";
+}
 
 export type OrderStatus = "pending" | "executed" | "cancelled";
 
