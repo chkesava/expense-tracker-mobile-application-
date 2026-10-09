@@ -147,9 +147,16 @@ export async function createExpense(
     { accountId: payload.accountId, amountDelta: -payload.amount, isCreditCard, oldBalance, oldOutstanding }
   ]) : [];
 
+  const { buildDashboardSummaryOps } = require("@/shared/utils/dashboardMutations");
+  const dashboardOps = buildDashboardSummaryOps(uid, payload.month, {
+    expenseDelta: payload.amount,
+    transactionCountDelta: 1,
+    categoryDeltas: { [payload.category]: payload.amount },
+  });
+
   const outcome = await commitMutations(
     uid,
-    [...expenseOps, ...balanceOps],
+    [...expenseOps, ...balanceOps, ...dashboardOps],
     { label: "expense" }
   );
   return { id: ref.id, outcome };
@@ -209,9 +216,15 @@ export async function createIncome(
     { accountId: payload.accountId, amountDelta: payload.amount, isCreditCard, oldBalance, oldOutstanding }
   ]) : [];
 
+  const { buildDashboardSummaryOps } = require("@/shared/utils/dashboardMutations");
+  const dashboardOps = buildDashboardSummaryOps(uid, payload.month, {
+    incomeDelta: payload.amount,
+    transactionCountDelta: 1,
+  });
+
   const outcome = await commitMutations(
     uid,
-    [...incomeOps, ...balanceOps],
+    [...incomeOps, ...balanceOps, ...dashboardOps],
     { label: "income" }
   );
   return { id: ref.id, outcome };

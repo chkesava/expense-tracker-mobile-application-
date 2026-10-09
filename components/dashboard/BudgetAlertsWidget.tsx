@@ -31,7 +31,7 @@ export interface BudgetAlertsWidgetProps {
   monthlySpent: number;
   currency: string;
   activeCategoryBudgets?: CategoryBudgetAlertItem[];
-  monthlyExpenses?: Expense[];
+  categoryTotals?: Record<string, number>;
   activeMonth: string;
   budget: SpendlyBudget;
 }
@@ -50,7 +50,7 @@ export const BudgetAlertsWidget = memo(function BudgetAlertsWidget({
   monthlySpent,
   currency,
   activeCategoryBudgets: explicitActiveCategoryBudgets,
-  monthlyExpenses,
+  categoryTotals,
   activeMonth,
   budget,
 }: BudgetAlertsWidgetProps) {
@@ -65,11 +65,11 @@ export const BudgetAlertsWidget = memo(function BudgetAlertsWidget({
     if (explicitActiveCategoryBudgets !== undefined) {
       return explicitActiveCategoryBudgets;
     }
-    if (!categoryBudgets || !monthlyExpenses) {
+    if (!categoryBudgets || !categoryTotals) {
       return [];
     }
-    return computeActiveCategoryBudgets(categoryBudgets, monthlyExpenses, activeMonth);
-  }, [explicitActiveCategoryBudgets, categoryBudgets, monthlyExpenses, activeMonth]);
+    return computeActiveCategoryBudgets(categoryBudgets, categoryTotals, activeMonth);
+  }, [explicitActiveCategoryBudgets, categoryBudgets, categoryTotals, activeMonth]);
 
   const statusColor = statusColorOf(budget.status, theme.colors);
   const remainingLabel = budget.isOverBudget ? "Over budget" : "Remaining";
