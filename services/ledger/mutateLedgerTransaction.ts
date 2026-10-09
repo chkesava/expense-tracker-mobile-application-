@@ -1,3 +1,4 @@
+import type { MutationOp } from "@/shared/types/mutations";
 import { computeDashboardExpenseUpdateOps, computeDashboardIncomeUpdateOps, computeDashboardDeleteOps, computeDashboardRestoreOps } from "@/shared/utils/dashboardMutations";
 /**
  * Journal edit and soft-delete (SPENDLY-38).
@@ -22,7 +23,7 @@ import {
   type Firestore,
 } from "firebase/firestore";
 
-import { commitMutations, type MutationOp } from "@/lib/commitMutations";
+import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";
 import type { WriteOutcome } from "@/lib/firestoreWrite";
 import { roundMoney } from "@/shared/utils/money";

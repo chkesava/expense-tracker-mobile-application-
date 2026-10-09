@@ -1,6 +1,7 @@
+import type { MutationOp } from "@/shared/types/mutations";
 import { doc } from "firebase/firestore";
 
-import { commitMutations, type MutationOp } from "@/lib/commitMutations";
+import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";
 import type { WriteOutcome } from "@/lib/firestoreWrite";
 import type {

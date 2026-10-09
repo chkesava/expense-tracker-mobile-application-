@@ -1,3 +1,4 @@
+import type { MutationOp } from "@/shared/types/mutations";
 /**
  * Credit-card bill payments that must move the bank ledger and the statement
  * stamp together (SPENDLY-30).
@@ -28,7 +29,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 
-import { commitMutations, type MutationOp } from "@/lib/commitMutations";
+import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";
 import type { WriteOutcome } from "@/lib/firestoreWrite";
 import { newId } from "@/lib/id";
