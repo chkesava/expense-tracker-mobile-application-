@@ -457,7 +457,7 @@ export function BorrowingsReceivablesProvider({
     for (const borrowing of borrowings) {
       if (!borrowing.id) continue;
       
-      if (borrowing.totalOutstanding !== undefined && borrowing.totalPaid !== undefined) {
+      if (borrowing.totalOutstanding !== undefined && borrowing.totalPaid !== undefined && (borrowing.interestRate || 0) === 0) {
         // SPENDLY-434: O(1) Fast path
         map.set(borrowing.id, {
           borrowingId: borrowing.id,
@@ -745,7 +745,7 @@ export function BorrowingsReceivablesProvider({
     for (const receivable of receivables) {
       if (!receivable.id) continue;
 
-      if (receivable.outstandingAmount !== undefined && receivable.totalReceived !== undefined) {
+      if (receivable.outstandingAmount !== undefined && receivable.totalReceived !== undefined && (receivable.interestRate || 0) === 0) {
         // SPENDLY-434: O(1) Fast path
         map.set(receivable.id, {
           receivableId: receivable.id,

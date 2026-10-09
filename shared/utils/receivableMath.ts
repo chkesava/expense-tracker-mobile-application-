@@ -354,8 +354,8 @@ export function summarizeReceivables(
       let outstandingAmount = receivable.outstandingAmount;
       let status = receivable.status;
 
-      if (totalReceived === undefined || outstandingAmount === undefined) {
-        // Fallback for non-backfilled records
+      if (totalReceived === undefined || outstandingAmount === undefined || (receivable.interestRate || 0) > 0) {
+        // Fallback for non-backfilled records, or dynamic interest accrual
         const summary = summarizeReceivable(receivable, repayments, asOfDate);
         totalReceived = summary.totalReceived;
         interestAccrued = summary.interestAccrued;

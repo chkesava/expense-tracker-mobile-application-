@@ -339,8 +339,8 @@ export function summarizeBorrowings(
       let repaid = borrowing.totalPaid;
       let status = borrowing.status;
 
-      if (totalOut === undefined || repaid === undefined) {
-        // Fallback for non-backfilled records
+      if (totalOut === undefined || repaid === undefined || (borrowing.interestRate || 0) > 0) {
+        // Fallback for non-backfilled records, or dynamic interest accrual
         const summary = summarizeBorrowing(borrowing, repayments, asOfDate);
         totalOut = summary.totalOutstanding;
         interest = summary.interestAccrued;
