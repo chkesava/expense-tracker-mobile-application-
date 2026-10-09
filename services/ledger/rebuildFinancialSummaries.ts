@@ -87,7 +87,9 @@ export async function rebuildFinancialSummaries(
     const incomes = await fetchCollection<Income>("incomes", "accountId");
     const entries = await fetchCollection<AccountEntry>("accountEntries", "accountId");
     
-    const allTransfers = await fetchCollection<AccountTransfer>("transfers");
+    // SPENDLY-436: the real collection is "accountTransfers" — "transfers"
+    // doesn't exist, so transfers were always silently invisible here.
+    const allTransfers = await fetchCollection<AccountTransfer>("accountTransfers");
     const filteredTransfers = allTransfers.filter(t => t.fromAccountId === account.id || t.toAccountId === account.id);
     
     // SPENDLY-436: these collections don't have a generic "accountId" field —

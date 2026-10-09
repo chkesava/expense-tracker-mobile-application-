@@ -110,7 +110,9 @@ async function rebuildForUser(uid: string) {
     } else {
       const incomes = await fetchCollection(uid, "incomes", "accountId", account.id);
       const entries = await fetchCollection(uid, "accountEntries", "accountId", account.id);
-      const transfers = await fetchCollection(uid, "transfers");
+      // SPENDLY-436: the real collection is "accountTransfers" — "transfers"
+      // doesn't exist, so transfers were always silently invisible here.
+      const transfers = await fetchCollection(uid, "accountTransfers");
       const filteredTransfers = transfers.filter((t: any) => t.fromAccountId === account.id || t.toAccountId === account.id);
       
       // SPENDLY-436: Borrowing/Receivable records relate to an account via

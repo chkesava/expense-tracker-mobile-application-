@@ -46,7 +46,10 @@ async function rebuildForUser(uid: string) {
   
   const collections = [
     "accountTypes", "accounts", "expenses", "incomes", "accountPayments",
-    "accountEntries", "transfers", "borrowings", "borrowingRepayments",
+    // SPENDLY-436: the real collection is "accountTransfers" — "transfers"
+    // doesn't exist, so it always silently returned zero documents and
+    // every transfer was invisible to the account-balance recalculation.
+    "accountEntries", "accountTransfers", "borrowings", "borrowingRepayments",
     "receivables", "receivableRepayments", "creditCardBills",
     "investments", "holdings", "epfEstablishments", "epfContributions",
     "epfTransfers", "epfInterestEntries", "epfReconciliations"
@@ -87,7 +90,7 @@ async function rebuildForUser(uid: string) {
       expenses: data.expenses.filter(e => e.accountId === account.id),
       incomes: data.incomes.filter(i => i.accountId === account.id),
       payments: data.accountPayments.filter(p => p.fromAccountId === account.id || p.toAccountId === account.id),
-      transfers: data.transfers.filter(t => t.fromAccountId === account.id || t.toAccountId === account.id),
+      transfers: data.accountTransfers.filter(t => t.fromAccountId === account.id || t.toAccountId === account.id),
       entries: data.accountEntries.filter(e => e.accountId === account.id),
       // SPENDLY-436: match via each collection's own relation field
       // (creditedAccountId / paymentAccountId / sourceAccountId /
@@ -194,7 +197,7 @@ async function rebuildForUser(uid: string) {
     payments: data.accountPayments,
     bills: data.creditCardBills,
     entries: data.accountEntries,
-    transfers: data.transfers,
+    transfers: data.accountTransfers,
     borrowings: data.borrowings,
     borrowingRepayments: data.borrowingRepayments,
     receivables: data.receivables,
