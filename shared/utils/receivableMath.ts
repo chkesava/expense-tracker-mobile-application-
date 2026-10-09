@@ -219,6 +219,9 @@ export function denormalizedReceivableCacheFields(summary: ReceivableSummary) {
     accruedInterest: summary.interestAccrued,
     principalReceived: summary.principalReceived,
     interestReceived: summary.interestReceived,
+    interestWaived: summary.interestWaived,
+    outstandingPrincipal: summary.outstandingPrincipal,
+    outstandingInterest: summary.outstandingInterest,
     status: summary.status,
     settledDate: summary.settledDate,
   };

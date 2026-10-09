@@ -111,6 +111,9 @@ export interface Receivable {
   accruedInterest?: number;
   principalReceived?: number;
   interestReceived?: number;
+  interestWaived?: number;
+  outstandingPrincipal?: number;
+  outstandingInterest?: number;
   status: ReceivableStatus;
   /** YYYY-MM-DD, set when outstanding reaches zero. */
   settledDate?: string | null;
