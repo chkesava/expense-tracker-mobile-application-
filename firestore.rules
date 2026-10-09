@@ -811,6 +811,10 @@ service cloud.firestore {
       match /accounts/{accountId} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && accountWellFormed();
+
+        match /{subcollection}/{subdoc=**} {
+          allow read, write: if isOwner(uid);
+        }
       }
 
 
@@ -977,7 +981,7 @@ service cloud.firestore {
             'epfReconciliations', 'epfTransferEvents', 'epfTransfers',
             'focus', 'goals', 'meta', 'notifications', 'portfolioSnapshots',
             'profile', 'recurringDismissals', 'spaces', 'stats', 'watchlist',
-            'weight_history'
+            'weight_history', 'financialSummaries'
           ];
       }
     }
