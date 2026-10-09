@@ -9,13 +9,13 @@ describe("reconciliation", () => {
       { id: "e2", accountId: "a1", amount: 50, date: "2026-10-05", category: "Food" } as Expense,
       { id: "e3", accountId: "a1", amount: 200, date: "2026-10-15", category: "Travel" } as Expense,
       { id: "e4", accountId: "a1", amount: 300, date: "2026-11-01", category: "Food" } as Expense,
-      { id: "e5", accountId: "a1", amount: 50, date: "2026-10-20", category: "Food", voidedAt: "now" } as Expense, // voided
+      { id: "e5", accountId: "a1", amount: 50, date: "2026-10-20", category: "Food", deletedAt: "now" } as Expense, // deleted
     ];
 
     const incomes: Income[] = [
       { id: "i1", accountId: "a1", amount: 1000, date: "2026-10-10" } as Income,
       { id: "i2", accountId: "a1", amount: 1000, date: "2026-11-10" } as Income,
-      { id: "i3", accountId: "a1", amount: 500, date: "2026-10-15", voidedAt: "now" } as Income, // voided
+      { id: "i3", accountId: "a1", amount: 500, date: "2026-10-15", deletedAt: "now" } as Income, // deleted
     ];
 
     const dashboards = calculateDashboardSummaries(expenses, incomes);
@@ -24,7 +24,7 @@ describe("reconciliation", () => {
     
     const oct = dashboards.get("2026-10");
     expect(oct).toBeDefined();
-    expect(oct?.totalExpenses).toBe(350); // 100 + 50 + 200
+    expect(oct?.totalExpenses).toBe(350);
     expect(oct?.totalIncome).toBe(1000);
     expect(oct?.categoryTotals).toEqual({
       "Food": 150,
