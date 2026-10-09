@@ -103,15 +103,19 @@ export interface Receivable {
   /** Interest forgiven rather than collected. Never counts as received. */
   waivedInterest?: number;
   /**
-   * Denormalized snapshots for list filtering/sorting only.
-   * `summarizeReceivable` is authoritative for anything displayed.
+   * Authoritative materialized summaries (SPENDLY-434).
+   * Do not recalculate from repayments during normal reads.
    */
   totalReceived?: number;
   outstandingAmount?: number;
   accruedInterest?: number;
+  principalReceived?: number;
+  interestReceived?: number;
   status: ReceivableStatus;
   /** YYYY-MM-DD, set when outstanding reaches zero. */
   settledDate?: string | null;
+  balanceLastRebuiltAt?: unknown;
+  reconciliationStatus?: "healthy" | "variance";
   createdAt?: unknown;
   updatedAt?: unknown;
 }

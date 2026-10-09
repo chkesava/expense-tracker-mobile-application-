@@ -89,15 +89,20 @@ export interface Borrowing {
   /** Account the borrowed money landed in. */
   creditedAccountId?: string | null;
   /**
-   * Denormalized snapshots kept for list filtering and sorting only.
-   * `summarizeBorrowing` is authoritative for anything displayed.
+   * Authoritative materialized summaries (SPENDLY-434).
+   * Do not recalculate from repayments during normal reads.
    */
   outstandingPrincipal?: number;
   accruedInterest?: number;
   totalOutstanding?: number;
+  principalPaid?: number;
+  interestPaid?: number;
+  totalPaid?: number;
   status: BorrowingStatus;
   /** YYYY-MM-DD, set when the borrowing reaches zero outstanding. */
   settledDate?: string | null;
+  balanceLastRebuiltAt?: unknown;
+  reconciliationStatus?: "healthy" | "variance";
   createdAt?: unknown;
   updatedAt?: unknown;
 }

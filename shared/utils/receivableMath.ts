@@ -217,6 +217,8 @@ export function denormalizedReceivableCacheFields(summary: ReceivableSummary) {
     totalReceived: summary.totalReceived,
     outstandingAmount: summary.outstandingAmount,
     accruedInterest: summary.interestAccrued,
+    principalReceived: summary.principalReceived,
+    interestReceived: summary.interestReceived,
     status: summary.status,
     settledDate: summary.settledDate,
   };
@@ -342,36 +344,51 @@ export function summarizeReceivables(
 ): ReceivablePortfolioSummary {
   return receivables.reduce<ReceivablePortfolioSummary>(
     (acc, receivable) => {
-      const summary = summarizeReceivable(receivable, repayments, asOfDate);
-      acc.totalLent = roundMoney(acc.totalLent + summary.originalAmount);
-      acc.totalReceived = roundMoney(acc.totalReceived + summary.totalReceived);
-      acc.totalInterest = roundMoney(acc.totalInterest + summary.interestAccrued);
-      if (summary.status !== "CANCELLED") {
+      // SPENDLY-434: Fast path using materialized fields.
+      let originalAmount = receivable.originalAmount;
+      let totalReceived = receivable.totalReceived;
+      let interestAccrued = receivable.accruedInterest;
+      let outstandingAmount = receivable.outstandingAmount;
+      let status = receivable.status;
+
+      if (totalReceived === undefined || outstandingAmount === undefined) {
+        // Fallback for non-backfilled records
+        const summary = summarizeReceivable(receivable, repayments, asOfDate);
+        totalReceived = summary.totalReceived;
+        interestAccrued = summary.interestAccrued;
+        outstandingAmount = summary.outstandingAmount;
+        status = summary.status;
+      }
+
+      acc.totalLent = roundMoney(acc.totalLent + originalAmount);
+      acc.totalReceived = roundMoney(acc.totalReceived + (totalReceived || 0));
+      acc.totalInterest = roundMoney(acc.totalInterest + (interestAccrued || 0));
+      if (status !== "CANCELLED") {
         acc.totalOutstanding = roundMoney(
-          acc.totalOutstanding + summary.outstandingAmount
+          acc.totalOutstanding + (outstandingAmount || 0)
         );
       }
-      if (summary.status === "FULLY_SETTLED") {
+      if (status === "FULLY_SETTLED") {
         acc.settledCount += 1;
-      } else if (summary.status === "CANCELLED") {
+      } else if (status === "CANCELLED") {
         acc.cancelledCount += 1;
       } else {
         acc.activeCount += 1;
       }
-      if (summary.status === "OVERDUE") {
+      if (status === "OVERDUE") {
         acc.overdueCount += 1;
         acc.overdueAmount = roundMoney(
-          acc.overdueAmount + summary.outstandingAmount
+          acc.overdueAmount + (outstandingAmount || 0)
         );
       } else if (
-        summary.status !== "CANCELLED" &&
-        summary.status !== "FULLY_SETTLED" &&
+        status !== "CANCELLED" &&
+        status !== "FULLY_SETTLED" &&
         isDueInMonthOf(receivable.dueDate, asOfDate)
       ) {
         // Overdue is its own bucket, so this stays "still to come this month"
         // rather than double-counting money that is already late.
         acc.dueThisMonthAmount = roundMoney(
-          acc.dueThisMonthAmount + summary.outstandingAmount
+          acc.dueThisMonthAmount + (outstandingAmount || 0)
         );
       }
       return acc;

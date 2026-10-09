@@ -456,7 +456,27 @@ export function BorrowingsReceivablesProvider({
     const map = new Map<string, BorrowingSummary>();
     for (const borrowing of borrowings) {
       if (!borrowing.id) continue;
-      map.set(borrowing.id, summarizeBorrowing(borrowing, borrowingRepayments, today));
+      
+      if (borrowing.totalOutstanding !== undefined && borrowing.totalPaid !== undefined) {
+        // SPENDLY-434: O(1) Fast path
+        map.set(borrowing.id, {
+          borrowingId: borrowing.id,
+          principalAmount: borrowing.principalAmount,
+          principalPaid: borrowing.principalPaid ?? 0,
+          outstandingPrincipal: borrowing.outstandingPrincipal ?? 0,
+          interestAccrued: borrowing.accruedInterest ?? 0,
+          interestPaid: borrowing.interestPaid ?? 0,
+          outstandingInterest: (borrowing.accruedInterest ?? 0) - (borrowing.interestPaid ?? 0),
+          totalPaid: borrowing.totalPaid ?? 0,
+          totalOutstanding: borrowing.totalOutstanding ?? 0,
+          status: borrowing.status,
+          settledDate: borrowing.settledDate ?? null,
+          isOverdue: Boolean(borrowing.dueDate && today > borrowing.dueDate && borrowing.totalOutstanding > 0),
+          repaymentCount: 0 // Cannot be known without reading repayments, but unused on main list
+        });
+      } else {
+        map.set(borrowing.id, summarizeBorrowing(borrowing, borrowingRepayments, today));
+      }
     }
     return map;
   }, [borrowings, borrowingRepayments, today]);
@@ -724,10 +744,28 @@ export function BorrowingsReceivablesProvider({
     const map = new Map<string, ReceivableSummary>();
     for (const receivable of receivables) {
       if (!receivable.id) continue;
-      map.set(
-        receivable.id,
-        summarizeReceivable(receivable, receivableRepayments, today)
-      );
+
+      if (receivable.outstandingAmount !== undefined && receivable.totalReceived !== undefined) {
+        // SPENDLY-434: O(1) Fast path
+        map.set(receivable.id, {
+          receivableId: receivable.id,
+          originalAmount: receivable.originalAmount,
+          principalReceived: receivable.principalReceived ?? 0,
+          interestReceived: receivable.interestReceived ?? 0,
+          totalReceived: receivable.totalReceived ?? 0,
+          outstandingAmount: receivable.outstandingAmount ?? 0,
+          interestAccrued: receivable.accruedInterest ?? 0,
+          status: receivable.status,
+          settledDate: receivable.settledDate ?? null,
+          isOverdue: Boolean(receivable.dueDate && today > receivable.dueDate && receivable.outstandingAmount > 0),
+          repaymentCount: 0
+        });
+      } else {
+        map.set(
+          receivable.id,
+          summarizeReceivable(receivable, receivableRepayments, today)
+        );
+      }
     }
     return map;
   }, [receivables, receivableRepayments, today]);
