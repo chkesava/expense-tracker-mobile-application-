@@ -7,7 +7,6 @@ import type { Receivable, ReceivableRepayment } from "../types/receivable";
 import { composeNetWorth } from "./netWorth";
 import { epfPortfolioSummary } from "../features/epf/utils/portfolio";
 import type { EpfEstablishment, EpfContribution, EpfTransfer, EpfInterestEntry, EpfReconciliation } from "../features/epf/types";
-import { parseLocalDate } from "./dates";
 
 export function calculateAccountBalances(inputs: {
   account: Account;
@@ -72,7 +71,7 @@ export function calculateEpfSummary(inputs: {
     employerContributionTotal: summary.employerEpfShare,
     interestTotal: summary.interest,
     adjustmentsTotal: summary.adjustments,
-    lastCreditPeriod: summary.lastReconciledAt, // Or compute from contributions
+    lastCreditPeriod: summary.lastReconciledAt, 
   };
 }
 
@@ -98,7 +97,7 @@ export function calculateDashboardSummaries(
   };
 
   for (const e of expenses) {
-    if (e.voidedAt) continue;
+    if (e.deletedAt) continue;
     const p = getPeriod(e.date);
     const m = initPeriod(p);
     m.totalExpenses! += e.amount;
@@ -109,7 +108,7 @@ export function calculateDashboardSummaries(
   }
 
   for (const i of incomes) {
-    if (i.voidedAt) continue;
+    if (i.deletedAt) continue;
     const p = getPeriod(i.date);
     const m = initPeriod(p);
     m.totalIncome! += i.amount;
