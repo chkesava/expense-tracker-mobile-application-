@@ -205,7 +205,7 @@ describe("dashboardWidgets utilities", () => {
         },
       ];
 
-      const activeBudgets = computeActiveCategoryBudgets(categoryBudgets, expenses, "2026-10");
+      const activeBudgets = computeActiveCategoryBudgets(categoryBudgets, { "Food": 3500, "Food::Dining Out": 1500, "Travel": 3200 }, "2026-10");
 
       expect(activeBudgets).toHaveLength(3);
 
@@ -247,7 +247,7 @@ describe("dashboardWidgets utilities", () => {
         },
       ];
 
-      const activeBudgets = computeActiveCategoryBudgets(categoryBudgets, expenses, "2026-10");
+      const activeBudgets = computeActiveCategoryBudgets(categoryBudgets, { "Food": 4000 }, "2026-10");
       const food = activeBudgets.find((b) => b.id === "b1");
       expect(food?.spent).toBe(4000);
       expect(food?.pct).toBe(80);

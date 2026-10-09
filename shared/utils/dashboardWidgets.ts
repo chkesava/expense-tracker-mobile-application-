@@ -194,32 +194,17 @@ export interface CategoryBudgetAlertItem {
  */
 export function computeActiveCategoryBudgets(
   categoryBudgets: { id: string; category: string; subcategory?: string; amount: number; month: string }[],
-  monthlyExpenses: Expense[],
+  categoryTotals: Record<string, number>,
   activeMonth: string
 ): CategoryBudgetAlertItem[] {
   const monthBudgets = categoryBudgets.filter((b) => b.month === activeMonth);
   if (monthBudgets.length === 0) return [];
 
-  const spendingByCat = new Map<string, number>();
-  for (let i = 0; i < monthlyExpenses.length; i++) {
-    const e = monthlyExpenses[i];
-    const key = e.subcategory
-      ? `${e.category}::${e.subcategory}`
-      : e.category;
-    spendingByCat.set(key, (spendingByCat.get(key) || 0) + (e.amount || 0));
-    if (e.subcategory) {
-      spendingByCat.set(
-        e.category,
-        (spendingByCat.get(e.category) || 0) + (e.amount || 0)
-      );
-    }
-  }
-
   return monthBudgets.map((b) => {
     const key = b.subcategory
       ? `${b.category}::${b.subcategory}`
       : b.category;
-    const spent = spendingByCat.get(key) || 0;
+    const spent = categoryTotals[key] || 0;
     const pct =
       b.amount > 0 ? Math.min(100, Math.round((spent / b.amount) * 100)) : 0;
     return {

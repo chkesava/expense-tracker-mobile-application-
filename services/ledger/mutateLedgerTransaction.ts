@@ -308,7 +308,8 @@ export async function updateExpense(
       });
       applyTripIncrement(ops, db, owner, data, delta);
       const balOps = buildAccountBalanceOps(owner, balanceDeltas);
-      ops.push(...balOps);
+      const { computeDashboardExpenseUpdateOps } = require("@/shared/utils/dashboardMutations");
+      ops.push(...balOps, ...computeDashboardExpenseUpdateOps(owner, before, after));
       return ops;
     })(),
     { label: "expense" }
@@ -384,7 +385,8 @@ export async function updateIncome(
         reason: options?.reason,
       });
       const balOps = buildAccountBalanceOps(owner, balanceDeltas);
-      ops.push(...balOps);
+      const { computeDashboardIncomeUpdateOps } = require("@/shared/utils/dashboardMutations");
+      ops.push(...balOps, ...computeDashboardIncomeUpdateOps(owner, before, after));
       return ops;
     })(),
     { label: "income" }
@@ -445,7 +447,8 @@ async function softDeleteRow(
         applyTripIncrement(ops, db, owner, data, -before.amount);
       }
       const balOps = buildAccountBalanceOps(owner, balanceDeltas);
-      ops.push(...balOps);
+      const { computeDashboardDeleteOps } = require("@/shared/utils/dashboardMutations");
+      ops.push(...balOps, ...computeDashboardDeleteOps(owner, before, kind));
       return ops;
     })(),
     { label: "transaction deletion" }
@@ -512,7 +515,8 @@ async function restoreRow(
         applyTripIncrement(ops, db, owner, data, before.amount);
       }
       const balOps = buildAccountBalanceOps(owner, balanceDeltas);
-      ops.push(...balOps);
+      const { computeDashboardRestoreOps } = require("@/shared/utils/dashboardMutations");
+      ops.push(...balOps, ...computeDashboardRestoreOps(owner, before, kind));
       return ops;
     })(),
     { label: "transaction restore" }

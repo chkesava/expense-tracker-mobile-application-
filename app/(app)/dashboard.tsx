@@ -28,8 +28,9 @@ import { PageShell } from "@/components/layout/PageShell";
 import { sampleScrollFps, perfEvent, perfMark } from "@/lib/perf";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useAccounts } from "@/hooks/useAccounts";
-import { useExpenses } from "@/hooks/useExpenses";
-import { useIncomes } from "@/hooks/useIncomes";
+import { useDashboardSummary } from "@/hooks/useDashboardSummary";
+import { useDashboardCashFlow } from "@/hooks/useDashboardCashFlow";
+import { useRecentExpenses } from "@/hooks/useRecentExpenses";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
 import { useSmsReviewInbox } from "@/hooks/useSmsReviewInbox";
 import { useAuth } from "@/providers/AuthProvider";
@@ -100,14 +101,15 @@ export default function DashboardScreen() {
   const { setIsAddExpenseOpen, setIsAddSheetOpen, setEditingExpense } =
     useModalActions();
 
-  const {
-    expenses,
-    loading: expensesLoading,
-    complete: expensesComplete,
-    error: financeError,
-    retry,
-  } = useExpenses();
-  const { incomes, loading: incomesLoading, complete: incomesComplete } = useIncomes();
+  const activeMonth = globalMonth || currentMonthKey(settings.timezone);
+  const previousMonth = getPreviousMonthKey(activeMonth);
+  const todayKey = formatDateKey(new Date(), settings.timezone);
+
+  const { summary: activeSummary, loading: activeLoading, error: financeError } = useDashboardSummary(activeMonth);
+  const { summary: previousSummary } = useDashboardSummary(previousMonth);
+  const { expenses: recentExpenses, loading: recentLoading } = useRecentExpenses(5);
+  const { summaries: cashFlowSummaries } = useDashboardCashFlow(activeMonth, 6);
+
   const { count: inboxCount } = useSmsReviewInbox();
   const { accounts, loading: accountsLoading } = useAccounts();
   const { subscriptions } = useSubscriptions();
@@ -119,58 +121,28 @@ export default function DashboardScreen() {
   }, [markScreenVisited]);
 
   const [refreshing, setRefreshing] = useState(false);
-  const activeMonth = globalMonth || currentMonthKey(settings.timezone);
-  const previousMonth = getPreviousMonthKey(activeMonth);
-  const todayKey = formatDateKey(new Date(), settings.timezone);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
-    retry();
-  }, [retry]);
+    setTimeout(() => setRefreshing(false), 500);
+  }, []);
 
   const dataReadyEmittedRef = useRef(false);
   const hydratedEmittedRef = useRef(false);
   useEffect(() => {
-    if (!expensesLoading && !incomesLoading && !accountsLoading) {
+    if (!activeLoading && !accountsLoading) {
       setRefreshing(false);
       if (!dataReadyEmittedRef.current) {
         dataReadyEmittedRef.current = true;
         perfMark("dashboard_data_ready");
       }
     }
-  }, [expensesLoading, incomesLoading, accountsLoading]);
+  }, [activeLoading, accountsLoading]);
 
-  const monthlyExpenses = useMemo(() => {
-    return expenses.filter((e) => isInMonth(e, activeMonth));
-  }, [expenses, activeMonth]);
-
-  const monthlyIncomes = useMemo(() => {
-    return incomes.filter((i) => isInMonth(i, activeMonth));
-  }, [incomes, activeMonth]);
-
-  const previousExpenses = useMemo(() => {
-    return expenses.filter((e) => isInMonth(e, previousMonth));
-  }, [expenses, previousMonth]);
-
-  const previousIncomes = useMemo(() => {
-    return incomes.filter((i) => isInMonth(i, previousMonth));
-  }, [incomes, previousMonth]);
-
-  const monthlySpent = useMemo(() => {
-    return monthlyExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-  }, [monthlyExpenses]);
-
-  const monthlyIncome = useMemo(() => {
-    return monthlyIncomes.reduce((sum, i) => sum + (i.amount || 0), 0);
-  }, [monthlyIncomes]);
-
-  const previousSpent = useMemo(() => {
-    return previousExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-  }, [previousExpenses]);
-
-  const previousIncome = useMemo(() => {
-    return previousIncomes.reduce((sum, i) => sum + (i.amount || 0), 0);
-  }, [previousIncomes]);
+  const monthlySpent = activeSummary?.totalExpenses || 0;
+  const monthlyIncome = activeSummary?.totalIncome || 0;
+  const previousSpent = previousSummary?.totalExpenses || 0;
+  const previousIncome = previousSummary?.totalIncome || 0;
 
   const recurringDueItems = useMemo(
     () =>
@@ -209,18 +181,22 @@ export default function DashboardScreen() {
 
   const cashFlow = useMemo(() => {
     if (!isOverviewEnabled) return [];
-    const flow = cashFlowByMonth(expenses, incomes, activeMonth, 6);
-    // SPENDLY-413: the ledger is permanently staged to a recent-first page
-    // (SPENDLY-409) — trim any leading months this session's data can't
-    // vouch for instead of showing them as a fabricated zero.
-    const cutoff = oldestTrustedCashFlowMonth(
-      expenses,
-      incomes,
-      expensesComplete,
-      incomesComplete
-    );
-    return trimToTrustedCashFlow(flow, cutoff);
-  }, [isOverviewEnabled, expenses, incomes, expensesComplete, incomesComplete, activeMonth]);
+    
+    const result = [];
+    let curMonth = activeMonth;
+    for (let i = 0; i < 6; i++) {
+       const summary = cashFlowSummaries.find(s => s.period === curMonth);
+       result.unshift({
+         month: curMonth,
+         income: summary?.totalIncome || 0,
+         spent: summary?.totalExpenses || 0,
+         net: (summary?.totalIncome || 0) - (summary?.totalExpenses || 0)
+       });
+       curMonth = getPreviousMonthKey(curMonth);
+    }
+    
+    return result;
+  }, [isOverviewEnabled, cashFlowSummaries, activeMonth]);
 
   const orderedWidgetIds = useMemo(() => {
     return getOrderedDashboardWidgets(
@@ -286,7 +262,7 @@ export default function DashboardScreen() {
               monthlyBudget={settings.monthlyBudget}
               monthlySpent={monthlySpent}
               currency={displayCurrency}
-              monthlyExpenses={monthlyExpenses}
+              categoryTotals={activeSummary?.categoryTotals || {}}
               activeMonth={activeMonth}
               budget={monthBudget}
             />
@@ -296,7 +272,7 @@ export default function DashboardScreen() {
           return (
             <TopCategoriesWidget
               key="topCategories"
-              expenses={monthlyExpenses}
+              categoryTotals={activeSummary?.categoryTotals || null}
               currency={displayCurrency}
               activeMonth={activeMonth}
             />
@@ -306,9 +282,9 @@ export default function DashboardScreen() {
           return (
             <RecentActivityWidget
               key="recentActivity"
-              expenses={expenses}
+              expenses={recentExpenses}
               currency={displayCurrency}
-              loading={expensesLoading && expenses.length === 0}
+              loading={recentLoading && recentExpenses.length === 0}
               onEditExpense={handleEditExpense}
               onViewAll={handleViewLedger}
             />
@@ -340,7 +316,7 @@ export default function DashboardScreen() {
               key="focus"
               budget={monthBudget}
               currency={displayCurrency}
-              loading={expensesLoading && accountsLoading && accounts.length === 0}
+              loading={activeLoading && accountsLoading && accounts.length === 0}
             />
           );
 
@@ -507,11 +483,10 @@ export default function DashboardScreen() {
       <WelcomeScreen />
       <SetupChecklistWidget />
 
-      {financeError && expenses.length === 0 && accounts.length === 0 ? (
+      {financeError && recentExpenses.length === 0 && accounts.length === 0 ? (
         <ErrorState
-          title="Couldn't load your transactions"
+          title="Couldn't load your dashboard"
           description={financeError.message}
-          onRetry={financeError.retryable ? retry : undefined}
         />
       ) : (
         <View style={styles.widgetsGrid}>
@@ -521,7 +496,7 @@ export default function DashboardScreen() {
             previousSpent={previousSpent}
             previousIncome={previousIncome}
             currency={displayCurrency}
-            loading={expensesLoading && monthlySpent === 0 && monthlyIncome === 0}
+            loading={activeLoading && monthlySpent === 0 && monthlyIncome === 0}
             monthLabel={activeMonthChipLabel}
             onOpenMonthPicker={handleOpenMonthPicker}
           />
@@ -533,7 +508,7 @@ export default function DashboardScreen() {
                 <View style={styles.quickInsightsSlot}>
                   <LazyMount delayMs={120}>
                     <SmartInsightsWidget
-                      expenses={expenses}
+                      expenses={recentExpenses}
                       monthlyBudget={settings.monthlyBudget}
                       currency={displayCurrency}
                       todayKey={todayKey}
@@ -546,7 +521,7 @@ export default function DashboardScreen() {
           {displayWidgetIds.length === 0 ? (
             <LazyMount delayMs={120}>
               <SmartInsightsWidget
-                expenses={expenses}
+                expenses={recentExpenses}
                 monthlyBudget={settings.monthlyBudget}
                 currency={displayCurrency}
                 todayKey={todayKey}

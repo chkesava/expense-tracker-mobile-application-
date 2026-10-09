@@ -22,7 +22,7 @@ import { computeTopCategories } from "@/shared/utils/dashboardWidgets";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export interface TopCategoriesWidgetProps {
-  expenses: Expense[];
+  categoryTotals: Record<string, number> | null;
   currency: string;
   activeMonth: string;
 }
@@ -65,7 +65,7 @@ function AnimatedCategoryBar({
 }
 
 export const TopCategoriesWidget = React.memo(function TopCategoriesWidget({
-  expenses,
+  categoryTotals,
   currency,
   activeMonth,
 }: TopCategoriesWidgetProps) {
@@ -73,8 +73,22 @@ export const TopCategoriesWidget = React.memo(function TopCategoriesWidget({
   const surfaces = useSurfaces();
 
   const { categories, totalSpent } = useMemo(() => {
-    return computeTopCategories(expenses, 5);
-  }, [expenses]);
+    if (!categoryTotals) return { categories: [], totalSpent: 0 };
+    
+    let total = 0;
+    const catArray = Object.entries(categoryTotals).map(([category, amount]) => {
+      total += amount;
+      return { category, amount };
+    });
+    
+    const sorted = catArray.sort((a, b) => b.amount - a.amount).slice(0, 5);
+    const result = sorted.map(c => ({
+      ...c,
+      percentage: total > 0 ? (c.amount / total) * 100 : 0
+    }));
+    
+    return { categories: result, totalSpent: total };
+  }, [categoryTotals]);
 
   /** Darkest = largest share; ramp carries no positive/negative meaning. */
   const barColors = categoryRamp(theme.colors);

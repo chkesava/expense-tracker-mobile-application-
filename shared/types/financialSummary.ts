@@ -86,3 +86,24 @@ export interface EpfSummary {
   calculatedAt: string | Timestamp;
   summaryVersion: number;
 }
+
+
+/**
+ * Materialized period totals for dashboard and insights screens.
+ * Stored at: users/{uid}/financialSummaries/dashboard_{YYYY-MM}
+ */
+export interface DashboardPeriodSummary {
+  /** YYYY-MM representing the period */
+  period: string;
+  /** Total expenses in this period */
+  totalExpenses: number;
+  /** Total income in this period */
+  totalIncome: number;
+  /** Top spending categories with their aggregated amounts */
+  categoryTotals: Record<string, number>;
+  /** Total counts to help with telemetry and validation */
+  transactionCount: number;
+  /** Schema version */
+  summaryVersion: number;
+  calculatedAt: string | Timestamp;
+}
