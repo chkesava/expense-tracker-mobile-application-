@@ -64,21 +64,23 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
     }
   };
 
-  const updateGoalProgress = async (id: string, currentAmount: number) => {
+  const addGoalContribution = async (id: string, amountDelta: number) => {
     const db = getFirestoreDb();
-    if (!uid || !db) return;
+    if (!uid || !db || !amountDelta) return;
 
     try {
+      // SPENDLY-433: Use atomic increments for materialized goals
+      const { increment } = await import("firebase/firestore");
       const outcome = await commitWrite(
         () =>
           updateDoc(doc(db, "users", uid, "financialGoals", id), {
-            currentAmount: Number(currentAmount) || 0,
+            currentAmount: increment(Number(amountDelta)),
           }),
-        { label: "goal" }
+        { label: "goal contribution" }
       );
       toast.success(writeSavedMessage(outcome, "Goal progress updated"));
     } catch (err) {
-      logError("financialGoals.updateGoal", err);
+      logError("financialGoals.addGoalContribution", err);
       toast.error("Failed to update goal");
     }
   };
@@ -99,5 +101,5 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
     }
   };
 
-  return { goals, loading, addGoal, updateGoalProgress, deleteGoal, error, retry };
+  return { goals, loading, addGoal, addGoalContribution, deleteGoal, error, retry };
 };
