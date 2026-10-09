@@ -1,6 +1,5 @@
-import { doc, increment, serverTimestamp } from "firebase/firestore";
-import type { MutationOp } from "@/lib/commitMutations";
-import { getFirestoreDb } from "@/lib/firebase";
+import { increment, serverTimestamp } from "firebase/firestore";
+import type { MutationOp } from "@/shared/types/mutations";
 import { buildNetWorthOps } from "./netWorthMutations";
 
 export type BalanceDeltaParams = {
@@ -18,8 +17,6 @@ export function buildAccountBalanceOps(
   uid: string,
   deltas: BalanceDeltaParams[]
 ): MutationOp[] {
-  const db = getFirestoreDb();
-  if (!db) return [];
   
   const aggregated = new Map<string, BalanceDeltaParams>();
   for (const d of deltas) {
@@ -41,7 +38,7 @@ export function buildAccountBalanceOps(
   for (const d of aggregated.values()) {
     if (d.amountDelta === 0) continue;
 
-    const ref = doc(db, "users", uid, "accounts", d.accountId);
+    const ref = { path: `users/${uid}/accounts/${d.accountId}` };
     
     if (d.isCreditCard) {
       const updateData: any = {

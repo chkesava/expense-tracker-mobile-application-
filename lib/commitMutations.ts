@@ -41,12 +41,7 @@ import {
   type WriteOutboxEntry,
 } from "@/lib/writeOutbox";
 
-export type MutationRef = { path: string };
-
-export type MutationOp =
-  | { op: "set"; ref: MutationRef; data: object; merge?: boolean }
-  | { op: "update"; ref: MutationRef; data: object }
-  | { op: "delete"; ref: MutationRef };
+import type { MutationOp, MutationRef } from "@/shared/types/mutations";
 
 let persistOverride: boolean | null = null;
 

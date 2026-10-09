@@ -1,7 +1,6 @@
 import { buildNetWorthOps } from "./netWorthMutations";
-import { doc, increment, serverTimestamp } from "firebase/firestore";
-import type { MutationOp } from "@/lib/commitMutations";
-import { getFirestoreDb } from "@/lib/firebase";
+import { increment, serverTimestamp } from "firebase/firestore";
+import type { MutationOp } from "@/shared/types/mutations";
 
 export type InvestmentSummaryDelta = {
   investmentCashDelta?: number;
@@ -18,8 +17,6 @@ export function buildInvestmentSummaryOps(
   uid: string,
   deltas: InvestmentSummaryDelta
 ): MutationOp[] {
-  const db = getFirestoreDb();
-  if (!db) return [];
 
   if (
     !deltas.investmentCashDelta &&
@@ -41,7 +38,7 @@ export function buildInvestmentSummaryOps(
   if (deltas.holdingCountDelta) updateData.holdingCount = increment(deltas.holdingCountDelta);
   if (deltas.fdPrincipalDelta) updateData.fdPrincipalTotal = increment(deltas.fdPrincipalDelta);
 
-  const ref = doc(db, "users", uid, "financialSummaries", "investments");
+  const ref = { path: `users/${uid}/financialSummaries/${"investments"}` };
   
   const ops: MutationOp[] = [
     {

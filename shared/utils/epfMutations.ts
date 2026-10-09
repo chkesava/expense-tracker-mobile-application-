@@ -1,7 +1,6 @@
 import { buildNetWorthOps } from "./netWorthMutations";
-import { doc, increment, serverTimestamp } from "firebase/firestore";
-import type { MutationOp } from "@/lib/commitMutations";
-import { getFirestoreDb } from "@/lib/firebase";
+import { increment, serverTimestamp } from "firebase/firestore";
+import type { MutationOp } from "@/shared/types/mutations";
 
 export type EpfSummaryDelta = {
   employeeContributionDelta?: number;
@@ -19,8 +18,6 @@ export function buildEpfSummaryOps(
   uid: string,
   deltas: EpfSummaryDelta
 ): MutationOp[] {
-  const db = getFirestoreDb();
-  if (!db) return [];
 
   const empDelta = deltas.employeeContributionDelta || 0;
   const emrDelta = deltas.employerContributionDelta || 0;
@@ -48,7 +45,7 @@ export function buildEpfSummaryOps(
     updateData.lastCreditPeriod = deltas.creditPeriod;
   }
 
-  const ref = doc(db, "users", uid, "financialSummaries", "epf");
+  const ref = { path: `users/${uid}/financialSummaries/${"epf"}` };
   
   const ops: MutationOp[] = [
     {

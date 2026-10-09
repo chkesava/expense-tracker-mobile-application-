@@ -1,6 +1,5 @@
-import { doc, increment, serverTimestamp } from "firebase/firestore";
-import type { MutationOp } from "@/lib/commitMutations";
-import { getFirestoreDb } from "@/lib/firebase";
+import { increment, serverTimestamp } from "firebase/firestore";
+import type { MutationOp } from "@/shared/types/mutations";
 import type { NetWorthSummary } from "@/shared/types/financialSummary";
 
 export type NetWorthDelta = {
@@ -24,8 +23,6 @@ export function buildNetWorthOps(
   uid: string,
   deltas: NetWorthDelta
 ): MutationOp[] {
-  const db = getFirestoreDb();
-  if (!db) return [];
 
   // Compute the total asset change
   const assetDelta =
@@ -80,7 +77,7 @@ export function buildNetWorthOps(
   if (deltas.borrowingLiabilities) updateData.borrowingLiabilities = increment(deltas.borrowingLiabilities);
 
   // Use { merge: true } or "set" op with merge because the document might not exist on a brand new account
-  const ref = doc(db, "users", uid, "financialSummaries", "netWorth");
+  const ref = { path: `users/${uid}/financialSummaries/${"netWorth"}` };
   
   return [
     {
