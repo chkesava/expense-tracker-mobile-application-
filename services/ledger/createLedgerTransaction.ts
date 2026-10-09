@@ -1,3 +1,4 @@
+import { buildDashboardSummaryOps } from "@/shared/utils/dashboardMutations";
 /**
  * Shared Firestore create for expenses and incomes.
  * Used by ExpenseForm and SMS import — one write shape, one collection path.
@@ -147,7 +148,7 @@ export async function createExpense(
     { accountId: payload.accountId, amountDelta: -payload.amount, isCreditCard, oldBalance, oldOutstanding }
   ]) : [];
 
-  const { buildDashboardSummaryOps } = require("@/shared/utils/dashboardMutations");
+  
   const dashboardOps = buildDashboardSummaryOps(uid, payload.month, {
     expenseDelta: payload.amount,
     transactionCountDelta: 1,
@@ -216,7 +217,7 @@ export async function createIncome(
     { accountId: payload.accountId, amountDelta: payload.amount, isCreditCard, oldBalance, oldOutstanding }
   ]) : [];
 
-  const { buildDashboardSummaryOps } = require("@/shared/utils/dashboardMutations");
+  
   const dashboardOps = buildDashboardSummaryOps(uid, payload.month, {
     incomeDelta: payload.amount,
     transactionCountDelta: 1,

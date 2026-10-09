@@ -437,10 +437,7 @@ export function buildCreditCardLedger(
     // the purchase and the close matched no statement once the cycle closed,
     // became carried credit, and was dropped — the generated bill silently
     // went back to gross spend.
-    const settles = (statement: WorkingStatement) =>
-      isCashback
-        ? payment.date >= statement.periodStart && payment.date <= statement.periodEnd
-        : statement.statementDate <= payment.date;
+    const settles = (statement: WorkingStatement) => statement.statementDate <= payment.date || (isCashback && payment.date >= statement.periodStart && payment.date <= statement.periodEnd);
     if (payment.id && linkedPaymentIds.has(payment.id)) {
       for (const statement of working) {
         if (left <= 0) break;

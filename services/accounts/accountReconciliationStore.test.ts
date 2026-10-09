@@ -99,11 +99,12 @@ beforeEach(() => {
 });
 
 describe("saveAccountReconciliation", () => {
-  it("writes exactly one document, to the reconciliations collection", async () => {
+  it("writes exactly two documents, one to reconciliations and one to account", async () => {
     await saveAccountReconciliation(UID, input());
 
-    expect(writes).toHaveLength(1);
+    expect(writes).toHaveLength(2);
     expect(writes[0].path).toBe("users/u1/accountReconciliations");
+    expect(writes[1].path).toBe("users/u1/accounts/a1");
   });
 
   it("never writes to the ledger", async () => {
@@ -114,7 +115,6 @@ describe("saveAccountReconciliation", () => {
       expect(write.path).not.toContain("accountEntries");
       expect(write.path).not.toContain("expenses");
       expect(write.path).not.toContain("incomes");
-      expect(write.path).not.toContain("accounts/");
     }
   });
 
@@ -139,8 +139,9 @@ describe("saveAccountReconciliation", () => {
     await saveAccountReconciliation(UID, input());
     expect(writes[0].data).not.toHaveProperty("adjustmentEntryId");
 
+    writes.length = 0;
     await saveAccountReconciliation(UID, input({ adjustmentEntryId: "entry-9" }));
-    expect(writes[1].data.adjustmentEntryId).toBe("entry-9");
+    expect(writes[0].data.adjustmentEntryId).toBe("entry-9");
   });
 
   it("rounds the money it stores", async () => {

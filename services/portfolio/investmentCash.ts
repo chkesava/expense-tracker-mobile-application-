@@ -1,3 +1,4 @@
+import { buildInvestmentSummaryOps } from "@/shared/utils/investmentMutations";
 /**
  * Writes to the Investment Cash ledger.
  *
@@ -228,7 +229,7 @@ export async function recordInvestmentCashEntry(
       { merge: true }
     );
     if (delta !== 0) {
-      const { buildInvestmentSummaryOps } = require("@/shared/utils/investmentMutations");
+      
       const ops = buildInvestmentSummaryOps(owner, { investmentCashDelta: delta });
       for (const op of ops) if (op.op === "set" && op.merge) batch.set(doc(db, (op.ref as any).path), op.data, { merge: true });
     }
@@ -334,7 +335,7 @@ export async function transferInvestmentCashWithBank(
       { merge: true }
     );
     if (delta !== 0) {
-      const { buildInvestmentSummaryOps } = require("@/shared/utils/investmentMutations");
+      
       const ops = buildInvestmentSummaryOps(owner, { investmentCashDelta: delta });
       for (const op of ops) if (op.op === "set" && op.merge) batch.set(doc(db, (op.ref as any).path), op.data, { merge: true });
     }
@@ -474,7 +475,7 @@ export async function createHoldingWithCash(
     }
 
     const investedDelta = quantity > 0 && price > 0 ? quantity * price : 0;
-    const { buildInvestmentSummaryOps } = require("@/shared/utils/investmentMutations");
+    
     const ops = buildInvestmentSummaryOps(owner, { investmentCashDelta: entryId ? -amount : 0, investedValueDelta: investedDelta, holdingCountDelta: 1 });
     for (const op of ops) if (op.op === "set" && op.merge) batch.set(doc(db, (op.ref as any).path), op.data, { merge: true });
 
@@ -915,7 +916,7 @@ export async function executeMockBuy(
         settingsCacheWrite(settings, settingsSnap.exists(), -cost, new Date()),
         { merge: true }
       );
-      const { buildInvestmentSummaryOps } = require("@/shared/utils/investmentMutations");
+      
       const ops = buildInvestmentSummaryOps(owner, { investmentCashDelta: -cost, investedValueDelta: cost, holdingCountDelta: nextQuantity > 0 && Number(holding.quantity || 0) === 0 ? 1 : 0 });
       for (const op of ops) if (op.op === "set" && op.merge) batch.set(doc(db, (op.ref as any).path), op.data, { merge: true });
     }
@@ -1012,7 +1013,7 @@ export async function executeMockSell(
       ),
       { merge: true }
     );
-    const { buildInvestmentSummaryOps } = require("@/shared/utils/investmentMutations");
+    
     const ops = buildInvestmentSummaryOps(owner, { investmentCashDelta: proceeds, investedValueDelta: -roundMoney(input.quantity * Number(holding.averageBuyPrice || 0)), holdingCountDelta: nextQuantity === 0 ? -1 : 0 });
     for (const op of ops) if (op.op === "set" && op.merge) batch.set(doc(db, (op.ref as any).path), op.data, { merge: true });
     return batch.commit();

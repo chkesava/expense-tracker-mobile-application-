@@ -12,8 +12,8 @@ const typeMap = new Map([
   ["t-other", "Broker Float"],
 ]);
 
-const account = (id: string, typeId: string, openingBalance: number, currency?: string) =>
-  ({ id, name: id, typeId, openingBalance, currency, createdAt: "2026-01-01T00:00:00.000Z" }) as unknown as NetWorthInputs["accounts"][number];
+const account = (id: string, typeId: string, balance: number, currency?: string) =>
+  ({ id, name: id, typeId, openingBalance: balance, currentBalance: balance, currentOutstanding: balance, currency, createdAt: "2026-01-01T00:00:00.000Z" }) as unknown as NetWorthInputs["accounts"][number];
 
 const fd = (id: string, principal: number, status = "active") =>
   ({ id, name: id, kind: "fixed_deposit", principal, startDate: "2026-09-01", annualInterestRate: 0, status }) as unknown as NetWorthInputs["investments"][number];

@@ -1,3 +1,4 @@
+import { buildNetWorthOps } from "./netWorthMutations";
 import { doc, increment, serverTimestamp } from "firebase/firestore";
 import type { MutationOp } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";
@@ -52,7 +53,6 @@ export function buildInvestmentSummaryOps(
   ];
 
   if (deltas.investmentCashDelta || deltas.fdPrincipalDelta) {
-    const { buildNetWorthOps } = require("./netWorthMutations");
     ops.push(...buildNetWorthOps(uid, {
       investmentCash: deltas.investmentCashDelta,
       fixedDepositTotal: deltas.fdPrincipalDelta,
