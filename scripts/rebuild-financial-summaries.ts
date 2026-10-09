@@ -1,6 +1,13 @@
 import { initializeApp, applicationDefault, cert } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import { computeBankBalance, computeOutstandingCredit } from "../shared/utils/accountBalance";
+import {
+  computeBankBalance,
+  computeOutstandingCredit,
+  borrowingsCreditedTo,
+  repaymentsPaidFrom,
+  receivablesPaidFrom,
+  receivableRepaymentsInto,
+} from "../shared/utils/accountBalance";
 import { getAccountKind } from "../shared/utils/accountKind";
 import type { Account } from "../shared/types/expense";
 
@@ -106,19 +113,21 @@ async function rebuildForUser(uid: string) {
       const transfers = await fetchCollection(uid, "transfers");
       const filteredTransfers = transfers.filter((t: any) => t.fromAccountId === account.id || t.toAccountId === account.id);
       
-      // Note: runway/netWorth features might use borrowings and receivables, but they are rarely tied directly to a single account balance unless specifically linked.
-      // computeBankBalance accepts them.
+      // SPENDLY-436: Borrowing/Receivable records relate to an account via
+      // their own named field (creditedAccountId / paymentAccountId /
+      // sourceAccountId / receivedAccountId) — there is no generic
+      // "accountId" on any of these four collections.
       const borrowings = await fetchCollection(uid, "borrowings");
-      const filteredBorrowings = borrowings.filter((b: any) => b.accountId === account.id);
-      
+      const filteredBorrowings = borrowingsCreditedTo(account.id, borrowings as any);
+
       const borrowingRepayments = await fetchCollection(uid, "borrowingRepayments");
-      const filteredBorrowingRepayments = borrowingRepayments.filter((r: any) => r.accountId === account.id);
+      const filteredBorrowingRepayments = repaymentsPaidFrom(account.id, borrowingRepayments as any);
 
       const receivables = await fetchCollection(uid, "receivables");
-      const filteredReceivables = receivables.filter((r: any) => r.accountId === account.id);
-      
+      const filteredReceivables = receivablesPaidFrom(account.id, receivables as any);
+
       const receivableRepayments = await fetchCollection(uid, "receivableRepayments");
-      const filteredReceivableRepayments = receivableRepayments.filter((r: any) => r.accountId === account.id);
+      const filteredReceivableRepayments = receivableRepaymentsInto(account.id, receivableRepayments as any);
 
       const bal = computeBankBalance(
         account,

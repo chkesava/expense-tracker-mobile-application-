@@ -99,6 +99,10 @@ export function CardsList() {
         color: card.color || "#888",
         identityLine: formatAccountIdentityLine(card, "Credit Card"),
         smsWarning: smsMatchingUnconfiguredLabel(card, "Credit Card"),
+        reconciliationWarning:
+          card.summaryReconciliationStatus === "needs_reconciliation"
+            ? "Balance pending reconciliation — tap Edit to rebuild"
+            : null,
         daysRemaining: card.nextDueDate ? daysBetweenDateKeys(today, card.nextDueDate) : 0,
         usedThisCycle: card.unbilledSpend ?? 0,
         cancelledSpend: 0, // Unused natively, handled elsewhere or omitted.

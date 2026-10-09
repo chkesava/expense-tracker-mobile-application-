@@ -1,6 +1,7 @@
 import { increment, serverTimestamp } from "firebase/firestore";
 import type { MutationOp } from "@/shared/types/mutations";
 import { buildNetWorthOps } from "./netWorthMutations";
+import { roundMoney } from "./money";
 
 export type BalanceDeltaParams = {
   accountId: string;
@@ -11,6 +12,14 @@ export type BalanceDeltaParams = {
   oldBalance?: number;
   /** The account's outstanding liability prior to this mutation. */
   oldOutstanding?: number;
+  /**
+   * SPENDLY-436: true when the account's materialized summary has never been
+   * seeded (`balanceInitialized` missing). `increment()` starts an absent
+   * field at 0, so this mutation is about to become this account's new
+   * baseline — flag it `needs_reconciliation` instead of silently marking it
+   * healthy, so a full-ledger rebuild still gets run for it.
+   */
+  needsInitialization?: boolean;
 };
 
 export function buildAccountBalanceOps(
@@ -26,6 +35,7 @@ export function buildAccountBalanceOps(
       const existing = aggregated.get(d.accountId)!;
       existing.amountDelta += d.amountDelta;
       existing.isUnbilled = existing.isUnbilled || d.isUnbilled;
+      existing.needsInitialization = existing.needsInitialization || d.needsInitialization;
     }
   }
   
@@ -42,9 +52,19 @@ export function buildAccountBalanceOps(
     
     if (d.isCreditCard) {
       const updateData: any = {
-        currentOutstanding: increment(-d.amountDelta),
         balanceUpdatedAt: serverTimestamp(),
       };
+      if (d.needsInitialization) {
+        // SPENDLY-436: a bare increment() starts an absent field at 0, which
+        // would drop any outstanding this account already carried. Seed from
+        // the caller's best-known prior value as a literal instead, and flag
+        // it so a full rebuild still reconciles it properly.
+        updateData.currentOutstanding = roundMoney((d.oldOutstanding ?? 0) - d.amountDelta);
+        updateData.balanceInitialized = true;
+        updateData.summaryReconciliationStatus = "needs_reconciliation";
+      } else {
+        updateData.currentOutstanding = increment(-d.amountDelta);
+      }
       if (d.isUnbilled) {
         updateData.unbilledSpend = increment(-d.amountDelta);
       }
@@ -58,13 +78,23 @@ export function buildAccountBalanceOps(
       // So liability increases by 100.
       totalCreditCardDelta += -d.amountDelta;
     } else {
+      const updateData: any = {
+        balanceUpdatedAt: serverTimestamp(),
+      };
+      if (d.needsInitialization) {
+        // SPENDLY-436: seed from the caller's best-known prior value
+        // (openingBalance) as a literal rather than incrementing an absent
+        // field from 0, and flag the account for a full rebuild.
+        updateData.currentBalance = roundMoney((d.oldBalance ?? 0) + d.amountDelta);
+        updateData.balanceInitialized = true;
+        updateData.balanceReconciliationStatus = "needs_reconciliation";
+      } else {
+        updateData.currentBalance = increment(d.amountDelta);
+      }
       ops.push({
         op: "update",
         ref: { path: ref.path },
-        data: {
-          currentBalance: increment(d.amountDelta),
-          balanceUpdatedAt: serverTimestamp(),
-        }
+        data: updateData,
       });
 
       // Compute Net Worth Deltas for Bank Accounts

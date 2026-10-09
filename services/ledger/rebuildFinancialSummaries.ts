@@ -1,6 +1,13 @@
 import { collection, doc, getDoc, getDocs, query, where, writeBatch, serverTimestamp } from "firebase/firestore";
 import { getFirestoreDb } from "@/lib/firebase";
-import { computeBankBalance, computeOutstandingCredit } from "@/shared/utils/accountBalance";
+import {
+  computeBankBalance,
+  computeOutstandingCredit,
+  borrowingsCreditedTo,
+  repaymentsPaidFrom,
+  receivablesPaidFrom,
+  receivableRepaymentsInto,
+} from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import type { Account, Expense, Income, AccountPayment, AccountEntry, AccountTransfer } from "@/shared/types/expense";
 import type { Borrowing, BorrowingRepayment } from "@/shared/types/borrowing";
@@ -83,10 +90,19 @@ export async function rebuildFinancialSummaries(
     const allTransfers = await fetchCollection<AccountTransfer>("transfers");
     const filteredTransfers = allTransfers.filter(t => t.fromAccountId === account.id || t.toAccountId === account.id);
     
-    const borrowings = await fetchCollection<Borrowing>("borrowings", "accountId");
-    const borrowingRepayments = await fetchCollection<BorrowingRepayment>("borrowingRepayments", "accountId");
-    const receivables = await fetchCollection<Receivable>("receivables", "accountId");
-    const receivableRepayments = await fetchCollection<ReceivableRepayment>("receivableRepayments", "accountId");
+    // SPENDLY-436: these collections don't have a generic "accountId" field —
+    // each relates to an account through its own named field
+    // (creditedAccountId / paymentAccountId / sourceAccountId /
+    // receivedAccountId), so fetch the full collection and filter in memory
+    // with the same helpers `computeBankBalance` relies on.
+    const allBorrowings = await fetchCollection<Borrowing>("borrowings");
+    const allBorrowingRepayments = await fetchCollection<BorrowingRepayment>("borrowingRepayments");
+    const allReceivables = await fetchCollection<Receivable>("receivables");
+    const allReceivableRepayments = await fetchCollection<ReceivableRepayment>("receivableRepayments");
+    const borrowings = borrowingsCreditedTo(account.id, allBorrowings);
+    const borrowingRepayments = repaymentsPaidFrom(account.id, allBorrowingRepayments);
+    const receivables = receivablesPaidFrom(account.id, allReceivables);
+    const receivableRepayments = receivableRepaymentsInto(account.id, allReceivableRepayments);
 
     const bal = computeBankBalance(
       account,

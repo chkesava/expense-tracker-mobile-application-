@@ -58,6 +58,7 @@ import {
   buildAccountWritePayload,
   hydrateAccountIdentity,
 } from "@/shared/utils/accountIdentity";
+import { getAccountKind } from "@/shared/utils/accountKind";
 import { fetchAccountTypes } from "@/services/ledger/fetchAccountTypes";
 import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
@@ -808,6 +809,21 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           createdAt: serverTimestamp(),
         });
 
+        // SPENDLY-436: a new account must never start "uninitialized" — an
+        // absent currentBalance/currentOutstanding is indistinguishable from
+        // a real zero to every later mutation's `?? 0` read, which silently
+        // drops openingBalance the moment the account is first touched.
+        if (getAccountKind(typeName || "") === "credit") {
+          payload.currentOutstanding = 0;
+          payload.unbilledSpend = 0;
+          payload.balanceInitialized = true;
+          payload.summaryReconciliationStatus = "healthy";
+        } else {
+          payload.currentBalance = (extras?.openingBalance as number | undefined) ?? 0;
+          payload.balanceInitialized = true;
+          payload.balanceReconciliationStatus = "healthy";
+        }
+
         const ref = doc(collection(database, "users", u.uid, "accounts"));
         const outcome = await commitMutations(
           u.uid,
@@ -1276,6 +1292,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           accountId,
           amountDelta: direction === "credit" ? amount : -amount,
           isCreditCard: accountTypes.get(accountId)?.isCreditCard || false, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding,
+          needsInitialization: accountTypes.get(accountId)?.needsInitialization,
           isUnbilled: true
         }];
         const balOps = buildAccountBalanceOps(u.uid, balanceDeltas);
@@ -1333,6 +1350,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           accountId: data.accountId,
           amountDelta,
           isCreditCard: accountTypes.get(data.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(data.accountId)?.oldBalance, oldOutstanding: accountTypes.get(data.accountId)?.oldOutstanding,
+          needsInitialization: accountTypes.get(data.accountId)?.needsInitialization,
           isUnbilled: true
         }]));
       }
@@ -1384,8 +1402,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         
         const accountTypes = await fetchAccountTypes(database, u.uid, [fromAccountId, toAccountId]);
         const balanceDeltas = [
-          { accountId: fromAccountId, amountDelta: -amount, isCreditCard: accountTypes.get(fromAccountId)?.isCreditCard || false, oldBalance: accountTypes.get(fromAccountId)?.oldBalance, oldOutstanding: accountTypes.get(fromAccountId)?.oldOutstanding },
-          { accountId: toAccountId, amountDelta: amount, isCreditCard: accountTypes.get(toAccountId)?.isCreditCard || false, oldBalance: accountTypes.get(toAccountId)?.oldBalance, oldOutstanding: accountTypes.get(toAccountId)?.oldOutstanding }
+          { accountId: fromAccountId, amountDelta: -amount, isCreditCard: accountTypes.get(fromAccountId)?.isCreditCard || false, oldBalance: accountTypes.get(fromAccountId)?.oldBalance, oldOutstanding: accountTypes.get(fromAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(fromAccountId)?.needsInitialization },
+          { accountId: toAccountId, amountDelta: amount, isCreditCard: accountTypes.get(toAccountId)?.isCreditCard || false, oldBalance: accountTypes.get(toAccountId)?.oldBalance, oldOutstanding: accountTypes.get(toAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(toAccountId)?.needsInitialization }
         ];
         const balOps = buildAccountBalanceOps(u.uid, balanceDeltas);
 
@@ -1431,8 +1449,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         const data = snap.data();
         const accountTypes = await fetchAccountTypes(database, u.uid, [data.fromAccountId, data.toAccountId]);
         const balanceDeltas = [
-          { accountId: data.fromAccountId, amountDelta: data.amount, isCreditCard: accountTypes.get(data.fromAccountId)?.isCreditCard || false, oldBalance: accountTypes.get(data.fromAccountId)?.oldBalance, oldOutstanding: accountTypes.get(data.fromAccountId)?.oldOutstanding },
-          { accountId: data.toAccountId, amountDelta: -data.amount, isCreditCard: accountTypes.get(data.toAccountId)?.isCreditCard || false, oldBalance: accountTypes.get(data.toAccountId)?.oldBalance, oldOutstanding: accountTypes.get(data.toAccountId)?.oldOutstanding }
+          { accountId: data.fromAccountId, amountDelta: data.amount, isCreditCard: accountTypes.get(data.fromAccountId)?.isCreditCard || false, oldBalance: accountTypes.get(data.fromAccountId)?.oldBalance, oldOutstanding: accountTypes.get(data.fromAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(data.fromAccountId)?.needsInitialization },
+          { accountId: data.toAccountId, amountDelta: -data.amount, isCreditCard: accountTypes.get(data.toAccountId)?.isCreditCard || false, oldBalance: accountTypes.get(data.toAccountId)?.oldBalance, oldOutstanding: accountTypes.get(data.toAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(data.toAccountId)?.needsInitialization }
         ];
         balOps.push(...buildAccountBalanceOps(u.uid, balanceDeltas));
       }

@@ -77,13 +77,19 @@ function isOnOrAfter(date: string, baseline?: string): boolean {
   return date >= baseline;
 }
 
-/** Borrowed money credited into this account. A liability, never income. */
-function borrowingsCreditedTo(accountId: string, borrowings: Borrowing[]) {
+/**
+ * Borrowed money credited into this account. A liability, never income.
+ *
+ * Exported (SPENDLY-436) so rebuild/backfill scripts match borrowings to an
+ * account the same way the balance replay does, instead of re-deriving (and
+ * getting wrong) the relation field themselves.
+ */
+export function borrowingsCreditedTo(accountId: string, borrowings: Borrowing[]) {
   return borrowings.filter((b) => b.creditedAccountId === accountId);
 }
 
 /** Loan repayments paid out of this account. Not ordinary expenses. */
-function repaymentsPaidFrom(
+export function repaymentsPaidFrom(
   accountId: string,
   repayments: BorrowingRepayment[]
 ) {
@@ -91,12 +97,12 @@ function repaymentsPaidFrom(
 }
 
 /** Money lent out of this account. An asset conversion, never an expense. */
-function receivablesPaidFrom(accountId: string, receivables: Receivable[]) {
+export function receivablesPaidFrom(accountId: string, receivables: Receivable[]) {
   return receivables.filter((r) => r.sourceAccountId === accountId);
 }
 
 /** Collections received into this account. Never ordinary income. */
-function receivableRepaymentsInto(
+export function receivableRepaymentsInto(
   accountId: string,
   repayments: ReceivableRepayment[]
 ) {

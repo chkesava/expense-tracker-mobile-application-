@@ -1,6 +1,14 @@
 import { initializeApp, applicationDefault, cert } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { calculateAccountBalances, calculateEpfSummary, calculateDashboardSummaries, calculateNetWorthSummary } from "../shared/utils/reconciliation";
+import {
+  borrowingsCreditedTo,
+  repaymentsPaidFrom,
+  receivablesPaidFrom,
+  receivableRepaymentsInto,
+} from "../shared/utils/accountBalance";
+import { summarizeBorrowings } from "../shared/utils/borrowingMath";
+import { summarizeReceivables } from "../shared/utils/receivableMath";
 import { todayDateKey } from "../shared/utils/dates";
 
 function loadCredential() {
@@ -81,10 +89,13 @@ async function rebuildForUser(uid: string) {
       payments: data.accountPayments.filter(p => p.fromAccountId === account.id || p.toAccountId === account.id),
       transfers: data.transfers.filter(t => t.fromAccountId === account.id || t.toAccountId === account.id),
       entries: data.accountEntries.filter(e => e.accountId === account.id),
-      borrowings: data.borrowings.filter(b => b.accountId === account.id),
-      borrowingRepayments: data.borrowingRepayments.filter(r => r.accountId === account.id),
-      receivables: data.receivables.filter(r => r.accountId === account.id),
-      receivableRepayments: data.receivableRepayments.filter(r => r.accountId === account.id),
+      // SPENDLY-436: match via each collection's own relation field
+      // (creditedAccountId / paymentAccountId / sourceAccountId /
+      // receivedAccountId) — none of these have a generic "accountId".
+      borrowings: borrowingsCreditedTo(account.id, data.borrowings),
+      borrowingRepayments: repaymentsPaidFrom(account.id, data.borrowingRepayments),
+      receivables: receivablesPaidFrom(account.id, data.receivables),
+      receivableRepayments: receivableRepaymentsInto(account.id, data.receivableRepayments),
       bills: data.creditCardBills.filter(b => b.accountId === account.id),
       today
     });
@@ -161,8 +172,12 @@ async function rebuildForUser(uid: string) {
 
   // 4. Net Worth Summary
   console.log(`\n--- 4. Net Worth Summary ---`);
-  const borrowingOutstanding = data.borrowings.reduce((sum, b) => sum + (b.amount - (b.amountPaid || 0)), 0);
-  const receivableOutstanding = data.receivables.reduce((sum, r) => sum + (r.amount - (r.amountPaid || 0)), 0);
+  // SPENDLY-436: Borrowing/Receivable have no `.amount`/`.amountPaid` fields.
+  // Reuse the same portfolio aggregators the live app uses (summarizeBorrowings
+  // / summarizeReceivables), which already fall back to dynamic calculation
+  // for interest-bearing or non-backfilled records.
+  const borrowingOutstanding = summarizeBorrowings(data.borrowings, data.borrowingRepayments, today).totalOutstanding;
+  const receivableOutstanding = summarizeReceivables(data.receivables, data.receivableRepayments, today).totalOutstanding;
   
   const nwUpdates = calculateNetWorthSummary({
     accounts: data.accounts,

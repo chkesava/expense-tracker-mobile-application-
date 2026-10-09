@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 
 import { AccountEditButton } from "@/components/accounts/AccountEditButton";
+import { NeedsReconciliationText } from "@/components/accounts/NeedsReconciliationText";
 import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import type { Account } from "@/shared/types/expense";
 import { formatAccountIdentityLine } from "@/shared/utils/accountIdentity";
@@ -87,6 +88,7 @@ export function AccountRow({
           {formatAccountIdentityLine(account, typeName)}
         </Text>
         <SmsMatchingUnconfiguredText account={account} typeName={typeName} />
+        <NeedsReconciliationText account={account} />
       </View>
 
       <View style={styles.accountRight}>

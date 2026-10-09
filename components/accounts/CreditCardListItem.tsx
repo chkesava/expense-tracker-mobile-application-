@@ -26,6 +26,8 @@ export type CreditCardRowModel = {
   name: string;
   identityLine: string;
   smsWarning: string | null;
+  /** SPENDLY-436: set when `summaryReconciliationStatus === "needs_reconciliation"`. */
+  reconciliationWarning: string | null;
   daysRemaining: number;
   /** Unbilled spend in the open cycle. */
   usedThisCycle: number;
@@ -106,6 +108,14 @@ export const CreditCardListItem = memo(function CreditCardListItem({
                 <AlertTriangle size={12} color={CARD_ORANGE} strokeWidth={2.4} />
                 <Text style={styles.warningText} numberOfLines={1}>
                   {row.smsWarning}
+                </Text>
+              </View>
+            ) : null}
+            {row.reconciliationWarning ? (
+              <View style={styles.warningRow}>
+                <AlertTriangle size={12} color={CARD_ORANGE} strokeWidth={2.4} />
+                <Text style={styles.warningText} numberOfLines={1}>
+                  {row.reconciliationWarning}
                 </Text>
               </View>
             ) : null}

@@ -131,21 +131,28 @@ export async function createExpense(
   let isCreditCard = false;
   let oldBalance = 0;
   let oldOutstanding = 0;
+  let needsInitialization = false;
   if (payload.accountId) {
     const accountSnap = await getDoc(doc(db, "users", uid, "accounts", payload.accountId));
     if (accountSnap.exists()) {
       const data = accountSnap.data();
       // accountTypeId is canonical, or fall back to checking if name/legacy type implies credit.
-      isCreditCard = data.accountTypeId === "credit_card" || 
+      isCreditCard = data.accountTypeId === "credit_card" ||
         (data.name || "").toLowerCase().includes("credit");
-      oldBalance = data.currentBalance ?? 0;
+      // SPENDLY-436: an absent `balanceInitialized` means this account's
+      // currentBalance/currentOutstanding was never seeded. Reading
+      // `currentBalance ?? 0` here would be indistinguishable from "the
+      // account really has zero", silently dropping openingBalance the
+      // moment this mutation applies. Seed from openingBalance instead.
+      needsInitialization = data.balanceInitialized !== true;
+      oldBalance = needsInitialization ? (data.openingBalance ?? 0) : (data.currentBalance ?? 0);
       oldOutstanding = data.currentOutstanding ?? 0;
     }
   }
 
   const expenseOps = [{ op: "set" as const, ref, data, merge: Boolean(options?.id) }];
   const balanceOps = payload.accountId ? buildAccountBalanceOps(uid, [
-    { accountId: payload.accountId, amountDelta: -payload.amount, isCreditCard, oldBalance, oldOutstanding }
+    { accountId: payload.accountId, amountDelta: -payload.amount, isCreditCard, oldBalance, oldOutstanding, needsInitialization }
   ]) : [];
 
   
@@ -201,20 +208,23 @@ export async function createIncome(
   let isCreditCard = false;
   let oldBalance = 0;
   let oldOutstanding = 0;
+  let needsInitialization = false;
   if (payload.accountId) {
     const accountSnap = await getDoc(doc(db, "users", uid, "accounts", payload.accountId));
     if (accountSnap.exists()) {
       const data = accountSnap.data();
-      isCreditCard = data.accountTypeId === "credit_card" || 
+      isCreditCard = data.accountTypeId === "credit_card" ||
         (data.name || "").toLowerCase().includes("credit");
-      oldBalance = data.currentBalance ?? 0;
+      // SPENDLY-436: see createExpense — do not treat "never seeded" as zero.
+      needsInitialization = data.balanceInitialized !== true;
+      oldBalance = needsInitialization ? (data.openingBalance ?? 0) : (data.currentBalance ?? 0);
       oldOutstanding = data.currentOutstanding ?? 0;
     }
   }
 
   const incomeOps = [{ op: "set" as const, ref, data, merge: Boolean(options?.id) }];
   const balanceOps = payload.accountId ? buildAccountBalanceOps(uid, [
-    { accountId: payload.accountId, amountDelta: payload.amount, isCreditCard, oldBalance, oldOutstanding }
+    { accountId: payload.accountId, amountDelta: payload.amount, isCreditCard, oldBalance, oldOutstanding, needsInitialization }
   ]) : [];
 
   

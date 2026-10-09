@@ -269,12 +269,12 @@ export async function updateExpense(
   const delta = roundMoney(amount - before.amount);
 
   const accountTypes = await fetchAccountTypes(db, owner, [before.accountId, afterRow.accountId]);
-  const balanceDeltas: { accountId: string, amountDelta: number, isCreditCard: boolean, oldBalance?: number, oldOutstanding?: number }[] = [];
+  const balanceDeltas: { accountId: string, amountDelta: number, isCreditCard: boolean, oldBalance?: number, oldOutstanding?: number, needsInitialization?: boolean }[] = [];
   if (before.accountId) {
-    balanceDeltas.push({ accountId: before.accountId, amountDelta: before.amount, isCreditCard: accountTypes.get(before.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(before.accountId)?.oldBalance, oldOutstanding: accountTypes.get(before.accountId)?.oldOutstanding });
+    balanceDeltas.push({ accountId: before.accountId, amountDelta: before.amount, isCreditCard: accountTypes.get(before.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(before.accountId)?.oldBalance, oldOutstanding: accountTypes.get(before.accountId)?.oldOutstanding, needsInitialization: accountTypes.get(before.accountId)?.needsInitialization });
   }
   if (afterRow.accountId) {
-    balanceDeltas.push({ accountId: afterRow.accountId, amountDelta: -amount, isCreditCard: accountTypes.get(afterRow.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(afterRow.accountId)?.oldBalance, oldOutstanding: accountTypes.get(afterRow.accountId)?.oldOutstanding });
+    balanceDeltas.push({ accountId: afterRow.accountId, amountDelta: -amount, isCreditCard: accountTypes.get(afterRow.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(afterRow.accountId)?.oldBalance, oldOutstanding: accountTypes.get(afterRow.accountId)?.oldOutstanding, needsInitialization: accountTypes.get(afterRow.accountId)?.needsInitialization });
   }
 
   const outcome = await commitMutations(
@@ -351,12 +351,12 @@ export async function updateIncome(
   const after = ledgerEventSnapshot(afterRow);
 
   const accountTypes = await fetchAccountTypes(db, owner, [before.accountId, afterRow.accountId]);
-  const balanceDeltas: { accountId: string, amountDelta: number, isCreditCard: boolean, oldBalance?: number, oldOutstanding?: number }[] = [];
+  const balanceDeltas: { accountId: string, amountDelta: number, isCreditCard: boolean, oldBalance?: number, oldOutstanding?: number, needsInitialization?: boolean }[] = [];
   if (before.accountId) {
-    balanceDeltas.push({ accountId: before.accountId, amountDelta: -before.amount, isCreditCard: accountTypes.get(before.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(before.accountId)?.oldBalance, oldOutstanding: accountTypes.get(before.accountId)?.oldOutstanding });
+    balanceDeltas.push({ accountId: before.accountId, amountDelta: -before.amount, isCreditCard: accountTypes.get(before.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(before.accountId)?.oldBalance, oldOutstanding: accountTypes.get(before.accountId)?.oldOutstanding, needsInitialization: accountTypes.get(before.accountId)?.needsInitialization });
   }
   if (afterRow.accountId) {
-    balanceDeltas.push({ accountId: afterRow.accountId, amountDelta: amount, isCreditCard: accountTypes.get(afterRow.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(afterRow.accountId)?.oldBalance, oldOutstanding: accountTypes.get(afterRow.accountId)?.oldOutstanding });
+    balanceDeltas.push({ accountId: afterRow.accountId, amountDelta: amount, isCreditCard: accountTypes.get(afterRow.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(afterRow.accountId)?.oldBalance, oldOutstanding: accountTypes.get(afterRow.accountId)?.oldOutstanding, needsInitialization: accountTypes.get(afterRow.accountId)?.needsInitialization });
   }
 
   const outcome = await commitMutations(
@@ -415,11 +415,11 @@ async function softDeleteRow(
   const deletedAt = new Date().toISOString();
 
   const accountTypes = await fetchAccountTypes(db, owner, [before.accountId]);
-  const accountInfo = before.accountId ? accountTypes.get(before.accountId) : null; const isCreditCard = accountInfo?.isCreditCard || false; const oldBalance = accountInfo?.oldBalance; const oldOutstanding = accountInfo?.oldOutstanding;
-  const balanceDeltas: { accountId: string, amountDelta: number, isCreditCard: boolean, oldBalance?: number, oldOutstanding?: number }[] = [];
+  const accountInfo = before.accountId ? accountTypes.get(before.accountId) : null; const isCreditCard = accountInfo?.isCreditCard || false; const oldBalance = accountInfo?.oldBalance; const oldOutstanding = accountInfo?.oldOutstanding; const needsInitialization = accountInfo?.needsInitialization;
+  const balanceDeltas: { accountId: string, amountDelta: number, isCreditCard: boolean, oldBalance?: number, oldOutstanding?: number, needsInitialization?: boolean }[] = [];
   if (before.accountId) {
     const deltaAmount = kind === "expense" ? before.amount : -before.amount;
-    balanceDeltas.push({ accountId: before.accountId, amountDelta: deltaAmount, isCreditCard, oldBalance, oldOutstanding });
+    balanceDeltas.push({ accountId: before.accountId, amountDelta: deltaAmount, isCreditCard, oldBalance, oldOutstanding, needsInitialization });
   }
 
   const outcome = await commitMutations(
@@ -479,11 +479,11 @@ async function restoreRow(
   const before = ledgerEventSnapshot(data);
 
   const accountTypes = await fetchAccountTypes(db, owner, [before.accountId]);
-  const accountInfo = before.accountId ? accountTypes.get(before.accountId) : null; const isCreditCard = accountInfo?.isCreditCard || false; const oldBalance = accountInfo?.oldBalance; const oldOutstanding = accountInfo?.oldOutstanding;
-  const balanceDeltas: { accountId: string, amountDelta: number, isCreditCard: boolean, oldBalance?: number, oldOutstanding?: number }[] = [];
+  const accountInfo = before.accountId ? accountTypes.get(before.accountId) : null; const isCreditCard = accountInfo?.isCreditCard || false; const oldBalance = accountInfo?.oldBalance; const oldOutstanding = accountInfo?.oldOutstanding; const needsInitialization = accountInfo?.needsInitialization;
+  const balanceDeltas: { accountId: string, amountDelta: number, isCreditCard: boolean, oldBalance?: number, oldOutstanding?: number, needsInitialization?: boolean }[] = [];
   if (before.accountId) {
     const deltaAmount = kind === "expense" ? -before.amount : before.amount;
-    balanceDeltas.push({ accountId: before.accountId, amountDelta: deltaAmount, isCreditCard, oldBalance, oldOutstanding });
+    balanceDeltas.push({ accountId: before.accountId, amountDelta: deltaAmount, isCreditCard, oldBalance, oldOutstanding, needsInitialization });
   }
 
   const outcome = await commitMutations(
