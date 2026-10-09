@@ -110,6 +110,13 @@ async function rebuildForUser(uid: string) {
     
     if (!hasVariance) console.log(`  [OK] Account ${account.id} (${account.name}) is fully reconciled.`);
 
+    // SPENDLY-436: the Net Worth Summary step below reads `data.accounts`.
+    // Without this, it would compute liabilities/assets from the stale
+    // pre-rebuild balances even in the same run that just recalculated them
+    // correctly above — giving an internally inconsistent report in both
+    // dry-run and apply mode.
+    Object.assign(account, updates);
+
     if (hasVariance && mode === "apply") {
       batch.update(db.doc(`users/${uid}/accounts/${account.id}`), { ...updates, balanceLastRebuiltAt: FieldValue.serverTimestamp() });
       totalWrites++;
