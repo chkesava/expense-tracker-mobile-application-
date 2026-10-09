@@ -98,7 +98,7 @@ export function calculateDashboardSummaries(
   };
 
   for (const e of expenses) {
-    if (e.voidedAt) continue;
+    if (e.deletedAt) continue;
     const p = getPeriod(e.date);
     const m = initPeriod(p);
     m.totalExpenses! += e.amount;
@@ -109,7 +109,7 @@ export function calculateDashboardSummaries(
   }
 
   for (const i of incomes) {
-    if (i.voidedAt) continue;
+    if (i.deletedAt) continue;
     const p = getPeriod(i.date);
     const m = initPeriod(p);
     m.totalIncome! += i.amount;
