@@ -182,7 +182,7 @@ describe("createHoldingWithCash", () => {
     expect(result.entryId).toBeNull();
     expect(pathsUnder("investmentCashTransactions")).toHaveLength(0);
     expect(writes.filter((w) => w.path.includes("/portfolioSettings/"))).toHaveLength(0);
-    expect(writes).toHaveLength(3);
+    expect(writes).toHaveLength(4);
 
     const txWrite = pathsUnder("portfolioTransactions")[0];
     expect(txWrite.path).toBe(`users/u1/portfolioTransactions/${result.transactionId}`);

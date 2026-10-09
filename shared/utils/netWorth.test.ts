@@ -20,12 +20,14 @@ const typeMap = new Map([
   [CREDIT, "Credit Card"],
 ]);
 
-function account(id: string, typeId: string, openingBalance: number) {
+function account(id: string, typeId: string, balance: number) {
   return {
     id,
     name: id,
     typeId,
-    openingBalance,
+    openingBalance: balance,
+    currentBalance: balance,
+    currentOutstanding: balance,
     createdAt: "2026-01-01T00:00:00.000Z",
   } as unknown as NetWorthInputs["accounts"][number];
 }

@@ -168,7 +168,7 @@ describe("dashboardWidgets utilities", () => {
     ];
 
     it("returns empty array when no category budgets exist for the active month", () => {
-      const result = computeActiveCategoryBudgets(categoryBudgets, [], "2026-11");
+      const result = computeActiveCategoryBudgets(categoryBudgets, {}, "2026-11");
       expect(result).toEqual([]);
     });
 

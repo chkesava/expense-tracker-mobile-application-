@@ -45,7 +45,19 @@ export function buildNetWorthOps(
   const netWorthDelta = assetDelta - liabilityDelta;
 
   // If there's literally no change, we can return empty ops
-  if (assetDelta === 0 && liabilityDelta === 0 && netWorthDelta === 0) {
+  if (
+    assetDelta === 0 &&
+    liabilityDelta === 0 &&
+    netWorthDelta === 0 &&
+    !deltas.bankCashTotal &&
+    !deltas.fixedDepositTotal &&
+    !deltas.investmentCash &&
+    !deltas.epfValue &&
+    !deltas.receivableAssets &&
+    !deltas.creditCardLiabilities &&
+    !deltas.bankOverdraftLiabilities &&
+    !deltas.borrowingLiabilities
+  ) {
     return [];
   }
 
