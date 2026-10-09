@@ -206,6 +206,9 @@ export function denormalizedBorrowingCacheFields(summary: BorrowingSummary) {
     outstandingPrincipal: summary.outstandingPrincipal,
     accruedInterest: summary.interestAccrued,
     totalOutstanding: summary.totalOutstanding,
+    principalPaid: summary.principalPaid,
+    interestPaid: summary.interestPaid,
+    totalPaid: summary.totalPaid,
     status: summary.status,
     settledDate: summary.settledDate,
   };
@@ -329,19 +332,34 @@ export function summarizeBorrowings(
 ): BorrowingPortfolioSummary {
   return borrowings.reduce<BorrowingPortfolioSummary>(
     (acc, borrowing) => {
-      const summary = summarizeBorrowing(borrowing, repayments, asOfDate);
-      acc.totalBorrowed = roundMoney(acc.totalBorrowed + summary.principalAmount);
+      // SPENDLY-434: Fast path using materialized fields.
+      let principal = borrowing.principalAmount;
+      let totalOut = borrowing.totalOutstanding;
+      let interest = borrowing.accruedInterest;
+      let repaid = borrowing.totalPaid;
+      let status = borrowing.status;
+
+      if (totalOut === undefined || repaid === undefined) {
+        // Fallback for non-backfilled records
+        const summary = summarizeBorrowing(borrowing, repayments, asOfDate);
+        totalOut = summary.totalOutstanding;
+        interest = summary.interestAccrued;
+        repaid = summary.totalPaid;
+        status = summary.status;
+      }
+
+      acc.totalBorrowed = roundMoney(acc.totalBorrowed + (principal || 0));
       acc.totalOutstanding = roundMoney(
-        acc.totalOutstanding + summary.totalOutstanding
+        acc.totalOutstanding + (totalOut || 0)
       );
-      acc.totalInterest = roundMoney(acc.totalInterest + summary.interestAccrued);
-      acc.totalRepaid = roundMoney(acc.totalRepaid + summary.totalPaid);
-      if (summary.status === "FULLY_SETTLED" || summary.status === "CLOSED") {
+      acc.totalInterest = roundMoney(acc.totalInterest + (interest || 0));
+      acc.totalRepaid = roundMoney(acc.totalRepaid + (repaid || 0));
+      if (status === "FULLY_SETTLED" || status === "CLOSED") {
         acc.settledCount += 1;
       } else {
         acc.activeCount += 1;
       }
-      if (summary.status === "OVERDUE") acc.overdueCount += 1;
+      if (status === "OVERDUE") acc.overdueCount += 1;
       return acc;
     },
     {
