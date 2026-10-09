@@ -1,6 +1,7 @@
 import { initializeApp, applicationDefault, cert } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
+import { calculateAccountBalances, calculateEpfSummary, calculateDashboardSummaries, calculateNetWorthSummary } from "../shared/utils/reconciliation";
+import { todayDateKey } from "../shared/utils/dates";
 
 function loadCredential() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -14,97 +15,173 @@ function loadCredential() {
 const app = initializeApp({ credential: loadCredential() });
 const db = getFirestore(app);
 
-async function rebuildDomainSummaries() {
-  const usersResult = await getAuth(app).listUsers();
-  
-  for (const user of usersResult.users) {
-    const uid = user.uid;
-    console.log(`Rebuilding for ${uid}...`);
+const args = process.argv.slice(2);
+const mode = args.includes("--apply") ? "apply" : "dryRun";
+const uidArg = args.find((a) => a.startsWith("--uid="));
+const TARGET_UID = uidArg ? uidArg.split("=")[1] : null;
 
-    // 1. Rebuild Investments
-    const holdingsSnap = await db.collection(`users/${uid}/holdings`).get();
-    let investmentCash = 0;
-    const settingsSnap = await db.collection(`users/${uid}/portfolioSettings`).doc("settings").get();
-    if (settingsSnap.exists) {
-      investmentCash = settingsSnap.data()?.cashBalance || 0;
+async function fetchCollection(uid: string, colName: string) {
+  const snap = await db.collection("users").doc(uid).collection(colName).get();
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[];
+}
+
+async function rebuildForUser(uid: string) {
+  console.log(`\nRebuilding summaries for user: ${uid} (Mode: ${mode})`);
+  
+  const typeMap = new Map<string, string>();
+  const typesSnap = await db.collection("users").doc(uid).collection("accountTypes").get();
+  typesSnap.forEach(d => typeMap.set(d.id, d.data().name));
+
+  const accounts = await fetchCollection(uid, "accounts");
+  const expenses = await fetchCollection(uid, "expenses");
+  const incomes = await fetchCollection(uid, "incomes");
+  const payments = await fetchCollection(uid, "accountPayments");
+  const entries = await fetchCollection(uid, "accountEntries");
+  const transfers = await fetchCollection(uid, "transfers");
+  const borrowings = await fetchCollection(uid, "borrowings");
+  const borrowingRepayments = await fetchCollection(uid, "borrowingRepayments");
+  const receivables = await fetchCollection(uid, "receivables");
+  const receivableRepayments = await fetchCollection(uid, "receivableRepayments");
+  const bills = await fetchCollection(uid, "creditCardBills");
+
+  const investments = await fetchCollection(uid, "investments");
+  const holdings = await fetchCollection(uid, "holdings");
+  
+  const epfEstablishments = await fetchCollection(uid, "epfEstablishments");
+  const epfContributions = await fetchCollection(uid, "epfContributions");
+  const epfTransfers = await fetchCollection(uid, "epfTransfers");
+  const epfInterestEntries = await fetchCollection(uid, "epfInterestEntries");
+  const epfAdjustments = await fetchCollection(uid, "epfReconciliations");
+
+  const today = todayDateKey();
+  
+  let totalWrites = 0;
+  const batch = db.batch();
+
+  // 1. Account Balances
+  for (const account of accounts) {
+    const updates = calculateAccountBalances({
+      account,
+      typeName: typeMap.get(account.typeId) || "",
+      expenses: expenses.filter(e => e.accountId === account.id),
+      incomes: incomes.filter(i => i.accountId === account.id),
+      payments: payments.filter(p => p.fromAccountId === account.id || p.toAccountId === account.id),
+      transfers: transfers.filter(t => t.fromAccountId === account.id || t.toAccountId === account.id),
+      entries: entries.filter(e => e.accountId === account.id),
+      borrowings: borrowings.filter(b => b.accountId === account.id),
+      borrowingRepayments: borrowingRepayments.filter(r => r.accountId === account.id),
+      receivables: receivables.filter(r => r.accountId === account.id),
+      receivableRepayments: receivableRepayments.filter(r => r.accountId === account.id),
+      bills: bills.filter(b => b.accountId === account.id),
+      today
+    });
+
+    let hasVariance = false;
+    for (const [key, expected] of Object.entries(updates)) {
+      if (account[key] !== expected && !(account[key] === undefined && expected === undefined)) {
+        console.log(`    [Account: ${account.id}] ${key} variance: expected ${expected}, got ${account[key]}`);
+        hasVariance = true;
+      }
     }
 
-    let holdingsMarketValue = 0;
-    let investedValue = 0;
-    let holdingCount = 0;
-    
-    holdingsSnap.forEach((doc) => {
-      const data = doc.data();
-      const qty = data.quantity || 0;
-      if (qty > 0) {
-        holdingCount++;
-        const avg = data.averageBuyPrice || 0;
-        investedValue += qty * avg;
-        holdingsMarketValue += qty * avg; // Fallback
-      }
-    });
+    if (hasVariance && mode === "apply") {
+      batch.update(db.doc(`users/${uid}/accounts/${account.id}`), { ...updates, balanceLastRebuiltAt: FieldValue.serverTimestamp() });
+      totalWrites++;
+    }
+  }
 
-    const fdSnap = await db.collection(`users/${uid}/accounts`).where("kind", "==", "fixed_deposit").get();
-    let fdPrincipalTotal = 0;
-    let fdCurrentValue = 0;
-    fdSnap.forEach((doc) => {
-      const data = doc.data();
-      fdPrincipalTotal += data.principal || 0;
-      fdCurrentValue += data.currentBalance || data.principal || 0;
-    });
-
-    await db.collection(`users/${uid}/financialSummaries`).doc("investments").set({
-      investmentCash,
-      holdingsMarketValue,
-      investedValue,
-      unrealisedPnL: 0,
-      realisedPnL: 0,
-      holdingCount,
-      fdPrincipalTotal,
-      fdCurrentValue,
-      calculatedAt: new Date().toISOString(),
+  // 2. EPF Summary
+  const epfUpdates = calculateEpfSummary({
+    establishments: epfEstablishments,
+    contributions: epfContributions,
+    transfers: epfTransfers,
+    interestEntries: epfInterestEntries,
+    adjustments: epfAdjustments
+  });
+  console.log(`    [EPF] Summary calculated:`, epfUpdates);
+  if (mode === "apply") {
+    batch.set(db.doc(`users/${uid}/financialSummaries/epf`), {
+      ...epfUpdates,
       summaryVersion: 1,
+      calculatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
+    totalWrites++;
+  }
 
-    // 2. Rebuild EPF
-    const epfSnap = await db.collection(`users/${uid}/epfContributions`).get();
-    let employee = 0;
-    let employer = 0;
-    epfSnap.forEach((doc) => {
-      const data = doc.data();
-      if (["credited", "overdue"].includes(data.status)) {
-         employee += data.employeeShare || 0;
-         employer += data.employerEpfShare || 0;
-      }
-    });
-    
-    let interest = 0;
-    const intSnap = await db.collection(`users/${uid}/epfInterestEntries`).get();
-    intSnap.forEach((doc) => {
-       interest += doc.data().interest || 0;
-    });
+  // 3. Dashboard Summaries
+  const dashboards = calculateDashboardSummaries(expenses, incomes);
+  for (const [period, dash] of dashboards.entries()) {
+    console.log(`    [Dashboard ${period}]`, dash);
+    if (mode === "apply") {
+      batch.set(db.doc(`users/${uid}/financialSummaries/dashboard_${period}`), {
+        ...dash,
+        summaryVersion: 1,
+        calculatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+      totalWrites++;
+    }
+  }
 
-    let adjustmentsTotal = 0;
-    const recSnap = await db.collection(`users/${uid}/epfReconciliations`).get();
-    recSnap.forEach((doc) => {
-       adjustmentsTotal += doc.data().adjustmentAmount || 0;
-    });
-
-    await db.collection(`users/${uid}/financialSummaries`).doc("epf").set({
-      currentBalance: employee + employer + interest + adjustmentsTotal,
-      employeeContributionTotal: employee,
-      employerContributionTotal: employer,
-      interestTotal: interest,
-      adjustmentsTotal,
-      lastCreditPeriod: null,
-      calculatedAt: new Date().toISOString(),
+  // 4. Net Worth Summary
+  const borrowingOutstanding = borrowings.reduce((sum, b) => sum + (b.amount - (b.amountPaid || 0)), 0);
+  const receivableOutstanding = receivables.reduce((sum, r) => sum + (r.amount - (r.amountPaid || 0)), 0);
+  
+  // Note: investmentCashBalance should be extracted from investment rows if applicable
+  const nwUpdates = calculateNetWorthSummary({
+    accounts,
+    typeMap,
+    expenses,
+    incomes,
+    payments,
+    bills,
+    entries,
+    transfers,
+    borrowings,
+    borrowingRepayments,
+    receivables,
+    receivableRepayments,
+    borrowingOutstanding,
+    receivableOutstanding,
+    investments,
+    holdings,
+    quotes: new Map(),
+    investmentCashBalance: 0,
+    epfValue: epfUpdates.currentBalance || 0,
+    epfUnreconciledCount: 0,
+    today
+  });
+  console.log(`    [Net Worth]`, nwUpdates);
+  
+  if (mode === "apply") {
+    batch.set(db.doc(`users/${uid}/financialSummaries/netWorth`), {
+      ...nwUpdates,
       summaryVersion: 1,
+      calculatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
-
-    console.log(`Finished ${uid}`);
+    totalWrites++;
+    
+    if (totalWrites > 0) {
+      await batch.commit();
+      console.log(`    Committed ${totalWrites} operations.`);
+    }
   }
 }
 
-if (require.main === module) {
-  rebuildDomainSummaries().then(() => process.exit(0)).catch(console.error);
+async function run() {
+  if (TARGET_UID) {
+    await rebuildForUser(TARGET_UID);
+  } else {
+    const usersSnap = await db.collection("users").get();
+    for (const userDoc of usersSnap.docs) {
+      await rebuildForUser(userDoc.id);
+    }
+  }
+  console.log("\nFinished.");
+  process.exit(0);
 }
+
+run().catch((err) => {
+  console.error("Fatal error:", err);
+  process.exit(1);
+});
+
