@@ -1,3 +1,4 @@
+import type { MutationOp } from "@/shared/types/mutations";
 /**
  * Idle auto-post for due subscriptions / EMIs / transfers (SPENDLY-40).
  *
@@ -12,7 +13,7 @@
 
 import { doc, serverTimestamp } from "firebase/firestore";
 
-import { commitMutations, type MutationOp } from "@/lib/commitMutations";
+import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";
 import type { WriteOutcome } from "@/lib/firestoreWrite";
 import { omitUndefined } from "@/shared/utils/firestorePayload";
