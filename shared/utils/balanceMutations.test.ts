@@ -11,7 +11,7 @@ describe("buildAccountBalanceOps", () => {
     const ops = buildAccountBalanceOps("u1", [
       { accountId: "a1", amountDelta: -300, isCreditCard: false, oldBalance: 1000 },
     ]);
-    const accountOp = ops.find((op) => op.ref.path === "users/u1/accounts/a1")!;
+    const accountOp = ops.find((op): op is Extract<typeof op, { data: object }> => op.op !== "delete" && op.ref.path === "users/u1/accounts/a1")!;
     const data = accountOp.data as Record<string, unknown>;
     // A real Firestore increment() sentinel, never a plain number here.
     expect(typeof data.currentBalance).not.toBe("number");
@@ -29,7 +29,7 @@ describe("buildAccountBalanceOps", () => {
         needsInitialization: true,
       },
     ]);
-    const accountOp = ops.find((op) => op.ref.path === "users/u1/accounts/a1")!;
+    const accountOp = ops.find((op): op is Extract<typeof op, { data: object }> => op.op !== "delete" && op.ref.path === "users/u1/accounts/a1")!;
     const data = accountOp.data as Record<string, unknown>;
     expect(data.currentBalance).toBe(18681);
     expect(data.balanceInitialized).toBe(true);
@@ -46,7 +46,7 @@ describe("buildAccountBalanceOps", () => {
         needsInitialization: true,
       },
     ]);
-    const accountOp = ops.find((op) => op.ref.path === "users/u1/accounts/c1")!;
+    const accountOp = ops.find((op): op is Extract<typeof op, { data: object }> => op.op !== "delete" && op.ref.path === "users/u1/accounts/c1")!;
     const data = accountOp.data as Record<string, unknown>;
     expect(data.currentOutstanding).toBe(2500);
     expect(data.balanceInitialized).toBe(true);
@@ -60,7 +60,7 @@ describe("buildAccountBalanceOps", () => {
     const ops = buildAccountBalanceOps("u1", [
       { accountId: "a1", amountDelta: -7600, isCreditCard: false, oldBalance: 18981, needsInitialization: true },
     ]);
-    const accountOp = ops.find((op) => op.ref.path === "users/u1/accounts/a1")!;
+    const accountOp = ops.find((op): op is Extract<typeof op, { data: object }> => op.op !== "delete" && op.ref.path === "users/u1/accounts/a1")!;
     const data = accountOp.data as Record<string, unknown>;
     // Not -7600 (what a bare increment() on an absent field would produce).
     expect(data.currentBalance).toBe(11381);
