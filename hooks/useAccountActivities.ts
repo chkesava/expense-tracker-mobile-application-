@@ -9,7 +9,10 @@ import { useBorrowings } from "@/hooks/useBorrowings";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useReceivables } from "@/hooks/useReceivables";
-import { buildAccountActivities } from "@/shared/utils/accountBalance";
+import {
+  buildAccountActivities,
+  partialLedgerBoundary,
+} from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
 
 /**
@@ -20,8 +23,20 @@ import { getAccountKind } from "@/shared/utils/accountKind";
 export function useAccountActivities(accountId: string | null | undefined) {
   const { accounts, loading: accountsLoading } = useAccounts();
   const { accountTypes } = useAccountTypes();
-  const { expenses, loading: expensesLoading } = useExpenses();
-  const { incomes } = useIncomes();
+  const { expenses, loading: expensesLoading, complete: expensesComplete } =
+    useExpenses();
+  const { incomes, complete: incomesComplete } = useIncomes();
+  const ledgerComplete = expensesComplete && incomesComplete;
+  const loadedFrom = useMemo(
+    () =>
+      ledgerComplete
+        ? undefined
+        : partialLedgerBoundary([
+            { dates: expenses.map((e) => e.date), complete: expensesComplete },
+            { dates: incomes.map((i) => i.date), complete: incomesComplete },
+          ]),
+    [ledgerComplete, expenses, incomes, expensesComplete, incomesComplete]
+  );
   const { entries } = useAccountEntries();
   const { payments } = useAccountPayments();
   const { transfers } = useAccountTransfers();
@@ -58,7 +73,8 @@ export function useAccountActivities(accountId: string | null | undefined) {
       transfers,
       accountNameById,
       { borrowings, borrowingRepayments },
-      { receivables, receivableRepayments }
+      { receivables, receivableRepayments },
+      { ledgerComplete, loadedFrom }
     );
   }, [
     account,
@@ -73,6 +89,8 @@ export function useAccountActivities(accountId: string | null | undefined) {
     borrowingRepayments,
     receivables,
     receivableRepayments,
+    ledgerComplete,
+    loadedFrom,
   ]);
 
   return {
@@ -81,6 +99,10 @@ export function useAccountActivities(accountId: string | null | undefined) {
     isCreditCard: account ? getAccountKind(typeName) === "credit" : false,
     accountNameById,
     activities,
+    /** False while older ledger pages are not loaded: history is partial. */
+    ledgerComplete,
+    /** With a partial ledger, rows on or before this date may have gaps. */
+    loadedFrom,
     loading: accountsLoading || expensesLoading,
   };
 }

@@ -358,7 +358,7 @@ export default function AccountDetailScreen() {
     );
   }, [account, isCreditCard, bills]);
 
-  const { activities: allActivities } = useAccountActivities(id);
+  const { activities: allActivities, loadedFrom } = useAccountActivities(id);
 
   // Past cycles get their own "Past Billing Cycles" section, so this list is
   // scoped to the open cycle for credit cards — otherwise it silently mixes
@@ -1357,6 +1357,7 @@ export default function AccountDetailScreen() {
           currentBalanceLabel={isCreditCard ? "Outstanding" : "Current balance"}
           window={historyWindow}
           onWindowChange={setHistoryWindow}
+          partialSince={loadedFrom}
         />
 
         {statementMonths.length > 0 ? (
