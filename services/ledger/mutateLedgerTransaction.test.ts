@@ -28,6 +28,10 @@ vi.mock("firebase/firestore", () => ({
     exists: () => docs.has(ref.path),
     data: () => docs.get(ref.path),
   })),
+  getDocFromCache: vi.fn(async (ref: FakeRef) => ({
+    exists: () => docs.has(ref.path),
+    data: () => docs.get(ref.path),
+  })),
   increment: (n: number) => ({ __increment: n }),
   deleteField: () => ({ __deleteField: true }),
   serverTimestamp: () => ({ __serverTimestamp: true }),

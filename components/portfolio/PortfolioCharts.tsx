@@ -1,21 +1,12 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, G, Polyline, Text as SvgText } from "react-native-svg";
-import Animated, {
-  FadeIn,
-  useAnimatedProps,
-  useSharedValue,
-  withDelay,
-  withSpring,
-  ZoomIn,
-} from "react-native-reanimated";
+import Animated, { FadeIn, ZoomIn } from "react-native-reanimated";
 
 import { Card } from "@/components/ui/Card";
 import type { AllocationSlice } from "@/shared/features/portfolio/types";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
-
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 export interface PortfolioChartsProps {
   allocations: AllocationSlice[];
@@ -25,7 +16,11 @@ export interface PortfolioChartsProps {
 
 // ─── Donut Segment ──────────────────────────────────────────
 
-function AnimatedAllocationSlice({
+/**
+ * Static slice; the donut enters through its wrapping `ZoomIn` view. Per-slice
+ * Reanimated props failed on unmounted SVG nodes (SPENDLY-489).
+ */
+function AllocationSliceArc({
   cx,
   cy,
   radius,
@@ -34,7 +29,6 @@ function AnimatedAllocationSlice({
   rotation,
   dashLength,
   circumference,
-  index,
 }: {
   cx: number;
   cy: number;
@@ -44,28 +38,10 @@ function AnimatedAllocationSlice({
   rotation: number;
   dashLength: number;
   circumference: number;
-  index: number;
 }) {
-  const progress = useSharedValue(0);
-
-  useEffect(() => {
-    progress.value = 0;
-    progress.value = withDelay(
-      index * 50,
-      withSpring(1, { damping: 18, stiffness: 160, mass: 0.8 })
-    );
-  }, [dashLength, index, progress]);
-
-  const animatedProps = useAnimatedProps(() => {
-    const currentLength = dashLength * progress.value;
-    const gap = Math.max(0, circumference - currentLength);
-    return {
-      strokeDasharray: `${currentLength} ${gap}`,
-    };
-  });
-
+  const gap = Math.max(0, circumference - dashLength);
   return (
-    <AnimatedCircle
+    <Circle
       cx={cx}
       cy={cy}
       r={radius}
@@ -73,8 +49,8 @@ function AnimatedAllocationSlice({
       stroke={color}
       strokeWidth={strokeWidth}
       strokeLinecap="butt"
+      strokeDasharray={`${dashLength} ${gap}`}
       transform={`rotate(${rotation} ${cx} ${cy})`}
-      animatedProps={animatedProps}
     />
   );
 }
@@ -125,7 +101,7 @@ function AllocationDonut({
           cumulativeOffset += pct;
 
           return (
-            <AnimatedAllocationSlice
+            <AllocationSliceArc
               key={i}
               cx={cx}
               cy={cy}
@@ -135,7 +111,6 @@ function AllocationDonut({
               rotation={rotation}
               dashLength={dashLength}
               circumference={circumference}
-              index={i}
             />
           );
         })}
