@@ -1086,56 +1086,21 @@ export default function AccountDetailScreen() {
     [router]
   );
 
-  if (!account) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <AccountHeader
-          title="Account"
-          subtitle=""
-          onBack={() => router.back()}
-        />
-        <View style={styles.missing}>
-          {accountsError ? (
-            <ErrorState
-              title="Couldn't load this account"
-              description={accountsError.message}
-              onRetry={accountsError.retryable ? retryAccounts : undefined}
-            />
-          ) : accountsLoading ? (
-            <ActivityIndicator color={theme.colors.primary} />
-          ) : (
-            <>
-              <Text
-                style={{
-                  fontSize: theme.typography.lg,
-                  color: theme.colors.mutedForeground,
-                }}
-              >
-                Account not found
-              </Text>
-              <Pressable onPress={() => router.back()} style={{ marginTop: 12 }}>
-                <Text
-                  style={{
-                    fontSize: theme.typography.sm,
-                    fontWeight: "700",
-                    color: theme.colors.primary,
-                  }}
-                >
-                  Go Back
-                </Text>
-              </Pressable>
-            </>
-          )}
-        </View>
-      </View>
-    );
-  }
-
   // --- Action center (SPENDLY-91) ------------------------------------------
   //
   // One ordered answer to "what can I do with this account", replacing buttons
   // that had accumulated in three different places. Availability comes from
   // the pure model in `accountActions.ts`; only the behaviour is wired here.
+  //
+  // SPENDLY-436: these three hooks must stay above the `if (!account) return`
+  // below them, not after it. `account` starts undefined on the very first
+  // render (before `useAccounts()` resolves) and becomes defined moments
+  // later — if any hook sat after that early return, the component would call
+  // fewer hooks on the first render than on the next, and React throws
+  // "Rendered more hooks than during the previous render." None of these three
+  // actually need `account` itself (only `isCreditCard`, `systemSettings`, and
+  // `accountDocuments`, all already computed above), so hoisting them costs
+  // nothing.
   const onRunAccountAction = useCallback(
     (action: AccountActionId) => {
       switch (action) {
@@ -1189,6 +1154,51 @@ export default function AccountDetailScreen() {
     () => accountDocuments.filter((entry) => entry.status === "pending").length,
     [accountDocuments]
   );
+
+  if (!account) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <AccountHeader
+          title="Account"
+          subtitle=""
+          onBack={() => router.back()}
+        />
+        <View style={styles.missing}>
+          {accountsError ? (
+            <ErrorState
+              title="Couldn't load this account"
+              description={accountsError.message}
+              onRetry={accountsError.retryable ? retryAccounts : undefined}
+            />
+          ) : accountsLoading ? (
+            <ActivityIndicator color={theme.colors.primary} />
+          ) : (
+            <>
+              <Text
+                style={{
+                  fontSize: theme.typography.lg,
+                  color: theme.colors.mutedForeground,
+                }}
+              >
+                Account not found
+              </Text>
+              <Pressable onPress={() => router.back()} style={{ marginTop: 12 }}>
+                <Text
+                  style={{
+                    fontSize: theme.typography.sm,
+                    fontWeight: "700",
+                    color: theme.colors.primary,
+                  }}
+                >
+                  Go Back
+                </Text>
+              </Pressable>
+            </>
+          )}
+        </View>
+      </View>
+    );
+  }
 
   const showsActivityList = sectionShowsActivityList(section);
 
