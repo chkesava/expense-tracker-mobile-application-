@@ -14,7 +14,7 @@
  * reference number. A VPA's local part is kept only as a matching hint, and
  * only when it doesn't look personal (no phone-like digit runs).
  *
- * This is independent of services/sms/smsMerchantNormalizer.ts, which SMS
+ * This is independent of services/recurring/merchantNormalizer.ts, which recurring detection
  * dedupe keys and statement fingerprints depend on and must not change.
  *
  * Documented in docs/SPENDLY-188-merchant-normalization.md.

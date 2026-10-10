@@ -492,9 +492,7 @@ export default function TransactionDetailsScreen() {
               {expense?.subscriptionId ? (
                 <Row label="Created by" value="A subscription" />
               ) : null}
-              {journalRow?.smsFingerprint ? (
-                <Row label="Recorded from" value="Bank SMS" />
-              ) : expense?.statementImportFingerprint ? (
+              {expense?.statementImportFingerprint ? (
                 <Row label="Recorded from" value="Statement import" />
               ) : null}
               {payment?.voidedAt ? (

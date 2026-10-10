@@ -93,7 +93,7 @@ export interface Account {
   name: string;
   /** Firestore id of `users/{uid}/accountTypes/{id}`. */
   typeId: string;
-  /** User-facing label only. SMS matching must not rely on this alone. */
+  /** User-facing label only. */
   displayName?: string;
   /** Stable institution slug, e.g. `super_money`. */
   institutionId?: string;
@@ -104,8 +104,6 @@ export interface Account {
   accountTypeId?: CanonicalAccountTypeId;
   /** Last 4 digits of the account or card. */
   last4?: string;
-  /** When false, SMS automation must ignore this account. */
-  smsMatchingEnabled?: boolean;
   billGenerationDay?: number;
   creditLimit?: number;
   openingBalance?: number;
@@ -444,13 +442,6 @@ export interface Expense {
   subscriptionId?: string; // ID of the subscription that generated this expense
   isRecurring?: boolean;
   isAudited?: boolean;
-  /** Present when this expense was imported from SMS (SPENDLY-41). */
-  smsFingerprint?: string;
-  smsExternalRef?: string;
-  /** SPENDLY-108 — original account-match audit at SMS ingest. */
-  smsMatchStatus?: "AUTO_MATCHED" | "AMBIGUOUS" | "NEEDS_REVIEW";
-  smsMatchConfidence?: number;
-  smsMatchedSignals?: string[];
   /** SPENDLY-106 — idempotent statement-import fingerprint. */
   statementImportFingerprint?: string;
   /** SPENDLY-106 — bill this import line was reconciled against. */
@@ -478,12 +469,6 @@ export interface Income {
   month: string;
   accountId?: string;
   time?: string;
-  smsFingerprint?: string;
-  smsExternalRef?: string;
-  /** SPENDLY-108 — original account-match audit at SMS ingest. */
-  smsMatchStatus?: "AUTO_MATCHED" | "AMBIGUOUS" | "NEEDS_REVIEW";
-  smsMatchConfidence?: number;
-  smsMatchedSignals?: string[];
   /** Soft-delete (SPENDLY-38). Same meaning as `Expense.deletedAt`. */
   deletedAt?: string;
   deletedBy?: string;

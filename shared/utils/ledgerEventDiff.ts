@@ -52,8 +52,6 @@ const FIELD_LABELS: Array<{
   { field: "tripId", label: "Trip" },
   { field: "splitId", label: "Split" },
   { field: "subscriptionId", label: "Subscription" },
-  { field: "smsFingerprint", label: "SMS fingerprint" },
-  { field: "smsExternalRef", label: "SMS reference" },
 ];
 
 /**

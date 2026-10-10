@@ -1,5 +1,5 @@
 import type { MerchantLedgerItem } from "./merchantGrouping";
-import { classifyRecurringCadence } from "../../services/sms/smsRecurringDetector";
+import { classifyRecurringCadence } from "../../services/recurring/recurringDetector";
 
 export interface MerchantInsightWindow {
   /** Inclusive ISO dates for the current period. */

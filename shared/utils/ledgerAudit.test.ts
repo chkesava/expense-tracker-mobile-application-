@@ -77,8 +77,8 @@ function build(over: Partial<LedgerAuditInput> = {}): LedgerAuditInput {
 function dirtyLedger(): Partial<LedgerAuditInput> {
   return {
     expenses: [
-      expense({ id: "a", smsFingerprint: "fp-1" }),
-      expense({ id: "b", smsFingerprint: "fp-1" }),
+      expense({ id: "a", statementImportFingerprint: "stmt-1" }),
+      expense({ id: "b", statementImportFingerprint: "stmt-1" }),
     ],
   };
 }
@@ -298,14 +298,14 @@ describe("ledger audit report (SPENDLY-112)", () => {
       const ctx = buildLedgerAuditContext(
         build({
           expenses: [
-            expense({ smsFingerprint: "fp-1" }),
-            expense({ smsFingerprint: "fp-1" }),
             expense({ statementImportFingerprint: "stmt-1" }),
+            expense({ statementImportFingerprint: "stmt-1" }),
+            expense({ statementImportFingerprint: "stmt-2" }),
           ],
         })
       );
-      expect(ctx.smsFingerprintGroups.get("fp:fp-1")).toHaveLength(2);
-      expect(ctx.statementFingerprintGroups.get("stmt-1")).toHaveLength(1);
+      expect(ctx.statementFingerprintGroups.get("stmt-1")).toHaveLength(2);
+      expect(ctx.statementFingerprintGroups.get("stmt-2")).toHaveLength(1);
     });
   });
 
@@ -353,8 +353,8 @@ describe("ledger audit report (SPENDLY-112)", () => {
 
       const input: LedgerAuditInput = {
         expenses: deepFreeze([
-          expense({ id: "a", smsFingerprint: "fp-1" }),
-          expense({ id: "b", smsFingerprint: "fp-1" }),
+          expense({ id: "a", statementImportFingerprint: "stmt-1" }),
+          expense({ id: "b", statementImportFingerprint: "stmt-1" }),
           expense({ amount: -1, accountId: "gone" }),
         ]),
         incomes: deepFreeze([income({ date: "2026-12-31", month: "2027-01" })]),

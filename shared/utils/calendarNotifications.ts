@@ -14,7 +14,7 @@ import type { CalendarReminder } from "../types/calendarReminder";
 import { shiftDateKey } from "./dates";
 
 /** Notification `data.source` values the tap handler may route. */
-export const NOTIFICATION_ROUTE_SOURCES = ["sms", "credit_card_bill", "calendar"] as const;
+export const NOTIFICATION_ROUTE_SOURCES = ["credit_card_bill", "calendar"] as const;
 
 export function isRoutableNotification(data: unknown): data is { source: string; url: string } {
   const d = data as { source?: unknown; url?: unknown } | null | undefined;

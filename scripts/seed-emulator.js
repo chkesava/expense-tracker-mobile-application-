@@ -141,7 +141,6 @@ function buildDemoData(today = new Date()) {
       accountTypeId,
       last4: extra.last4,
       accountNumber: extra.last4,
-      smsMatchingEnabled: false,
       institutionId: null,
       institutionName: null,
       institutionType: null,

@@ -1,7 +1,7 @@
 import { buildDashboardSummaryOps } from "@/shared/utils/dashboardMutations";
 /**
  * Shared Firestore create for expenses and incomes.
- * Used by ExpenseForm and SMS import — one write shape, one collection path.
+ * Used by ExpenseForm and statement import — one write shape, one collection path.
  */
 
 import { collection, doc, serverTimestamp, getDoc } from "firebase/firestore";
@@ -24,11 +24,6 @@ export type CreateExpenseInput = {
   spaceId?: string | null;
   /** HH:mm posting clock when known. */
   time?: string;
-  smsFingerprint?: string;
-  smsExternalRef?: string;
-  smsMatchStatus?: "AUTO_MATCHED" | "AMBIGUOUS" | "NEEDS_REVIEW";
-  smsMatchConfidence?: number;
-  smsMatchedSignals?: string[];
   /** SPENDLY-106 statement import provenance. */
   statementImportFingerprint?: string;
   creditCardBillId?: string;
@@ -44,11 +39,6 @@ export type CreateIncomeInput = {
   note: string;
   /** HH:mm posting clock when known. */
   time?: string;
-  smsFingerprint?: string;
-  smsExternalRef?: string;
-  smsMatchStatus?: "AUTO_MATCHED" | "AMBIGUOUS" | "NEEDS_REVIEW";
-  smsMatchConfidence?: number;
-  smsMatchedSignals?: string[];
 };
 
 export type LedgerWriteResult = {
@@ -58,7 +48,7 @@ export type LedgerWriteResult = {
 };
 
 export type CreateLedgerOptions = {
-  /** Deterministic id (SMS import). Random id when omitted. */
+  /** Deterministic id (statement import). Random id when omitted. */
   id?: string;
 };
 
@@ -102,21 +92,6 @@ export async function createExpense(
     // byte-identical to what this function wrote before Spaces existed.
     ...(payload.spaceId ? { spaceId: payload.spaceId } : {}),
     ...(payload.time ? { time: payload.time } : {}),
-    ...(payload.smsFingerprint
-      ? { smsFingerprint: payload.smsFingerprint }
-      : {}),
-    ...(payload.smsExternalRef
-      ? { smsExternalRef: payload.smsExternalRef }
-      : {}),
-    ...(payload.smsMatchStatus
-      ? { smsMatchStatus: payload.smsMatchStatus }
-      : {}),
-    ...(typeof payload.smsMatchConfidence === "number"
-      ? { smsMatchConfidence: payload.smsMatchConfidence }
-      : {}),
-    ...(payload.smsMatchedSignals?.length
-      ? { smsMatchedSignals: payload.smsMatchedSignals }
-      : {}),
     ...(payload.statementImportFingerprint
       ? { statementImportFingerprint: payload.statementImportFingerprint }
       : {}),
@@ -188,21 +163,6 @@ export async function createIncome(
     accountId: payload.accountId,
     note: payload.note,
     ...(payload.time ? { time: payload.time } : {}),
-    ...(payload.smsFingerprint
-      ? { smsFingerprint: payload.smsFingerprint }
-      : {}),
-    ...(payload.smsExternalRef
-      ? { smsExternalRef: payload.smsExternalRef }
-      : {}),
-    ...(payload.smsMatchStatus
-      ? { smsMatchStatus: payload.smsMatchStatus }
-      : {}),
-    ...(typeof payload.smsMatchConfidence === "number"
-      ? { smsMatchConfidence: payload.smsMatchConfidence }
-      : {}),
-    ...(payload.smsMatchedSignals?.length
-      ? { smsMatchedSignals: payload.smsMatchedSignals }
-      : {}),
     createdAt: serverTimestamp(),
   };
   let isCreditCard = false;

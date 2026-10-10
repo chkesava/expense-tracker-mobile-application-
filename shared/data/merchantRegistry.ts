@@ -1,9 +1,9 @@
 /**
  * Canonical merchant registry (SPENDLY-188, epic SPENDLY-186).
  *
- * Bundled data only: no network lookups, no remote logos. Seeded from the SMS
+ * Bundled data only: no network lookups, no remote logos. Seeded from the
  * merchant catalog and its category rules, which are READ here and never
- * changed (SMS dedupe keys and statement fingerprints depend on them), then
+ * changed (recurring-detection keys and statement fingerprints depend on them), then
  * enriched with legal names, extra aliases and common Indian merchants.
  *
  * Adding a merchant or alias is a data edit to this file; `registryIssues`
@@ -13,8 +13,8 @@
  * Documented in docs/SPENDLY-188-merchant-normalization.md.
  */
 
-import { SMS_MERCHANT_CATALOG } from "../../services/sms/smsMerchantCatalog";
-import { SMS_MERCHANT_CATEGORY_RULES } from "../../services/sms/smsCategoryRules";
+import { MERCHANT_CATALOG } from "./merchantCatalog";
+import { MERCHANT_CATEGORY_RULES } from "./merchantCategoryRules";
 import type { Merchant } from "../types/merchant";
 import { foldKey, merchantSlug, MERCHANT_LIMITS } from "../utils/merchantModel";
 import { CATEGORY_TAXONOMY } from "./categoryTaxonomy";
@@ -26,19 +26,19 @@ export const MERCHANT_REGISTRY_VERSION = 1;
 export const MIN_ALIAS_LENGTH = 3;
 
 /**
- * SMS catalog aliases the registry leaves out because they collide with
+ * Catalog aliases the registry leaves out because they collide with
  * something else in Indian narrations.
  * - "mcd": Municipal Corporation of Delhi payments, not McDonald's.
  */
-const EXCLUDED_SMS_ALIASES = new Set(["mcd"]);
+const EXCLUDED_CATALOG_ALIASES = new Set(["mcd"]);
 
-/** Seeded SMS rules that mean "no category" rather than a real suggestion. */
+/** Seeded catalog rules that mean "no category" rather than a real suggestion. */
 const isPlaceholderCategory = (category: string, subcategory: string) =>
   category === "Miscellaneous" && subcategory === "Uncategorized";
 
 type Enrichment = { legalName?: string; aliases?: string[] };
 
-/** Extra data for SMS-seeded merchants, keyed by the catalog's canonical name. */
+/** Extra data for catalog-seeded merchants, keyed by the catalog's canonical name. */
 const SEED_ENRICHMENT: Record<string, Enrichment> = {
   Swiggy: { legalName: "Swiggy Limited", aliases: ["bundltechnologies"] },
   Zomato: { legalName: "Zomato Limited" },
@@ -198,11 +198,11 @@ function uniqueFolded(values: (string | undefined)[]): string[] {
 
 function buildRegistry(): Merchant[] {
   const merchants: Merchant[] = [];
-  for (const entry of SMS_MERCHANT_CATALOG) {
-    const rule = SMS_MERCHANT_CATEGORY_RULES.find((r) => foldKey(r.merchant) === foldKey(entry.canonical));
+  for (const entry of MERCHANT_CATALOG) {
+    const rule = MERCHANT_CATEGORY_RULES.find((r) => foldKey(r.merchant) === foldKey(entry.canonical));
     const extra = SEED_ENRICHMENT[entry.canonical] ?? {};
     const aliases = uniqueFolded([entry.canonical, ...(entry.aliases ?? []), ...(extra.aliases ?? [])]).filter(
-      (alias) => !EXCLUDED_SMS_ALIASES.has(alias)
+      (alias) => !EXCLUDED_CATALOG_ALIASES.has(alias)
     );
     merchants.push({
       id: merchantSlug(entry.canonical),

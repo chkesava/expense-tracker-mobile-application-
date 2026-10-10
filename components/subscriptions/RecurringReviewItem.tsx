@@ -4,8 +4,8 @@ import { StyleSheet, Text, View } from "react-native";
 import { Amount } from "@/components/common/Amount";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { formatRecurringCadence } from "@/services/sms/smsRecurringDetector";
-import type { RecurringPattern } from "@/services/sms/smsRecurringDetector";
+import { formatRecurringCadence } from "@/services/recurring/recurringDetector";
+import type { RecurringPattern } from "@/services/recurring/recurringDetector";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export type RecurringReviewItemProps = {

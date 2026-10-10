@@ -27,7 +27,7 @@ import { useSubscriptions } from "@/hooks/useSubscriptions";
 import type { Subscription, SubscriptionFrequency } from "@/shared/types/subscription";
 import { subscriptionFrequency } from "@/shared/types/subscription";
 import { todayDateKey } from "@/shared/utils/dates";
-import { acceptRecurringSuggestion } from "@/services/sms/smsRecurringSync";
+import { acceptRecurringSuggestion } from "@/services/recurring/recurringSync";
 import { useTheme } from "@/theme/ThemeProvider";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -296,9 +296,9 @@ export function EditSubscriptionModal({
       // Say what actually happens. Deleting writes one doc delete and nothing
       // else: already-posted charges keep their `subscriptionId` and stay in
       // the ledger. Deleting also calls `rememberDeletedSubscription`, which
-      // dismisses the merchant so SMS detection stops re-suggesting it —
+      // dismisses the merchant so recurring detection stops re-suggesting it —
       // surprising enough to be worth stating.
-      "Future charges stop. Transactions it has already added to your ledger stay where they are.\n\nThis also stops SMS detection suggesting this merchant again.",
+      "Future charges stop. Transactions it has already added to your ledger stay where they are.\n\nSpendly also stops suggesting this merchant as a recurring charge.",
       [
         { text: "Cancel", style: "cancel" },
         {

@@ -27,7 +27,7 @@ import { useRecurringSuggestions } from "@/hooks/useRecurringSuggestions";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
 import { useAuth } from "@/providers/AuthProvider";
 import { toast } from "@/lib/toast";
-import { patternToSubscription } from "@/services/sms/smsRecurringDetector";
+import { patternToSubscription } from "@/services/recurring/recurringDetector";
 import type { Subscription } from "@/shared/types/subscription";
 import {
   computeMonthlyCommitments,

@@ -6,8 +6,6 @@ import type { InstitutionType } from "../types/expense";
  * - `name` is the canonical institution name
  * - `aliases` / `abbreviations` are brand names
  * - `productNames` are cards/products (e.g. Super Card)
- * - `smsSenders` are SMS headers (e.g. VM-SUPER)
- * - `smsKeywords` are body tokens
  * User account `displayName` is never stored here.
  */
 export type Institution = {
@@ -17,8 +15,6 @@ export type Institution = {
   aliases: string[];
   abbreviations: string[];
   productNames: string[];
-  smsSenders: string[];
-  smsKeywords: string[];
 };
 
 type InstitutionInput = {
@@ -28,8 +24,6 @@ type InstitutionInput = {
   aliases?: string[];
   abbreviations?: string[];
   productNames?: string[];
-  smsSenders?: string[];
-  smsKeywords?: string[];
 };
 
 function defineInstitution(input: InstitutionInput): Institution {
@@ -40,14 +34,12 @@ function defineInstitution(input: InstitutionInput): Institution {
     aliases: input.aliases ?? [],
     abbreviations: input.abbreviations ?? [],
     productNames: input.productNames ?? [],
-    smsSenders: input.smsSenders ?? [],
-    smsKeywords: input.smsKeywords ?? [],
   };
 }
 
 /**
  * Static institution identity catalog.
- * Search UI uses `searchInstitutions`; SMS resolution uses identifier matchers.
+ * Search UI uses `searchInstitutions`.
  */
 export const INSTITUTIONS: Institution[] = [
   defineInstitution({
@@ -60,8 +52,6 @@ export const INSTITUTIONS: Institution[] = [
       "super money card",
       "super money credit card",
     ],
-    smsSenders: ["VM-SUPER", "AD-SUPER", "SUPER"],
-    smsKeywords: ["super money", "super card", "supermoney"],
   }),
   defineInstitution({
     id: "sbi",
@@ -69,128 +59,96 @@ export const INSTITUTIONS: Institution[] = [
     type: "bank",
     aliases: ["sbi", "state bank"],
     abbreviations: ["sbi"],
-    smsSenders: ["SBIIN", "SBIINB", "ATMSBI", "VM-SBIINB", "VK-SBIINB"],
-    smsKeywords: ["state bank", "sbi"],
   }),
   defineInstitution({
     id: "hdfc",
     name: "HDFC",
     type: "bank",
     aliases: ["hdfc"],
-    smsSenders: ["HDFCBK", "VM-HDFCBK", "AD-HDFCBK", "VK-HDFCBK", "AX-HDFCBK"],
-    smsKeywords: ["hdfc"],
   }),
   defineInstitution({
     id: "icici",
     name: "ICICI",
     type: "bank",
     aliases: ["icici"],
-    smsSenders: ["ICICIB", "VM-ICICIB", "AD-ICICIB"],
-    smsKeywords: ["icici"],
   }),
   defineInstitution({
     id: "axis",
     name: "Axis",
     type: "bank",
     aliases: ["axis"],
-    smsSenders: ["AXISBK", "VM-AXISBK", "AD-AXISBK"],
-    smsKeywords: ["axis"],
   }),
   defineInstitution({
     id: "kotak",
     name: "Kotak",
     type: "bank",
     aliases: ["kotak"],
-    smsSenders: ["KOTAKB", "VM-KOTAKB"],
-    smsKeywords: ["kotak"],
   }),
   defineInstitution({
     id: "yes_bank",
     name: "Yes Bank",
     type: "bank",
     aliases: ["yes bank", "yesbank"],
-    smsSenders: ["YESBNK", "VM-YESBNK"],
-    smsKeywords: ["yes bank", "yesbank"],
   }),
   defineInstitution({
     id: "idfc",
     name: "IDFC",
     type: "bank",
     aliases: ["idfc"],
-    smsSenders: ["IDFCFB", "VM-IDFCFB"],
-    smsKeywords: ["idfc"],
   }),
   defineInstitution({
     id: "pnb",
     name: "PNB",
     type: "bank",
     aliases: ["pnb", "punjab national"],
-    smsSenders: ["PUNJAB", "VM-PUNJAB"],
-    smsKeywords: ["pnb", "punjab national"],
   }),
   defineInstitution({
     id: "bob",
     name: "Bank of Baroda",
     type: "bank",
     aliases: ["bob", "bank of baroda"],
-    smsSenders: ["BARBOB", "VM-BARBOB"],
-    smsKeywords: ["bank of baroda", "bob"],
   }),
   defineInstitution({
     id: "canara",
     name: "Canara",
     type: "bank",
     aliases: ["canara"],
-    smsSenders: ["CANBNK", "VM-CANBNK"],
-    smsKeywords: ["canara"],
   }),
   defineInstitution({
     id: "union_bank",
     name: "Union Bank",
     type: "bank",
     aliases: ["union bank"],
-    smsSenders: ["UBININ", "VM-UBININ"],
-    smsKeywords: ["union bank"],
   }),
   defineInstitution({
     id: "indusind",
     name: "IndusInd",
     type: "bank",
     aliases: ["indusind"],
-    smsSenders: ["INDUSI", "VM-INDUSI"],
-    smsKeywords: ["indusind"],
   }),
   defineInstitution({
     id: "federal",
     name: "Federal",
     type: "bank",
     aliases: ["federal"],
-    smsSenders: ["FDRLHO", "VM-FDRLHO"],
-    smsKeywords: ["federal"],
   }),
   defineInstitution({
     id: "rbl",
     name: "RBL",
     type: "bank",
     aliases: ["rbl"],
-    smsSenders: ["RBLBNK", "VM-RBLBNK"],
-    smsKeywords: ["rbl"],
   }),
   defineInstitution({
     id: "hsbc",
     name: "HSBC",
     type: "bank",
     aliases: ["hsbc"],
-    smsSenders: ["HSBCIN", "VM-HSBCIN"],
-    smsKeywords: ["hsbc"],
   }),
   defineInstitution({
     id: "citi",
     name: "Citi",
     type: "bank",
     aliases: ["citi"],
-    smsSenders: ["CITIBK", "VM-CITIBK"],
-    smsKeywords: ["citi"],
   }),
   defineInstitution({
     id: "amex",
@@ -198,56 +156,42 @@ export const INSTITUTIONS: Institution[] = [
     type: "card_issuer",
     aliases: ["amex", "american express"],
     productNames: ["amex card"],
-    smsSenders: ["AMEXIN", "VM-AMEXIN"],
-    smsKeywords: ["american express", "amex"],
   }),
   defineInstitution({
     id: "paytm",
     name: "Paytm",
     type: "wallet",
     aliases: ["paytm"],
-    smsSenders: ["PAYTMB", "VM-PAYTMB"],
-    smsKeywords: ["paytm"],
   }),
   defineInstitution({
     id: "phonepe",
     name: "PhonePe",
     type: "wallet",
     aliases: ["phonepe", "phone pe"],
-    smsSenders: ["PHONEPE", "PHONPE", "AX-PHONEPE"],
-    smsKeywords: ["phonepe", "phone pe"],
   }),
   defineInstitution({
     id: "google_pay",
     name: "Google Pay",
     type: "wallet",
     aliases: ["google pay", "gpay"],
-    smsSenders: ["GPAYIN", "VM-GPAYIN"],
-    smsKeywords: ["google pay", "gpay"],
   }),
   defineInstitution({
     id: "amazon_pay",
     name: "Amazon Pay",
     type: "wallet",
     aliases: ["amazon pay"],
-    smsSenders: ["AMZPAY", "VM-AMZPAY"],
-    smsKeywords: ["amazon pay"],
   }),
   defineInstitution({
     id: "fi",
     name: "Fi",
     type: "nbfc",
     aliases: ["fi", "epifi"],
-    smsSenders: ["EPIFII", "VM-EPIFII"],
-    smsKeywords: ["epifi"],
   }),
   defineInstitution({
     id: "jupiter",
     name: "Jupiter",
     type: "nbfc",
     aliases: ["jupiter"],
-    smsSenders: ["JUPITR", "VM-JUPITR"],
-    smsKeywords: ["jupiter"],
   }),
   defineInstitution({
     id: "slice",
@@ -255,8 +199,6 @@ export const INSTITUTIONS: Institution[] = [
     type: "card_issuer",
     aliases: ["slice"],
     productNames: ["slice card"],
-    smsSenders: ["SLICEI", "VM-SLICEI"],
-    smsKeywords: ["slice"],
   }),
   defineInstitution({
     id: "uni",
@@ -264,8 +206,6 @@ export const INSTITUTIONS: Institution[] = [
     type: "card_issuer",
     aliases: ["uni", "uni cards"],
     productNames: ["uni card"],
-    smsSenders: ["UNICRD", "VM-UNICRD"],
-    smsKeywords: ["uni cards"],
   }),
 ];
 
@@ -310,7 +250,7 @@ export function getInstitutionById(id?: string | null): Institution | undefined 
   return INSTITUTIONS.find((item) => item.id === key);
 }
 
-/** Name / alias / product / abbreviation — never SMS senders, never displayName. */
+/** Name / alias / product / abbreviation — never displayName. */
 export function institutionTextLabels(institution: Institution): string[] {
   return [
     institution.name,
@@ -350,15 +290,6 @@ export function searchInstitutions(query: string): Institution[] {
         score = Math.max(score, 700);
       } else if (labelName.includes(q) || labelFolded.includes(folded)) {
         score = Math.max(score, 400);
-      }
-    }
-
-    for (const sender of institution.smsSenders) {
-      const senderFolded = foldInstitutionKey(sender);
-      if (sender.toLowerCase() === q || senderFolded === folded) {
-        score = Math.max(score, 300);
-      } else if (folded.length >= 4 && senderFolded.includes(folded)) {
-        score = Math.max(score, 200);
       }
     }
 

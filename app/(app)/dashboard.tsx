@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { ShieldAlert, Sparkles, Inbox, ChevronRight } from "lucide-react-native";
+import { ShieldAlert, Sparkles } from "lucide-react-native";
 
 import { BudgetAlertsWidget } from "@/components/dashboard/BudgetAlertsWidget";
 import { DashboardWelcome } from "@/components/dashboard/DashboardWelcome";
@@ -32,7 +32,6 @@ import { useDashboardSummary } from "@/hooks/useDashboardSummary";
 import { useDashboardCashFlow } from "@/hooks/useDashboardCashFlow";
 import { useRecentExpenses } from "@/hooks/useRecentExpenses";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
-import { useSmsReviewInbox } from "@/hooks/useSmsReviewInbox";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGlobalMonth, useModalActions } from "@/providers/ModalProvider";
 import { useInvestmentsEnabled } from "@/hooks/useInvestmentsEnabled";
@@ -47,7 +46,6 @@ import {
   getOrderedDashboardWidgets,
   type DashboardWidgetId,
 } from "@/shared/utils/dashboardWidgets";
-import { formatDetectedCount } from "@/services/sms/smsReviewInbox";
 import { currentMonthKey, formatDateKey, isInMonth } from "@/shared/utils/dates";
 import {
   cashFlowByMonth,
@@ -110,7 +108,6 @@ export default function DashboardScreen() {
   const { expenses: recentExpenses, loading: recentLoading } = useRecentExpenses(5);
   const { summaries: cashFlowSummaries } = useDashboardCashFlow(activeMonth, 6);
 
-  const { count: inboxCount } = useSmsReviewInbox();
   const { accounts, loading: accountsLoading } = useAccounts();
   const { subscriptions } = useSubscriptions();
   const { markScreenVisited } = useSetupProgress();
@@ -408,53 +405,6 @@ export default function DashboardScreen() {
             </Text>
           </View>
         </View>
-      ) : null}
-
-      {!isDuress && inboxCount > 0 ? (
-        <Pressable
-          onPress={() => {
-            haptic.selection().catch(() => undefined);
-            router.push("/sms-inbox" as any);
-          }}
-          android_ripple={{
-            color: withAlpha(theme.colors.primary, 0.12),
-            borderless: false,
-          }}
-          style={({ pressed }) => [
-            styles.alertBanner,
-            { backgroundColor: surfaces.wash(theme.colors.primary) },
-            pressed && { opacity: 0.85 },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Open Transaction Inbox"
-        >
-          <Inbox size={17} color={theme.colors.primary} strokeWidth={2.3} />
-          <View style={styles.alertTextCol}>
-            <Text
-              style={[
-                styles.alertTitle,
-                {
-                  color: theme.colors.foreground,
-                  fontFamily: theme.fontFamily.semibold,
-                },
-              ]}
-            >
-              Transaction inbox
-            </Text>
-            <Text
-              style={[
-                styles.alertText,
-                {
-                  color: theme.colors.mutedForeground,
-                  fontFamily: theme.fontFamily.regular,
-                },
-              ]}
-            >
-              {formatDetectedCount(inboxCount)} — tap to Add or Ignore
-            </Text>
-          </View>
-          <ChevronRight size={16} color={theme.colors.primary} />
-        </Pressable>
       ) : null}
 
       {system.announcementBanner ? (

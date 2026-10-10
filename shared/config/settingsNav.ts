@@ -71,8 +71,8 @@ export const SETTINGS_SECTIONS: SettingsSectionMeta[] = [
     id: "automation",
     group: "automation",
     title: "Automation",
-    subtitle: "SMS, rules & bill reminders",
-    keywords: "sms inbox auto categorize notifications credit card bills reminders",
+    subtitle: "Rules, bill reminders & calendar alerts",
+    keywords: "auto categorize notifications credit card bills reminders",
   },
   {
     id: "privacy",

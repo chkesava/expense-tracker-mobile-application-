@@ -73,7 +73,7 @@ export default function SettingsHubScreen() {
         <EmptyState
           illustration="general"
           title="No matching settings"
-          description="Try a different name, like PIN, SMS, or theme."
+          description="Try a different name, like PIN, budgets, or theme."
           primaryAction={{
             label: "Clear search",
             onPress: () => setQuery(""),

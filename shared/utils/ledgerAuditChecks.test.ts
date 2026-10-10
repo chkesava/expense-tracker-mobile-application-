@@ -9,7 +9,6 @@ import {
   type LedgerAuditReadiness,
 } from "./ledgerAudit";
 import {
-  checkDuplicateSmsFingerprint,
   checkDuplicateStatementFingerprint,
   checkInvalidAmount,
   checkInvalidDate,
@@ -241,58 +240,26 @@ describe("ledger integrity checks (SPENDLY-112)", () => {
         expense({ amount: 120, date: "2026-09-10", note: "Coffee" }),
       ];
       const context = ctx({ expenses: rows });
-      expect(checkDuplicateSmsFingerprint(context)).toEqual([]);
       expect(checkDuplicateStatementFingerprint(context)).toEqual([]);
     });
 
-    it("reports two rows sharing an SMS fingerprint as one finding carrying both", () => {
-      const rows = [
-        expense({ id: "a", smsFingerprint: "fp-1" }),
-        expense({ id: "b", smsFingerprint: "fp-1" }),
-      ];
-      const found = checkDuplicateSmsFingerprint(ctx({ expenses: rows }));
-      expect(found).toHaveLength(1);
-      expect(found[0].subjects.map((subject) => subject.id)).toEqual(["a", "b"]);
-      expect(found[0].severity).toBe("error");
-    });
-
     it("reports three rows sharing a fingerprint as one finding with three subjects", () => {
-      const rows = ["a", "b", "c"].map((id) => expense({ id, smsFingerprint: "fp-1" }));
-      const found = checkDuplicateSmsFingerprint(ctx({ expenses: rows }));
+      const rows = ["a", "b", "c"].map((id) =>
+        expense({ id, statementImportFingerprint: "stmt-1" })
+      );
+      const found = checkDuplicateStatementFingerprint(ctx({ expenses: rows }));
       expect(found).toHaveLength(1);
       expect(found[0].subjects).toHaveLength(3);
-      expect(found[0].message).toContain("3 transactions");
-    });
-
-    it("emits one finding when a pair is reachable by both fingerprint and reference", () => {
-      const rows = [
-        expense({ id: "a", smsFingerprint: "fp-1", smsExternalRef: "ref-1" }),
-        expense({ id: "b", smsFingerprint: "fp-1", smsExternalRef: "ref-1" }),
-      ];
-      expect(checkDuplicateSmsFingerprint(ctx({ expenses: rows }))).toHaveLength(1);
-    });
-
-    it("matches an expense against an income when they share a reference", () => {
-      const found = checkDuplicateSmsFingerprint(
-        ctx({
-          expenses: [expense({ id: "a", smsExternalRef: "ref-1" })],
-          incomes: [income({ id: "b", smsExternalRef: "ref-1" })],
-        })
-      );
-      expect(found).toHaveLength(1);
-      expect(found[0].subjects.map((subject) => subject.kind)).toEqual([
-        "expense",
-        "income",
-      ]);
+      expect(found[0].severity).toBe("error");
     });
 
     it("ignores an empty fingerprint rather than grouping every blank row together", () => {
       const rows = [
-        expense({ smsFingerprint: "" }),
-        expense({ smsFingerprint: "   " }),
+        expense({ statementImportFingerprint: "" }),
+        expense({ statementImportFingerprint: "   " }),
         expense({}),
       ];
-      expect(checkDuplicateSmsFingerprint(ctx({ expenses: rows }))).toEqual([]);
+      expect(checkDuplicateStatementFingerprint(ctx({ expenses: rows }))).toEqual([]);
     });
 
     it("reports a re-imported statement line", () => {
@@ -307,10 +274,14 @@ describe("ledger integrity checks (SPENDLY-112)", () => {
 
     it("never counts a soft-deleted row towards a duplicate group", () => {
       const rows = [
-        expense({ id: "a", smsFingerprint: "fp-1" }),
-        expense({ id: "b", smsFingerprint: "fp-1", deletedAt: "2026-09-11T00:00:00Z" }),
+        expense({ id: "a", statementImportFingerprint: "stmt-1" }),
+        expense({
+          id: "b",
+          statementImportFingerprint: "stmt-1",
+          deletedAt: "2026-09-11T00:00:00Z",
+        }),
       ];
-      expect(checkDuplicateSmsFingerprint(ctx({ expenses: rows }))).toEqual([]);
+      expect(checkDuplicateStatementFingerprint(ctx({ expenses: rows }))).toEqual([]);
     });
   });
 
@@ -460,10 +431,9 @@ describe("ledger integrity checks (SPENDLY-112)", () => {
             spaceId: "gone",
             tripId: "gone",
             splitId: "gone",
-            smsFingerprint: "fp-1",
             statementImportFingerprint: "stmt-1",
           }),
-          expense({ ...removed, smsFingerprint: "fp-1" }),
+          expense({ ...removed, statementImportFingerprint: "stmt-1" }),
         ],
         incomes: [income({ ...removed, date: "bad", accountId: "gone" })],
         bills: [],
@@ -479,8 +449,7 @@ describe("ledger integrity checks (SPENDLY-112)", () => {
         checkMonthDateMismatch,
         checkInvalidAmount,
         checkZeroAmount,
-        checkDuplicateSmsFingerprint,
-        checkDuplicateStatementFingerprint,
+              checkDuplicateStatementFingerprint,
         checkOrphanAccountRef,
         checkOrphanBillRef,
         checkOrphanSubscriptionRef,

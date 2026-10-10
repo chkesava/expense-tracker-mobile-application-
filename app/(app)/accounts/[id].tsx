@@ -41,7 +41,6 @@ import { RecordCashbackModal } from "@/components/accounts/RecordCashbackModal";
 import { CashbackHistoryCard } from "@/components/accounts/CashbackHistoryCard";
 import { CreditCardAnalyticsSection } from "@/components/accounts/CreditCardAnalyticsSection";
 import { CreditStatementCard } from "@/components/accounts/CreditStatementCard";
-import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { TransferFundsModal } from "@/components/accounts/TransferFundsModal";
 import {
   TransactionColumnHeaders,
@@ -86,10 +85,7 @@ import {
 } from "@/shared/utils/billingCycle";
 import { roundMoney } from "@/shared/utils/money";
 import { buildCashbackHistory } from "@/shared/utils/cashbackHistory";
-import {
-  formatCreditCardHeaderLine,
-  smsMatchingStatusLabel,
-} from "@/shared/utils/accountIdentity";
+import { formatCreditCardHeaderLine } from "@/shared/utils/accountIdentity";
 import {
   applyAccountActivityFilters,
   countActiveAccountActivityFilters,
@@ -1499,11 +1495,6 @@ export default function AccountDetailScreen() {
         }
         variant={isCreditCard ? "credit" : "default"}
         accentColor={account.color}
-        warning={
-          smsMatchingStatusLabel(account, typeName) ? (
-            <SmsMatchingUnconfiguredText account={account} typeName={typeName} />
-          ) : undefined
-        }
         onBack={() => router.back()}
         onEdit={() => {
           haptic.light().catch(() => undefined);

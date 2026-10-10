@@ -27,9 +27,6 @@ export type LedgerEventSnapshot = {
   tripId?: string | null;
   splitId?: string;
   subscriptionId?: string;
-  /** Kept across corrections so SMS provenance survives edits (SPENDLY-108). */
-  smsFingerprint?: string;
-  smsExternalRef?: string;
   /**
    * Payment events only (SPENDLY-385). `accountId` holds the paying account
    * (`fromAccountId`, or the `"external"` sentinel) so the existing diff and

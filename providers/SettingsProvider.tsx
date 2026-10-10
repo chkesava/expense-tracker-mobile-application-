@@ -23,10 +23,6 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import {
-  resetDisplayCurrencyPreferences,
-  setDisplayCurrencyPreferences,
-} from "@/shared/utils/displayCurrency";
-import {
   SETTINGS_DEFAULTS,
   mergeSettingsFromDoc,
   overlayPendingSettings,
@@ -91,22 +87,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     haptic.setEnabled(settings.hapticFeedback);
   }, [settings.hapticFeedback]);
 
-  // Mirror money-formatting prefs for code that formats outside the React tree
-  // (SMS notification copy, background handlers).
-  useEffect(() => {
-    setDisplayCurrencyPreferences({
-      currency: settings.currency,
-      numberFormat: settings.numberFormat,
-    });
-  }, [settings.currency, settings.numberFormat]);
-
   useEffect(() => {
     if (!realUser) {
       overlayRef.current = {};
       pendingRef.current = {};
       setSettings(SETTINGS_DEFAULTS);
       setSeedAttempted(false);
-      resetDisplayCurrencyPreferences();
       return;
     }
     if (userDocLoading) return;

@@ -318,39 +318,12 @@ describe("journal related records (SPENDLY-110)", () => {
   });
 
   describe("provenance", () => {
-    it("reports an SMS import with its match status", () => {
-      const [record] = findJournalRelatedRecords({
-        expense: expense({
-          smsExternalRef: "ref-1",
-          smsMatchStatus: "NEEDS_REVIEW",
-        }),
-      });
-      expect(record).toMatchObject({
-        kind: "smsImport",
-        detail: "NEEDS_REVIEW",
-      });
-    });
-
-    it("falls back to the fingerprint when there is no external ref", () => {
-      const [record] = findJournalRelatedRecords({
-        expense: expense({ smsFingerprint: "fp-1" }),
-      });
-      expect(record.kind).toBe("smsImport");
-    });
-
     it("reports a statement import", () => {
       const [record] = findJournalRelatedRecords({
         expense: expense({ statementImportFingerprint: "sf-1" }),
       });
       expect(record).toMatchObject({ kind: "statementImport" });
       expect(record.detail).toMatch(/duplicate/i);
-    });
-
-    it("works for an SMS-imported income", () => {
-      const [record] = findJournalRelatedRecords({
-        income: income({ smsFingerprint: "fp-2" }),
-      });
-      expect(record.kind).toBe("smsImport");
     });
   });
 
@@ -368,7 +341,7 @@ describe("journal related records (SPENDLY-110)", () => {
         expense: expense({
           creditCardBillId: "bill-1",
           tripId: "t-1",
-          smsFingerprint: "fp-1",
+          statementImportFingerprint: "sf-1",
         }),
         payments: [
           payment({ sourceType: "cashback", linkedExpenseId: "e1", amount: 50 }),
@@ -380,7 +353,7 @@ describe("journal related records (SPENDLY-110)", () => {
         "bill",
         "billPayment",
         "trip",
-        "smsImport",
+        "statementImport",
       ]);
     });
   });
