@@ -20,6 +20,13 @@ export type BalanceDeltaParams = {
    * healthy, so a full-ledger rebuild still gets run for it.
    */
   needsInitialization?: boolean;
+  /**
+   * A card credit (e.g. cashback) settles the oldest open statement first and
+   * only the leftover reduces unbilled spend — a split this delta model can't
+   * express. Set this so the write flags `needs_reconciliation` instead of
+   * leaving `statementDue`/`unbilledSpend` silently un-split until a rebuild.
+   */
+  flagReconciliation?: boolean;
 };
 
 export function buildAccountBalanceOps(
@@ -36,6 +43,7 @@ export function buildAccountBalanceOps(
       existing.amountDelta += d.amountDelta;
       existing.isUnbilled = existing.isUnbilled || d.isUnbilled;
       existing.needsInitialization = existing.needsInitialization || d.needsInitialization;
+      existing.flagReconciliation = existing.flagReconciliation || d.flagReconciliation;
     }
   }
   
@@ -67,6 +75,9 @@ export function buildAccountBalanceOps(
       }
       if (d.isUnbilled) {
         updateData.unbilledSpend = increment(-d.amountDelta);
+      }
+      if (d.flagReconciliation) {
+        updateData.summaryReconciliationStatus = "needs_reconciliation";
       }
       ops.push({ op: "update", ref: { path: ref.path }, data: updateData });
 

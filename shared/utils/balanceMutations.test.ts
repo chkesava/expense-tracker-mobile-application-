@@ -65,4 +65,47 @@ describe("buildAccountBalanceOps", () => {
     // Not -7600 (what a bare increment() on an absent field would produce).
     expect(data.currentBalance).toBe(11381);
   });
+
+  // A card credit (cashback) settles the oldest open statement first and only
+  // the leftover reduces unbilled spend — a split this delta model can't
+  // express, so the write must flag reconciliation instead of pretending the
+  // statementDue/unbilledSpend split is exact.
+  describe("flagReconciliation", () => {
+    it("flags needs_reconciliation on an already-initialized credit card", () => {
+      const ops = buildAccountBalanceOps("u1", [
+        {
+          accountId: "c1",
+          amountDelta: 200,
+          isCreditCard: true,
+          isUnbilled: false,
+          oldOutstanding: 2000,
+          flagReconciliation: true,
+        },
+      ]);
+      const accountOp = ops.find((op): op is Extract<typeof op, { data: object }> => op.op !== "delete" && op.ref.path === "users/u1/accounts/c1")!;
+      const data = accountOp.data as Record<string, unknown>;
+      expect(typeof data.currentOutstanding).not.toBe("number");
+      expect(data.summaryReconciliationStatus).toBe("needs_reconciliation");
+      expect(data.unbilledSpend).toBeUndefined();
+    });
+
+    it("does not flag reconciliation when not requested", () => {
+      const ops = buildAccountBalanceOps("u1", [
+        { accountId: "c1", amountDelta: -500, isCreditCard: true, oldOutstanding: 2000 },
+      ]);
+      const accountOp = ops.find((op): op is Extract<typeof op, { data: object }> => op.op !== "delete" && op.ref.path === "users/u1/accounts/c1")!;
+      const data = accountOp.data as Record<string, unknown>;
+      expect(data.summaryReconciliationStatus).toBeUndefined();
+    });
+
+    it("aggregates the flag across multiple deltas for the same account", () => {
+      const ops = buildAccountBalanceOps("u1", [
+        { accountId: "c1", amountDelta: -500, isCreditCard: true, oldOutstanding: 2000 },
+        { accountId: "c1", amountDelta: 200, isCreditCard: true, flagReconciliation: true },
+      ]);
+      const accountOp = ops.find((op): op is Extract<typeof op, { data: object }> => op.op !== "delete" && op.ref.path === "users/u1/accounts/c1")!;
+      const data = accountOp.data as Record<string, unknown>;
+      expect(data.summaryReconciliationStatus).toBe("needs_reconciliation");
+    });
+  });
 });

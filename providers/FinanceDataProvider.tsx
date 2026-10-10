@@ -61,6 +61,7 @@ import {
 import { getAccountKind } from "@/shared/utils/accountKind";
 import { fetchAccountTypes } from "@/services/ledger/fetchAccountTypes";
 import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
+import type { MutationOp } from "@/shared/types/mutations";
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { resolveJournalDateScope } from "@/shared/utils/journalDateScope";
 import { isActiveLedgerRow } from "@/shared/utils/ledgerRow";
@@ -1218,6 +1219,37 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       try {
         const id = cashbackDocId(input);
         const ref = doc(database, "users", u.uid, "accountPayments", id);
+
+        // The id is deterministic (a double-tap/retry/second-device resolves
+        // to the same doc), so only apply the balance delta the first time —
+        // otherwise a retry after a dropped connection would decrement
+        // `currentOutstanding` twice for one real credit.
+        const existing = await import("firebase/firestore").then((m) => m.getDoc(ref));
+        let balOps: MutationOp[] = [];
+        if (!existing.exists()) {
+          const accountInfo = (
+            await fetchAccountTypes(database, u.uid, [input.cardId])
+          ).get(input.cardId);
+          balOps = buildAccountBalanceOps(u.uid, [
+            {
+              accountId: input.cardId,
+              // A credit reduces what the card owes — same sign convention
+              // `recordCreditBillPayment` uses for a bill payment.
+              amountDelta: input.amount,
+              isCreditCard: true,
+              isUnbilled: false,
+              oldOutstanding: accountInfo?.oldOutstanding,
+              needsInitialization: accountInfo?.needsInitialization,
+              // Unlike a bill payment, a cashback credit isn't tied to one
+              // statement: it settles the oldest open bill first and only
+              // the leftover reduces unbilled spend, a split this delta
+              // can't express. Flag it so the existing "tap Edit to
+              // rebuild" banner prompts the precise split to be recomputed.
+              flagReconciliation: true,
+            },
+          ]);
+        }
+
         const outcome = await commitMutations(
           u.uid,
           [
@@ -1243,6 +1275,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
                 updatedAt: serverTimestamp(),
               },
             },
+            ...balOps,
           ],
           { label: "cashback" }
         );
@@ -1269,18 +1302,43 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const database = getFirestoreDb();
     if (!u || !database || !id) return false;
     try {
+      const ref = doc(database, "users", u.uid, "accountPayments", id);
+      const snap = await import("firebase/firestore").then((m) => m.getDoc(ref));
+      let balOps: MutationOp[] = [];
+      // Already voided (or never existed): reversing the balance again would
+      // double-credit outstanding back for one real reversal.
+      if (snap.exists() && !snap.data()?.voidedAt) {
+        const data = snap.data();
+        const accountInfo = (
+          await fetchAccountTypes(database, u.uid, [data.toAccountId])
+        ).get(data.toAccountId);
+        balOps = buildAccountBalanceOps(u.uid, [
+          {
+            accountId: data.toAccountId,
+            // Reverse of the credit `addCashback` applied.
+            amountDelta: -(Number(data.amount) || 0),
+            isCreditCard: true,
+            isUnbilled: false,
+            oldOutstanding: accountInfo?.oldOutstanding,
+            needsInitialization: accountInfo?.needsInitialization,
+            flagReconciliation: true,
+          },
+        ]);
+      }
+
       const outcome = await commitMutations(
         u.uid,
         [
           {
             op: "update",
-            ref: doc(database, "users", u.uid, "accountPayments", id),
+            ref,
             data: {
               voidedAt: new Date().toISOString(),
               ...(reason?.trim() ? { voidReason: reason.trim() } : {}),
               updatedAt: serverTimestamp(),
             },
           },
+          ...balOps,
         ],
         { label: "cashback reversal" }
       );
