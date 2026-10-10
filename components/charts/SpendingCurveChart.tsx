@@ -1,22 +1,13 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { LayoutChangeEvent, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Path, Stop, Line, Text as SvgText } from "react-native-svg";
-import Animated, {
-  FadeIn,
-  FadeOut,
-  useAnimatedProps,
-  useSharedValue,
-  withDelay,
-  withSpring,
-} from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 
 import { Amount } from "@/components/common/Amount";
 import { compactAxisValue } from "@/components/charts/axis";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
-
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 export interface CurvePoint {
   date: string; // e.g. "2026-08-01" or "1", "2"...
@@ -39,56 +30,10 @@ export interface SpendingCurveChartProps {
    */
   autoDomain?: boolean;
   /**
-   * Animate each dot in with a staggered spring. Turn off for long series —
-   * the stagger is per-point, so hundreds of points take many seconds.
+   * @deprecated No-op since SPENDLY-489. Dots are static; the chart fades in
+   * as one view. Per-dot Reanimated props failed on unmounted SVG nodes.
    */
   animateDots?: boolean;
-}
-
-function AnimatedCurveDot({
-  cx,
-  cy,
-  targetRadius,
-  fill,
-  stroke,
-  strokeWidth,
-  index,
-  onPress,
-}: {
-  cx: number;
-  cy: number;
-  targetRadius: number;
-  fill: string;
-  stroke: string;
-  strokeWidth: number;
-  index: number;
-  onPress: () => void;
-}) {
-  const radius = useSharedValue(0);
-
-  useEffect(() => {
-    radius.value = 0;
-    radius.value = withDelay(
-      index * 30,
-      withSpring(targetRadius, { damping: 14, stiffness: 220 })
-    );
-  }, [targetRadius, index, radius]);
-
-  const animatedProps = useAnimatedProps(() => ({
-    r: radius.value,
-  }));
-
-  return (
-    <AnimatedCircle
-      cx={cx}
-      cy={cy}
-      fill={fill}
-      stroke={stroke}
-      strokeWidth={strokeWidth}
-      animatedProps={animatedProps}
-      onPress={onPress}
-    />
-  );
 }
 
 export function SpendingCurveChart({
@@ -100,7 +45,6 @@ export function SpendingCurveChart({
   showYAxis = false,
   xTickCount = 3,
   autoDomain = false,
-  animateDots = true,
 }: SpendingCurveChartProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -334,21 +278,7 @@ export function SpendingCurveChart({
               setSelectedIndex(i);
             };
 
-            // A plain circle still reads and still responds to touch; it just
-            // skips the per-point spring that makes long series crawl.
-            return animateDots ? (
-              <AnimatedCurveDot
-                key={i}
-                cx={pt.x}
-                cy={pt.y}
-                targetRadius={targetRadius}
-                fill={isSelected ? theme.colors.foreground : activeLineColor}
-                stroke={theme.colors.card}
-                strokeWidth={isSelected ? 2 : 1}
-                index={i}
-                onPress={onPress}
-              />
-            ) : (
+            return (
               <Circle
                 key={i}
                 cx={pt.x}
