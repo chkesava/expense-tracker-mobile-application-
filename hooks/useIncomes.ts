@@ -11,6 +11,8 @@ export function useIncomes() {
     isFetchingMoreIncomes,
     loadMoreIncomes,
     loadAllIncomes,
+    incomeMonthsLoaded,
+    loadIncomesForMonth,
     removeIncome,
     updateIncome,
   } = useIncomesContext();
@@ -29,6 +31,10 @@ export function useIncomes() {
     loadMore: loadMoreIncomes,
     /** SPENDLY-410: Loads all remaining historical incomes on demand. */
     loadAll: loadAllIncomes,
+    /** Month keys ("YYYY-MM") already confirmed loaded via a direct date-range query. */
+    monthsLoaded: incomeMonthsLoaded,
+    /** Fetches every income dated within `monthKey` directly, once. */
+    loadMonth: loadIncomesForMonth,
     removeIncome,
     updateIncome,
   };

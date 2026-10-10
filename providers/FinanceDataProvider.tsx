@@ -62,6 +62,7 @@ import { getAccountKind } from "@/shared/utils/accountKind";
 import { fetchAccountTypes } from "@/services/ledger/fetchAccountTypes";
 import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
+import { resolveJournalDateScope } from "@/shared/utils/journalDateScope";
 import { isActiveLedgerRow } from "@/shared/utils/ledgerRow";
 import {
   FINANCE_SNAPSHOT_LISTEN_OPTIONS,
@@ -113,6 +114,15 @@ export type ExpensesContextType = {
   loadMoreExpenses: () => Promise<void>;
   /** SPENDLY-410: Loads all remaining historical expenses on demand. */
   loadAllExpenses: () => Promise<void>;
+  /**
+   * Month keys ("YYYY-MM") confirmed loaded by a direct `date`-range query,
+   * independent of how far the `createdAt` cursor has paged back. Lets a
+   * screen trust a single selected month's totals without reading the whole
+   * ledger first.
+   */
+  expenseMonthsLoaded: Set<string>;
+  /** Fetches every expense dated within `monthKey`, once, via `where("date", ...)`. */
+  loadExpensesForMonth: (monthKey: string) => Promise<void>;
   /** Local ledger mutation helper for optimistic updates. */
   removeExpense: (id: string) => void;
   updateExpense: (id: string, updates: Partial<Expense>) => void;
@@ -137,6 +147,10 @@ export type IncomesContextType = {
   loadMoreIncomes: () => Promise<void>;
   /** SPENDLY-410: Loads all remaining historical incomes on demand. */
   loadAllIncomes: () => Promise<void>;
+  /** Month keys ("YYYY-MM") confirmed loaded by a direct `date`-range query. Mirrors `expenseMonthsLoaded`. */
+  incomeMonthsLoaded: Set<string>;
+  /** Fetches every income dated within `monthKey`, once, via `where("date", ...)`. */
+  loadIncomesForMonth: (monthKey: string) => Promise<void>;
   /** Local ledger mutation helper for optimistic updates. */
   removeIncome: (id: string) => void;
   updateIncome: (id: string, updates: Partial<Income>) => void;
@@ -277,6 +291,19 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     hasMoreIncomesRef.current = hasMoreIncomes;
   }, [hasMoreIncomes]);
+
+  // Month keys already fetched in full via a direct date-range query, so a
+  // screen can trust one month's totals without paging through the whole
+  // createdAt-ordered history first. Refs dedupe in-flight/duplicate calls;
+  // the state copies drive re-renders.
+  const expenseMonthsLoadedRef = useRef<Set<string>>(new Set());
+  const [expenseMonthsLoaded, setExpenseMonthsLoaded] = useState<Set<string>>(
+    new Set()
+  );
+  const incomeMonthsLoadedRef = useRef<Set<string>>(new Set());
+  const [incomeMonthsLoaded, setIncomeMonthsLoaded] = useState<Set<string>>(
+    new Set()
+  );
 
   // Combined expenses: realtime snapshot wins on matching id; paginated rows append
   const expenses = useMemo<Expense[]>(() => {
@@ -1530,6 +1557,54 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     }
   }, [loadMoreExpenses]);
 
+  /**
+   * Fetches every expense dated inside `monthKey` directly, instead of paging
+   * backwards through `createdAt` order until that month happens to surface.
+   * A single bounded `where("date", ...)` read is cheap (the month's actual
+   * row count) and, unlike the cursor page, proves the month is complete.
+   */
+  const loadExpensesForMonth = useCallback(async (monthKey: string) => {
+    const u = userRef.current;
+    const database = getFirestoreDb();
+    if (!u || !database || expenseMonthsLoadedRef.current.has(monthKey)) return;
+    const scope = resolveJournalDateScope(monthKey, { fromDate: "", toDate: "" });
+    if (!scope.fromDate || !scope.toDate) return;
+
+    expenseMonthsLoadedRef.current.add(monthKey);
+    try {
+      const expensesCol = collection(database, "users", u.uid, "expenses");
+      const q = query(
+        expensesCol,
+        where("date", ">=", scope.fromDate),
+        where("date", "<=", scope.toDate)
+      );
+      const snap = await getDocs(q);
+      logDirectRead(
+        `users/${u.uid}/expenses`,
+        snap.docs.length,
+        snap.metadata.fromCache ? "cache" : "server",
+        { feature: "ledger_month_query", queryShape: `date range ${monthKey}` }
+      );
+
+      const { items: newItems } = foldLedgerSnapshot<Expense>(snap.docs, {
+        activeOnly: true,
+      });
+      setPaginatedExpenses((prev) => {
+        const existingIds = new Set([
+          ...realtimeExpensesRef.current.map((e) => e.id),
+          ...prev.map((e) => e.id),
+        ]);
+        const toAdd = newItems.filter((e) => e.id && !existingIds.has(e.id));
+        return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+      });
+      setExpenseMonthsLoaded(new Set(expenseMonthsLoadedRef.current));
+    } catch (err) {
+      expenseMonthsLoadedRef.current.delete(monthKey);
+      logError("financeProvider.loadExpensesForMonth", err);
+      toast.error(friendlyErrorMessage(err, "Failed to load that month's expenses"));
+    }
+  }, []);
+
   const removeExpense = useCallback((id: string) => {
     setRealtimeExpenses((prev) => prev.filter((e) => e.id !== id));
     setPaginatedExpenses((prev) => prev.filter((e) => e.id !== id));
@@ -1605,6 +1680,49 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     }
   }, [loadMoreIncomes]);
 
+  /** Mirrors `loadExpensesForMonth` for incomes. */
+  const loadIncomesForMonth = useCallback(async (monthKey: string) => {
+    const u = userRef.current;
+    const database = getFirestoreDb();
+    if (!u || !database || incomeMonthsLoadedRef.current.has(monthKey)) return;
+    const scope = resolveJournalDateScope(monthKey, { fromDate: "", toDate: "" });
+    if (!scope.fromDate || !scope.toDate) return;
+
+    incomeMonthsLoadedRef.current.add(monthKey);
+    try {
+      const incomesCol = collection(database, "users", u.uid, "incomes");
+      const q = query(
+        incomesCol,
+        where("date", ">=", scope.fromDate),
+        where("date", "<=", scope.toDate)
+      );
+      const snap = await getDocs(q);
+      logDirectRead(
+        `users/${u.uid}/incomes`,
+        snap.docs.length,
+        snap.metadata.fromCache ? "cache" : "server",
+        { feature: "ledger_month_query", queryShape: `date range ${monthKey}` }
+      );
+
+      const { items: newItems } = foldLedgerSnapshot<Income>(snap.docs, {
+        activeOnly: true,
+      });
+      setPaginatedIncomes((prev) => {
+        const existingIds = new Set([
+          ...realtimeIncomesRef.current.map((i) => i.id),
+          ...prev.map((i) => i.id),
+        ]);
+        const toAdd = newItems.filter((i) => i.id && !existingIds.has(i.id));
+        return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+      });
+      setIncomeMonthsLoaded(new Set(incomeMonthsLoadedRef.current));
+    } catch (err) {
+      incomeMonthsLoadedRef.current.delete(monthKey);
+      logError("financeProvider.loadIncomesForMonth", err);
+      toast.error(friendlyErrorMessage(err, "Failed to load that month's incomes"));
+    }
+  }, []);
+
   const removeIncome = useCallback((id: string) => {
     setRealtimeIncomes((prev) => prev.filter((i) => i.id !== id));
     setPaginatedIncomes((prev) => prev.filter((i) => i.id !== id));
@@ -1634,6 +1752,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       isFetchingMoreExpenses,
       loadMoreExpenses,
       loadAllExpenses,
+      expenseMonthsLoaded,
+      loadExpensesForMonth,
       removeExpense,
       updateExpense,
     }),
@@ -1649,6 +1769,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       isFetchingMoreExpenses,
       loadMoreExpenses,
       loadAllExpenses,
+      expenseMonthsLoaded,
+      loadExpensesForMonth,
       removeExpense,
       updateExpense,
     ]
@@ -1665,6 +1787,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       isFetchingMoreIncomes,
       loadMoreIncomes,
       loadAllIncomes,
+      incomeMonthsLoaded,
+      loadIncomesForMonth,
       removeIncome,
       updateIncome,
     }),
@@ -1678,6 +1802,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       isFetchingMoreIncomes,
       loadMoreIncomes,
       loadAllIncomes,
+      incomeMonthsLoaded,
+      loadIncomesForMonth,
       removeIncome,
       updateIncome,
     ]

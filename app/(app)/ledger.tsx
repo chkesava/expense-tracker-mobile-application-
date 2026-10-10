@@ -57,7 +57,10 @@ import {
 import { applyAccountActivityFilters } from "@/shared/utils/accountActivityFilters";
 import { searchAccountActivities } from "@/shared/utils/accountActivitySearch";
 import { buildJournalRecords, type JournalScope } from "@/shared/utils/journalActivities";
-import { resolveJournalDateScope } from "@/shared/utils/journalDateScope";
+import {
+  isDateScopeCoveredByLoadedHistory,
+  resolveJournalDateScope,
+} from "@/shared/utils/journalDateScope";
 import {
   runJournalFilterPipeline,
   withJournalDateScope,
@@ -123,6 +126,8 @@ export default function LedgerScreen() {
     complete: expensesComplete,
     error: expensesError,
     retry: retryExpenses,
+    monthsLoaded: expenseMonthsLoaded,
+    loadMonth: loadExpensesForMonth,
   } = useExpenses();
   const {
     incomes,
@@ -130,6 +135,8 @@ export default function LedgerScreen() {
     complete: incomesComplete,
     error: incomesError,
     retry: retryIncomes,
+    monthsLoaded: incomeMonthsLoaded,
+    loadMonth: loadIncomesForMonth,
   } = useIncomes();
   const { accounts } = useAccounts();
   const {
@@ -265,6 +272,62 @@ export default function LedgerScreen() {
     expensesTab === "income"
       ? incomesComplete
       : expensesComplete && incomesComplete;
+
+  // `journal.records` is every canonical row already loaded for this sub-tab
+  // (before the month/range filter narrows it down), so its oldest `date`
+  // tells us how far back the pages in hand actually reach.
+  const oldestLoadedRecordDate = useMemo(() => {
+    let min: string | null = null;
+    for (const record of journal.records) {
+      const date = record.activity.date;
+      if (!min || date < min) min = date;
+    }
+    return min;
+  }, [journal.records]);
+
+  // True once a direct date-range query has confirmed the selected month —
+  // not merely the heuristic above — regardless of how far pagination has
+  // paged back. A custom range (`monthOverridden`) isn't covered by this: it
+  // can span months a single query never fetched, so it still relies on the
+  // heuristic or full history below.
+  const activeMonthDirectlyLoaded =
+    !journal.dateScope.monthOverridden &&
+    !!journal.dateScope.monthKey &&
+    incomeMonthsLoaded.has(journal.dateScope.monthKey) &&
+    (expensesTab === "income" ||
+      expenseMonthsLoaded.has(journal.dateScope.monthKey));
+
+  // SPENDLY-111 follow-up: the period card only needs the active month (or
+  // range) covered, not the whole ledger. Waiting for every page before
+  // showing "this month's" spend forces a full-history read just to render a
+  // card that never looks past the month filter anyway.
+  const periodSummaryComplete =
+    ledgerComplete ||
+    activeMonthDirectlyLoaded ||
+    isDateScopeCoveredByLoadedHistory(journal.dateScope, oldestLoadedRecordDate);
+
+  // Rather than making the user click "Load older" repeatedly until the
+  // selected month happens to surface in createdAt order, fetch it directly
+  // the moment it's picked and isn't already covered.
+  useEffect(() => {
+    if (periodSummaryComplete) return;
+    if (journal.dateScope.monthOverridden) return;
+    const monthKey = journal.dateScope.monthKey;
+    if (!monthKey) return;
+    if (!incomeMonthsLoaded.has(monthKey)) void loadIncomesForMonth(monthKey);
+    if (expensesTab !== "income" && !expenseMonthsLoaded.has(monthKey)) {
+      void loadExpensesForMonth(monthKey);
+    }
+  }, [
+    periodSummaryComplete,
+    journal.dateScope.monthOverridden,
+    journal.dateScope.monthKey,
+    expensesTab,
+    incomeMonthsLoaded,
+    expenseMonthsLoaded,
+    loadIncomesForMonth,
+    loadExpensesForMonth,
+  ]);
 
   const hasNarrowedView =
     journal.activeFilterCount > 0 || debouncedQuery.trim().length > 0;
@@ -652,7 +715,7 @@ export default function LedgerScreen() {
         granularity={periodGranularity}
         onGranularityChange={setPeriodGranularity}
         netCashFlow={journal.runningBalance.netCashFlow}
-        complete={ledgerComplete}
+        complete={periodSummaryComplete}
       />
     </>
   ) : null;

@@ -13,6 +13,8 @@ export function useExpenses() {
     isFetchingMoreExpenses,
     loadMoreExpenses,
     loadAllExpenses,
+    expenseMonthsLoaded,
+    loadExpensesForMonth,
     removeExpense,
     updateExpense,
   } = useExpensesContext();
@@ -38,6 +40,10 @@ export function useExpenses() {
     loadMore: loadMoreExpenses,
     /** SPENDLY-410: Loads all remaining historical expenses on demand. */
     loadAll: loadAllExpenses,
+    /** Month keys ("YYYY-MM") already confirmed loaded via a direct date-range query. */
+    monthsLoaded: expenseMonthsLoaded,
+    /** Fetches every expense dated within `monthKey` directly, once. */
+    loadMonth: loadExpensesForMonth,
     removeExpense,
     updateExpense,
   };

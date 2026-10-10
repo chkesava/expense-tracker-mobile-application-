@@ -57,3 +57,27 @@ export function resolveJournalDateScope(
   // malformed month key should mean rather than an error.
   return { fromDate: "", toDate: "", monthOverridden: false, monthKey: month };
 }
+
+/**
+ * SPENDLY-111 follow-up — whether the pages already loaded reach back far
+ * enough to cover a bounded scope, so a monthly card does not have to wait
+ * for the *entire* ledger to page in before it can trust its totals.
+ *
+ * Ledger pagination orders by `createdAt`, not the transaction `date`, so
+ * this is a practical bound rather than a proof: like the realtime window
+ * the rest of the ledger already leans on for "current period" figures
+ * (`docs/FIRESTORE_CURSOR_PAGINATION.md`), it assumes a transaction's date
+ * tracks close to when it was entered. If the oldest loaded record's date
+ * already reaches back to or past the scope's start, nothing still unloaded
+ * could change the totals for that scope.
+ *
+ * An unbounded scope (no `fromDate` — the whole-ledger view) can never be
+ * declared covered this way; it genuinely needs every page loaded.
+ */
+export function isDateScopeCoveredByLoadedHistory(
+  scope: Pick<JournalDateScope, "fromDate">,
+  oldestLoadedDate: string | null
+): boolean {
+  if (!scope.fromDate || !oldestLoadedDate) return false;
+  return oldestLoadedDate <= scope.fromDate;
+}

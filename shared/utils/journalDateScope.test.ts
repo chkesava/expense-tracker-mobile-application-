@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveJournalDateScope } from "./journalDateScope";
+import {
+  isDateScopeCoveredByLoadedHistory,
+  resolveJournalDateScope,
+} from "./journalDateScope";
 
 const none = { fromDate: "", toDate: "" };
 
@@ -131,6 +134,38 @@ describe("journal date scope (SPENDLY-109)", () => {
       });
       expect(scope.monthOverridden).toBe(true);
       expect(scope.fromDate).toBe("2026-02-01");
+    });
+  });
+
+  describe("isDateScopeCoveredByLoadedHistory", () => {
+    it("is covered once the oldest loaded record reaches back to the scope start", () => {
+      expect(
+        isDateScopeCoveredByLoadedHistory({ fromDate: "2026-10-01" }, "2026-09-15")
+      ).toBe(true);
+    });
+
+    it("is covered when the oldest loaded record lands exactly on the scope start", () => {
+      expect(
+        isDateScopeCoveredByLoadedHistory({ fromDate: "2026-10-01" }, "2026-10-01")
+      ).toBe(true);
+    });
+
+    it("is not covered while the oldest loaded record is still inside the scope", () => {
+      expect(
+        isDateScopeCoveredByLoadedHistory({ fromDate: "2026-10-01" }, "2026-10-05")
+      ).toBe(false);
+    });
+
+    it("is never covered for an unbounded (whole-ledger) scope", () => {
+      expect(isDateScopeCoveredByLoadedHistory({ fromDate: "" }, "2020-01-01")).toBe(
+        false
+      );
+    });
+
+    it("is not covered when nothing has loaded yet", () => {
+      expect(isDateScopeCoveredByLoadedHistory({ fromDate: "2026-10-01" }, null)).toBe(
+        false
+      );
     });
   });
 });
