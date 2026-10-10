@@ -114,13 +114,13 @@ const styles = StyleSheet.create({
   },
   chip: {
     gap: 8,
-    paddingHorizontal: 15,
-    minHeight: 46,
+    paddingHorizontal: 16,
+    minHeight: 48,
   },
   featuredGlyph: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
