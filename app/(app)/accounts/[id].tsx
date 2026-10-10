@@ -80,7 +80,11 @@ import {
   transactionHref,
 } from "@/shared/utils/transactionRef";
 import {
-} from "@/shared/utils/accountBalance";
+  getDaysUntilReset,
+  getOpenBillingCycle,
+  normalizeBillGenerationDay,
+} from "@/shared/utils/billingCycle";
+import { roundMoney } from "@/shared/utils/money";
 import { buildCashbackHistory } from "@/shared/utils/cashbackHistory";
 import {
   formatCreditCardHeaderLine,
@@ -163,7 +167,7 @@ import {
   activityTitle,
   formatActivityDateLabel,
 } from "@/shared/utils/activityDisplay";
-import { currentMonthKey, todayDateKey, toLocalDateKey, parseLocalDate, daysBetweenDateKeys } from "@/shared/utils/dates";
+import { currentMonthKey, todayDateKey, toLocalDateKey, parseLocalDate } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -312,20 +316,35 @@ export default function AccountDetailScreen() {
   const creditUsage = useMemo(() => {
     if (!account || !isCreditCard) return null;
     const limit = account.creditLimit || 0;
-    const nextDate = account.nextDueDate ? parseLocalDate(account.nextDueDate) : new Date();
+    const unbilledSpend = account.unbilledSpend ?? 0;
+    const billDay = normalizeBillGenerationDay(account.billGenerationDay);
+    // Cycle boundaries are pure date math — compute them live from the bill
+    // date instead of trusting `account.openCycleStart`/`nextDueDate`. Those
+    // are only ever written by the manual full-ledger rebuild (`nextDueDate`
+    // isn't written by anything at all), so a brand-new or just-configured
+    // card would otherwise silently fall back to "today", showing a fake
+    // same-day cycle with zero days remaining.
+    const cycle =
+      billDay != null ? getOpenBillingCycle(billDay, parseLocalDate(today)) : null;
     return {
-      unbilledSpend: account.unbilledSpend ?? 0,
-      usedThisCycle: account.unbilledSpend ?? 0,
+      unbilledSpend,
+      usedThisCycle: unbilledSpend,
       statementDue: account.statementDue ?? 0,
       totalOutstanding: account.currentOutstanding ?? 0,
-      availableCredit: account.availableCredit ?? limit,
-      daysRemaining: account.nextDueDate ? daysBetweenDateKeys(today, account.nextDueDate) : 0,
-      openCycleStart: account.openCycleStart ?? today,
+      // Trivial arithmetic on two always-fresh numbers — compute it live
+      // rather than trust a materialized field the rebuild script alone
+      // keeps current, which would otherwise undercount usage the moment a
+      // new card starts spending before its first rebuild.
+      availableCredit: roundMoney(Math.max(0, limit - unbilledSpend)),
+      daysRemaining: cycle ? getDaysUntilReset(cycle.cycleEnd, parseLocalDate(today)) : 0,
+      openCycleStart: cycle ? toLocalDateKey(cycle.cycleStart) : null,
+      /** False when this card has no bill date configured yet — there is no real cycle to show. */
+      billDayConfigured: billDay != null,
       cancelledSpend: 0,
       cashbackThisCycle: account.cashbackThisCycle ?? 0,
       oldestOpenRemaining: account.oldestOpenRemaining ?? 0,
       oldestOpenBillId: account.oldestOpenBillId,
-      nextResetDate: nextDate,
+      nextResetDate: cycle ? cycle.cycleEnd : null,
     };
   }, [account, isCreditCard, today]);
 
@@ -350,8 +369,11 @@ export default function AccountDetailScreen() {
   // in every prior cycle's spend, which never reconciles with the "unbilled
   // this cycle" figure shown above it.
   const activities = useMemo(() => {
-    if (isCreditCard && creditUsage) {
-      return allActivities.filter((a) => a.date >= creditUsage.openCycleStart);
+    // No bill date configured yet: there is no real cycle boundary, so
+    // everything spent is unbilled (mirrors `buildCreditCardLedger`'s
+    // billDay-unset branch) rather than filtering against a fabricated date.
+    if (isCreditCard && creditUsage && creditUsage.openCycleStart) {
+      return allActivities.filter((a) => a.date >= creditUsage.openCycleStart!);
     }
     return allActivities;
   }, [allActivities, isCreditCard, creditUsage]);
@@ -1223,8 +1245,9 @@ export default function AccountDetailScreen() {
             availableCredit={creditUsage.availableCredit}
             creditLimit={account.creditLimit || 0}
             daysRemaining={creditUsage.daysRemaining}
-            openCycleStart={creditUsage.openCycleStart}
-            nextResetDate={creditUsage.nextResetDate.toISOString()}
+            openCycleStart={creditUsage.openCycleStart ?? undefined}
+            nextResetDate={creditUsage.nextResetDate?.toISOString()}
+            billDayConfigured={creditUsage.billDayConfigured}
             currency={currency}
             payLabel="Record Bill Payment"
             onPay={onRecordBillPayment}

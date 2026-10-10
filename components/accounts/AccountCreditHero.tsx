@@ -26,6 +26,7 @@ export function AccountCreditHero({
   daysRemaining,
   openCycleStart,
   nextResetDate,
+  billDayConfigured = true,
   currency,
   payLabel,
   onPay,
@@ -46,6 +47,8 @@ export function AccountCreditHero({
   daysRemaining: number;
   openCycleStart?: string;
   nextResetDate?: string;
+  /** False when the card has no bill date set — there is no real cycle to show. */
+  billDayConfigured?: boolean;
   currency: string;
   payLabel: string;
   onPay: () => void;
@@ -103,7 +106,9 @@ export function AccountCreditHero({
             </View>
           )}
           {!isLoading && (
-            <View
+            <Pressable
+              disabled={billDayConfigured || !onSetLimit}
+              onPress={() => onSetLimit?.()}
               style={[
                 styles.resetPill,
                 {
@@ -113,9 +118,9 @@ export function AccountCreditHero({
             >
               <Calendar size={12} color={theme.colors.mutedForeground} />
               <Text style={[styles.resetText, { color: theme.colors.mutedForeground }]}>
-                Resets in {daysRemaining}d
+                {billDayConfigured ? `Resets in ${daysRemaining}d` : "Set bill date"}
               </Text>
-            </View>
+            </Pressable>
           )}
         </View>
 
@@ -184,7 +189,11 @@ export function AccountCreditHero({
 
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8, marginTop: 4 }}>
           <Text style={{ fontSize: 12, fontWeight: "600", color: theme.colors.mutedForeground }}>
-            {openCycleStart && nextResetDate ? `Cycle: ${openCycleStart.slice(5, 10).replace("-", "/")} — ${nextResetDate.slice(5, 10).replace("-", "/")}` : "Current cycle"}
+            {openCycleStart && nextResetDate
+              ? `Cycle: ${openCycleStart.slice(5, 10).replace("-", "/")} — ${nextResetDate.slice(5, 10).replace("-", "/")}`
+              : billDayConfigured
+                ? "Current cycle"
+                : "No bill date set"}
           </Text>
           {creditLimit > 0 && (
             <Text style={{ fontSize: 12, fontWeight: "800", color: theme.colors.foreground, fontVariant: ["tabular-nums"] }}>

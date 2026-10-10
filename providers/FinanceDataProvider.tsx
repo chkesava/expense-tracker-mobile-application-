@@ -890,6 +890,21 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           typeName,
           extras: hydrated,
         });
+
+        // SPENDLY-423 follow-up: statementDue/availableCredit/cashbackThisCycle/
+        // oldestOpenRemaining/openCycleStart are only ever recomputed by the
+        // manual full-ledger rebuild, never incrementally. Setting (or
+        // changing) a card's bill date instantly makes those materialized
+        // fields describe the wrong cycle, so flag the existing SPENDLY-436
+        // "needs_reconciliation" banner rather than let them look current.
+        if (
+          getAccountKind(typeName || "") === "credit" &&
+          "billGenerationDay" in updates &&
+          updates.billGenerationDay !== existing?.billGenerationDay
+        ) {
+          payload.summaryReconciliationStatus = "needs_reconciliation";
+        }
+
         const outcome = await commitMutations(
           u.uid,
           [

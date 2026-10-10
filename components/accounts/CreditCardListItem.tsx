@@ -29,6 +29,8 @@ export type CreditCardRowModel = {
   /** SPENDLY-436: set when `summaryReconciliationStatus === "needs_reconciliation"`. */
   reconciliationWarning: string | null;
   daysRemaining: number;
+  /** False when the card has no bill date set — there is no real cycle to show. */
+  billDayConfigured: boolean;
   /** Unbilled spend in the open cycle. */
   usedThisCycle: number;
   /** Owed under a cancelled statement — not this cycle, so it never eats the limit. */
@@ -132,7 +134,7 @@ export const CreditCardListItem = memo(function CreditCardListItem({
         >
           <Calendar size={12} color={theme.colors.mutedForeground} />
           <Text style={[styles.resetText, { color: theme.colors.mutedForeground }]}>
-            Resets in {row.daysRemaining}d
+            {row.billDayConfigured ? `Resets in ${row.daysRemaining}d` : "Set bill date"}
           </Text>
         </View>
       </View>

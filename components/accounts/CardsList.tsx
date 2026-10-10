@@ -24,7 +24,13 @@ import {
   formatAccountIdentityLine,
   smsMatchingUnconfiguredLabel,
 } from "@/shared/utils/accountIdentity";
-import { todayDateKey, daysBetweenDateKeys } from "@/shared/utils/dates";
+import { todayDateKey, parseLocalDate } from "@/shared/utils/dates";
+import {
+  getDaysUntilReset,
+  getOpenBillingCycle,
+  normalizeBillGenerationDay,
+} from "@/shared/utils/billingCycle";
+import { roundMoney } from "@/shared/utils/money";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
@@ -93,6 +99,13 @@ export function CardsList() {
   const cardRows = useMemo((): CreditCardRowModel[] => {
     return creditCards.map((card) => {
       const limit = card.creditLimit || 0;
+      const unbilledSpend = card.unbilledSpend ?? 0;
+      const billDay = normalizeBillGenerationDay(card.billGenerationDay);
+      // Pure date math, computed live rather than trusting `nextDueDate`
+      // (never written by anything) or a stale materialized cycle field —
+      // see the account detail screen for the full rationale.
+      const cycle =
+        billDay != null ? getOpenBillingCycle(billDay, parseLocalDate(today)) : null;
       return {
         id: card.id,
         name: card.name,
@@ -103,14 +116,15 @@ export function CardsList() {
           card.summaryReconciliationStatus === "needs_reconciliation"
             ? "Balance pending reconciliation — tap Edit to rebuild"
             : null,
-        daysRemaining: card.nextDueDate ? daysBetweenDateKeys(today, card.nextDueDate) : 0,
-        usedThisCycle: card.unbilledSpend ?? 0,
+        daysRemaining: cycle ? getDaysUntilReset(cycle.cycleEnd, parseLocalDate(today)) : 0,
+        billDayConfigured: billDay != null,
+        usedThisCycle: unbilledSpend,
         cancelledSpend: 0, // Unused natively, handled elsewhere or omitted.
         statementDue: card.statementDue ?? 0,
         outstanding: card.currentOutstanding ?? 0,
-        availableCredit: card.availableCredit ?? limit,
+        availableCredit: roundMoney(Math.max(0, limit - unbilledSpend)),
         limit,
-        utilization: limit > 0 ? ((card.unbilledSpend ?? 0) / limit) * 100 : 0,
+        utilization: limit > 0 ? (unbilledSpend / limit) * 100 : 0,
         accent: card.color || DEFAULT_CARD_ACCENT,
         openBill: openBillByAccount.get(card.id) ?? null,
       };
