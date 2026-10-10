@@ -267,6 +267,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   const [expensesComplete, setExpensesComplete] = useState(false);
   const [hasMoreExpenses, setHasMoreExpenses] = useState(false);
   const [isFetchingMoreExpenses, setIsFetchingMoreExpenses] = useState(false);
+  // SPENDLY-490: the in-flight guard is a ref, so `loadMoreExpenses` keeps one
+  // identity across pages and two quick calls can't fetch the same cursor.
+  const fetchingMoreExpensesRef = useRef(false);
   const hasMoreExpensesRef = useRef(false);
   useEffect(() => {
     hasMoreExpensesRef.current = hasMoreExpenses;
@@ -288,6 +291,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   const [incomesComplete, setIncomesComplete] = useState(false);
   const [hasMoreIncomes, setHasMoreIncomes] = useState(false);
   const [isFetchingMoreIncomes, setIsFetchingMoreIncomes] = useState(false);
+  const fetchingMoreIncomesRef = useRef(false);
   const hasMoreIncomesRef = useRef(false);
   useEffect(() => {
     hasMoreIncomesRef.current = hasMoreIncomes;
@@ -424,6 +428,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       setHasMoreIncomes(false);
       setIsFetchingMoreExpenses(false);
       setIsFetchingMoreIncomes(false);
+      fetchingMoreExpensesRef.current = false;
+      fetchingMoreIncomesRef.current = false;
       setAccounts([]);
       setAccountTypes([]);
       setPayments([]);
@@ -1572,10 +1578,11 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   const loadMoreExpenses = useCallback(async () => {
     const u = userRef.current;
     const database = getFirestoreDb();
-    if (!u || !database || isFetchingMoreExpenses || !hasMoreExpensesRef.current) return;
+    if (!u || !database || fetchingMoreExpensesRef.current || !hasMoreExpensesRef.current) return;
     const cursor = lastExpenseDocRef.current;
     if (!cursor) return;
 
+    fetchingMoreExpensesRef.current = true;
     setIsFetchingMoreExpenses(true);
     try {
       const expensesCol = collection(database, "users", u.uid, "expenses");
@@ -1620,9 +1627,10 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       logError("financeProvider.loadMoreExpenses", err);
       toast.error(friendlyErrorMessage(err, "Failed to load older expenses"));
     } finally {
+      fetchingMoreExpensesRef.current = false;
       setIsFetchingMoreExpenses(false);
     }
-  }, [isFetchingMoreExpenses]);
+  }, []);
 
   const loadAllExpenses = useCallback(async () => {
     while (hasMoreExpensesRef.current) {
@@ -1695,10 +1703,11 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   const loadMoreIncomes = useCallback(async () => {
     const u = userRef.current;
     const database = getFirestoreDb();
-    if (!u || !database || isFetchingMoreIncomes || !hasMoreIncomesRef.current) return;
+    if (!u || !database || fetchingMoreIncomesRef.current || !hasMoreIncomesRef.current) return;
     const cursor = lastIncomeDocRef.current;
     if (!cursor) return;
 
+    fetchingMoreIncomesRef.current = true;
     setIsFetchingMoreIncomes(true);
     try {
       const incomesCol = collection(database, "users", u.uid, "incomes");
@@ -1743,9 +1752,10 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       logError("financeProvider.loadMoreIncomes", err);
       toast.error(friendlyErrorMessage(err, "Failed to load older incomes"));
     } finally {
+      fetchingMoreIncomesRef.current = false;
       setIsFetchingMoreIncomes(false);
     }
-  }, [isFetchingMoreIncomes]);
+  }, []);
 
   const loadAllIncomes = useCallback(async () => {
     while (hasMoreIncomesRef.current) {

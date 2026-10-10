@@ -82,7 +82,12 @@ export interface ExpenseListProps {
   onRefresh?: () => void;
   listHeader?: React.ReactNode;
   emptyState?: React.ReactNode;
-  /** SPENDLY-410: Callback when end of list is reached during scroll */
+  /**
+   * SPENDLY-410: Callback when end of list is reached during scroll. Fires at
+   * most once per user drag (SPENDLY-490): a list shorter than the screen
+   * reports "end reached" after every data change, which used to chain-load
+   * the entire ledger without the user scrolling at all.
+   */
   onEndReached?: () => void;
   /** SPENDLY-410: Threshold for onEndReached (default 0.3) */
   onEndReachedThreshold?: number;
@@ -179,7 +184,15 @@ export function ExpenseList({
     setSelectedExpenseIds(new Set());
   }, []);
 
+  const draggedSinceEndReachedRef = useRef(false);
+  const handleEndReached = useCallback(() => {
+    if (!draggedSinceEndReachedRef.current) return;
+    draggedSinceEndReachedRef.current = false;
+    onEndReached?.();
+  }, [onEndReached]);
+
   const handleScrollBeginDrag = useCallback(() => {
+    draggedSinceEndReachedRef.current = true;
     closeOpenSwipeableRow();
     setSwipeCloseSignal((n) => n + 1);
     sampleScrollFps("ledger");
@@ -870,7 +883,7 @@ export function ExpenseList({
           )
         }
         renderItem={renderListItem}
-        onEndReached={onEndReached}
+        onEndReached={onEndReached ? handleEndReached : undefined}
         onEndReachedThreshold={onEndReachedThreshold ?? 0.3}
         ListFooterComponent={renderListFooter}
       />
