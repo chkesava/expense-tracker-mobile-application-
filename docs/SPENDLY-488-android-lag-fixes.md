@@ -4,7 +4,7 @@
 
 | Story | Title | State |
 |---|---|---|
-| SPENDLY-489 | Chart animations: stop per-node SVG animated props | In progress |
+| SPENDLY-489 | Chart animations: stop per-node SVG animated props | Merged to epic (b34730a); device check pending |
 | SPENDLY-490 | Journal: stop onEndReached auto-paging the whole ledger | To do |
 | SPENDLY-491 | Saves: read account info from memory or cache, not a server getDoc | To do |
 | SPENDLY-492 | Enable R8 minify and resource shrinking for release builds | To do |
