@@ -7,6 +7,7 @@ import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import {
   MetaLabel,
+  Pill,
   ProgressTrack,
   Section,
   StatusStrip,
@@ -74,6 +75,12 @@ export const BudgetAlertsWidget = memo(function BudgetAlertsWidget({
   const statusColor = statusColorOf(budget.status, theme.colors);
   const remainingLabel = budget.isOverBudget ? "Over budget" : "Remaining";
   const remainingValue = Math.abs(budget.remaining);
+  const statusTone =
+    budget.status === "attention"
+      ? ("negative" as const)
+      : budget.status === "watch"
+        ? ("warning" as const)
+        : ("positive" as const);
 
   if (monthlyBudget === 0 && activeCategoryBudgets.length === 0) {
     return (
@@ -104,16 +111,7 @@ export const BudgetAlertsWidget = memo(function BudgetAlertsWidget({
           subtitle={`Target ${currency} ${monthlyBudget.toLocaleString()}`}
           icon={<Wallet size={16} color={statusColor} strokeWidth={2.3} />}
           iconTint={surfaces.wash(statusColor)}
-          badge={
-            <Text
-              style={[
-                styles.usedPct,
-                { color: statusColor, fontFamily: theme.fontFamily.bold },
-              ]}
-            >
-              {budget.pctUsed}%
-            </Text>
-          }
+          badge={<Pill label={`${budget.pctUsed}%`} tone={statusTone} />}
         >
           <ProgressTrack pct={budget.pctUsed} color={statusColor} height={8} />
 
@@ -270,10 +268,6 @@ export const BudgetAlertsWidget = memo(function BudgetAlertsWidget({
 const styles = StyleSheet.create({
   stack: {
     gap: 12,
-  },
-  usedPct: {
-    fontSize: 18,
-    letterSpacing: -0.4,
   },
   footerRow: {
     flexDirection: "row",

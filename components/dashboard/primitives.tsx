@@ -22,13 +22,14 @@ import {
   type TextStyle,
   type ViewStyle,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { ChevronRight } from "lucide-react-native";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 
 /** One radius per role — no per-component radii. */
 export const DASH_RADIUS = {
@@ -42,6 +43,43 @@ export const DASH_SPACE = {
   sectionGap: 12,
   rowGap: 10,
 } as const;
+
+/** The one hero number scale — only the top-of-fold hero card uses this. */
+export const DASH_TYPE = {
+  heroValue: 38,
+  heroValueLine: 44,
+} as const;
+
+/**
+ * Mixes two `#RRGGBB` colours by `t` (0 = colorA, 1 = colorB). Used to derive
+ * the hero gradient's deep stop from the active theme's own tokens instead of
+ * a hardcoded brand hex — so it reads correctly across all themes, not just
+ * Spendly's default palette.
+ */
+export function mixColors(colorA: string, colorB: string, t: number): string {
+  const parse = (c: string): [number, number, number] | null => {
+    if (!c.startsWith("#")) return null;
+    const hex = c.slice(1);
+    const full =
+      hex.length === 3
+        ? hex
+            .split("")
+            .map((ch) => ch + ch)
+            .join("")
+        : hex;
+    const r = parseInt(full.slice(0, 2), 16);
+    const g = parseInt(full.slice(2, 4), 16);
+    const b = parseInt(full.slice(4, 6), 16);
+    if ([r, g, b].some((n) => Number.isNaN(n))) return null;
+    return [r, g, b];
+  };
+  const a = parse(colorA);
+  const b = parse(colorB);
+  if (!a || !b) return colorA;
+  const clamped = Math.max(0, Math.min(1, t));
+  const mix = (x: number, y: number) => Math.round(x + (y - x) * clamped);
+  return `rgb(${mix(a[0], b[0])}, ${mix(a[1], b[1])}, ${mix(a[2], b[2])})`;
+}
 
 /** Semantic tones — the only colour vocabulary dashboard widgets may use. */
 export type Tone =
@@ -214,6 +252,111 @@ export function Section({
     >
       {body}
     </Card>
+  );
+}
+
+/* -------------------------------------------------------------- HeroSection */
+
+export type HeroSectionProps = {
+  title?: string;
+  subtitle?: string;
+  icon?: ReactNode;
+  /** Right-aligned header affordance, e.g. a privacy toggle. */
+  action?: ReactNode;
+  children?: ReactNode;
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
+};
+
+/**
+ * The dashboard's single bold surface — reserved for exactly one first-fold
+ * hero card (Safe to Spend). Gradient stops are derived from the active
+ * theme's `primary` token via `mixColors`, never a hardcoded brand hex, so it
+ * reads correctly across all themes (light, dark, and the named palettes).
+ */
+export function HeroSection({
+  title,
+  subtitle,
+  icon,
+  action,
+  children,
+  style,
+  testID,
+}: HeroSectionProps) {
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
+
+  const baseColor = theme.colors.primary;
+  const deepColor = mixColors(
+    theme.colors.primary,
+    surfaces.isDark ? "#000000" : theme.colors.foreground,
+    surfaces.isDark ? 0.55 : 0.4
+  );
+  const onHero = theme.colors.primaryForeground;
+
+  return (
+    <LinearGradient
+      testID={testID}
+      colors={[baseColor, deepColor]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={[styles.heroSurface, style]}
+    >
+      <LinearGradient
+        colors={[withAlpha(onHero, 0.14), withAlpha(onHero, 0)]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0.6, y: 0.8 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+
+      {title || icon || action ? (
+        <View style={styles.heroHeader}>
+          <View style={styles.heroHeaderLeft}>
+            {icon ? (
+              <View
+                style={[
+                  styles.heroIconTile,
+                  { backgroundColor: withAlpha(onHero, 0.16) },
+                ]}
+              >
+                {icon}
+              </View>
+            ) : null}
+            <View style={styles.heroHeaderText}>
+              {title ? (
+                <Text
+                  style={[
+                    styles.heroTitle,
+                    { color: onHero, fontFamily: theme.fontFamily.semibold },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {title}
+                </Text>
+              ) : null}
+              {subtitle ? (
+                <Text
+                  style={[
+                    styles.heroSubtitle,
+                    {
+                      color: withAlpha(onHero, 0.78),
+                      fontFamily: theme.fontFamily.regular,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {subtitle}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+          {action ? <View style={styles.heroHeaderRight}>{action}</View> : null}
+        </View>
+      ) : null}
+
+      {children}
+    </LinearGradient>
   );
 }
 
@@ -651,6 +794,51 @@ const styles = StyleSheet.create({
   },
   sectionContent: {
     padding: DASH_SPACE.sectionPadding,
+  },
+  heroSurface: {
+    borderRadius: DASH_RADIUS.section,
+    borderCurve: "continuous",
+    padding: DASH_SPACE.sectionPadding,
+    overflow: "hidden",
+  },
+  heroHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+    marginBottom: 14,
+  },
+  heroHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  heroIconTile: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    borderCurve: "continuous",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroHeaderText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  heroHeaderRight: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  heroTitle: {
+    fontSize: 15,
+    letterSpacing: -0.1,
+  },
+  heroSubtitle: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   action: {
     flexDirection: "row",
