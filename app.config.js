@@ -43,6 +43,9 @@ const SHARED_PLUGINS = [
   // same entry in app.json's plugins array (the combined build's config,
   // which app.config.js returns unmodified when no product is set).
   "./plugins/withReactNativeArchitectures",
+  // R8 + resource shrinking for release builds (SPENDLY-492) — see
+  // plugins/withAndroidReleaseShrinking.js. Also listed in app.json.
+  "./plugins/withAndroidReleaseShrinking",
 ];
 
 function splashScreenPlugin(image, backgroundColor, imageWidth) {

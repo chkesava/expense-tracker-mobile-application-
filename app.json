@@ -126,7 +126,8 @@
           ]
         }
       ],
-      "./plugins/withReactNativeArchitectures"
+      "./plugins/withReactNativeArchitectures",
+      "./plugins/withAndroidReleaseShrinking"
     ],
     "experiments": {
       "typedRoutes": true
