@@ -495,7 +495,8 @@ export async function editCreditBillPayment(
   }
 
   if (sourceChanged && !external) {
-    const accountSnap = await getDoc(doc(db, "users", owner, "accounts", fromAccountId));
+    const { readAccountSnap } = await import("@/services/ledger/fetchAccountTypes");
+    const accountSnap = await readAccountSnap(db, owner, fromAccountId);
     if (!accountSnap.exists()) throw new Error("That bank account no longer exists");
   }
 
