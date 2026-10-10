@@ -357,5 +357,4 @@ jobs:
             echo "- \`npm test\` — passed before APK"
             echo "- \`npm run typecheck:shared\` / \`typecheck\` — passed before APK"
             echo "- \`npm run release:verify\` — passed after prebuild, before APK"
-            echo "- SMS device pack — deferred (SMS not on this branch)"
           } >> "$GITHUB_STEP_SUMMARY"

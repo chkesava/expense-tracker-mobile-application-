@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
-import { TransactionInboxItem } from "@/components/sms/TransactionInboxItem";
+import { TransactionInboxItem } from "@/components/creditCardBills/TransactionInboxItem";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAccountPayments } from "@/hooks/useAccountPayments";

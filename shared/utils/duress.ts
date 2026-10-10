@@ -4,7 +4,7 @@
  * Duress mode proxies the signed-in user as `${uid}_duress` so the decoy tree
  * lives under a sibling document and can never bleed into the real one
  * (BUG-004, `lib/duressPath.contract.test.ts`). The suffix was a bare string
- * literal in `lib/authHelpers.ts` and four `services/sms/*` guards; the EPF
+ * literal in `lib/authHelpers.ts` and several since-removed SMS guards; the EPF
  * cron needs the same rule server-side to stop sweeping decoy trees, and a
  * sixth copy of a security-relevant literal is not something to add.
  *

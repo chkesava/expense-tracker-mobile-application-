@@ -3,9 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Account } from "../types/expense";
 import {
   buildAccountWritePayload,
-  getAccountConfigurationStatus,
   hydrateAccountIdentity,
-  summarizeAccountIdentityMigration,
 } from "./accountIdentity";
 
 function simulateUpdateWrite(
@@ -56,10 +54,6 @@ describe("existing account identity migration", () => {
     );
 
     expect(hydrated.institutionId).toBeUndefined();
-    expect(hydrated.smsMatchingEnabled).toBe(false);
-    expect(getAccountConfigurationStatus(hydrated, "Credit Card")).toBe(
-      "NEEDS_INSTITUTION"
-    );
   });
 
   it("is idempotent when hydrated twice", () => {
@@ -92,7 +86,7 @@ describe("existing account identity migration", () => {
     expect(payload.displayName).toBe("Primary Bank");
     expect(payload.openingBalance).toBe(5000);
     expect(payload.institutionId).toBeNull();
-    expect(payload.smsMatchingEnabled).toBe(false);
+    expect(payload).not.toHaveProperty("smsMatchingEnabled");
   });
 
   it("keeps last4 when resuming a partially configured account", () => {
@@ -103,20 +97,15 @@ describe("existing account identity migration", () => {
       displayName: "HDFC Salary",
       accountTypeId: "bank",
       last4: "7788",
-      smsMatchingEnabled: false,
     };
     const hydrated = hydrateAccountIdentity(existing, "Bank");
     expect(hydrated.id).toBe("acc-partial");
     expect(hydrated.last4).toBe("7788");
     expect(hydrated.institutionId).toBeUndefined();
-    expect(getAccountConfigurationStatus(hydrated, "Bank")).toBe(
-      "NEEDS_INSTITUTION"
-    );
 
     const payload = simulateUpdateWrite(existing, {}, "Bank");
     expect(payload.last4).toBe("7788");
     expect(payload.institutionId).toBeNull();
-    expect(payload.smsMatchingEnabled).toBe(false);
   });
 
   it("skips already-configured accounts without changing identity", () => {
@@ -128,7 +117,6 @@ describe("existing account identity migration", () => {
       accountTypeId: "credit_card",
       institutionId: "super_money",
       last4: "4521",
-      smsMatchingEnabled: true,
     };
     const first = simulateUpdateWrite(existing, {}, "Credit Card");
     const second = simulateUpdateWrite(
@@ -138,69 +126,6 @@ describe("existing account identity migration", () => {
     );
 
     expect(first.institutionId).toBe("super_money");
-    expect(first.smsMatchingEnabled).toBe(true);
     expect(second).toEqual(first);
-    expect(getAccountConfigurationStatus(existing, "Credit Card")).toBe(
-      "CONFIGURED"
-    );
-  });
-
-  it("classifies configuration statuses without inventing persisted fields", () => {
-    expect(getAccountConfigurationStatus({ typeId: "" }, "Credit Card")).toBe(
-      "NEEDS_ACCOUNT_TYPE"
-    );
-    expect(
-      getAccountConfigurationStatus({ typeId: "type-cash" }, "Cash")
-    ).toBe("NOT_SUPPORTED");
-    expect(
-      getAccountConfigurationStatus(
-        {
-          typeId: "type-cc",
-          institutionId: "super_money",
-        },
-        "Credit Card"
-      )
-    ).toBe("NEEDS_LAST4");
-  });
-
-  it("reports counts only and never includes account secrets", () => {
-    const accounts: Account[] = [
-      {
-        id: "acc-1",
-        name: "Super Money Credit Card",
-        typeId: "type-cc",
-      },
-      {
-        id: "acc-2",
-        name: "Travel card",
-        typeId: "type-cc",
-        accountTypeId: "credit_card",
-        institutionId: "super_money",
-        last4: "4521",
-      },
-      { id: "acc-3", name: "Wallet cash", typeId: "type-cash" },
-    ];
-    const report = summarizeAccountIdentityMigration(
-      accounts,
-      new Map([
-        ["type-cc", "Credit Card"],
-        ["type-cash", "Cash"],
-      ])
-    );
-
-    expect(report.scanned).toBe(3);
-    expect(report.alreadyMigrated).toBe(1);
-    expect(report.migrated).toBe(1);
-    expect(report.byStatus.NEEDS_INSTITUTION).toBe(1);
-    expect(report.byStatus.CONFIGURED).toBe(1);
-    expect(report.byStatus.NOT_SUPPORTED).toBe(1);
-    expect(report.requiringConfiguration).toBe(1);
-    expect(report.skipped).toBe(1);
-    expect(report.errors).toBe(0);
-
-    const serialized = JSON.stringify(report);
-    expect(serialized).not.toContain("Super Money");
-    expect(serialized).not.toContain("4521");
-    expect(serialized).not.toContain("Travel card");
   });
 });

@@ -12,7 +12,6 @@ export default defineConfig({
       "shared/**/*.test.ts",
       "services/**/*.test.ts",
       "lib/**/*.test.ts",
-      "services/sms/**/*.test.ts",
       // The ganesh-files Edge Function's authorization logic (GS-096). It lives
       // outside the app tree and is excluded from tsconfig because it deploys to
       // Deno, but handler.ts is deliberately plain TypeScript so its rules are

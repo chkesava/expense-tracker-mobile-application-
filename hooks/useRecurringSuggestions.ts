@@ -3,12 +3,12 @@ import { useCallback, useEffect, useState } from "react";
 import {
   acceptRecurringSuggestion,
   declineRecurringSuggestion,
-} from "@/services/sms/smsRecurringSync";
+} from "@/services/recurring/recurringSync";
 import {
   loadRecurringSuggestions,
   subscribeRecurringSuggestions,
-} from "@/services/sms/smsRecurringStore";
-import type { RecurringPattern } from "@/services/sms/smsRecurringDetector";
+} from "@/services/recurring/recurringStore";
+import type { RecurringPattern } from "@/services/recurring/recurringDetector";
 
 export function useRecurringSuggestions() {
   const [items, setItems] = useState<RecurringPattern[]>([]);

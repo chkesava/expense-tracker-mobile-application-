@@ -20,6 +20,8 @@ import { SetupWizardModal } from "@/components/onboarding/SetupWizardModal";
 import { useAndroidBackHandler } from "@/hooks/useAndroidBackHandler";
 import { useAppShortcutHandler } from "@/hooks/useAppShortcutHandler";
 import { useNavigationStateRestoration } from "@/hooks/useNavigationStateRestoration";
+import { useNotificationTapRouting } from "@/hooks/useNotificationTapRouting";
+import { useRecurringSync } from "@/hooks/useRecurringSync";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/providers/AuthProvider";
 import { BottomChromeProvider } from "@/components/layout/BottomChromeProvider";
@@ -31,7 +33,6 @@ import { CreditCardBillsProvider } from "@/providers/CreditCardBillsProvider";
 import { LedgerStateProvider } from "@/providers/LedgerStateProvider";
 import { ModalProvider } from "@/providers/ModalProvider";
 import { SetupProgressProvider } from "@/providers/SetupProgressProvider";
-import { SmsReceiverProvider } from "@/providers/SmsReceiverProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -50,6 +51,12 @@ function AppShellInner() {
 
   // Route state restoration across sessions, scoped to the signed-in user.
   useNavigationStateRestoration(user?.uid);
+
+  // Bill and calendar reminder taps, including the one that launched the app.
+  useNotificationTapRouting();
+
+  // Queue recurring merchants found in the expense list for review.
+  useRecurringSync();
 
   return (
     // The clearance every list pads by has to describe the chrome actually
@@ -154,12 +161,6 @@ function AppShellInner() {
             />
             <Stack.Screen
               name="fees/[key]"
-              options={{
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="sms-inbox"
               options={{
                 animation: "slide_from_right",
               }}
@@ -313,9 +314,7 @@ export default function AppLayout() {
               <ModalProvider>
                 <SetupProgressProvider>
                   <LedgerStateProvider>
-                    <SmsReceiverProvider>
-                      <AppShellInner />
-                    </SmsReceiverProvider>
+                    <AppShellInner />
                   </LedgerStateProvider>
                 </SetupProgressProvider>
               </ModalProvider>

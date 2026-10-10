@@ -148,7 +148,6 @@ function verifyStartupGuardrails() {
     const forbiddenRootProviders = [
       'BorrowingsReceivablesProvider',
       'CreditCardBillsProvider',
-      'SmsReceiverProvider',
     ];
     for (const provider of forbiddenRootProviders) {
       if (rootLayoutContent.includes(`<${provider}>`)) {

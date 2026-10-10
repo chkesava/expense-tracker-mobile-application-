@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { SMS_MERCHANT_CATALOG } from "../../services/sms/smsMerchantCatalog";
+import { MERCHANT_CATALOG } from "./merchantCatalog";
 import { foldKey, merchantSlug } from "../utils/merchantModel";
 import { normalizeMerchantText } from "../utils/merchantNormalize";
 import {
@@ -19,7 +19,7 @@ describe("merchant registry", () => {
 
   it("carries every SMS catalog merchant and alias, except known collisions", () => {
     const index = buildMerchantAliasIndex();
-    for (const entry of SMS_MERCHANT_CATALOG) {
+    for (const entry of MERCHANT_CATALOG) {
       const id = merchantSlug(entry.canonical);
       expect(index.byId.get(id)?.displayName).toBe(entry.canonical);
       for (const alias of [entry.canonical, ...(entry.aliases ?? [])].map(foldKey)) {

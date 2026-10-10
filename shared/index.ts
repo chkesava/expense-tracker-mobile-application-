@@ -15,7 +15,6 @@ export * from "./types/trip";
 export * from "./types/user";
 export * from "./types/vault";
 export * from "./types/vaultExpense";
-export * from "./types/smsTransaction";
 
 export * from "./data/categoryTaxonomy";
 export * from "./data/institutions";
@@ -26,7 +25,6 @@ export * from "./utils/dates";
 export * from "./utils/accountBalance";
 export * from "./utils/accountKind";
 export * from "./utils/accountIdentity";
-export * from "./utils/accountResolver";
 export * from "./utils/billingCycle";
 export * from "./utils/investmentInterest";
 export * from "./utils/analytics";

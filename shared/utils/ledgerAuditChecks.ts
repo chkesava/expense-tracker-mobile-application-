@@ -14,8 +14,8 @@
  * "Two rows with the same amount on the same day are a duplicate" is not a
  * check and must not become one. `accountReconciliation.ts` already argues this
  * for statement lines: two identical coffees in one day are both real. Without
- * a key the system itself guarantees to be unique — an SMS fingerprint, a
- * statement fingerprint — the signal-to-noise is unacceptable, and a diagnostic
+ * a key the system itself guarantees to be unique — a statement fingerprint —
+ * the signal-to-noise is unacceptable, and a diagnostic
  * nobody trusts is worse than no diagnostic. A named test pins the silence.
  */
 
@@ -240,17 +240,6 @@ function duplicateFindings(
     findings.push(finding(code, "error", describe(members.length), members));
   }
   return findings;
-}
-
-export function checkDuplicateSmsFingerprint(
-  ctx: LedgerAuditContext
-): LedgerAuditFinding[] {
-  return duplicateFindings(
-    ctx.smsFingerprintGroups,
-    "duplicate_sms_fingerprint",
-    (count) =>
-      `${count} transactions share one bank message, so the same charge was recorded ${count} times.`
-  );
 }
 
 /**

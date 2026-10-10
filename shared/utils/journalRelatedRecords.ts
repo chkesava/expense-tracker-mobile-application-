@@ -38,7 +38,6 @@ export type JournalRelationKind =
   | "space"
   | "subscription"
   | "investment"
-  | "smsImport"
   | "statementImport";
 
 export interface JournalRelatedRecord {
@@ -226,23 +225,9 @@ function tagRelations(
 }
 
 function provenanceRelations(
-  expense: Expense | undefined,
-  income: Income | undefined
+  expense: Expense | undefined
 ): JournalRelatedRecord[] {
   const records: JournalRelatedRecord[] = [];
-  const smsRef =
-    expense?.smsExternalRef ??
-    income?.smsExternalRef ??
-    expense?.smsFingerprint ??
-    income?.smsFingerprint;
-  if (smsRef) {
-    records.push({
-      kind: "smsImport",
-      label: "Imported from SMS",
-      detail: expense?.smsMatchStatus ?? income?.smsMatchStatus,
-      isSameMoney: true,
-    });
-  }
   if (expense?.statementImportFingerprint) {
     records.push({
       kind: "statementImport",
@@ -275,7 +260,7 @@ export function findJournalRelatedRecords(
   if (expense) records.push(...billFor(expense, payments));
   records.push(...investmentFor(expense, income, entries));
   records.push(...tagRelations(expense, input.nameById));
-  records.push(...provenanceRelations(expense, income));
+  records.push(...provenanceRelations(expense));
 
   return records;
 }

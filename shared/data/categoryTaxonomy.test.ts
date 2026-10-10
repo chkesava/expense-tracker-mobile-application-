@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SMS_MERCHANT_CATEGORY_RULES } from "@/services/sms/smsCategoryRules";
+import { MERCHANT_CATEGORY_RULES } from "@/shared/data/merchantCategoryRules";
 import {
   CATEGORY_SUGGESTIONS,
   CATEGORY_TAXONOMY,
@@ -271,13 +271,13 @@ describe("v3 to v4 maps and suggestions", () => {
     for (const item of CATEGORY_SUGGESTIONS) {
       expect(isExactTaxonomyPair(item.category, item.subcategory)).toBe(true);
     }
-    for (const rule of SMS_MERCHANT_CATEGORY_RULES) {
+    for (const rule of MERCHANT_CATEGORY_RULES) {
       expect(isExactTaxonomyPair(rule.category, rule.subcategory)).toBe(true);
     }
   });
 
   it("treats Amazon as online shopping, not a permanent merchant category", () => {
-    const amazon = SMS_MERCHANT_CATEGORY_RULES.find((r) => r.merchant === "Amazon");
+    const amazon = MERCHANT_CATEGORY_RULES.find((r) => r.merchant === "Amazon");
     expect(amazon).toEqual({
       merchant: "Amazon",
       category: "Shopping & Clothing",
@@ -288,7 +288,7 @@ describe("v3 to v4 maps and suggestions", () => {
 
   it("does not map UPI wallets onto EMI or SIP", () => {
     for (const merchant of ["Paytm", "PhonePe", "Google Pay"]) {
-      const rule = SMS_MERCHANT_CATEGORY_RULES.find((r) => r.merchant === merchant);
+      const rule = MERCHANT_CATEGORY_RULES.find((r) => r.merchant === merchant);
       expect(rule?.category).toBe("Miscellaneous");
       expect(rule?.subcategory).toBe("Uncategorized");
     }

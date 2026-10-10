@@ -126,7 +126,7 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
         { label: "subscription deletion" }
       );
       if (existing?.name) {
-        void import("@/services/sms/smsRecurringSync").then((m) =>
+        void import("@/services/recurring/recurringSync").then((m) =>
           m.rememberDeletedSubscription(uid, existing)
         );
       }

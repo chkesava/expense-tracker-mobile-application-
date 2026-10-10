@@ -38,7 +38,6 @@ import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
-import { rememberHydratedSubscriptions } from "@/services/sms/smsRecurringSync";
 import { postDueSubscriptionCharge } from "@/services/subscriptions/duePost";
 import type {
   CategorizationRule,
@@ -294,7 +293,6 @@ export function ExpenseReferenceDataProvider({
     if (!uid || !db) {
       setSubscriptions([]);
       setSubscriptionsLoading(false);
-      rememberHydratedSubscriptions(null);
       return;
     }
     setSubscriptionsLoading(true);
@@ -320,7 +318,6 @@ export function ExpenseReferenceDataProvider({
           ...(docSnap.data() as Omit<Subscription, "id">),
         }));
         setSubscriptions(list);
-        rememberHydratedSubscriptions(list);
         setSubscriptionsError(null);
         setSubscriptionsLoading(false);
       },
@@ -335,7 +332,6 @@ export function ExpenseReferenceDataProvider({
     );
     return () => {
       forgetSnapshotPath(path);
-      rememberHydratedSubscriptions(null);
       unsub();
     };
   }, [uid, db, subscriptionsAttempt, setSubscriptionsError]);

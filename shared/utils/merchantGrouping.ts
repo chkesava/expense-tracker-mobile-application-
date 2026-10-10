@@ -6,7 +6,7 @@ import type {
 } from "../types/merchant";
 import { expenseSourceText, incomeSourceText } from "./merchantModel";
 import { resolveMerchants } from "./merchantResolve";
-import { classifyRecurringCadence } from "../../services/sms/smsRecurringDetector";
+import { classifyRecurringCadence } from "../../services/recurring/recurringDetector";
 
 export interface MerchantLedgerItem {
   id: string;

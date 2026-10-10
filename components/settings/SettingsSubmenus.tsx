@@ -46,7 +46,6 @@ import {
   DEFAULT_EXPENSE_SUBCATEGORY,
 } from "@/shared/data/categoryTaxonomy";
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
-import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -952,10 +951,6 @@ export function AccountsManager() {
                         .filter(Boolean)
                         .join(" · ")}
                     </Text>
-                    <SmsMatchingUnconfiguredText
-                      account={acc}
-                      typeName={typeName}
-                    />
                   </Pressable>
 
                   <Button

@@ -4,14 +4,12 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from "react-native";
 import { Check, CreditCard } from "lucide-react-native";
 
 import { InstitutionSearchField } from "@/components/accounts/InstitutionSearchField";
-import { SmsMatchingUnconfiguredText } from "@/components/accounts/SmsMatchingUnconfiguredText";
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -29,7 +27,6 @@ import { rebuildFinancialSummaries } from "@/services/ledger/rebuildFinancialSum
 import type { Account } from "@/shared/types/expense";
 import { getInstitutionById } from "@/shared/data/institutions";
 import {
-  defaultSmsMatchingEnabled,
   getAccountLast4,
   normalizeLast4,
   requiresCatalogInstitution,
@@ -85,7 +82,6 @@ export function EditAccountModal({
   const [openingBalance, setOpeningBalance] = useState("");
   const [balanceAsOfDate, setBalanceAsOfDate] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
-  const [smsMatchingEnabled, setSmsMatchingEnabled] = useState(true);
   const [creditLimit, setCreditLimit] = useState("");
   const [billGenerationDay, setBillGenerationDay] = useState("");
   const [color, setColor] = useState(ACCOUNT_COLORS[0]);
@@ -122,10 +118,6 @@ export function EditAccountModal({
         effectiveBalanceAsOfDate(account.balanceAsOfDate, ledgerDates, today) || ""
       );
       setAccountNumber(getAccountLast4(account) || account.accountNumber || "");
-      setSmsMatchingEnabled(
-        Boolean(getInstitutionById(account.institutionId)) &&
-          account.smsMatchingEnabled !== false
-      );
       setCreditLimit(
         account.creditLimit !== undefined ? String(account.creditLimit) : ""
       );
@@ -143,11 +135,6 @@ export function EditAccountModal({
       setOpeningBalance("0");
       setBalanceAsOfDate("");
       setAccountNumber("");
-      setSmsMatchingEnabled(
-        defaultSmsMatchingEnabled(
-          canonicalAccountTypeId(accountTypes[0]?.name || "")
-        )
-      );
       setCreditLimit("");
       setBillGenerationDay("");
       setColor(ACCOUNT_COLORS[0]);
@@ -163,8 +150,6 @@ export function EditAccountModal({
   const isCreditCard = getAccountKind(selectedTypeName) === "credit";
   const needsInstitution = requiresCatalogInstitution(accountTypeId);
   const catalogInstitution = getInstitutionById(institutionId);
-  const catalogConfigured = Boolean(catalogInstitution);
-  const matchingAllowed = !needsInstitution || catalogConfigured;
   const suggestedName = suggestedAccountDisplayName(
     catalogInstitution,
     accountTypeId
@@ -217,15 +202,6 @@ export function EditAccountModal({
       toast.error("Select an institution from the list");
       return;
     }
-    if (
-      !isEditing &&
-      needsInstitution &&
-      smsMatchingEnabled &&
-      !catalogInstitution
-    ) {
-      toast.error("Select an institution to enable SMS matching");
-      return;
-    }
 
     const trimmedName = name.trim() || suggestedName;
     if (!trimmedName) {
@@ -255,7 +231,6 @@ export function EditAccountModal({
         last4,
         accountNumber: last4,
         institutionId: catalogInstitution?.id || "",
-        smsMatchingEnabled: matchingAllowed && smsMatchingEnabled,
         displayName: trimmedName,
         accountTypeId,
         creditLimit: parsedLimit,
@@ -346,24 +321,6 @@ export function EditAccountModal({
         contentContainerStyle={{ gap: 16, paddingBottom: 24 }}
         keyboardShouldPersistTaps="handled"
       >
-        {isEditing && needsInstitution && !catalogConfigured ? (
-          <View style={{ gap: 4 }}>
-            <SmsMatchingUnconfiguredText
-              account={account ?? { institutionId: "", accountTypeId }}
-              typeName={selectedTypeName}
-            />
-            <Text
-              style={{
-                color: theme.colors.mutedForeground,
-                fontSize: theme.typography.xs,
-              }}
-            >
-              Search and select an institution to enable SMS matching. Other
-              account details can still be saved.
-            </Text>
-          </View>
-        ) : null}
-
         <View style={{ gap: 6 }}>
           <Text
             style={[
@@ -389,11 +346,6 @@ export function EditAccountModal({
                     const nextTypeId = canonicalAccountTypeId(t.name);
                     if (!requiresCatalogInstitution(nextTypeId)) {
                       setInstitutionId("");
-                    }
-                    if (!isEditing) {
-                      setSmsMatchingEnabled(
-                        defaultSmsMatchingEnabled(nextTypeId)
-                      );
                     }
                     applySuggestedName(
                       requiresCatalogInstitution(nextTypeId)
@@ -440,11 +392,6 @@ export function EditAccountModal({
             onSelect={(institution) => {
               const nextId = institution?.id ?? "";
               setInstitutionId(nextId);
-              if (institution) {
-                setSmsMatchingEnabled(true);
-              } else if (isEditing) {
-                setSmsMatchingEnabled(false);
-              }
               applySuggestedName(nextId, selectedTypeName);
             }}
           />
@@ -460,7 +407,7 @@ export function EditAccountModal({
             }}
             placeholder="Last 4, or paste the full number"
             keyboardType="number-pad"
-            helperText="Only the last 4 digits are saved. Used to match bank SMS."
+            helperText="Only the last 4 digits are saved."
           />
         ) : null}
 
@@ -582,56 +529,6 @@ export function EditAccountModal({
             Account Type.
           </Text>
         </View>
-
-        <Pressable
-          onPress={() => {
-            if (!matchingAllowed) return;
-            setSmsMatchingEnabled((prev) => !prev);
-          }}
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            minHeight: 52,
-            opacity: matchingAllowed ? 1 : 0.55,
-          }}
-          accessibilityRole="switch"
-          accessibilityState={{
-            checked: matchingAllowed && smsMatchingEnabled,
-            disabled: !matchingAllowed,
-          }}
-        >
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text
-              style={[
-                styles.label,
-                { color: theme.colors.foreground, fontSize: theme.typography.sm },
-              ]}
-            >
-              Use for SMS matching
-            </Text>
-            <Text
-              style={{
-                color: theme.colors.mutedForeground,
-                fontSize: theme.typography.xs,
-              }}
-            >
-              {needsInstitution && !catalogConfigured
-                ? "SMS matching not configured until you select an institution."
-                : accountTypeId === "cash"
-                  ? "Cash accounts are excluded from SMS matching by default."
-                  : "Bank and card accounts are included by default."}
-            </Text>
-          </View>
-          <Switch
-            value={matchingAllowed && smsMatchingEnabled}
-            onValueChange={setSmsMatchingEnabled}
-            disabled={!matchingAllowed}
-            trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-            thumbColor="#FFFFFF"
-          />
-        </Pressable>
 
         <View style={{ gap: 8 }}>
           <Text

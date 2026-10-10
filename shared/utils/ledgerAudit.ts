@@ -48,7 +48,6 @@ import type {
 import type { CreditCardBill } from "@/shared/types/creditCardBill";
 import { isActiveLedgerRow } from "./ledgerRow";
 import {
-  checkDuplicateSmsFingerprint,
   checkDuplicateStatementFingerprint,
   checkInvalidAmount,
   checkInvalidDate,
@@ -71,7 +70,6 @@ export type LedgerAuditCheckId =
   | "month_date_mismatch"
   | "invalid_amount"
   | "zero_amount"
-  | "duplicate_sms_fingerprint"
   | "duplicate_statement_fingerprint"
   | "orphan_account_ref"
   | "orphan_bill_ref"
@@ -125,7 +123,7 @@ export type LedgerAuditSkipReason = "dataset_not_loaded" | "offline_cache";
 
 export interface LedgerAuditCheckResult {
   id: LedgerAuditCheckId;
-  /** Section heading, e.g. "Duplicate SMS imports". */
+  /** Section heading, e.g. "Duplicate statement imports". */
   label: string;
   status: LedgerAuditCheckStatus;
   /** Set only when `status === "skipped"`. */
@@ -226,8 +224,6 @@ export interface LedgerAuditContext {
   spaceIds: Set<string>;
   tripIds: Set<string>;
   splitIds: Set<string>;
-  /** Non-empty `smsFingerprint` (and `smsExternalRef`) -> the rows carrying it. */
-  smsFingerprintGroups: Map<string, LedgerAuditSubject[]>;
   statementFingerprintGroups: Map<string, LedgerAuditSubject[]>;
   subjectOf: (
     row: Expense | Income,
@@ -268,13 +264,6 @@ export const LEDGER_AUDIT_CHECKS: readonly LedgerAuditCheck[] = [
     severity: "error",
     requires: ["expenses", "incomes"],
     run: checkInvalidAmount,
-  },
-  {
-    id: "duplicate_sms_fingerprint",
-    label: "Duplicate SMS imports",
-    severity: "error",
-    requires: ["expenses", "incomes"],
-    run: checkDuplicateSmsFingerprint,
   },
   {
     id: "duplicate_statement_fingerprint",
@@ -400,15 +389,10 @@ export function buildLedgerAuditContext(
     };
   };
 
-  const smsFingerprintGroups = new Map<string, LedgerAuditSubject[]>();
   const statementFingerprintGroups = new Map<string, LedgerAuditSubject[]>();
 
   const indexRow = (row: Expense | Income, kind: "expense" | "income"): void => {
     const subject = subjectOf(row, kind);
-    const fingerprint = trimmed(row.smsFingerprint);
-    if (fingerprint) addToGroup(smsFingerprintGroups, `fp:${fingerprint}`, subject);
-    const externalRef = trimmed(row.smsExternalRef);
-    if (externalRef) addToGroup(smsFingerprintGroups, `ref:${externalRef}`, subject);
     if (kind === "expense") {
       const statement = trimmed((row as Expense).statementImportFingerprint);
       if (statement) addToGroup(statementFingerprintGroups, statement, subject);
@@ -428,7 +412,6 @@ export function buildLedgerAuditContext(
     spaceIds: idSet(input.spaces),
     tripIds: idSet(input.trips),
     splitIds: idSet(input.splits),
-    smsFingerprintGroups,
     statementFingerprintGroups,
     subjectOf,
   };

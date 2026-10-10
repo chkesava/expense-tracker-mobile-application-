@@ -20,10 +20,7 @@ import { useSettings } from "@/providers/SettingsProvider";
 import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 import type { Account } from "@/shared/types/expense";
 import { getAccountKind } from "@/shared/utils/accountKind";
-import {
-  formatAccountIdentityLine,
-  smsMatchingUnconfiguredLabel,
-} from "@/shared/utils/accountIdentity";
+import { formatAccountIdentityLine } from "@/shared/utils/accountIdentity";
 import { todayDateKey, parseLocalDate } from "@/shared/utils/dates";
 import {
   getDaysUntilReset,
@@ -111,7 +108,6 @@ export function CardsList() {
         name: card.name,
         color: card.color || "#888",
         identityLine: formatAccountIdentityLine(card, "Credit Card"),
-        smsWarning: smsMatchingUnconfiguredLabel(card, "Credit Card"),
         reconciliationWarning:
           card.summaryReconciliationStatus === "needs_reconciliation"
             ? "Balance pending reconciliation — tap Edit to rebuild"

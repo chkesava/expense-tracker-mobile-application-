@@ -6,8 +6,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 /**
  * SPENDLY-436: an account whose materialized summary was never seeded (or
  * was mutated before it was) gets flagged `needs_reconciliation` rather than
- * silently presented as healthy. Mirrors SmsMatchingUnconfiguredText's
- * warning-line pattern.
+ * silently presented as healthy.
  */
 export function NeedsReconciliationText({
   account,

@@ -21,7 +21,7 @@ describe("resolveAndroidBackAction", () => {
   it("pops out of stack sub-screens", () => {
     expect(resolveAndroidBackAction("/settings")).toBe("pop");
     expect(resolveAndroidBackAction("/settings/privacy")).toBe("pop");
-    expect(resolveAndroidBackAction("/sms-inbox")).toBe("pop");
+    expect(resolveAndroidBackAction("/fees")).toBe("pop");
     expect(resolveAndroidBackAction("/decisions")).toBe("pop");
     expect(resolveAndroidBackAction("/decisions/abc")).toBe("pop");
     expect(resolveAndroidBackAction("/decisions/edit?id=abc")).toBe("pop");
@@ -173,7 +173,7 @@ describe("resolvePrimaryTabId", () => {
     expect(resolvePrimaryTabId("/accounts/abc123")).toBeNull();
     expect(resolvePrimaryTabId("/settings")).toBeNull();
     expect(resolvePrimaryTabId("/settings/privacy")).toBeNull();
-    expect(resolvePrimaryTabId("/sms-inbox")).toBeNull();
+    expect(resolvePrimaryTabId("/fees")).toBeNull();
     expect(resolvePrimaryTabId("/add")).toBeNull();
     expect(resolvePrimaryTabId("/credit-card-bills/xyz")).toBeNull();
   });
