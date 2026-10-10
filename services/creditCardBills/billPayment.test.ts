@@ -54,6 +54,10 @@ vi.mock("firebase/firestore", () => {
       exists: () => docs.has(ref.path),
       data: () => docs.get(ref.path),
     })),
+  getDocFromCache: vi.fn(async (ref: FakeRef) => ({
+      exists: () => docs.has(ref.path),
+      data: () => docs.get(ref.path),
+    })),
     increment: (n: number) => mangled("increment", { ar: n }),
     arrayUnion: (...values: unknown[]) => mangled("arrayUnion", { _r: values }),
     arrayRemove: (...values: unknown[]) => mangled("arrayRemove", { _r: values }),

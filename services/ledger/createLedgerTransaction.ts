@@ -4,12 +4,13 @@ import { buildDashboardSummaryOps } from "@/shared/utils/dashboardMutations";
  * Used by ExpenseForm and statement import — one write shape, one collection path.
  */
 
-import { collection, doc, serverTimestamp, getDoc } from "firebase/firestore";
+import { collection, doc, serverTimestamp } from "firebase/firestore";
 
 import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";
 import type { WriteOutcome } from "@/lib/firestoreWrite";
 import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
+import { fetchAccountTypes } from "./fetchAccountTypes";
 
 export type CreateExpenseInput = {
   amount: number;
@@ -103,27 +104,15 @@ export async function createExpense(
       : {}),
     createdAt: serverTimestamp(),
   };
-  let isCreditCard = false;
-  let oldBalance = 0;
-  let oldOutstanding = 0;
-  let needsInitialization = false;
-  if (payload.accountId) {
-    const accountSnap = await getDoc(doc(db, "users", uid, "accounts", payload.accountId));
-    if (accountSnap.exists()) {
-      const data = accountSnap.data();
-      // accountTypeId is canonical, or fall back to checking if name/legacy type implies credit.
-      isCreditCard = data.accountTypeId === "credit_card" ||
-        (data.name || "").toLowerCase().includes("credit");
-      // SPENDLY-436: an absent `balanceInitialized` means this account's
-      // currentBalance/currentOutstanding was never seeded. Reading
-      // `currentBalance ?? 0` here would be indistinguishable from "the
-      // account really has zero", silently dropping openingBalance the
-      // moment this mutation applies. Seed from openingBalance instead.
-      needsInitialization = data.balanceInitialized !== true;
-      oldBalance = needsInitialization ? (data.openingBalance ?? 0) : (data.currentBalance ?? 0);
-      oldOutstanding = data.currentOutstanding ?? 0;
-    }
-  }
+  // SPENDLY-491: cache first, so the save never waits on a server round trip.
+  // SPENDLY-436's "never seeded" handling lives in accountInfoFromSnap.
+  const accountInfo = payload.accountId
+    ? (await fetchAccountTypes(db, uid, [payload.accountId])).get(payload.accountId)
+    : undefined;
+  const isCreditCard = accountInfo?.isCreditCard ?? false;
+  const oldBalance = accountInfo?.oldBalance ?? 0;
+  const oldOutstanding = accountInfo?.oldOutstanding ?? 0;
+  const needsInitialization = accountInfo?.needsInitialization ?? false;
 
   const expenseOps = [{ op: "set" as const, ref, data, merge: Boolean(options?.id) }];
   const balanceOps = payload.accountId ? buildAccountBalanceOps(uid, [
@@ -165,22 +154,15 @@ export async function createIncome(
     ...(payload.time ? { time: payload.time } : {}),
     createdAt: serverTimestamp(),
   };
-  let isCreditCard = false;
-  let oldBalance = 0;
-  let oldOutstanding = 0;
-  let needsInitialization = false;
-  if (payload.accountId) {
-    const accountSnap = await getDoc(doc(db, "users", uid, "accounts", payload.accountId));
-    if (accountSnap.exists()) {
-      const data = accountSnap.data();
-      isCreditCard = data.accountTypeId === "credit_card" ||
-        (data.name || "").toLowerCase().includes("credit");
-      // SPENDLY-436: see createExpense — do not treat "never seeded" as zero.
-      needsInitialization = data.balanceInitialized !== true;
-      oldBalance = needsInitialization ? (data.openingBalance ?? 0) : (data.currentBalance ?? 0);
-      oldOutstanding = data.currentOutstanding ?? 0;
-    }
-  }
+  // SPENDLY-491: cache first, so the save never waits on a server round trip.
+  // SPENDLY-436's "never seeded" handling lives in accountInfoFromSnap.
+  const accountInfo = payload.accountId
+    ? (await fetchAccountTypes(db, uid, [payload.accountId])).get(payload.accountId)
+    : undefined;
+  const isCreditCard = accountInfo?.isCreditCard ?? false;
+  const oldBalance = accountInfo?.oldBalance ?? 0;
+  const oldOutstanding = accountInfo?.oldOutstanding ?? 0;
+  const needsInitialization = accountInfo?.needsInitialization ?? false;
 
   const incomeOps = [{ op: "set" as const, ref, data, merge: Boolean(options?.id) }];
   const balanceOps = payload.accountId ? buildAccountBalanceOps(uid, [
