@@ -814,6 +814,10 @@ export default function LedgerScreen() {
                   refreshing={refreshing}
                   onRefresh={handleRefresh}
                   onEndReached={() => {
+                    // SPENDLY-490: a month that is already fully loaded has
+                    // nothing older to show; paging on would only pull the
+                    // rest of the ledger in for nothing.
+                    if (periodSummaryComplete) return;
                     if (hasMoreLedger && !isFetchingMoreLedger) {
                       void loadMoreLedger("all");
                     }
@@ -888,6 +892,7 @@ export default function LedgerScreen() {
                   refreshing={refreshing}
                   onRefresh={handleRefresh}
                   onEndReached={() => {
+                    if (periodSummaryComplete) return;
                     if (hasMoreIncomes && !isFetchingMoreIncomes) {
                       void loadMoreIncomes();
                     }
