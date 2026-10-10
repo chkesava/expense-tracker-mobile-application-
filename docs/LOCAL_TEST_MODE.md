@@ -27,9 +27,10 @@ You need the Firebase CLI (`npm i -g firebase-tools`), JDK 21 and a phone with U
    ```
 4. **Install it and connect it to the emulator.** Re-run `device:reverse` after every reconnect.
    ```sh
-   adb install -r dist/Spendly-Test.apk
+   npm run android:install
    npm run device:reverse
    ```
+   `android:install` runs `adb install -r` and then AOT-compiles the app (SPENDLY-493). A plain `adb install` leaves it interpreted until Android's overnight dexopt, so it feels laggier than it really is. To compile an app installed some other way, such as the real Spendly after an in-app update, run `npm run android:install -- --compile-only --package=com.example.expensetracker`.
 5. **Sign in.** Open **Spendly Test** and sign in with email and password: `demo@spendly.test` / `spendly-demo`.
 
 A yellow **TEST DATA** pill next to the logo shows you're in the test app.

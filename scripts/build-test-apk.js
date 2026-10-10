@@ -147,7 +147,7 @@ function main() {
 
   console.log(`\nSpendly Test APK: ${path.relative(ROOT_DIR, OUTPUT_APK)}`);
   console.log('Next: npm run emulators:local, npm run device:reverse, then');
-  console.log(`      adb install -r ${path.relative(ROOT_DIR, OUTPUT_APK)}`);
+  console.log('      npm run android:install   (installs and AOT-compiles, SPENDLY-493)');
 }
 
 if (require.main === module) {
