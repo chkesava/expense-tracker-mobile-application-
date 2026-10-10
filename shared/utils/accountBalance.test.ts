@@ -13,6 +13,7 @@ import type {
 } from "../types/receivable";
 import {
   buildAccountActivities,
+  partialLedgerBoundary,
   computeBankBalance,
   computeOutstandingCredit,
   getCreditBillHistory,
@@ -848,6 +849,132 @@ describe("floating-point safety in money math", () => {
     // Newest first: evening income leaves 1300, morning expense left 800.
     expect(activities[0]?.runningBalance).toBe(1300);
     expect(activities[1]?.runningBalance).toBe(800);
+  });
+});
+
+describe("buildAccountActivities running balance anchor (SPENDLY-487)", () => {
+  const expense = (id: string, amount: number, date: string): Expense => ({
+    id,
+    amount,
+    category: "Food",
+    note: id,
+    date,
+    month: date.slice(0, 7),
+    accountId: "bank-1",
+    createdAt: null,
+  });
+  const salary: Income = {
+    id: "salary",
+    amount: 33000,
+    source: "Salary",
+    note: "Salary",
+    date: "2026-05-01",
+    month: "2026-05",
+    accountId: "bank-1",
+    createdAt: null,
+  };
+  // Full history: 33,000 in, then 10,000 + 500 + 52 out → 22,448.
+  const all = [
+    expense("old-rent", 10000, "2026-06-01"),
+    expense("laddo", 500, "2026-10-08"),
+    expense("curd", 52, "2026-10-10"),
+  ];
+  const stored: Account = {
+    id: "bank-1",
+    name: "Bank",
+    typeId: "bank-type",
+    openingBalance: 0,
+    balanceInitialized: true,
+    currentBalance: 22448,
+  };
+
+  it("matches the stored balance on the newest row when older pages are not loaded", () => {
+    // Only the newest expense page is loaded: the June rent is missing, while
+    // every income is loaded. The oldest loaded expense is 2026-10-08.
+    const loadedFrom = partialLedgerBoundary([
+      { dates: all.slice(1).map((e) => e.date), complete: false },
+      { dates: [salary.date], complete: true },
+    ]);
+    expect(loadedFrom).toBe("2026-10-08");
+    const recent = buildAccountActivities(
+      stored,
+      "Bank",
+      all.slice(1),
+      [salary],
+      [],
+      [],
+      [],
+      undefined,
+      undefined,
+      undefined,
+      { ledgerComplete: false, loadedFrom }
+    );
+    expect(recent.map((row) => row.id)).toEqual(["curd", "laddo", "salary"]);
+    expect(recent[0]?.runningBalance).toBe(22448);
+    // At and below the boundary the rent gap would make any number a guess.
+    expect(recent[1]?.runningBalance).toBeUndefined();
+    expect(recent[2]?.runningBalance).toBeUndefined();
+  });
+
+  it("finds no boundary once every collection is complete", () => {
+    expect(
+      partialLedgerBoundary([
+        { dates: ["2026-10-01"], complete: true },
+        { dates: ["2026-05-01"], complete: true },
+      ])
+    ).toBeUndefined();
+  });
+
+  it("agrees with the forward replay when the full history is loaded", () => {
+    const anchored = buildAccountActivities(stored, "Bank", all, [salary]);
+    const replayed = buildAccountActivities(
+      { ...stored, currentBalance: undefined },
+      "Bank",
+      all,
+      [salary]
+    );
+    expect(anchored.map((row) => row.runningBalance)).toEqual(
+      replayed.map((row) => row.runningBalance)
+    );
+    expect(anchored[0]?.runningBalance).toBe(22448);
+    expect(anchored[anchored.length - 1]?.runningBalance).toBe(33000);
+  });
+
+  it("shows no running balance rather than a wrong one without a stored balance on a partial ledger", () => {
+    const rows = buildAccountActivities(
+      { ...stored, currentBalance: undefined },
+      "Bank",
+      all.slice(1),
+      [salary],
+      [],
+      [],
+      [],
+      undefined,
+      undefined,
+      undefined,
+      { ledgerComplete: false }
+    );
+    expect(rows.every((row) => row.runningBalance === undefined)).toBe(true);
+  });
+
+  it("does not trust a stored balance flagged for reconciliation", () => {
+    const rows = buildAccountActivities(
+      { ...stored, currentBalance: 999, balanceReconciliationStatus: "needs_reconciliation" },
+      "Bank",
+      all,
+      [salary]
+    );
+    expect(rows[0]?.runningBalance).toBe(22448);
+  });
+
+  it("does not trust an unseeded stored balance", () => {
+    const rows = buildAccountActivities(
+      { ...stored, currentBalance: 999, balanceInitialized: false },
+      "Bank",
+      all,
+      [salary]
+    );
+    expect(rows[0]?.runningBalance).toBe(22448);
   });
 });
 

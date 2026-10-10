@@ -400,7 +400,8 @@ export function buildAccountActivities(
   receivableFlows?: {
     receivables?: Receivable[];
     receivableRepayments?: ReceivableRepayment[];
-  }
+  },
+  options: AccountActivityOptions = {}
 ): AccountActivity[] {
   // Never hide ledger rows. A "balance as of" date only affects the running
   // header balance (via computeBankBalance), not whether history is listed.
@@ -578,18 +579,92 @@ export function buildAccountActivities(
       [],
       todayDateKey()
     );
-    const opening = account.openingBalance ?? 0;
-    let running = opening;
-    for (const act of chronological) {
-      if (!isOnOrAfter(act.date, baseline)) continue;
-      if (act.type === "debit") running -= act.amount;
-      else running += act.amount;
-      running = roundMoney(running);
-      act.runningBalance = running;
+    const anchor = storedBalanceAnchor(account);
+    if (anchor !== undefined) {
+      // SPENDLY-487: walk back from the materialized balance, so every loaded
+      // row is right even when older ledger pages were never fetched. A
+      // forward replay from `openingBalance` silently drops whatever spending
+      // sits in the unloaded pages.
+      // Below `loadedFrom` some rows may be missing (older pages not fetched),
+      // so the walk stops there instead of guessing.
+      const loadedFrom = options.ledgerComplete === false ? options.loadedFrom : undefined;
+      let running = anchor;
+      for (let i = chronological.length - 1; i >= 0; i -= 1) {
+        const act = chronological[i];
+        if (!isOnOrAfter(act.date, baseline)) break;
+        if (loadedFrom && act.date <= loadedFrom) break;
+        act.runningBalance = running;
+        running = roundMoney(
+          act.type === "debit" ? running + act.amount : running - act.amount
+        );
+      }
+    } else if (options.ledgerComplete !== false) {
+      // No trustworthy stored balance: replaying from the opening balance is
+      // only correct over the full history.
+      const opening = account.openingBalance ?? 0;
+      let running = opening;
+      for (const act of chronological) {
+        if (!isOnOrAfter(act.date, baseline)) continue;
+        if (act.type === "debit") running -= act.amount;
+        else running += act.amount;
+        running = roundMoney(running);
+        act.runningBalance = running;
+      }
     }
   }
 
   return chronological.reverse();
+}
+
+export interface AccountActivityOptions {
+  /**
+   * False while only the newest ledger pages are loaded. Running balances are
+   * then taken only from the account's stored balance, never replayed from
+   * the opening balance. Defaults to true.
+   */
+  ledgerComplete?: boolean;
+  /**
+   * With a partial ledger: the newest date at which loaded history may have
+   * gaps (the latest of the oldest loaded expense / income dates). Rows on or
+   * before it get no running balance. Ignored when `ledgerComplete`.
+   */
+  loadedFrom?: string;
+}
+
+/**
+ * {@link AccountActivityOptions.loadedFrom} for a partially loaded ledger:
+ * the latest of the oldest dates loaded in each collection that still has
+ * older pages. Undefined when nothing is partial.
+ */
+export function partialLedgerBoundary(
+  collections: { dates: readonly string[]; complete: boolean }[]
+): string | undefined {
+  let boundary: string | undefined;
+  for (const { dates, complete } of collections) {
+    if (complete || dates.length === 0) continue;
+    let oldest = dates[0];
+    for (const date of dates) if (date < oldest) oldest = date;
+    if (!boundary || oldest > boundary) boundary = oldest;
+  }
+  return boundary;
+}
+
+/**
+ * The materialized `currentBalance`, when it can be trusted as the balance
+ * after the newest row: seeded (`balanceInitialized`) and not flagged for
+ * reconciliation.
+ */
+function storedBalanceAnchor(account: Account): number | undefined {
+  if (account.balanceInitialized !== true) return undefined;
+  if (typeof account.currentBalance !== "number") return undefined;
+  if (!Number.isFinite(account.currentBalance)) return undefined;
+  if (
+    account.balanceReconciliationStatus === "needs_reconciliation" ||
+    account.summaryReconciliationStatus === "needs_reconciliation"
+  ) {
+    return undefined;
+  }
+  return account.currentBalance;
 }
 
 export function previewBalanceAfterTransaction(

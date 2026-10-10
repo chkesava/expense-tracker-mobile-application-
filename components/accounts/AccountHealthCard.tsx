@@ -28,6 +28,7 @@ export function AccountHealthCard({
   currentBalanceLabel,
   window,
   onWindowChange,
+  partialSince,
 }: {
   metrics: AccountHealthMetrics;
   currency: string;
@@ -36,6 +37,11 @@ export function AccountHealthCard({
   currentBalanceLabel: string;
   window: AccountHistoryWindow;
   onWindowChange: (window: AccountHistoryWindow) => void;
+  /**
+   * SPENDLY-487: set while older ledger pages are not loaded. Figures then
+   * only cover activity after this date, so the card says so.
+   */
+  partialSince?: string;
 }) {
   const { theme, themeName } = useTheme();
   const surfaces = useSurfaces();
@@ -189,6 +195,11 @@ export function AccountHealthCard({
               ? ` · last on ${formatActivityDateLabel(metrics.lastActivityDate)}`
               : "")}
       </Text>
+      {partialSince ? (
+        <Text style={[styles.footer, { color: theme.colors.mutedForeground }]}>
+          {`Based on activity after ${formatActivityDateLabel(partialSince)}. Older history isn't loaded yet.`}
+        </Text>
+      ) : null}
     </View>
   );
 }
