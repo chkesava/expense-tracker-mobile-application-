@@ -129,9 +129,9 @@ export const NetWorthWidget = memo(function NetWorthWidget({ currency, cashFlow 
               <View key={row.month} style={styles.sparkCol}>
                 <View
                   style={{
-                    width: 8,
+                    width: 10,
                     height,
-                    borderRadius: 3,
+                    borderRadius: 5,
                     backgroundColor: positive
                       ? theme.colors.success
                       : theme.colors.destructive,
