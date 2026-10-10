@@ -2,10 +2,8 @@ import React, { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import Animated, {
-  useAnimatedProps,
   useAnimatedStyle,
   useSharedValue,
-  withDelay,
   withSequence,
   withSpring,
   withTiming,
@@ -15,8 +13,6 @@ import Animated, {
 import { useTheme } from "@/theme/ThemeProvider";
 import { haptic as hapticEngine } from "@/lib/haptics";
 
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 export interface AnimatedSuccessCheckmarkProps {
   size?: number;
@@ -37,7 +33,6 @@ export function AnimatedSuccessCheckmark({
 
   const ringScale = useSharedValue(0.7);
   const ringOpacity = useSharedValue(0);
-  const checkProgress = useSharedValue(0);
 
   useEffect(() => {
     if (haptic) {
@@ -52,25 +47,12 @@ export function AnimatedSuccessCheckmark({
       withTiming(0.4, { duration: 150 }),
       withTiming(0, { duration: 400 })
     );
-
-    checkProgress.value = withDelay(
-      100,
-      withSpring(1, { damping: 14, stiffness: 220 })
-    );
-  }, [checkProgress, haptic, ringOpacity, ringScale]);
+  }, [haptic, ringOpacity, ringScale]);
 
   const ringAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: ringScale.value }],
     opacity: ringOpacity.value,
   }));
-
-  const checkAnimatedProps = useAnimatedProps(() => {
-    // Total path length of checkmark: approx 32
-    const totalLength = 32;
-    return {
-      strokeDashoffset: totalLength * (1 - checkProgress.value),
-    };
-  });
 
   return (
     <View
@@ -116,15 +98,15 @@ export function AnimatedSuccessCheckmark({
             fill="none"
             opacity={0.85}
           />
-          <AnimatedPath
+          {/* Static: the badge's ZoomIn is the entrance. Drawing the stroke
+              with Reanimated props failed on unmounted SVG nodes (SPENDLY-489). */}
+          <Path
             d="M20 33 L28 41 L45 23"
             stroke={checkColor}
             strokeWidth="4.5"
             strokeLinecap="round"
             strokeLinejoin="round"
             fill="none"
-            strokeDasharray="32"
-            animatedProps={checkAnimatedProps}
           />
         </Svg>
       </Animated.View>

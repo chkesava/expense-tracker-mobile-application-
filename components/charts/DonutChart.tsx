@@ -1,21 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, G, Path } from "react-native-svg";
-import Animated, {
-  FadeIn,
-  useAnimatedProps,
-  useSharedValue,
-  withDelay,
-  withSpring,
-  ZoomIn,
-} from "react-native-reanimated";
+import Animated, { FadeIn, ZoomIn } from "react-native-reanimated";
 
 import { Amount } from "@/components/common/Amount";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
-
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 export interface DonutSegment {
   id?: string;
@@ -33,7 +24,12 @@ export interface DonutChartProps {
   showLegend?: boolean;
 }
 
-function AnimatedDonutSlice({
+/**
+ * A static slice. The chart's entrance is the wrapping `ZoomIn` view: animating
+ * each SVG circle with Reanimated pushed synchronous props to native views that
+ * were not (or no longer) mounted, logging a stack trace per frame (SPENDLY-489).
+ */
+function DonutSlice({
   cx,
   cy,
   radius,
@@ -43,7 +39,6 @@ function AnimatedDonutSlice({
   sliceLength,
   circumference,
   isSelected,
-  index,
   onPress,
 }: {
   cx: number;
@@ -55,53 +50,20 @@ function AnimatedDonutSlice({
   sliceLength: number;
   circumference: number;
   isSelected: boolean;
-  index: number;
   onPress: () => void;
 }) {
-  const progress = useSharedValue(0);
-  const animRadius = useSharedValue(radius);
-  const animStroke = useSharedValue(strokeWidth);
-
-  useEffect(() => {
-    progress.value = 0;
-    progress.value = withDelay(
-      index * 50,
-      withSpring(1, { damping: 18, stiffness: 160, mass: 0.8 })
-    );
-  }, [sliceLength, index, progress]);
-
-  useEffect(() => {
-    animRadius.value = withSpring(isSelected ? radius + 2 : radius, {
-      damping: 15,
-      stiffness: 200,
-    });
-    animStroke.value = withSpring(isSelected ? strokeWidth + 4 : strokeWidth, {
-      damping: 15,
-      stiffness: 200,
-    });
-  }, [isSelected, radius, strokeWidth, animRadius, animStroke]);
-
-  const animatedProps = useAnimatedProps(() => {
-    const currentLength = sliceLength * progress.value;
-    const gap = Math.max(0, circumference - currentLength);
-    return {
-      r: animRadius.value,
-      strokeWidth: animStroke.value,
-      strokeDasharray: `${currentLength} ${gap}`,
-    };
-  });
-
+  const gap = Math.max(0, circumference - sliceLength);
   return (
-    <AnimatedCircle
+    <Circle
       cx={cx}
       cy={cy}
-      r={radius}
+      r={isSelected ? radius + 2 : radius}
       fill="none"
       stroke={color}
-      strokeWidth={strokeWidth}
+      strokeWidth={isSelected ? strokeWidth + 4 : strokeWidth}
       strokeLinecap="round"
+      strokeDasharray={`${sliceLength} ${gap}`}
       transform={`rotate(${rotation} ${cx} ${cy})`}
-      animatedProps={animatedProps}
       onPress={onPress}
     />
   );
@@ -196,7 +158,7 @@ export function DonutChart({
           {/* Segment Arcs */}
           <G>
             {slices.map((slice, idx) => (
-              <AnimatedDonutSlice
+              <DonutSlice
                 key={slice.label + idx}
                 cx={center}
                 cy={center}
@@ -207,7 +169,6 @@ export function DonutChart({
                 sliceLength={slice.sliceLength}
                 circumference={circumference}
                 isSelected={slice.isSelected}
-                index={idx}
                 onPress={() => handleSelect(idx)}
               />
             ))}
