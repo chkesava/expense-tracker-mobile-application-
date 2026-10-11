@@ -108,6 +108,8 @@ function injectHeadTags(outDir, product) {
   const tags = [
     `<link rel="manifest" href="${basePath}/manifest.webmanifest" />`,
     `<link rel="apple-touch-icon" href="${iconHref}" />`,
+    // Chrome warns when only the apple- prefixed tag is present; iOS still reads it.
+    `<meta name="mobile-web-app-capable" content="yes" />`,
     `<meta name="apple-mobile-web-app-capable" content="yes" />`,
     `<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />`,
   ].join('\n    ');
