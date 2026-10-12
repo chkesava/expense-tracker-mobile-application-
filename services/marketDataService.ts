@@ -19,6 +19,13 @@ const getBaseUrl = (): string => {
   if (Constants.expoConfig?.extra?.marketApiUrl) {
     return Constants.expoConfig.extra.marketApiUrl;
   }
+  // On web, call the page's own origin: its `_redirects` proxies /api/* to
+  // the legacy site that hosts the market functions (scripts/build-web.js).
+  // Calling the legacy origin directly is blocked by the CSP, and it sends no
+  // CORS headers anyway. `document` is absent on native.
+  if (typeof document !== 'undefined' && typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
   // The deployed web app and its Netlify functions share this public origin.
   // This avoids direct device calls to third-party market providers.
   return process.env.EXPO_PUBLIC_APP_URL || '';

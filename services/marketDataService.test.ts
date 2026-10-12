@@ -100,3 +100,32 @@ describe("marketDataService", () => {
     );
   });
 });
+
+describe("marketDataService base URL", () => {
+  const LEGACY = "https://legacy.test";
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.EXPO_PUBLIC_APP_URL;
+  });
+
+  async function requestedUrl(): Promise<string> {
+    vi.resetModules();
+    process.env.EXPO_PUBLIC_APP_URL = LEGACY;
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, symbol: "KPITTECH" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { fetchStockQuote } = await import("./marketDataService");
+    await fetchStockQuote("KPITTECH.NS");
+    return String((fetchMock.mock.calls[0] as unknown[])[0]);
+  }
+
+  it("calls the page's own origin on web, where /api/* is proxied", async () => {
+    vi.stubGlobal("document", {});
+    vi.stubGlobal("window", { location: { origin: "https://spendly-share.test" } });
+    expect(await requestedUrl()).toBe("https://spendly-share.test/api/stock?symbol=KPITTECH.NS");
+  });
+
+  it("calls the legacy app URL on native, which has no document", async () => {
+    expect(await requestedUrl()).toBe(`${LEGACY}/api/stock?symbol=KPITTECH.NS`);
+  });
+});

@@ -27,6 +27,9 @@ const Jimp = require('jimp-compact');
 const ROOT_DIR = path.resolve(__dirname, '..');
 const PRODUCTS_DIR = path.join(ROOT_DIR, 'products');
 const OUT_ROOT = path.join(ROOT_DIR, 'dist-web');
+// Legacy Vite web app: still hosts the /api/* market functions that native
+// builds reach through EXPO_PUBLIC_APP_URL. The web build proxies to it.
+const LEGACY_MARKET_API_ORIGIN = 'https://kesavaexpensetracker.netlify.app';
 
 // Product builds first, "landing" last. Order is no longer load-bearing:
 // each `expo export` copies public/** into its own output root, and landing
@@ -177,6 +180,11 @@ function writeRedirectsAndHeaders() {
     // listed explicitly rather than relying on the catch-all below.
     '/split/*           /index.html             200',
     '/payment/*         /index.html             200',
+    // The market functions (/api/stock, /api/mutual-funds, /api/crypto) live
+    // only on the legacy site. Proxying keeps the browser same-origin, so the
+    // CSP connect-src stays 'self' and the legacy functions need no CORS
+    // headers. Must stay above the catch-all, which otherwise serves HTML.
+    `/api/*            ${LEGACY_MARKET_API_ORIGIN}/api/:splat  200`,
     '/*                 /index.html             200',
     '',
   ].join('\n');
