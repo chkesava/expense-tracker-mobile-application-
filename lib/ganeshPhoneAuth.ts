@@ -10,6 +10,7 @@ import {
 import { env } from "@/lib/env";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { indianPhoneToE164 } from "@/shared/utils/ganeshIdentity";
+import { ganeshPhoneAuthBridgeUrl } from "@/shared/utils/ganeshPhoneAuthUrl";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -45,15 +46,13 @@ export async function requestGaneshPhoneVerification(
     return { verificationId, phoneNumber };
   }
 
-  const base = env.publicAppUrl.replace(/\/$/, "");
-  if (!base) {
+  const redirectUri = Linking.createURL("ganesh-phone-auth");
+  const authUrl = ganeshPhoneAuthBridgeUrl(env.shareUrl || env.publicAppUrl, phoneNumber, redirectUri);
+  if (!authUrl) {
     throw new Error(
-      "Phone sign-in on this device needs EXPO_PUBLIC_APP_URL so reCAPTCHA can run in a browser."
+      "Phone sign-in on this device needs EXPO_PUBLIC_SHARE_URL so reCAPTCHA can run in a browser."
     );
   }
-
-  const redirectUri = Linking.createURL("ganesh-phone-auth");
-  const authUrl = `${base}/ganesh-phone-auth?phone=${encodeURIComponent(phoneNumber)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
   const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
   if (result.type === "cancel" || result.type === "dismiss") {
     throw new Error("Phone verification was cancelled.");

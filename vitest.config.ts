@@ -18,6 +18,8 @@ export default defineConfig({
       // provable here rather than only against a deployed function.
       "supabase/functions/**/*.test.ts",
       "scripts/**/*.test.ts",
+      // SPENDLY-522: Netlify function handlers (market quotes).
+      "netlify/**/*.test.ts",
       "theme/**/*.test.ts",
     ],
     environment: "node",
