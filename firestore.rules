@@ -510,10 +510,15 @@ service cloud.firestore {
           && optionalBoundedNonNeg(d, 'totalInvested');
       }
 
+      // SPENDLY-521: a cost-basis ADJUSTMENT row carries the signed change in
+      // invested amount as `price` (negative when the basis is lowered), which
+      // reconciliation adds to the derived cost. Every other type stays >= 0.
       function portfolioTxWellFormed() {
         let d = request.resource.data;
         return optionalBoundedNonNeg(d, 'quantity')
-          && optionalBoundedNonNeg(d, 'price')
+          && (d.get('type', '') == 'ADJUSTMENT'
+            ? optionalBoundedNumber(d, 'price')
+            : optionalBoundedNonNeg(d, 'price'))
           && optionalBoundedNonNeg(d, 'fees')
           && optionalYmd(d, 'date');
       }

@@ -18,6 +18,7 @@ import { Amount } from "@/components/common/Amount";
 import { appDialog } from "@/lib/appDialog";
 import { haptic } from "@/lib/haptics";
 import { toast } from "@/lib/toast";
+import { writeSavedMessage } from "@/lib/firestoreWrite";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { useAuth } from "@/providers/AuthProvider";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -120,24 +121,22 @@ export function HoldingAdjustmentModal({
           onPress: async () => {
             setSubmitting(true);
             try {
-              if (type === "add_missing_acquisition") {
-                await executeMissingAcquisitionAdjustment(user.uid, {
+              const { outcome } = type === "add_missing_acquisition"
+                ? await executeMissingAcquisitionAdjustment(user.uid, {
                   holdingId: holding.id,
                   quantity: Number(qtyStr),
                   price: Number(priceStr),
                   date: dateStr,
                   fundingSource,
                   reason: reasonAcq,
-                });
-              } else {
-                await executeCostBasisAdjustment(user.uid, {
+                })
+                : await executeCostBasisAdjustment(user.uid, {
                   holdingId: holding.id,
                   actualInvestedValue: Number(investedStr),
                   date: todayDateKey(),
                   reason: reasonCost,
                 });
-              }
-              toast.success("Holding recalibrated successfully");
+              toast.success(writeSavedMessage(outcome, "Holding recalibrated successfully"));
               onClose();
             } catch (error) {
               logError("portfolio.adjustHolding", error);

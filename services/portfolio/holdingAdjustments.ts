@@ -92,7 +92,10 @@ export async function executeMissingAcquisitionAdjustment(
   const transactionId = newId();
   const cashEntryId = deducts ? newId() : null;
 
-  const outcome = await commitWrite(async () => {
+  // SPENDLY-521: `run` must perform the write. Returning the batch without
+  // committing it resolved straight away, so the app reported success and
+  // nothing reached Firestore.
+  const outcome = await commitWrite(() => {
     const batch = writeBatch(db);
     batch.update(holdingRef, {
       quantity: nextQuantity,
@@ -161,8 +164,8 @@ export async function executeMissingAcquisitionAdjustment(
       }
     );
 
-    return batch;
-  });
+    return batch.commit();
+  }, { label: "holding adjustment" });
 
   return { outcome, adjustmentId };
 }
@@ -194,7 +197,7 @@ export async function executeCostBasisAdjustment(
   const adjustmentId = newId();
   const transactionId = newId();
 
-  const outcome = await commitWrite(async () => {
+  const outcome = await commitWrite(() => {
     const batch = writeBatch(db);
     batch.update(holdingRef, {
       averageBuyPrice: newAveragePrice,
@@ -209,6 +212,9 @@ export async function executeCostBasisAdjustment(
         symbol: holding.symbol,
         type: "ADJUSTMENT",
         quantity: 0,
+        // Signed: reconciliation adds it to the derived cost and order history
+        // shows it with its sign. `portfolioTxWellFormed` allows a negative
+        // price on ADJUSTMENT rows only.
         price: costDifference,
         fees: 0,
         date: input.date,
@@ -240,8 +246,8 @@ export async function executeCostBasisAdjustment(
       }
     );
 
-    return batch;
-  });
+    return batch.commit();
+  }, { label: "holding adjustment" });
 
   return { outcome, adjustmentId };
 }
