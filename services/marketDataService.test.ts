@@ -100,3 +100,43 @@ describe("marketDataService", () => {
     );
   });
 });
+
+describe("marketDataService base URL", () => {
+  const SHARE = "https://share.test";
+  const LEGACY = "https://legacy.test";
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.EXPO_PUBLIC_SHARE_URL;
+    delete process.env.EXPO_PUBLIC_APP_URL;
+  });
+
+  async function requestedUrl(env: { share?: string; app?: string }): Promise<string> {
+    vi.resetModules();
+    if (env.share) process.env.EXPO_PUBLIC_SHARE_URL = env.share;
+    if (env.app) process.env.EXPO_PUBLIC_APP_URL = env.app;
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, symbol: "KPITTECH" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { fetchStockQuote } = await import("./marketDataService");
+    await fetchStockQuote("KPITTECH.NS");
+    return String((fetchMock.mock.calls[0] as unknown[])[0]);
+  }
+
+  it("calls the page's own origin on web, which hosts the functions", async () => {
+    vi.stubGlobal("document", {});
+    vi.stubGlobal("window", { location: { origin: "https://spendly-share.test" } });
+    expect(await requestedUrl({ share: SHARE, app: LEGACY })).toBe(
+      "https://spendly-share.test/api/stock?symbol=KPITTECH.NS"
+    );
+  });
+
+  it("calls the share site on native, not the legacy app URL", async () => {
+    expect(await requestedUrl({ share: `${SHARE}/`, app: LEGACY })).toBe(
+      `${SHARE}/api/stock?symbol=KPITTECH.NS`
+    );
+  });
+
+  it("falls back to the legacy app URL on native when no share URL is set", async () => {
+    expect(await requestedUrl({ app: LEGACY })).toBe(`${LEGACY}/api/stock?symbol=KPITTECH.NS`);
+  });
+});

@@ -177,6 +177,13 @@ function writeRedirectsAndHeaders() {
     // listed explicitly rather than relying on the catch-all below.
     '/split/*           /index.html             200',
     '/payment/*         /index.html             200',
+    // SPENDLY-522: market quote functions, served by this site (they used to
+    // live on the legacy kesavaexpensetracker site). Same origin, so the CSP
+    // connect-src stays 'self'. Must stay above the catch-all, which
+    // otherwise answers /api/* with HTML.
+    '/api/stock         /.netlify/functions/stock         200',
+    '/api/mutual-funds  /.netlify/functions/mutual-funds  200',
+    '/api/crypto        /.netlify/functions/crypto        200',
     '/*                 /index.html             200',
     '',
   ].join('\n');

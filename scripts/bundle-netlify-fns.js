@@ -26,6 +26,10 @@ const FUNCTIONS = [
   "epf-cron",
   "nutrition-ai",
   "delete-account",
+  // SPENDLY-522: market quotes, moved here from the legacy site.
+  "stock",
+  "mutual-funds",
+  "crypto",
 ];
 
 fs.mkdirSync(outDir, { recursive: true });

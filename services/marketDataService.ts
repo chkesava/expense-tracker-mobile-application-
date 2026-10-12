@@ -19,9 +19,17 @@ const getBaseUrl = (): string => {
   if (Constants.expoConfig?.extra?.marketApiUrl) {
     return Constants.expoConfig.extra.marketApiUrl;
   }
-  // The deployed web app and its Netlify functions share this public origin.
-  // This avoids direct device calls to third-party market providers.
-  return process.env.EXPO_PUBLIC_APP_URL || '';
+  // SPENDLY-522: the market functions (netlify/functions/stock|mutual-funds|
+  // crypto) ship with the web build on spendly-share. On web that is the
+  // page's own origin, which the CSP connect-src allows. `document` is absent
+  // on native.
+  if (typeof document !== 'undefined' && typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
+  // Native reaches the same site through EXPO_PUBLIC_SHARE_URL. The
+  // EXPO_PUBLIC_APP_URL fallback is the legacy site, which still serves these
+  // functions for builds made before the share URL existed.
+  return (process.env.EXPO_PUBLIC_SHARE_URL || process.env.EXPO_PUBLIC_APP_URL || '').replace(/\/$/, '');
 };
 
 /** Cancellation token passed down from React Query so superseded quote

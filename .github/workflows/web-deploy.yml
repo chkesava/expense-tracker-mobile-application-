@@ -139,6 +139,9 @@ jobs:
           node --no-experimental-require-module -e "require('./netlify/functions-dist/epf-cron.js'); console.log('epf-cron loaded')"
           node --no-experimental-require-module -e "require('./netlify/functions-dist/nutrition-ai.js'); console.log('nutrition-ai loaded')"
           node --no-experimental-require-module -e "require('./netlify/functions-dist/delete-account.js'); console.log('delete-account loaded')"
+          node --no-experimental-require-module -e "require('./netlify/functions-dist/stock.js'); console.log('stock loaded')"
+          node --no-experimental-require-module -e "require('./netlify/functions-dist/mutual-funds.js'); console.log('mutual-funds loaded')"
+          node --no-experimental-require-module -e "require('./netlify/functions-dist/crypto.js'); console.log('crypto loaded')"
 
       - name: Deploy to Netlify
         env:
