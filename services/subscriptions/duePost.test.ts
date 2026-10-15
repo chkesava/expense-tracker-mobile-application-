@@ -172,9 +172,45 @@ describe("postDueSubscriptionCharge", () => {
 
   it("does not apply the balance again when the charge doc already exists", async () => {
     chargeExists = true;
-    await postDueSubscriptionCharge("u1", EXPENSE_ACTION);
+    const result = await postDueSubscriptionCharge("u1", EXPENSE_ACTION);
+    expect(result.status).toBe("already_posted");
     expect(commits).toBe(1);
-    expect(writes.find((w) => w.path.includes("/expenses/"))).toBeDefined();
+    expect(writes.some((w) => w.path.startsWith("users/u1/accounts/"))).toBe(false);
+  });
+
+  // SPENDLY-525: a client planning from a stale subscription (old account
+  // SBI) re-posted a charge already posted on HDFC; `merge` moved it to SBI.
+  it("never rewrites an existing charge, even from a stale payload", async () => {
+    chargeExists = true;
+    const result = await postDueSubscriptionCharge("u1", {
+      ...EXPENSE_ACTION,
+      expense: { ...EXPENSE_ACTION.expense, accountId: "sbi-stale" },
+    });
+
+    expect(result.status).toBe("already_posted");
+    expect(writes.some((w) => w.path.includes("/expenses/"))).toBe(false);
+    expect(writes.some((w) => w.path.startsWith("users/u1/accounts/"))).toBe(false);
+    const stamp = writes.find((w) => w.path.includes("/subscriptions/"));
+    expect(stamp?.data).toEqual({ lastProcessed: "2026-08" });
+  });
+
+  it("never rewrites an existing recurring transfer either", async () => {
+    chargeExists = true;
+    await postDueSubscriptionCharge("u1", {
+      kind: "transfer",
+      subscriptionId: "sub-sip",
+      docId: "sub-sip_2026-08",
+      monthKey: "2026-08",
+      transfer: {
+        fromAccountId: "bank-old",
+        toAccountId: "bank-2",
+        amount: 5000,
+        date: "2026-08-05",
+        note: "[Auto-Transfer] SIP",
+      },
+      markCompleted: false,
+    });
+    expect(writes.some((w) => w.path.includes("/accountTransfers/"))).toBe(false);
     expect(writes.some((w) => w.path.startsWith("users/u1/accounts/"))).toBe(false);
   });
 

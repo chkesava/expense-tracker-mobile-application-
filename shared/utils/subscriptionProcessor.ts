@@ -295,6 +295,24 @@ export interface MonthlyCommitmentSummary {
   transfersTotal: number;
 }
 
+/**
+ * SPENDLY-525: may this client plan and post due charges right now?
+ *
+ * A subscriptions snapshot served only from the local cache can predate a
+ * change made on another device (a new account, a newer `lastProcessed`).
+ * Posting from it re-posted an already-posted month and moved that charge to
+ * the subscription's old account. Only a server-confirmed snapshot is
+ * trusted; offline, posting waits until the app is next online.
+ */
+export function canAutoPostSubscriptions(input: {
+  loading: boolean;
+  /** `snapshot.metadata.fromCache` of the latest subscriptions snapshot. */
+  fromCache: boolean;
+  count: number;
+}): boolean {
+  return !input.loading && !input.fromCache && input.count > 0;
+}
+
 export type DuePostAction =
   | {
       kind: "expense";
