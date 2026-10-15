@@ -9,6 +9,14 @@
 
 **Deploy dependency**: both stories add a new Firestore collection (`portfolioReconciliationAudits`, `stockProfiles`) with its own rule block. `holdings`/`portfolioTransactions` writes now include a `stockProfiles` write in the same batch (`createHoldingWithCash`, `executeMockBuy`/`Sell`, CSV import) — under the currently-live production rules (which don't yet have the `stockProfiles` match block), that write is denied, which fails the **entire batch** atomically. Per `docs/AFTER_MERGE_CHECKLIST.md`'s "ticket only adds a client write" case: **Firestore rules must be deployed before or together with this app release**, not after, or every Add Holding / Buy on the new app build breaks until rules catch up.
 
+## SPENDLY-526 (stock trading charges)
+
+| Story | State |
+|---|---|
+| SPENDLY-526 Trading charges for BUY and SELL | Implemented on `feature/SPENDLY-526-trading-charges`, not yet merged into the epic branch. Doc: `docs/SPENDLY-526-trading-charges.md` |
+
+The epic branch was fast-forwarded to `main` (f27e038) before this story was cut. SPENDLY-419/420 were already on `main`.
+
 ## Related, already-merged work under this epic (pre-dates this tracker)
 
 - **SPENDLY-388** (`docs/SPENDLY-388-portfolio-home.md`) — Portfolio home dashboard; confirms SPENDLY-119 as the parent epic for holdings/cash-ledger/XIRR work.
@@ -18,4 +26,5 @@
 
 - SPENDLY-419 fixes the root cause (every funded holding now atomically gets a BUY transaction row) and adds a previewable, idempotent recalibration flow for historical data — it does not touch the Holding/Stock Profile data model shape (that's SPENDLY-420).
 - Recalibration only ever auto-repairs the unambiguous case (a cash PURCHASE entry exists but its transaction row is missing). Any cash-side gap or ambiguity is routed to explicit user confirmation — never fabricated.
+- SPENDLY-526: charges come only from `portfolioTransactions.fees`, never from cash entries, so nothing is counted twice. BUY charges join the cost basis; SELL charges only reduce proceeds. Legacy rows count as 0 and are never estimated or rewritten.
 - SPENDLY-420 adds a `stockProfiles` collection as the authoritative, reusable instrument identity (what "select/create"/"reuse" resolve against) but deliberately keeps `Holding`'s existing denormalized identity fields rather than stripping them — this avoids any UI component changes and matches how `portfolioTransactions`/`investmentCashTransactions` already denormalize `symbol`. "Adding the same stock again" now routes into a subsequent-buy path (updates the existing holding, appends a transaction) instead of creating a duplicate holding.

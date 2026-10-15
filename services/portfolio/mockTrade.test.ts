@@ -271,6 +271,10 @@ describe("executeMockSell", () => {
     const holding = writes.find((w) => w.path === "users/u1/holdings/h1");
     expect(holding?.kind).toBe("update");
     expect(holding?.data).toMatchObject({ quantity: 8 });
+    // SPENDLY-526: SELL charges reduce proceeds; they never touch the
+    // remaining shares' cost basis.
+    expect(holding?.data).not.toHaveProperty("averageBuyPrice");
+    expect(pathsUnder("portfolioTransactions")[0].data).toMatchObject({ type: "SELL", fees: 5 });
 
     const cash = pathsUnder("investmentCashTransactions")[0];
     expect(cash.data).toMatchObject({

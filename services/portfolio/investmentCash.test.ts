@@ -186,6 +186,77 @@ describe("createHoldingWithCash", () => {
     expect(settingsWrite?.merge).toBe(true);
   });
 
+  // SPENDLY-526: charges on a first acquisition.
+  it("deducts trade value + charges once and puts the charges in the cost basis", async () => {
+    const result = await createHoldingWithCash("u1", {
+      holding: HOLDING,
+      fundingSource: "investment_cash",
+      purchaseAmount: 6000,
+      fees: 24,
+      date: "2026-09-11",
+    });
+
+    expect(commits).toBe(1);
+    const entries = pathsUnder("investmentCashTransactions");
+    expect(entries).toHaveLength(1);
+    expect(entries[0].data).toMatchObject({ type: "PURCHASE", amount: 6024, price: 500 });
+    const settingsWrite = writes.find((w) => w.path.includes("/portfolioSettings/"));
+    expect(settingsWrite?.data.cashBalance).toEqual({ __increment: -6024 });
+
+    const holdingWrite = writes.find((w) => w.path.includes("/holdings/"));
+    expect(holdingWrite?.data.averageBuyPrice).toBe(502);
+
+    const txWrite = pathsUnder("portfolioTransactions")[0];
+    expect(txWrite.path).toBe(`users/u1/portfolioTransactions/${result.transactionId}`);
+    expect(txWrite.data).toMatchObject({ type: "BUY", quantity: 12, price: 500, fees: 24 });
+  });
+
+  it("records charges on an external holding without touching investment cash", async () => {
+    const result = await createHoldingWithCash("u1", {
+      holding: HOLDING,
+      fundingSource: "external",
+      purchaseAmount: 6000,
+      fees: 24,
+      date: "2026-09-11",
+    });
+
+    expect(result.entryId).toBeNull();
+    expect(pathsUnder("investmentCashTransactions")).toHaveLength(0);
+    expect(writes.filter((w) => w.path.includes("/portfolioSettings/"))).toHaveLength(0);
+    expect(writes.find((w) => w.path.includes("/holdings/"))?.data.averageBuyPrice).toBe(502);
+    expect(pathsUnder("portfolioTransactions")[0].data).toMatchObject({ price: 500, fees: 24 });
+  });
+
+  it("writes fees 0 and the entered average when no charges are given", async () => {
+    await createHoldingWithCash("u1", {
+      holding: HOLDING,
+      fundingSource: "investment_cash",
+      purchaseAmount: 6000,
+      date: "2026-09-11",
+    });
+    expect(writes.find((w) => w.path.includes("/holdings/"))?.data.averageBuyPrice).toBe(500);
+    expect(pathsUnder("portfolioTransactions")[0].data).toMatchObject({ price: 500, fees: 0 });
+    expect(pathsUnder("investmentCashTransactions")[0].data.amount).toBe(6000);
+  });
+
+  it("targets the same docs when retried with the same ids and charges", async () => {
+    const ids = { holdingId: "h-fixed", entryId: "e-fixed", transactionId: "t-fixed" };
+    const input = {
+      holding: HOLDING,
+      fundingSource: "investment_cash" as const,
+      purchaseAmount: 6000,
+      fees: 24,
+      date: "2026-09-11",
+      ...ids,
+    };
+    await createHoldingWithCash("u1", input);
+    const first = writes.map((w) => w.path);
+    writes = [];
+    await createHoldingWithCash("u1", input);
+    expect(writes.map((w) => w.path)).toEqual(first);
+    expect(pathsUnder("investmentCashTransactions")).toHaveLength(1);
+  });
+
   it("moves no cash for a holding bought outside the app, but still writes its BUY row", async () => {
     const result = await createHoldingWithCash("u1", {
       holding: HOLDING,

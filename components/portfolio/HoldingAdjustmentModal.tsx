@@ -52,6 +52,8 @@ export function HoldingAdjustmentModal({
   // Missing Acquisition fields
   const [qtyStr, setQtyStr] = useState("");
   const [priceStr, setPriceStr] = useState("");
+  // SPENDLY-526: optional charges on the missing purchase; added to its cost.
+  const [feesStr, setFeesStr] = useState("");
   const [dateStr, setDateStr] = useState(todayDateKey());
   const [fundingSource, setFundingSource] = useState<"investment_cash" | "external">("investment_cash");
   const [reasonAcq, setReasonAcq] = useState("Missing historical purchase");
@@ -101,6 +103,11 @@ export function HoldingAdjustmentModal({
         toast.error("Enter a valid price");
         return;
       }
+      const f = feesStr.trim() ? Number(feesStr) : 0;
+      if (!Number.isFinite(f) || f < 0) {
+        toast.error("Charges must be zero or more");
+        return;
+      }
     } else {
       const inv = Number(investedStr);
       if (isNaN(inv) || inv < 0 || investedStr === "") {
@@ -126,6 +133,7 @@ export function HoldingAdjustmentModal({
                   holdingId: holding.id,
                   quantity: Number(qtyStr),
                   price: Number(priceStr),
+                  fees: feesStr.trim() ? Number(feesStr) : 0,
                   date: dateStr,
                   fundingSource,
                   reason: reasonAcq,
@@ -219,6 +227,17 @@ export function HoldingAdjustmentModal({
                     />
                   </View>
                 </View>
+
+                <Text style={[styles.label, { color: theme.colors.mutedForeground, marginTop: 12 }]}>Charges / fees (optional)</Text>
+                <TextInput
+                  style={[styles.input, { color: theme.colors.foreground, borderColor: theme.colors.border }]}
+                  keyboardType="numeric"
+                  value={feesStr}
+                  onChangeText={setFeesStr}
+                  placeholder="0.00"
+                  placeholderTextColor={theme.colors.mutedForeground}
+                  accessibilityLabel="Charges or fees, optional"
+                />
                 
                 <Text style={[styles.label, { color: theme.colors.mutedForeground, marginTop: 12 }]}>Purchase Date</Text>
                 <TextInput
