@@ -3,7 +3,13 @@
 SPENDLY-524 was filed for the same report and is closed as its duplicate.
 
 ## Bug
-On 2026-10-15 the HDFC account showed ₹53,938.50, but the real bank balance was ₹29,429.00. Spendly was ₹24,509.50 too high.
+On 2026-10-15 the HDFC account showed ₹53,938.50. The user first gave the real balance as ₹29,429.00 (₹24,509.50 too high), then corrected it to **₹28,229.00**: the first figure left out the ₹1,200 gym fee. Spendly is therefore **₹25,709.50** too high.
+
+| Part of the gap | Amount |
+|---|---|
+| Two bank → Demat top-ups that never moved the balance | ₹24,500.00 |
+| ₹1,200 "[Subscription] GYM" charge, if it was auto-posted | ₹1,200.00 |
+| Not yet explained | ₹9.50 |
 
 - The rows themselves were correct, and the "Balance after" chain was internally consistent.
 - Opening balance ₹0.00, baseline "Creation" (no `balanceAsOfDate`, so the full ledger counts).
@@ -55,9 +61,9 @@ It was verified on the Firestore emulator with a fixture of the HDFC pattern. Th
 
 ## Production repair (HDFC only, not yet run)
 1. Dry-run report:
-   `npx tsx scripts/reconcile-account-ledger.ts --uid=<uid> --accountId=<hdfc id> --real-balance=29429 --out=<scratch>/hdfc.md`
+   `npx tsx scripts/reconcile-account-ledger.ts --uid=<uid> --accountId=<hdfc id> --real-balance=28229 --out=<scratch>/hdfc.md`
    This needs `GOOGLE_APPLICATION_CREDENTIALS`.
-2. Explain the full variance in this doc: the ₹24,500, the ₹9.50 and the ₹1,200 GY… row (auto-posted or entered by hand).
+2. Explain the full variance in this doc. Confirm the GYM row is a due-post (deterministic `{subscriptionId}_{month}` id, created after the last rebuild), and find the ₹9.50.
 3. Get explicit approval from the user, then apply to HDFC only:
    `npx tsx scripts/rebuild-financial-summaries.ts --uid=<uid> --accountId=<hdfc id> --apply`
 4. Re-run the report and expect zero variance. Then check on the device: Overview, "Balance after" and Account health.
