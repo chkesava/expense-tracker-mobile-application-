@@ -14,6 +14,7 @@ import { usePageListBottomPadding } from "@/components/layout/usePageListBottomP
 import { OnboardingFlow } from "@/components/portfolio/OnboardingFlow";
 import { PortfolioCharts } from "@/components/portfolio/PortfolioCharts";
 import { PortfolioSummaryCard } from "@/components/portfolio/PortfolioSummaryCard";
+import { TradingChargesCard } from "@/components/portfolio/TradingChargesCard";
 import { ManageStockCashModal } from "@/components/portfolio/ManageStockCashModal";
 import { HoldingsList } from "@/components/portfolio/HoldingsList";
 import { WatchlistTab } from "@/components/portfolio/WatchlistTab";
@@ -103,6 +104,7 @@ function PortfolioDashboardInner({ listHeader }: { listHeader?: ReactNode }) {
     alerts,
     orders,
     snapshots,
+    transactions,
     settings: portfolioSettings,
     cashBalance: investmentCashBalance,
     loading,
@@ -293,6 +295,9 @@ function PortfolioDashboardInner({ listHeader }: { listHeader?: ReactNode }) {
         currency={displayCurrency}
         onManageCash={() => setIsCashModalOpen(true)}
       />
+
+      {/* SPENDLY-526: from the already-loaded trades, no extra read. */}
+      <TradingChargesCard transactions={transactions} currency={displayCurrency} />
 
       <HorizontalSwipeBoundary>
         <ScrollView

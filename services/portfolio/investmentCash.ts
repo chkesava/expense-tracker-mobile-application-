@@ -46,6 +46,7 @@ import {
   netHoldingCashOutlay,
 } from "@/shared/features/portfolio/utils/investmentCash";
 import { planHoldingOverwrite } from "@/shared/features/portfolio/utils/holdingsOverwrite";
+import { acquisitionCost } from "@/shared/features/portfolio/utils/tradeCharges";
 import { planStockProfileUpserts, resolveStockProfileId } from "@/shared/features/portfolio/utils/stockProfile";
 import type { StockProfileIdentity } from "@/shared/features/portfolio/utils/stockProfile";
 import type { RepairBatchPlan } from "@/shared/features/portfolio/utils/portfolioReconciliation";
@@ -407,10 +408,20 @@ export async function transferInvestmentCashWithBank(
 }
 
 export type CreateHoldingWithCashInput = {
+  /** `averageBuyPrice` is the unit price paid, before charges. */
   holding: CreateHoldingInput;
   fundingSource: HoldingFundingSource;
-  /** Cash the purchase consumes. Ignored when funding is `external`. */
+  /**
+   * Trade value (quantity × unit price), excluding charges. Ignored when
+   * funding is `external`.
+   */
   purchaseAmount: number;
+  /**
+   * SPENDLY-526: charges paid on this acquisition. They join the cost basis
+   * (the stored average), the invested value and, when funded from
+   * Investment Cash, the single PURCHASE debit. Defaults to 0.
+   */
+  fees?: number;
   /** Reused across retries to keep the write idempotent. */
   holdingId?: string;
   entryId?: string;
@@ -456,12 +467,20 @@ export async function createHoldingWithCash(
   const owner = requireUid(uid);
   const holdingId = input.holdingId ?? newId();
   const holdingRef = doc(db, "users", owner, "holdings", holdingId);
-  const amount = roundMoney(Math.max(0, Number(input.purchaseAmount) || 0));
+  const quantity = Number(input.holding.quantity) || 0;
+  const price = Number(input.holding.averageBuyPrice) || 0;
+  const fees = roundMoney(Math.max(0, Number(input.fees) || 0));
+  const tradeValue = roundMoney(Math.max(0, Number(input.purchaseAmount) || 0));
+  // SPENDLY-526: charges are part of what the purchase cost — deducted with it,
+  // in the same single PURCHASE entry, never as a second movement.
+  const amount = tradeValue > 0 ? roundMoney(tradeValue + fees) : 0;
   const deducts = input.fundingSource === "investment_cash" && amount > 0;
   const entryId = deducts ? input.entryId ?? newId() : null;
   const transactionId = input.transactionId ?? newId();
-  const quantity = Number(input.holding.quantity) || 0;
-  const price = Number(input.holding.averageBuyPrice) || 0;
+  const averageBuyPrice =
+    quantity > 0 && price > 0
+      ? roundMoney(acquisitionCost(quantity, price, fees) / quantity)
+      : price;
   const profileId = resolveStockProfileId({
     symbol: input.holding.symbol,
     yahooSymbol: input.holding.yahooSymbol,
@@ -483,6 +502,7 @@ export async function createHoldingWithCash(
       holdingRef,
       stripUndefined({
         ...input.holding,
+        averageBuyPrice,
         profileId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -526,7 +546,7 @@ export async function createHoldingWithCash(
           type: "BUY",
           quantity,
           price,
-          fees: 0,
+          fees,
           broker: input.holding.broker,
           date: input.date,
           orderStatus: "executed",
@@ -535,7 +555,8 @@ export async function createHoldingWithCash(
       );
     }
 
-    const investedDelta = quantity > 0 && price > 0 ? quantity * price : 0;
+    const investedDelta =
+      quantity > 0 && price > 0 ? acquisitionCost(quantity, price, fees) : 0;
     
     const ops = buildInvestmentSummaryOps(owner, { investmentCashDelta: entryId ? -amount : 0, investedValueDelta: investedDelta, holdingCountDelta: 1 });
     for (const op of ops) if (op.op === "set" && op.merge) batch.set(doc(db, (op.ref as any).path), op.data, { merge: true });
@@ -802,7 +823,7 @@ export type MockTradeResult = {
 };
 
 export function mockTradeCost(quantity: number, price: number, fees: number): number {
-  return roundMoney(quantity * price + fees);
+  return acquisitionCost(quantity, price, fees);
 }
 
 function mockTradeProceeds(quantity: number, price: number, fees: number): number {
@@ -1128,6 +1149,7 @@ export async function applyReconciliationRepairs(
           type: fix.quantity >= 0 ? "BUY" : "SELL",
           quantity: Math.abs(fix.quantity),
           price: fix.price,
+          // SPENDLY-526: a rebuilt row has no recorded charge; 0, never estimated.
           fees: 0,
           date: fix.date,
           orderStatus: "executed",

@@ -22,6 +22,7 @@
 import { roundMoney } from "@/shared/utils/money";
 import type { Holding, InvestmentCashEntry, PortfolioTransaction } from "@/shared/features/portfolio/types";
 import { dedupeEntries } from "./investmentCash";
+import { tradeFees } from "./tradeCharges";
 
 export type FindingType =
   | "missing_buy_recoverable_from_cash"
@@ -109,7 +110,10 @@ function transactionDerivedCost(transactions: PortfolioTransaction[]): number {
       return sum + (Number(tx.price) || 0);
     }
     const cost = (Number(tx.quantity) || 0) * (Number(tx.price) || 0);
-    return tx.type === "SELL" ? sum - cost : sum + cost;
+    // SPENDLY-526: a BUY's charges are part of its cost basis (the stored
+    // average includes them), so leaving them out flagged every BUY with
+    // charges as an average-price mismatch. SELL charges reduce proceeds only.
+    return tx.type === "SELL" ? sum - cost : sum + cost + tradeFees(tx);
   }, 0);
   return roundMoney(total);
 }

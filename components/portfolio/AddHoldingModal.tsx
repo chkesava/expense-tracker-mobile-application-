@@ -13,6 +13,7 @@ import {
   canAfford,
   holdingPurchaseAmount,
 } from '@/shared/features/portfolio/utils/investmentCash';
+import { acquisitionCost } from '@/shared/features/portfolio/utils/tradeCharges';
 import type { Holding, InstrumentType, Exchange, Broker } from '@/shared/features/portfolio/types';
 
 import { Chip } from '@/components/ui/Chip';
@@ -22,6 +23,8 @@ export type AddHoldingOptions = {
   /** Minted once per open so a retried submit rewrites the same docs. */
   entryId: string;
   holdingId: string;
+  /** SPENDLY-526: charges paid on this purchase, recorded on its BUY row. */
+  fees?: number;
 };
 
 interface AddHoldingModalProps {
@@ -76,6 +79,7 @@ export function AddHoldingModal({
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
   const [targetPrice, setTargetPrice] = useState('');
+  const [fees, setFees] = useState('');
   const [broker, setBroker] = useState<Broker>('Zerodha');
 
   const [fundingSource, setFundingSource] = useState<HoldingFundingSource>('investment_cash');
@@ -89,10 +93,16 @@ export function AddHoldingModal({
    */
   const writeIds = useRef({ holdingId: newId(), entryId: newId() });
 
-  const purchaseAmount = useMemo(
-    () => holdingPurchaseAmount(parseFloat(quantity), parseFloat(price)),
-    [quantity, price]
-  );
+  const feesValue = Math.max(0, parseFloat(fees) || 0);
+  // SPENDLY-526: what the purchase costs, charges included — the amount that
+  // is checked against and deducted from investment cash, once.
+  const purchaseAmount = useMemo(() => {
+    const qty = parseFloat(quantity);
+    const unitPrice = parseFloat(price);
+    return holdingPurchaseAmount(qty, unitPrice) > 0
+      ? acquisitionCost(qty, unitPrice, feesValue)
+      : 0;
+  }, [quantity, price, feesValue]);
   const affordability = useMemo(
     () => canAfford(availableCash, purchaseAmount),
     [availableCash, purchaseAmount]
@@ -115,6 +125,7 @@ export function AddHoldingModal({
     setQuantity('');
     setPrice('');
     setTargetPrice('');
+    setFees('');
     setBroker('Zerodha');
     setFundingSource(availableCash > 0 ? 'investment_cash' : 'external');
     setError('');
@@ -144,6 +155,12 @@ export function AddHoldingModal({
 
       if (isNaN(numPrice) || numPrice <= 0) {
         setError('Invalid price');
+        return;
+      }
+
+      const numFees = fees.trim() ? Number(fees) : 0;
+      if (!Number.isFinite(numFees) || numFees < 0) {
+        setError('Charges must be zero or more');
         return;
       }
 
@@ -186,6 +203,7 @@ export function AddHoldingModal({
         fundingSource,
         holdingId: writeIds.current.holdingId,
         entryId: writeIds.current.entryId,
+        fees: numFees,
       });
       if (!added) {
         setError('Failed to add holding');
@@ -294,6 +312,15 @@ export function AddHoldingModal({
               </View>
 
               <Input
+                label="Charges / fees (Optional)"
+                placeholder="0.00"
+                value={fees}
+                onChangeText={setFees}
+                keyboardType="numeric"
+                helperText="Brokerage, taxes and other charges. Added to the cost."
+              />
+
+              <Input
                 label="Target Price (Optional)"
                 placeholder="0.00"
                 value={targetPrice}
@@ -333,7 +360,7 @@ export function AddHoldingModal({
                 </View>
                 <View style={styles.fundingRow}>
                   <Text style={[styles.fundingLabel, { color: theme.colors.mutedForeground }]}>
-                    This purchase
+                    {feesValue > 0 ? 'This purchase (incl. charges)' : 'This purchase'}
                   </Text>
                   <Amount
                     value={purchaseAmount}

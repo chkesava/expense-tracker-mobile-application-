@@ -56,6 +56,23 @@ function cashEntry(overrides: Partial<InvestmentCashEntry>): InvestmentCashEntry
 }
 
 describe("scanHoldingForFindings", () => {
+  // SPENDLY-526: a BUY's charges are part of the stored average.
+  it("does not flag an average-price mismatch for a BUY whose charges are in the average", () => {
+    const holding = { ...HOLDING, quantity: 10, averageBuyPrice: 102 };
+    const transactions = [buyTx({ id: "tx1", quantity: 10, price: 100, fees: 20 })];
+    const findings = scanHoldingForFindings(holding, transactions, []);
+    expect(findings.find((f) => f.type === "avg_price_mismatch")).toBeUndefined();
+  });
+
+  it("still flags a real average-price mismatch when charges are present", () => {
+    const holding = { ...HOLDING, quantity: 10, averageBuyPrice: 110 };
+    const transactions = [buyTx({ id: "tx1", quantity: 10, price: 100, fees: 20 })];
+    const findings = scanHoldingForFindings(holding, transactions, []);
+    expect(findings.find((f) => f.type === "avg_price_mismatch")?.detail).toMatchObject({
+      recalculatedAvgPrice: 102,
+    });
+  });
+
   it("flags the KPIT case: 40-share holding with only 30 in BUY rows and a matching unclaimed cash entry", () => {
     const transactions = [
       buyTx({ id: "tx1", quantity: 10, price: 485, date: "2026-07-01" }),
