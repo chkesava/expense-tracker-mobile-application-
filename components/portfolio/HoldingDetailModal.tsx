@@ -26,6 +26,7 @@ import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { todayDateKey } from "@/shared/utils/dates";
 import { currencySymbol } from "@/shared/utils/formatCurrency";
 import { computeHoldingXirr } from "@/shared/utils/portfolioXirr";
+import { tradeCashEffect } from "@/shared/features/portfolio/utils/tradeCharges";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -337,43 +338,60 @@ export function HoldingDetailModal({
             ) : (
               trades.map((tx) => {
                 const buy = tx.type === "BUY";
+                const isTrade = tx.type === "BUY" || tx.type === "SELL";
+                // SPENDLY-526: value, recorded charges and the net cash effect.
+                const effect = isTrade ? tradeCashEffect(tx) : null;
                 return (
-                  <View key={tx.id} style={styles.historyRow}>
-                    <View style={styles.historyLeft}>
-                      <Text
-                        style={[
-                          styles.historyType,
-                          { color: buy ? BUY_BG : tx.type === "ADJUSTMENT" ? ADJUST_BG : SELL_BG },
-                        ]}
-                      >
-                        {tx.type === "ADJUSTMENT" ? "ADJ" : tx.type}
-                      </Text>
-                      {tx.type === "ADJUSTMENT" ? (
-                        <Text style={[styles.historyMeta, { color: muted }]}>
-                          Cost base:{" "}
-                          <Amount
-                            value={tx.price}
-                            currency={currency}
-                            prefix={tx.price > 0 ? "+" : ""}
-                            style={{ color: muted }}
-                          />
+                  <View key={tx.id} style={styles.historyItem}>
+                    <View style={styles.historyRow}>
+                      <View style={styles.historyLeft}>
+                        <Text
+                          style={[
+                            styles.historyType,
+                            { color: buy ? BUY_BG : tx.type === "ADJUSTMENT" ? ADJUST_BG : SELL_BG },
+                          ]}
+                        >
+                          {tx.type === "ADJUSTMENT" ? "ADJ" : tx.type}
                         </Text>
-                      ) : (
-                        <>
+                        {tx.type === "ADJUSTMENT" ? (
                           <Text style={[styles.historyMeta, { color: muted }]}>
-                            {formatQuantity(tx.quantity)} @{" "}
+                            Cost base:{" "}
+                            <Amount
+                              value={tx.price}
+                              currency={currency}
+                              prefix={tx.price > 0 ? "+" : ""}
+                              style={{ color: muted }}
+                            />
                           </Text>
-                          <Amount
-                            value={tx.price}
-                            currency={currency}
-                            style={[styles.historyMeta, { color: muted }]}
-                          />
-                        </>
-                      )}
+                        ) : (
+                          <>
+                            <Text style={[styles.historyMeta, { color: muted }]}>
+                              {formatQuantity(tx.quantity)} @{" "}
+                            </Text>
+                            <Amount
+                              value={tx.price}
+                              currency={currency}
+                              style={[styles.historyMeta, { color: muted }]}
+                            />
+                          </>
+                        )}
+                      </View>
+                      <Text style={[styles.historyDate, { color: muted }]}>
+                        {formatDisplayDate(tx.date, settings.dateFormat)}
+                      </Text>
                     </View>
-                    <Text style={[styles.historyDate, { color: muted }]}>
-                      {formatDisplayDate(tx.date, settings.dateFormat)}
-                    </Text>
+                    {effect ? (
+                      <Text style={[styles.historyBreakdown, { color: muted }]}>
+                        Value <Amount value={effect.gross} currency={currency} style={[styles.historyBreakdown, { color: muted }]} />
+                        {" · "}Charges <Amount value={effect.fees} currency={currency} style={[styles.historyBreakdown, { color: muted }]} />
+                        {" · "}{buy ? "Total cost" : "Net proceeds"}{" "}
+                        <Amount
+                          value={effect.net}
+                          currency={currency}
+                          style={[styles.historyBreakdown, { color: theme.colors.foreground, fontWeight: "700" }]}
+                        />
+                      </Text>
+                    ) : null}
                   </View>
                 );
               })
@@ -649,6 +667,13 @@ const styles = StyleSheet.create({
   emptyHistory: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  historyItem: {
+    gap: 2,
+  },
+  historyBreakdown: {
+    fontSize: 12,
+    fontWeight: "500",
   },
   historyRow: {
     flexDirection: "row",

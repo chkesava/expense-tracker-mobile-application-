@@ -135,6 +135,7 @@ async function reconcileUser(userRef, { apply, runId }) {
         type: repair.type,
         quantity: repair.quantity,
         price: repair.price,
+        // SPENDLY-526: a rebuilt row has no recorded charge; 0, never estimated.
         fees: 0,
         date: repair.date,
         orderStatus: "executed",

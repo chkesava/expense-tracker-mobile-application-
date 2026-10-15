@@ -128,4 +128,21 @@ describe("executeMissingAcquisitionAdjustment", () => {
     expect(holding.data).toMatchObject({ quantity: 25, averageBuyPrice: 1240 });
     expect(tx.data).toMatchObject({ type: "BUY", quantity: 5, price: 1000 });
   });
+
+  // SPENDLY-526: charges entered on a missing purchase join its cost.
+  it("adds the charges to the merged average and records them on the BUY row", async () => {
+    await executeMissingAcquisitionAdjustment(UID, {
+      holdingId: "h1",
+      quantity: 5,
+      price: 1000,
+      fees: 50,
+      date: "2026-01-05",
+      fundingSource: "external",
+      reason: "Missing historical purchase",
+    });
+
+    const [holding, tx] = batches[0].writes;
+    expect(holding.data).toMatchObject({ quantity: 25, averageBuyPrice: 1242 });
+    expect(tx.data).toMatchObject({ type: "BUY", quantity: 5, price: 1000, fees: 50 });
+  });
 });

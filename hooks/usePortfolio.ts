@@ -256,10 +256,16 @@ function usePortfolioState(options?: {
       holdingId?: string;
       date?: string;
       source?: InvestmentCashSource;
+      /**
+       * SPENDLY-526: charges paid on this purchase. Kept out of `holding`, which
+       * is the holding document's shape; they belong on the BUY row.
+       */
+      fees?: number;
     }
   ): Promise<string | null> => {
     if (!user || !db) return null;
     const fundingSource = options?.fundingSource ?? "investment_cash";
+    const fees = Math.max(0, Number(options?.fees) || 0);
     const purchaseAmount = holdingPurchaseAmount(holding.quantity, holding.averageBuyPrice);
     const date = options?.date ?? (holding.datePurchased || today);
     try {
@@ -279,7 +285,7 @@ function usePortfolioState(options?: {
           holdingId: existing.id,
           quantity: holding.quantity,
           price: holding.averageBuyPrice,
-          fees: 0,
+          fees,
           date,
           fundingSource,
           cashEntryId: options?.entryId,
@@ -297,6 +303,7 @@ function usePortfolioState(options?: {
         holding,
         fundingSource,
         purchaseAmount,
+        fees,
         entryId: options?.entryId,
         holdingId: options?.holdingId,
         date,
