@@ -32,7 +32,12 @@ import {
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite, type WriteOutcome } from "@/lib/firestoreWrite";
 import { newId } from "@/lib/id";
+import { docAlreadyWritten, fetchAccountTypes } from "@/services/ledger/fetchAccountTypes";
+import type { AccountEntry } from "@/shared/types/expense";
+import type { MutationOp } from "@/shared/types/mutations";
+import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
 import { isValidDateKey } from "@/shared/utils/dates";
+import { ledgerRowAccountDeltas } from "@/shared/utils/ledgerAccountDeltas";
 import { roundMoney } from "@/shared/utils/money";
 import {
   canAfford,
@@ -122,6 +127,44 @@ function stageStockProfileUpsert(
     doc(db, "users", owner, "stockProfiles", profileId),
     stripUndefined({ ...identity, status: "active", updatedAt: serverTimestamp() }),
     { merge: true }
+  );
+}
+
+/** Stages {@link MutationOp}s (balance / net-worth) on a raw batch. */
+function stageMutationOps(
+  batch: ReturnType<typeof writeBatch>,
+  db: ReturnType<typeof requireDb>,
+  ops: MutationOp[]
+): void {
+  for (const op of ops) {
+    const ref = doc(db, op.ref.path);
+    if (op.op === "update") batch.update(ref, op.data as Record<string, unknown>);
+    else if (op.op === "set") batch.set(ref, op.data, op.merge ? { merge: true } : {});
+    else batch.delete(ref);
+  }
+}
+
+/**
+ * The bank account's `currentBalance` op for a Demat ↔ bank transfer leg —
+ * the same delta `computeBankBalance` counts for that `accountEntries` row.
+ */
+async function bankLegBalanceOps(
+  db: ReturnType<typeof requireDb>,
+  owner: string,
+  row: Pick<AccountEntry, "id" | "accountId" | "amount" | "direction" | "date">
+): Promise<MutationOp[]> {
+  const deltas = ledgerRowAccountDeltas({ kind: "accountEntry", row });
+  const info = (await fetchAccountTypes(db, owner, [row.accountId])).get(row.accountId);
+  return buildAccountBalanceOps(
+    owner,
+    deltas.map((d) => ({
+      accountId: d.accountId,
+      amountDelta: d.amountDelta,
+      isCreditCard: info?.isCreditCard ?? false,
+      oldBalance: info?.oldBalance,
+      oldOutstanding: info?.oldOutstanding,
+      needsInitialization: info?.needsInitialization,
+    }))
   );
 }
 
@@ -290,6 +333,23 @@ export async function transferInvestmentCashWithBank(
   const cashDirection = input.type === "TOP_UP" ? "credit" : "debit";
   const bankDirection = cashDirection === "credit" ? "debit" : "credit";
   const note = input.note?.trim() || undefined;
+  const accountEntryRef = doc(db, "users", owner, "accountEntries", accountEntryId);
+
+  // SPENDLY-523: the bank leg used to land in `accountEntries` without moving
+  // the bank's materialized `currentBalance`, so every top-up left it too high
+  // by its amount (₹24,500 on one user's HDFC account). The ids are reused
+  // across retries, so only the first write applies the delta — a retry after
+  // a dropped ack must not debit the bank twice. Same guard as `addCashback`.
+  const alreadyPosted = await docAlreadyWritten(accountEntryRef);
+  const bankBalanceOps = alreadyPosted
+    ? []
+    : await bankLegBalanceOps(db, owner, {
+        id: accountEntryId,
+        accountId: input.accountId,
+        amount,
+        direction: bankDirection,
+        date: input.date,
+      });
 
   const outcome = await commitWrite(() => {
     const batch = writeBatch(db);
@@ -313,7 +373,7 @@ export async function transferInvestmentCashWithBank(
       })
     );
     batch.set(
-      doc(db, "users", owner, "accountEntries", accountEntryId),
+      accountEntryRef,
       stripUndefined({
         accountId: input.accountId,
         amount,
@@ -339,6 +399,7 @@ export async function transferInvestmentCashWithBank(
       const ops = buildInvestmentSummaryOps(owner, { investmentCashDelta: delta });
       for (const op of ops) if (op.op === "set" && op.merge) batch.set(doc(db, (op.ref as any).path), op.data, { merge: true });
     }
+    stageMutationOps(batch, db, bankBalanceOps);
     return batch.commit();
   }, { label: "investment cash bank transfer" });
 

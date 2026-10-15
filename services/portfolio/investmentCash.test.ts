@@ -45,6 +45,20 @@ vi.mock("@/lib/firestoreWrite", () => ({
   },
 }));
 
+let accountInfo = {
+  isCreditCard: false,
+  oldBalance: 50000,
+  oldOutstanding: 0,
+  needsInitialization: false,
+};
+let accountEntryExists = false;
+vi.mock("@/services/ledger/fetchAccountTypes", () => ({
+  docAlreadyWritten: vi.fn(async () => accountEntryExists),
+  fetchAccountTypes: vi.fn(async (_db: unknown, _uid: string, ids: string[]) =>
+    new Map(ids.map((id) => [id, accountInfo]))
+  ),
+}));
+
 let idCounter = 0;
 vi.mock("@/lib/id", () => ({
   newId: () => `id-${++idCounter}`,
@@ -111,6 +125,8 @@ beforeEach(() => {
   commits = 0;
   idCounter = 0;
   settingsData = null;
+  accountInfo = { isCreditCard: false, oldBalance: 50000, oldOutstanding: 0, needsInitialization: false };
+  accountEntryExists = false;
   vi.clearAllMocks();
   installBatchRecorder();
 });
@@ -630,12 +646,82 @@ describe("transferInvestmentCashWithBank", () => {
     expect(commits).toBe(2);
   });
 
+  // SPENDLY-523: the bank leg must move the bank's materialized balance.
+  it("debits the bank's currentBalance in the same batch for a bank → Demat top-up", async () => {
+    await transferInvestmentCashWithBank("u1", {
+      type: "TOP_UP",
+      amount: 20000,
+      date: "2026-10-15",
+      accountId: "bank-1",
+      entryId: "cash-1",
+      accountEntryId: "bank-entry-1",
+    });
+
+    expect(commits).toBe(1);
+    const account = writes.find((w) => w.path === "users/u1/accounts/bank-1");
+    expect(account?.data.currentBalance).toEqual({ __increment: -20000 });
+    const netWorth = writes.find((w) => w.path.includes("financialSummaries/netWorth"));
+    expect(netWorth).toBeDefined();
+  });
+
+  it("credits the bank's currentBalance for a Demat → bank withdrawal", async () => {
+    await transferInvestmentCashWithBank("u1", {
+      type: "WITHDRAWAL",
+      amount: 800,
+      date: "2026-10-15",
+      accountId: "bank-1",
+      entryId: "cash-2",
+      accountEntryId: "bank-entry-2",
+    });
+
+    const account = writes.find((w) => w.path === "users/u1/accounts/bank-1");
+    expect(account?.data.currentBalance).toEqual({ __increment: 800 });
+  });
+
+  it("seeds an uninitialized bank from its opening balance and flags it", async () => {
+    accountInfo = { isCreditCard: false, oldBalance: 1000, oldOutstanding: 0, needsInitialization: true };
+    await transferInvestmentCashWithBank("u1", {
+      type: "TOP_UP",
+      amount: 300,
+      date: "2026-10-15",
+      accountId: "bank-1",
+      entryId: "cash-1",
+      accountEntryId: "bank-entry-1",
+    });
+
+    const account = writes.find((w) => w.path === "users/u1/accounts/bank-1");
+    expect(account?.data).toMatchObject({
+      currentBalance: 700,
+      balanceInitialized: true,
+      balanceReconciliationStatus: "needs_reconciliation",
+    });
+  });
+
+  it("does not debit the bank again when a retry finds the entry already written", async () => {
+    accountEntryExists = true;
+    await transferInvestmentCashWithBank("u1", {
+      type: "TOP_UP",
+      amount: 100,
+      date: "2026-10-15",
+      accountId: "bank-1",
+      entryId: "cash-1",
+      accountEntryId: "bank-entry-1",
+    });
+
+    expect(commits).toBe(1);
+    expect(writes.some((w) => w.path.startsWith("users/u1/accounts/"))).toBe(false);
+    expect(pathsUnder("accountEntries")).toHaveLength(1);
+  });
+
   it("rejects without committing when the batch fails — neither ledger can land alone", async () => {
     vi.mocked(writeBatch).mockImplementation(
       () =>
         ({
           set: (ref: FakeRef, data: Record<string, unknown>, options?: { merge?: boolean }) => {
             writes.push({ path: ref.path, data, merge: options?.merge === true });
+          },
+          update: (ref: FakeRef, data: Record<string, unknown>) => {
+            writes.push({ path: ref.path, data, merge: true });
           },
           commit: async () => {
             throw new Error("leg 2");
