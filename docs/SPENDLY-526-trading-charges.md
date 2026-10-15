@@ -49,12 +49,12 @@ Story under epic SPENDLY-119. The plan is in [SPENDLY-526-plan.md](SPENDLY-526-p
 - **Pending/cancelled:** every `portfolioTransactions` writer records `executed`. The filter is applied anyway and is covered by tests.
 
 ## Findings, not fixed here
-| Rank | Finding | Where |
-|---|---|---|
-| P1 | **Missing acquisition can wrongly report insufficient cash.** It reads settings doc `"main"` while the rest of the portfolio code uses `"config"`, so an Investment-Cash-funded missing acquisition can fail with "Insufficient cash balance". | `services/portfolio/holdingAdjustments.ts` |
-| P2 | **Missing acquisition skips the cached totals.** It never updates the `cashBalance` cache or the investment summary. | same |
-| P2 | **External mock buys skip the invested value.** `executeMockBuy` with external funding never updates the summary's `investedValue`. | `services/portfolio/investmentCash.ts` |
-| P3 | **Reconciliation prices a SELL wrongly.** `transactionDerivedCost` subtracts a SELL at its sale price rather than at cost basis. | `portfolioReconciliation.ts` |
+| Rank | Finding | Where | Ticket |
+|---|---|---|---|
+| P1 | **Missing acquisition always reports insufficient cash.** It reads settings doc `"main"` while the rest of the portfolio code uses `"config"`. The settings come back empty, so the cash check sees ₹0 and every Investment-Cash-funded missing acquisition fails with "Insufficient cash balance". | `services/portfolio/holdingAdjustments.ts` | SPENDLY-527 |
+| P2 | **Missing acquisition skips the cached totals.** It never updates the `cashBalance` cache or the investment summary. | same | SPENDLY-528 (blocked by 527) |
+| P2 | **External mock buys skip the invested value.** `executeMockBuy` with external funding never updates the summary's `investedValue`. | `services/portfolio/investmentCash.ts` | SPENDLY-529 |
+| P3 | **Reconciliation prices a SELL wrongly.** `transactionDerivedCost` subtracts a SELL at its sale price rather than at cost basis. | `portfolioReconciliation.ts` | SPENDLY-530 |
 
 ## Tests
 - `tradeCharges.test.ts` (11):
