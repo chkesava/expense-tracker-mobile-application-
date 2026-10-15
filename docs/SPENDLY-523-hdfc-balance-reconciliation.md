@@ -59,16 +59,24 @@ Two write paths added a ledger row but never moved the account's materialized `c
 
 It was verified on the Firestore emulator with a fixture of the HDFC pattern. The ₹24,500 was attributed to the two top-ups and the unexplained remainder was ₹0.00.
 
-## Production repair (HDFC only, not yet run)
-1. Dry-run report:
-   `npx tsx scripts/reconcile-account-ledger.ts --uid=<uid> --accountId=<hdfc id> --real-balance=28229 --out=<scratch>/hdfc.md`
-   This needs `GOOGLE_APPLICATION_CREDENTIALS`.
-2. Explain the full variance in this doc. Confirm the GYM row is a due-post (deterministic `{subscriptionId}_{month}` id, created after the last rebuild), and find the ₹9.50.
-3. Get explicit approval from the user, then apply to HDFC only:
-   `npx tsx scripts/rebuild-financial-summaries.ts --uid=<uid> --accountId=<hdfc id> --apply`
-4. Re-run the report and expect zero variance. Then check on the device: Overview, "Balance after" and Account health.
+## Production repair (HDFC only, done 2026-10-15)
+| Step | Result |
+|---|---|
+| Per-record report (read-only, 07:48 UTC) | 166 rows. Stored ₹53,938.50, ledger ₹29,438.50, gap **₹24,500.00**. That is exactly the two top-ups written after the last rebuild (2026-10-09 20:17 UTC): `4d8af982…` ₹4,500 and `5a2adf5e…` ₹20,000. Unexplained remainder ₹0.00 |
+| Rebuild dry-run (`--accountId`) | One change only: `currentBalance` 53,938.50 → 29,438.50 |
+| Apply (user approved, 07:51 UTC) | `currentBalance` **₹53,938.50 → ₹29,438.50**, `balanceReconciliationStatus: healthy`, `balanceLastRebuiltAt: 2026-10-15T07:51:24Z`. No ledger row was touched |
+| Report re-run | Stored − recomputed **₹0.00** |
 
-Every other account stays with SPENDLY-500.
+Before value for rollback: `currentBalance = 53938.5`.
+
+Earlier drift from the same two bugs is listed in the report as written *before* the 2026-10-09 rebuild: Demat top-ups on 5, 7 and 8 Oct, and every auto-posted rent, EMI and chitti since April. That rebuild had already absorbed it, which explains the ₹69,714.50 vs ₹56,132.50 figure from SPENDLY-436.
+
+### Still open: ledger ₹1,209.50 above the real ₹28,229
+This is missing data, not a balance bug.
+- **₹1,200:** the 15 Oct "[Subscription] GYM FEE" (`8DdwU0B1jGNQpxIvPvn7_2026-10`) is booked on **State Bank of India**, not HDFC. If HDFC actually paid it, move it to HDFC in the app. The edit moves both balances.
+- **₹9.50:** no matching ledger row. It is most likely a bank charge that was never entered. No statement-imported expenses exist on this account, so the re-import double-apply is ruled out here.
+
+The gym charge was auto-posted at 07:43 UTC on 15 Oct. If the posting device was still on a build before 4.0.11, SBI's stored balance may be ₹1,200 too high. That is checked under SPENDLY-500.
 
 ## Findings, not fixed here
 | Rank | Finding | Where | Owner |
