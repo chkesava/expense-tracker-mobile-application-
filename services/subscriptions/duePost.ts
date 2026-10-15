@@ -16,7 +16,16 @@ import { doc, serverTimestamp } from "firebase/firestore";
 import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";
 import type { WriteOutcome } from "@/lib/firestoreWrite";
+import {
+  docAlreadyWritten,
+  fetchAccountTypes,
+} from "@/services/ledger/fetchAccountTypes";
+import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
 import { omitUndefined } from "@/shared/utils/firestorePayload";
+import {
+  ledgerRowAccountDeltas,
+  type LedgerRow,
+} from "@/shared/utils/ledgerAccountDeltas";
 import {
   duePostNeedsAccount,
   type DuePostAction,
@@ -51,11 +60,23 @@ export async function postDueSubscriptionCharge(
 
   const db = requireDb();
   const ops: MutationOp[] = [];
+  const chargeRef =
+    action.kind === "transfer"
+      ? doc(db, "users", owner, "accountTransfers", action.docId)
+      : doc(db, "users", owner, "expenses", action.docId);
+
+  // SPENDLY-523: due-posts never moved the materialized account balance, so
+  // every auto-posted charge left `currentBalance` too high (or both transfer
+  // legs stale). The id is deterministic, so a second device or a re-run that
+  // lands on the same doc must not apply the delta again.
+  const balanceOps = (await docAlreadyWritten(chargeRef))
+    ? []
+    : await chargeBalanceOps(db, owner, action);
 
   if (action.kind === "transfer") {
     ops.push({
       op: "set",
-      ref: doc(db, "users", owner, "accountTransfers", action.docId),
+      ref: chargeRef,
       merge: true,
       data: omitUndefined({
         ...action.transfer,
@@ -65,7 +86,7 @@ export async function postDueSubscriptionCharge(
   } else {
     ops.push({
       op: "set",
-      ref: doc(db, "users", owner, "expenses", action.docId),
+      ref: chargeRef,
       merge: true,
       data: omitUndefined({
         ...action.expense,
@@ -90,8 +111,43 @@ export async function postDueSubscriptionCharge(
     data: subUpdates,
   });
 
+  ops.push(...balanceOps);
+
   const outcome = await commitMutations(owner, ops, {
     label: "subscription charge",
   });
   return { status: "posted", docId: action.docId, outcome };
+}
+
+/** Balance ops for the posted charge: the expense's account, or both transfer legs. */
+async function chargeBalanceOps(
+  db: ReturnType<typeof requireDb>,
+  owner: string,
+  action: DuePostAction
+): Promise<MutationOp[]> {
+  const row: LedgerRow =
+    action.kind === "transfer"
+      ? { kind: "accountTransfer", row: { id: action.docId, ...action.transfer } }
+      : { kind: "expense", row: { id: action.docId, ...action.expense } };
+  const deltas = ledgerRowAccountDeltas(row);
+  if (deltas.length === 0) return [];
+  const info = await fetchAccountTypes(
+    db,
+    owner,
+    deltas.map((d) => d.accountId)
+  );
+  return buildAccountBalanceOps(
+    owner,
+    deltas.map((d) => {
+      const account = info.get(d.accountId);
+      return {
+        accountId: d.accountId,
+        amountDelta: d.amountDelta,
+        isCreditCard: account?.isCreditCard ?? false,
+        oldBalance: account?.oldBalance,
+        oldOutstanding: account?.oldOutstanding,
+        needsInitialization: account?.needsInitialization,
+      };
+    })
+  );
 }

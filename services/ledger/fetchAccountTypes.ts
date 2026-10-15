@@ -2,6 +2,7 @@ import {
   doc,
   getDoc,
   getDocFromCache,
+  type DocumentReference,
   type DocumentSnapshot,
   type Firestore,
 } from "firebase/firestore";
@@ -32,6 +33,27 @@ export async function readAccountSnap(
     return await getDocFromCache(ref);
   } catch {
     return getDoc(ref);
+  }
+}
+
+/**
+ * SPENDLY-523: has a deterministic-id ledger doc already been written?
+ *
+ * Guards a non-idempotent `increment()` behind "first write only". Cache
+ * first, so this device's own pending write counts and the save never waits
+ * on the network. When neither the cache nor the server can answer (offline,
+ * never cached), the doc is treated as new: refusing would block offline
+ * saves, and a doc this device never wrote or read is new in the common case.
+ */
+export async function docAlreadyWritten(ref: DocumentReference): Promise<boolean> {
+  try {
+    return (await getDocFromCache(ref)).exists();
+  } catch {
+    try {
+      return (await getDoc(ref)).exists();
+    } catch {
+      return false;
+    }
   }
 }
 

@@ -978,6 +978,86 @@ describe("buildAccountActivities running balance anchor (SPENDLY-487)", () => {
   });
 });
 
+// SPENDLY-523: sanitized model of the HDFC report. Two bank → Demat top-ups
+// were written as `accountEntries` debits without moving `currentBalance`, so
+// the stored balance sat ₹24,500 above the ledger. The anchored "Balance
+// after" walk (SPENDLY-487) then showed a chain that was consistent row to
+// row but offset by the whole gap.
+describe("stale stored balance after unapplied Demat top-ups (SPENDLY-523)", () => {
+  const salary: Income = {
+    id: "salary",
+    amount: 60000,
+    source: "Salary",
+    note: "Salary",
+    date: "2026-10-01",
+    month: "2026-10",
+    accountId: "hdfc",
+    createdAt: null,
+  };
+  const gym: Expense = {
+    id: "gym",
+    amount: 1200,
+    category: "Health",
+    note: "[Subscription] GYM",
+    date: "2026-10-15",
+    month: "2026-10",
+    accountId: "hdfc",
+    createdAt: null,
+    time: "09:35",
+  };
+  const topUps = [
+    { id: "topup-1", accountId: "hdfc", amount: 4500, direction: "debit" as const, date: "2026-10-14", note: "Account fund transfer", time: "13:34" },
+    { id: "topup-2", accountId: "hdfc", amount: 20000, direction: "debit" as const, date: "2026-10-15", note: "Account fund transfer", time: "09:36" },
+  ];
+  const ledgerBalance = 60000 - 1200 - 4500 - 20000; // 34,300
+  const stale: Account = {
+    id: "hdfc",
+    name: "Hdfc bank",
+    typeId: "bank-type",
+    openingBalance: 0,
+    balanceInitialized: true,
+    balanceReconciliationStatus: "healthy",
+    currentBalance: ledgerBalance + 24500,
+  };
+
+  it("reproduces the offset chain: every Balance after is high by the unapplied top-ups", () => {
+    expect(computeBankBalance(stale, [gym], [salary], [], topUps)).toBe(ledgerBalance);
+    const rows = buildAccountActivities(stale, "Bank", [gym], [salary], [], topUps);
+    expect(rows[0]?.runningBalance).toBe(ledgerBalance + 24500);
+    const replayed = buildAccountActivities(
+      { ...stale, currentBalance: undefined },
+      "Bank",
+      [gym],
+      [salary],
+      [],
+      topUps
+    );
+    rows.forEach((row, i) => {
+      expect(roundTo2((row.runningBalance ?? 0) - (replayed[i]?.runningBalance ?? 0))).toBe(24500);
+    });
+  });
+
+  it("agrees with the full-ledger replay on every row once the balance is rebuilt", () => {
+    const rebuilt = { ...stale, currentBalance: computeBankBalance(stale, [gym], [salary], [], topUps) };
+    const anchored = buildAccountActivities(rebuilt, "Bank", [gym], [salary], [], topUps);
+    const replayed = buildAccountActivities(
+      { ...rebuilt, currentBalance: undefined },
+      "Bank",
+      [gym],
+      [salary],
+      [],
+      topUps
+    );
+    expect(anchored.map((row) => row.runningBalance)).toEqual(replayed.map((row) => row.runningBalance));
+    expect(anchored[0]?.runningBalance).toBe(ledgerBalance);
+    expect(anchored[anchored.length - 1]?.runningBalance).toBe(60000);
+  });
+});
+
+function roundTo2(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
 describe("computeOutstandingCredit", () => {
   const card: Account = {
     id: "slice",

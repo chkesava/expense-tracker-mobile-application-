@@ -32,7 +32,7 @@ vi.mock("firebase/firestore", () => ({
   },
 }));
 
-import { fetchAccountTypes } from "./fetchAccountTypes";
+import { docAlreadyWritten, fetchAccountTypes } from "./fetchAccountTypes";
 
 const db = {} as any;
 
@@ -99,6 +99,33 @@ describe("fetchAccountTypes", () => {
     expect(serverReads).toEqual(["c1"]);
     expect(result.get("c1")).toMatchObject({ isCreditCard: true, oldOutstanding: 5 });
     expect(result.size).toBe(2);
+    cachedById = null;
+  });
+});
+
+// SPENDLY-523: guards a first-write-only balance increment.
+describe("docAlreadyWritten", () => {
+  it("answers from the cache when it has the doc, without a server read", async () => {
+    serverReads.length = 0;
+    cachedById = { e1: { amount: 1 } };
+    docsById = {};
+    expect(await docAlreadyWritten({ id: "e1" } as any)).toBe(true);
+    expect(serverReads).toEqual([]);
+  });
+
+  it("falls back to the server on a cache miss", async () => {
+    cachedById = {};
+    docsById = { e2: { amount: 1 } };
+    expect(await docAlreadyWritten({ id: "e2" } as any)).toBe(true);
+    docsById = {};
+    expect(await docAlreadyWritten({ id: "e3" } as any)).toBe(false);
+  });
+
+  it("treats the doc as new when neither cache nor server can answer (offline)", async () => {
+    cachedById = {};
+    docsById = new Proxy({}, { get: () => { throw new Error("client is offline"); } }) as any;
+    expect(await docAlreadyWritten({ id: "e4" } as any)).toBe(false);
+    docsById = {};
     cachedById = null;
   });
 });

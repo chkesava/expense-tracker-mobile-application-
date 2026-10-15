@@ -15,6 +15,7 @@ const fakeDoc = (_db: unknown, ...segments: string[]): FakeRef => ({
 vi.mock("firebase/firestore", () => ({
   doc: (db: unknown, ...segments: string[]) => fakeDoc(db, ...segments),
   serverTimestamp: () => ({ __serverTimestamp: true }),
+  increment: (n: number) => ({ __increment: n }),
   writeBatch: vi.fn(),
 }));
 
@@ -24,6 +25,20 @@ vi.mock("@/lib/firebase", () => ({
 
 const writes: Write[] = [];
 let commits = 0;
+let chargeExists = false;
+const accounts: Record<string, { isCreditCard: boolean; oldBalance: number; oldOutstanding: number; needsInitialization: boolean }> = {};
+
+vi.mock("@/services/ledger/fetchAccountTypes", () => ({
+  docAlreadyWritten: vi.fn(async () => chargeExists),
+  fetchAccountTypes: vi.fn(async (_db: unknown, _uid: string, ids: string[]) =>
+    new Map(
+      ids.map((id) => [
+        id,
+        accounts[id] ?? { isCreditCard: false, oldBalance: 10000, oldOutstanding: 0, needsInitialization: false },
+      ])
+    )
+  ),
+}));
 
 vi.mock("@/lib/commitMutations", () => ({
   commitMutations: async (
@@ -48,6 +63,7 @@ vi.mock("@/lib/commitMutations", () => ({
   },
 }));
 
+import { increment } from "firebase/firestore";
 import { postDueSubscriptionCharge } from "./duePost";
 import type { DuePostAction } from "@/shared/utils/subscriptionProcessor";
 
@@ -74,7 +90,12 @@ const EXPENSE_ACTION: DuePostAction = {
 beforeEach(() => {
   writes.length = 0;
   commits = 0;
+  chargeExists = false;
+  for (const key of Object.keys(accounts)) delete accounts[key];
 });
+
+const accountWrite = (id: string) =>
+  writes.find((w) => w.path === `users/u1/accounts/${id}`);
 
 describe("postDueSubscriptionCharge", () => {
   it("writes expense and lastProcessed in one batch on a deterministic id", async () => {
@@ -101,11 +122,60 @@ describe("postDueSubscriptionCharge", () => {
   it("replays to the same expense path", async () => {
     await postDueSubscriptionCharge("u1", EXPENSE_ACTION);
     await postDueSubscriptionCharge("u1", EXPENSE_ACTION);
-    const paths = writes.filter((w) => w.kind === "set").map((w) => w.path);
+    const paths = writes
+      .filter((w) => w.kind === "set" && w.path.includes("/expenses/"))
+      .map((w) => w.path);
     expect(paths).toEqual([
       "users/u1/expenses/sub-netflix_2026-08",
       "users/u1/expenses/sub-netflix_2026-08",
     ]);
+  });
+
+  // SPENDLY-523: auto-posted charges must move the materialized balance.
+  it("debits the expense's account in the same batch", async () => {
+    await postDueSubscriptionCharge("u1", EXPENSE_ACTION);
+    expect(commits).toBe(1);
+    expect(accountWrite("bank-1")?.data.currentBalance).toEqual(
+      increment(-649)
+    );
+  });
+
+  it("raises a card's outstanding when the subscription is charged to a card", async () => {
+    accounts["card-1"] = { isCreditCard: true, oldBalance: 0, oldOutstanding: 500, needsInitialization: false };
+    await postDueSubscriptionCharge("u1", {
+      ...EXPENSE_ACTION,
+      expense: { ...EXPENSE_ACTION.expense, accountId: "card-1" },
+    });
+    expect(accountWrite("card-1")?.data.currentOutstanding).toEqual(increment(649));
+  });
+
+  it("moves both accounts for a recurring transfer", async () => {
+    await postDueSubscriptionCharge("u1", {
+      kind: "transfer",
+      subscriptionId: "sub-sip",
+      docId: "sub-sip_2026-08",
+      monthKey: "2026-08",
+      transfer: {
+        fromAccountId: "bank-1",
+        toAccountId: "bank-2",
+        amount: 5000,
+        date: "2026-08-05",
+        note: "[Auto-Transfer] SIP",
+        subscriptionId: "sub-sip",
+        recurringTransfer: true,
+      },
+      markCompleted: false,
+    });
+    expect(accountWrite("bank-1")?.data.currentBalance).toEqual(increment(-5000));
+    expect(accountWrite("bank-2")?.data.currentBalance).toEqual(increment(5000));
+  });
+
+  it("does not apply the balance again when the charge doc already exists", async () => {
+    chargeExists = true;
+    await postDueSubscriptionCharge("u1", EXPENSE_ACTION);
+    expect(commits).toBe(1);
+    expect(writes.find((w) => w.path.includes("/expenses/"))).toBeDefined();
+    expect(writes.some((w) => w.path.startsWith("users/u1/accounts/"))).toBe(false);
   });
 
   it("skips a charge with no account so later subscriptions can still post", async () => {
