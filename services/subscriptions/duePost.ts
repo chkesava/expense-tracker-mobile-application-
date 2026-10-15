@@ -33,6 +33,8 @@ import {
 
 export type PostDueSubscriptionResult =
   | { status: "posted"; docId: string; outcome: WriteOutcome }
+  /** SPENDLY-525: the charge already existed; only the subscription was stamped. */
+  | { status: "already_posted"; docId: string; outcome: WriteOutcome }
   | { status: "skipped_no_account"; docId: string };
 
 function requireDb() {
@@ -69,27 +71,24 @@ export async function postDueSubscriptionCharge(
   // every auto-posted charge left `currentBalance` too high (or both transfer
   // legs stale). The id is deterministic, so a second device or a re-run that
   // lands on the same doc must not apply the delta again.
-  const balanceOps = (await docAlreadyWritten(chargeRef))
+  //
+  // SPENDLY-525: nor may it rewrite the charge. A client planning from stale
+  // subscription data re-posted 15 Oct's GYM FEE with the subscription's old
+  // account, and `merge` silently moved the posted charge from HDFC to SBI
+  // with neither balance adjusted. An existing charge is left exactly as it
+  // is; only the subscription's processed stamp is (re)written.
+  const alreadyPosted = await docAlreadyWritten(chargeRef);
+  const balanceOps = alreadyPosted
     ? []
     : await chargeBalanceOps(db, owner, action);
 
-  if (action.kind === "transfer") {
+  if (!alreadyPosted) {
     ops.push({
       op: "set",
       ref: chargeRef,
       merge: true,
       data: omitUndefined({
-        ...action.transfer,
-        createdAt: serverTimestamp(),
-      }),
-    });
-  } else {
-    ops.push({
-      op: "set",
-      ref: chargeRef,
-      merge: true,
-      data: omitUndefined({
-        ...action.expense,
+        ...(action.kind === "transfer" ? action.transfer : action.expense),
         createdAt: serverTimestamp(),
       }),
     });
@@ -116,7 +115,11 @@ export async function postDueSubscriptionCharge(
   const outcome = await commitMutations(owner, ops, {
     label: "subscription charge",
   });
-  return { status: "posted", docId: action.docId, outcome };
+  return {
+    status: alreadyPosted ? "already_posted" : "posted",
+    docId: action.docId,
+    outcome,
+  };
 }
 
 /** Balance ops for the posted charge: the expense's account, or both transfer legs. */

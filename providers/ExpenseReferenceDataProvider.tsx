@@ -51,6 +51,7 @@ import { parseLocalDate, todayDateKey } from "@/shared/utils/dates";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import { perfEvent } from "@/lib/perf";
 import {
+  canAutoPostSubscriptions,
   evaluateSubscriptionDue,
   planDueSubscriptionPosts,
 } from "@/shared/utils/subscriptionProcessor";
@@ -112,6 +113,9 @@ export function ExpenseReferenceDataProvider({
 
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [subscriptionsLoading, setSubscriptionsLoading] = useState(true);
+  // SPENDLY-525: true until a subscriptions snapshot is confirmed by the
+  // server. Due-posting never runs on cache-only data.
+  const [subscriptionsFromCache, setSubscriptionsFromCache] = useState(true);
   const [spacesLoading, setSpacesLoading] = useState(true);
   const [rulesLoading, setRulesLoading] = useState(true);
   const [budgetsLoading, setBudgetsLoading] = useState(true);
@@ -296,8 +300,10 @@ export function ExpenseReferenceDataProvider({
       return;
     }
     setSubscriptionsLoading(true);
+    setSubscriptionsFromCache(true);
     const path = `users/${uid}/subscriptions`;
     perfEvent("firestore_listener_start", { collection: "subscriptions" });
+    let seenFirst = false;
     const unsub = onSnapshot(
       // SPENDLY-412: defensive bound (observed <25 docs) — stays realtime,
       // subscriptions drive the due-subscription auto-posting side effect below.
@@ -306,7 +312,14 @@ export function ExpenseReferenceDataProvider({
         orderBy("name", "asc"),
         limit(200)
       ),
+      // SPENDLY-525: metadata changes too, so the cache → server transition
+      // is seen even when the data didn't change. Auto-posting waits for it.
+      // Metadata-only events cost no reads.
+      { includeMetadataChanges: true },
       (snap) => {
+        setSubscriptionsFromCache(snap.metadata.fromCache);
+        if (seenFirst && snap.docChanges().length === 0) return;
+        seenFirst = true;
         logQuerySnapshot(path, snap, { feature: "reference", queryShape: "subscriptions" });
         perfEvent("firestore_first_snapshot", {
           collection: "subscriptions",
@@ -619,11 +632,24 @@ export function ExpenseReferenceDataProvider({
   }, [uid, timezone]);
 
   useEffect(() => {
-    if (subscriptionsLoading || subscriptions.length === 0) return;
+    if (
+      !canAutoPostSubscriptions({
+        loading: subscriptionsLoading,
+        fromCache: subscriptionsFromCache,
+        count: subscriptions.length,
+      })
+    ) {
+      return;
+    }
     return scheduleIdleWork(() => {
       void processDueSubscriptions();
     }, { timeoutMs: 3000, fallbackDelayMs: 1500 });
-  }, [subscriptionsLoading, subscriptions.length, processDueSubscriptions]);
+  }, [
+    subscriptionsLoading,
+    subscriptionsFromCache,
+    subscriptions.length,
+    processDueSubscriptions,
+  ]);
 
   const value = useMemo<ExpenseReferenceData>(
     () => ({
