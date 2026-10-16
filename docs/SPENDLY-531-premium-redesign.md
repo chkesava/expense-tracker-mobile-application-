@@ -6,7 +6,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`.
 
 | Story | Title | Branch | State |
 |---|---|---|---|
-| SPENDLY-532 | Phase 1: dashboard redesign | `feature/SPENDLY-532-dashboard-redesign` | Implemented and committed; awaiting approval to merge into the epic. Device QA open. |
+| SPENDLY-532 | Phase 1: dashboard redesign | `feature/SPENDLY-532-dashboard-redesign` | Merged into the epic (`f800dca`, 2026-10-16). In Progress until the epic reaches `main`. Android/iOS device QA open. |
 
 ## Decisions
 - **Midnight Emerald is a selectable preset, not a forced default.** It's in Settings → Appearance → Custom Presets. Existing users keep their theme.
@@ -15,4 +15,5 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`.
 - **One hero per screen.** On the dashboard it's net worth, using the `HeroSection` `deep` variant. Safe to Spend moved to a standard section.
 - **Account cards are a pure selection** of `useUnifiedNetWorth` fields (`shared/utils/dashboardAccountCards.ts`). The UI never re-derives net worth.
 - **No fabricated values.** A missing or errored monthly summary shows "—" with an explanation, not ₹0. No trends are shown without real prior-period data.
+- **The web colour-scheme fix is a `patch-package` patch** (`patches/react-native-css-interop+0.2.6.patch`, applied on `postinstall`), not `darkMode: 'class'`, so the shared `Button`/`Input` keep their `dark:` variants on web. Re-check the patch on any NativeWind upgrade.
 - **Later phases reuse these foundations**: the theme preset, `HeroSection` `deep`, `Section`, the dashboard tokens, and `signedCurrencyPrefix`.
