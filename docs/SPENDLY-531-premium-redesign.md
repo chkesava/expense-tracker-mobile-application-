@@ -7,7 +7,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`.
 | Story | Title | Branch | State |
 |---|---|---|---|
 | SPENDLY-532 | Phase 1: dashboard redesign | `feature/SPENDLY-532-dashboard-redesign` | Merged into the epic (`f800dca`, 2026-10-16). In Progress until the epic reaches `main`. Android/iOS device QA open. |
-| SPENDLY-533 | Phase 1b: finish the dashboard (remaining widgets, nav lens, shared components, motion) | `feature/SPENDLY-533-dashboard-redesign-completion` | Implemented and committed; awaiting approval to merge into the epic. Device QA open. |
+| SPENDLY-533 | Phase 1b: finish the dashboard (remaining widgets, nav lens, shared components, motion) | `feature/SPENDLY-533-dashboard-redesign-completion` | Merged into the epic (2026-10-16). In Progress until the epic reaches `main`. Android/iOS device QA open. |
 
 ## Decisions
 - **Midnight Emerald is a selectable preset, not a forced default.** It's in Settings → Appearance → Custom Presets. Existing users keep their theme.
