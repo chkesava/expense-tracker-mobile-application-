@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Filter } from "lucide-react-native";
 
-import { accountAccent } from "@/components/accounts/accountScreenTheme";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
@@ -95,7 +94,8 @@ export function TransactionFilters({
   const { theme, themeName } = useTheme();
   const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
-  const accent = accountAccent(isDark);
+  // SPENDLY-534: the theme accent, not the fixed account green.
+  const accent = theme.colors.primary;
 
   const allChips: { id: ActivityFilter; label: string; count: number }[] = [
     {
@@ -174,7 +174,9 @@ export function TransactionFilters({
           <Filter size={16} color={theme.colors.mutedForeground} />
           {activeFilterCount > 0 ? (
             <View style={[styles.filterCount, { backgroundColor: accent }]}>
-              <Text style={styles.filterCountText}>{activeFilterCount}</Text>
+              <Text style={[styles.filterCountText, { color: theme.colors.primaryForeground }]}>
+                {activeFilterCount}
+              </Text>
             </View>
           ) : null}
         </Pressable>
@@ -367,7 +369,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   filterCountText: {
-    color: "#FFFFFF",
     fontSize: 10,
     fontWeight: "800",
     fontVariant: ["tabular-nums"],

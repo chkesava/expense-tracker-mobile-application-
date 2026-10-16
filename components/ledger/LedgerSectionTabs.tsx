@@ -2,13 +2,11 @@ import { useEffect, useRef } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { MoreHorizontal } from "lucide-react-native";
 
-import { accountAccent } from "@/components/accounts/accountScreenTheme";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 import { Chip } from "@/components/ui/Chip";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 import {
   LEDGER_SECTIONS,
   type LedgerHubTabId,
@@ -39,9 +37,10 @@ export function LedgerSectionTabs({
   /** Live counts for the sections that have one; absent means no count shown. */
   counts?: Partial<Record<LedgerHubTabId, number>>;
 }) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const accent = accountAccent(isDark);
+  const { theme } = useTheme();
+  // SPENDLY-534: the active section takes the theme accent (emerald in
+  // Midnight Emerald), not the fixed account green the Money hub used.
+  const accent = theme.colors.primary;
   const surfaces = useSurfaces();
 
   const scrollRef = useRef<ScrollView>(null);
@@ -128,13 +127,13 @@ const styles = StyleSheet.create({
     paddingRight: 4,
   },
   tab: {
-    height: 36,
+    height: 40,
     paddingHorizontal: 16,
   },
   more: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderCurve: "continuous",
     borderWidth: 1,
     alignItems: "center",

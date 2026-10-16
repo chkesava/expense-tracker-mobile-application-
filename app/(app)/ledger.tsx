@@ -15,7 +15,7 @@ import { ReceivablesList } from "@/components/receivables/ReceivablesList";
 import { SubscriptionsList } from "@/components/subscriptions/SubscriptionsList";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
-import { Skeleton } from "@/components/common/Skeleton";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { AccountActivityFilterModal } from "@/components/accounts/AccountActivityFilterModal";
 import {
   TransactionFilters,
@@ -80,7 +80,6 @@ import { appDialog } from "@/lib/appDialog";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 /**
  * SPENDLY-112 — the Audit sub-tab holds two different questions. The trail
@@ -97,8 +96,7 @@ const AUDIT_VIEWS = [
 export default function LedgerScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
   const { settings } = useSettings();
   const {
     setIsAddExpenseOpen,
@@ -570,7 +568,7 @@ export default function LedgerScreen() {
       <PageHeader
         title="Money"
         subtitle="Activity, accounts & bills"
-        icon={<Wallet size={22} color={isDark ? theme.colors.foreground : theme.colors.success} />}
+        icon={<Wallet size={22} color={theme.colors.primary} />}
       />
   );
 
@@ -767,10 +765,8 @@ export default function LedgerScreen() {
               {expensesLoading && filteredExpenses.length === 0 ? (
                 <PageListStateScroll>
                   {listHeaderNode}
-                  <View style={{ gap: 8, marginTop: 8 }}>
-                    {[0, 1, 2, 3, 4].map((i) => (
-                      <Skeleton key={i} height={64} borderRadius={theme.radius.lg} />
-                    ))}
+                  <View style={{ marginTop: 8 }}>
+                    <DashboardSkeleton variant="section" rows={5} />
                   </View>
                 </PageListStateScroll>
               ) : expensesError && expenses.length === 0 ? (
@@ -845,10 +841,8 @@ export default function LedgerScreen() {
               {incomesLoading && filteredIncomes.length === 0 ? (
                 <PageListStateScroll>
                   {listHeaderNode}
-                  <View style={{ gap: 8, marginTop: 8 }}>
-                    {[0, 1, 2, 3, 4].map((i) => (
-                      <Skeleton key={i} height={64} borderRadius={theme.radius.lg} />
-                    ))}
+                  <View style={{ marginTop: 8 }}>
+                    <DashboardSkeleton variant="section" rows={5} />
                   </View>
                 </PageListStateScroll>
               ) : incomesError && incomes.length === 0 ? (
