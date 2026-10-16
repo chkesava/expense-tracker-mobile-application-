@@ -16,6 +16,7 @@ import {
   type AccentColorName,
   type ThemeMode,
   type ThemeName,
+  themeOwnsAccent,
   themeUsesDarkPalette,
 } from "@/theme/tokens";
 
@@ -58,7 +59,7 @@ export function AppearanceSection() {
           <View style={{ gap: 8 }}>
             <FieldLabel label={t("theme_mode_custom", "Theme Presets")} />
             <ChipRow
-              options={(["light", "dark"] as ThemeName[]).map((name) => ({
+              options={(["light", "dark", "midnight-emerald"] as ThemeName[]).map((name) => ({
                 value: name,
                 label: THEME_LABELS[name],
               }))}
@@ -69,66 +70,79 @@ export function AppearanceSection() {
         ) : null}
 
         <FieldLabel label={t("accent_color", "Accent Color")} />
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-          {ACCENT_COLOR_NAMES.map((name) => {
-            const pal = ACCENT_PALETTES[name];
-            const active = accentColor === name;
-            const palPrimary = themeUsesDarkPalette(themeName)
-              ? pal.dark.primary
-              : pal.light.primary;
-            const palContainer = themeUsesDarkPalette(themeName)
-              ? pal.dark.primaryContainer
-              : pal.light.primaryContainer;
+        {themeOwnsAccent(themeName) ? (
+          <Text
+            style={{
+              fontSize: 13,
+              lineHeight: 18,
+              color: theme.colors.mutedForeground,
+              fontFamily: theme.fontFamily.regular,
+            }}
+          >
+            {THEME_LABELS[themeName]} uses its own emerald accent.
+          </Text>
+        ) : (
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+            {ACCENT_COLOR_NAMES.map((name) => {
+              const pal = ACCENT_PALETTES[name];
+              const active = accentColor === name;
+              const palPrimary = themeUsesDarkPalette(themeName)
+                ? pal.dark.primary
+                : pal.light.primary;
+              const palContainer = themeUsesDarkPalette(themeName)
+                ? pal.dark.primaryContainer
+                : pal.light.primaryContainer;
 
-            return (
-              <Pressable
-                key={name}
-                onPress={() => {
-                  void haptic.selection();
-                  setAccentColor(name as AccentColorName);
-                }}
-                android_ripple={{
-                  color: palPrimary + "20",
-                  borderless: false,
-                }}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 8,
-                  paddingHorizontal: 14,
-                  minHeight: 40,
-                  borderRadius: 20,
-                  borderCurve: "continuous",
-                  borderWidth: active ? 2 : 1,
-                  borderColor: active ? palPrimary : theme.colors.border,
-                  backgroundColor: active
-                    ? palContainer
-                    : theme.colors.surfaceVariant,
-                }}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: active }}
-              >
-                <View
-                  style={{
-                    width: 14,
-                    height: 14,
-                    borderRadius: 7,
-                    backgroundColor: palPrimary,
+              return (
+                <Pressable
+                  key={name}
+                  onPress={() => {
+                    void haptic.selection();
+                    setAccentColor(name as AccentColorName);
                   }}
-                />
-                <Text
-                  style={{
-                    fontSize: 13,
-                    fontWeight: active ? "700" : "500",
-                    color: active ? palPrimary : theme.colors.foreground,
+                  android_ripple={{
+                    color: palPrimary + "20",
+                    borderless: false,
                   }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 8,
+                    paddingHorizontal: 14,
+                    minHeight: 40,
+                    borderRadius: 20,
+                    borderCurve: "continuous",
+                    borderWidth: active ? 2 : 1,
+                    borderColor: active ? palPrimary : theme.colors.border,
+                    backgroundColor: active
+                      ? palContainer
+                      : theme.colors.surfaceVariant,
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: active }}
                 >
-                  {pal.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+                  <View
+                    style={{
+                      width: 14,
+                      height: 14,
+                      borderRadius: 7,
+                      backgroundColor: palPrimary,
+                    }}
+                  />
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: active ? "700" : "500",
+                      color: active ? palPrimary : theme.colors.foreground,
+                    }}
+                  >
+                    {pal.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
       </SettingsPanel>
 
       <DashboardWidgetToggles />
