@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View, type GestureResponderEvent } from "react-native";
 import Svg, { Circle, G, Path } from "react-native-svg";
-import Animated, { FadeIn, ZoomIn } from "react-native-reanimated";
+import Animated, { FadeIn, ZoomIn, useReducedMotion } from "react-native-reanimated";
 
 import { Amount } from "@/components/common/Amount";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
+import { donutSliceAt, pressPoint } from "@/shared/utils/chartHitTest";
 
 export interface DonutSegment {
   id?: string;
@@ -39,7 +40,6 @@ function DonutSlice({
   sliceLength,
   circumference,
   isSelected,
-  onPress,
 }: {
   cx: number;
   cy: number;
@@ -50,7 +50,6 @@ function DonutSlice({
   sliceLength: number;
   circumference: number;
   isSelected: boolean;
-  onPress: () => void;
 }) {
   const gap = Math.max(0, circumference - sliceLength);
   return (
@@ -64,7 +63,6 @@ function DonutSlice({
       strokeLinecap="round"
       strokeDasharray={`${sliceLength} ${gap}`}
       transform={`rotate(${rotation} ${cx} ${cy})`}
-      onPress={onPress}
     />
   );
 }
@@ -80,6 +78,7 @@ export function DonutChart({
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const reduceMotion = useReducedMotion();
 
   const validData = useMemo(() => data.filter((d) => d.value > 0), [data]);
   const total = useMemo(() => validData.reduce((sum, d) => sum + d.value, 0), [validData]);
@@ -117,6 +116,26 @@ export function DonutChart({
     setSelectedIndex((prev) => (prev === idx ? null : idx));
   };
 
+  const fractions = useMemo(
+    () => (total > 0 ? validData.map((d) => d.value / total) : []),
+    [validData, total]
+  );
+
+  const handleChartPress = (event: GestureResponderEvent) => {
+    const point = pressPoint(event.nativeEvent);
+    if (!point) return;
+    // A little slack either side of the stroke so thin rings stay tappable.
+    const slice = donutSliceAt(
+      point.x - center,
+      point.y - center,
+      radius - strokeWidth / 2 - 8,
+      radius + strokeWidth / 2 + 8,
+      fractions
+    );
+    if (slice === null) setSelectedIndex(null);
+    else handleSelect(slice);
+  };
+
   if (validData.length === 0 || total === 0) {
     return (
       <View style={[styles.emptyContainer, { height: size }]}>
@@ -142,7 +161,7 @@ export function DonutChart({
   return (
     <View style={styles.container}>
       <Animated.View
-        entering={ZoomIn.springify().damping(18)}
+        entering={reduceMotion ? undefined : ZoomIn.springify().damping(18)}
         style={{ width: size, height: size, alignSelf: "center" }}
       >
         <Svg width={size} height={size}>
@@ -169,17 +188,25 @@ export function DonutChart({
                 sliceLength={slice.sliceLength}
                 circumference={circumference}
                 isSelected={slice.isSelected}
-                onPress={() => handleSelect(idx)}
               />
             ))}
           </G>
         </Svg>
 
-        {/* Center Metric */}
+        {/* Center metric. Also the chart's one tap target (SPENDLY-533): a tap
+            on the ring selects that slice, anywhere else clears the
+            selection. SVG shapes take no onPress — on web react-native-svg
+            forwards the responder props to the DOM and React warns. The
+            legend below stays the accessible way to pick a slice. */}
         <Pressable
           style={styles.centerOverlay}
-          onPress={() => setSelectedIndex(null)}
+          onPress={handleChartPress}
+          accessibilityRole="button"
+          accessibilityLabel={activeItem ? `Clear ${activeItem.label} selection` : title}
         >
+          {/* Children never take the touch, so locationX/Y always measure
+              from the chart's own box. */}
+          <View pointerEvents="none" style={styles.centerContent}>
           <Text
             style={[
               styles.centerSub,
@@ -210,12 +237,13 @@ export function DonutChart({
               {Math.round((activeItem.value / total) * 100)}% of total
             </Text>
           )}
+          </View>
         </Pressable>
       </Animated.View>
 
       {/* Interactive Legend Grid */}
       {showLegend && (
-        <Animated.View entering={FadeIn.delay(100)} style={styles.legendContainer}>
+        <Animated.View entering={reduceMotion ? undefined : FadeIn.delay(100)} style={styles.legendContainer}>
           {validData.map((item, idx) => {
             const isSelected = selectedIndex === idx;
             const percent = Math.round((item.value / total) * 100);
@@ -283,6 +311,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
+  },
+  centerContent: {
+    alignItems: "center",
+    maxWidth: "100%",
   },
   centerSub: {
     fontWeight: "700",

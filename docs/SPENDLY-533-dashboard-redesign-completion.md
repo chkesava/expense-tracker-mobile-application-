@@ -64,7 +64,20 @@ These all respect the OS setting:
   - A QA income added to the emulator showed as "+₹1,250" at the top of Recent activity.
 - Android and iOS have not been built. Device QA is still open.
 
+## Charts: SVG tap warnings fixed (follow-up)
+`DonutChart` (Insights, category distribution) and `SpendingCurveChart` (Insights daily spending, account balance trend) put `onPress` on SVG shapes. On web, react-native-svg passes the responder props to DOM nodes, which logged "Unknown event handler property" errors. Neither chart is on the dashboard, but both are now fixed the same way as `BarChart`:
+- **Donut:** the existing full-size centre Pressable is now the chart's one tap target.
+  - A tap on the ring selects that slice; anywhere else clears the selection.
+  - `donutSliceAt` maps the touch to a slice using distance from the centre plus the angle, clockwise from 12 o'clock, exactly as the slices are drawn.
+  - The centre content is `pointerEvents="none"`, so the touch always measures from the chart's own box.
+  - This also fixes a latent native bug: that `absoluteFill` overlay sat over the ring, so ring taps likely only ever cleared the selection.
+  - The legend stays the accessible way to pick a slice.
+- **Curve:** one Pressable over the plot selects the nearest day (`nearestPointIndex`), replacing 2–6 px dots that were no real touch target.
+- **`pressPoint`:** native gives `locationX/Y`, but on web a Pressable's `onPress` gets the DOM click event with `offsetX/Y`. `pressPoint` reads whichever is present. Without it every web tap read as `NaN`.
+- **Reduced motion:** both charts' zoom and fade entrances now respect it.
+- **Tests:** `shared/utils/chartHitTest.test.ts`, 7 cases.
+- **Verified on web** (emulator): on Insights and an account page there were 0 errors before and after taps. A tap on the ring at 12 o'clock selected "Food & Groceries ₹16,122, 51% of total", a centre tap cleared it, and a curve tap selected day 26. `npm test`: 5,517 passed.
+
 ## Known follow-ups
-- `DonutChart` and `SpendingCurveChart` still put `onPress` on SVG shapes, which logs warnings on web. They aren't on the dashboard.
 - **Missing goal target.** A goal with no target is treated as a target of 1 (pre-existing), so it would read "of ₹1".
 - **Upcoming 7-day total.** It now always shows, as ₹0 when nothing is due; before, the subtitle hid it at zero.

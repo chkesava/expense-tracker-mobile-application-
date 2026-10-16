@@ -1,13 +1,21 @@
 import React, { useMemo, useState } from "react";
-import { LayoutChangeEvent, StyleSheet, Text, View } from "react-native";
+import {
+  LayoutChangeEvent,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type GestureResponderEvent,
+} from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Path, Stop, Line, Text as SvgText } from "react-native-svg";
-import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut, useReducedMotion } from "react-native-reanimated";
 
 import { Amount } from "@/components/common/Amount";
 import { compactAxisValue } from "@/components/charts/axis";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
+import { nearestPointIndex, pressPoint } from "@/shared/utils/chartHitTest";
 
 export interface CurvePoint {
   date: string; // e.g. "2026-08-01" or "1", "2"...
@@ -50,6 +58,7 @@ export function SpendingCurveChart({
   const isDark = themeUsesDarkPalette(themeName);
   const [containerWidth, setContainerWidth] = useState(300);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const reduceMotion = useReducedMotion();
 
   const activeLineColor = lineColor || theme.colors.primary;
 
@@ -172,6 +181,18 @@ export function SpendingCurveChart({
 
   const selectedPoint = selectedIndex !== null ? coordinates[selectedIndex] : null;
 
+  const handlePlotPress = (event: GestureResponderEvent) => {
+    const point = pressPoint(event.nativeEvent);
+    if (!point) return;
+    const index = nearestPointIndex(
+      point.x,
+      coordinates.map((pt) => pt.x)
+    );
+    if (index < 0) return;
+    haptic.selection().catch(() => undefined);
+    setSelectedIndex(index);
+  };
+
   if (processedData.length === 0) {
     return (
       <View style={[styles.emptyContainer, { height }]}>
@@ -185,8 +206,8 @@ export function SpendingCurveChart({
       {/* Selected Point Badge with Reanimated Fade */}
       {selectedPoint && (
         <Animated.View
-          entering={FadeIn.duration(180)}
-          exiting={FadeOut.duration(120)}
+          entering={reduceMotion ? undefined : FadeIn.duration(180)}
+          exiting={reduceMotion ? undefined : FadeOut.duration(120)}
           style={[
             styles.tooltipBadge,
             {
@@ -210,7 +231,7 @@ export function SpendingCurveChart({
       )}
 
       {/* SVG Canvas with Animated Container */}
-      <Animated.View entering={FadeIn.duration(280)}>
+      <Animated.View entering={reduceMotion ? undefined : FadeIn.duration(280)}>
         <Svg width={containerWidth} height={height}>
           <Defs>
             <LinearGradient id="curveGradient" x1="0" y1="0" x2="0" y2="1">
@@ -273,10 +294,6 @@ export function SpendingCurveChart({
               pt.amount === maxPointAmount;
 
             const targetRadius = isSelected ? 6 : isKeyPoint ? 3.5 : 2;
-            const onPress = () => {
-              haptic.selection().catch(() => undefined);
-              setSelectedIndex(i);
-            };
 
             return (
               <Circle
@@ -287,7 +304,6 @@ export function SpendingCurveChart({
                 fill={isSelected ? theme.colors.foreground : activeLineColor}
                 stroke={theme.colors.card}
                 strokeWidth={isSelected ? 2 : 1}
-                onPress={onPress}
               />
             );
           })}
@@ -306,6 +322,18 @@ export function SpendingCurveChart({
             </SvgText>
           ))}
         </Svg>
+
+        {/* SPENDLY-533: one tap target over the plot picks the nearest day.
+            SVG dots take no onPress (react-native-svg leaks responder props
+            to the DOM on web), and a 2-6 px dot was no target anyway. */}
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={handlePlotPress}
+          accessibilityRole="button"
+          accessibilityLabel={
+            selectedPoint ? `Selected ${selectedPoint.date}` : "Tap the chart to see a day's amount"
+          }
+        />
       </Animated.View>
     </View>
   );
