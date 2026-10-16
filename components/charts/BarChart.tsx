@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { LayoutChangeEvent, StyleSheet, Text, View } from "react-native";
+import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { G, Line, Rect, Text as SvgText } from "react-native-svg";
 import Animated, {
   FadeIn,
@@ -43,7 +43,6 @@ function BarSegment({
   width,
   color,
   opacity,
-  onPress,
 }: {
   x: number;
   height: number;
@@ -51,8 +50,10 @@ function BarSegment({
   width: number;
   color: string;
   opacity: number;
-  onPress: () => void;
 }) {
+  // No onPress on SVG shapes: on web react-native-svg forwards the responder
+  // props to the DOM node and React warns "Unknown event handler property".
+  // Taps go through the Pressable slot overlay instead.
   return (
     <Rect
       x={x}
@@ -62,7 +63,6 @@ function BarSegment({
       rx={4}
       fill={color}
       opacity={opacity}
-      onPress={onPress}
     />
   );
 }
@@ -230,7 +230,6 @@ export function BarChart({
                 fontWeight={isSelected ? "800" : "500"}
                 fill={isSelected ? theme.colors.foreground : theme.colors.mutedForeground}
                 textAnchor="middle"
-                onPress={() => handleSelectBar(idx)}
               >
                 {item.label}
               </SvgText>
@@ -267,7 +266,6 @@ export function BarChart({
                       width={barWidth}
                       color={color1}
                       opacity={barOpacity}
-                      onPress={() => handleSelectBar(idx)}
                     />
                     <BarSegment
                       x={slotCenterX + 1}
@@ -276,7 +274,6 @@ export function BarChart({
                       width={barWidth}
                       color={color2}
                       opacity={barOpacity}
-                      onPress={() => handleSelectBar(idx)}
                     />
                   </G>
                 );
@@ -291,12 +288,31 @@ export function BarChart({
                   width={barWidth}
                   color={color1}
                   opacity={barOpacity}
-                  onPress={() => handleSelectBar(idx)}
                 />
               );
             })}
           </Svg>
         </Animated.View>
+
+        {/* One full-height tap target per slot (bars + label), on top of both layers. */}
+        <View
+          style={[styles.slotsLayer, { left: chartPaddingLeft, width: plotWidth, height }]}
+        >
+          {data.map((item, idx) => (
+            <Pressable
+              key={idx}
+              onPress={() => handleSelectBar(idx)}
+              style={styles.slot}
+              accessibilityRole="button"
+              accessibilityState={{ selected: selectedIndex === idx }}
+              accessibilityLabel={
+                hasSecondary
+                  ? `${item.label}: ${primaryLabel} ${Math.round(item.value)}, ${secondaryLabel} ${Math.round(item.secondaryValue ?? 0)}`
+                  : `${item.label}: ${primaryLabel} ${Math.round(item.value)}`
+              }
+            />
+          ))}
+        </View>
       </View>
 
       {/* Legend */}
@@ -324,6 +340,15 @@ const styles = StyleSheet.create({
   container: {
     width: "100%",
     gap: 8,
+  },
+  slotsLayer: {
+    position: "absolute",
+    top: 0,
+    flexDirection: "row",
+  },
+  slot: {
+    flex: 1,
+    height: "100%",
   },
   barsLayer: {
     position: "absolute",

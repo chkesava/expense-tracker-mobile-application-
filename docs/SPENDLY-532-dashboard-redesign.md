@@ -43,9 +43,22 @@ The net-worth hero (`overview`) and quick actions (`quickAdd`) are pinned first 
   - A baseline on `main` code shows the same net-worth figures (₹2,05,220, liquid ₹0, no liabilities), so those come from the seed data, not the redesign.
 - **Android / iOS:** not built or run on a device in this story. Device QA is still open (Spendly Test, `docs/LOCAL_TEST_MODE.md`).
 
-## Findings (not fixed here; outside a UI-only story)
-- **P2: the seed has no monthly summaries.** `scripts/seed-emulator.js` writes no `financialSummaries/dashboard_*` docs. On a fresh emulator, Safe to Spend, Monthly Budget and Category Budgets show ₹0 spent next to 128 seeded expenses. Income & expenses now says "aren't ready yet" instead, but the budget widgets still read the missing doc as zero.
-- **P3: duplicate summary listeners.** The dashboard listens to `dashboard_<month>` and `dashboard_<prev>` separately, and also to the six-month range that already contains both. That's two redundant doc listeners.
-- **P3: unused imports.** `app/(app)/dashboard.tsx` imports `cashFlowByMonth`, `oldestTrustedCashFlowMonth`, `trimToTrustedCashFlow` and `isInMonth` without using them. They pre-date this story.
-- **P3: dev-only error on web.** It reports "Cannot manually set color scheme, as dark mode is type 'media'". `components/ui/gluestack-ui-provider` calls `setColorScheme` while `tailwind.config.js` uses `darkMode: 'media'`. Pre-existing.
-- **P3: decorative overflow on web.** The `AuraBackground` blob extends about 60 px past the viewport. Pre-existing and invisible.
+## Findings (all fixed in this story)
+The first pass logged these as findings; the user then asked for them to be fixed here.
+
+| Rank | Finding | Fix |
+|---|---|---|
+| P2 | The emulator seed wrote no `financialSummaries/dashboard_*` docs, so Safe to Spend, Monthly Budget and Category Budgets showed ₹0 spent next to 128 seeded expenses. | `scripts/seed-emulator.js` now builds the summaries from the seeded rows, in the same shape `buildDashboardSummaryOps` writes: totals, `category` and `category::subcategory` keys, and one transaction count per row. A test in `lib/localTestMode.test.ts` checks every month adds up. |
+| P3 | The dashboard listened to `dashboard_<month>` and `dashboard_<prev>` separately, alongside a six-month range that already contained both. | The dashboard now reads both months from the `useDashboardCashFlow` window, so there's one summary listener instead of three. The hook gained `error` (a `LoadFailure`), `logQuerySnapshot` and `forgetSnapshotPath`. The orphaned `hooks/useDashboardSummary.ts` is deleted. |
+| P3 | `app/(app)/dashboard.tsx` imported things it never used: `cashFlowByMonth`, `oldestTrustedCashFlowMonth`, `trimToTrustedCashFlow`, `isInMonth`, `Pressable`, `withAlpha` and `haptic`. | Removed. |
+| P3 | A dev-only error on web: "Cannot manually set color scheme, as dark mode is type 'media'". | The root cause is upstream: `react-native-css-interop`'s web MutationObserver calls `colorScheme.set()` even under `darkMode: 'media'`, and `set()` then throws. It's still present in the latest 0.2.7. Fixed with a one-hunk `patches/react-native-css-interop+0.2.6.patch` that skips the call under `media`, applied by `patch-package` on `postinstall`. Every CI workflow uses `npm ci`, which runs it. `.gitattributes` keeps the patch LF. `GluestackUIProvider` also no longer sets `"system"` explicitly, since that's the default and the same throw. `darkMode: 'class'` was rejected: it would silently drop the `dark:` variants in the shared `Button`/`Input` on web for OS-dark users in all three products. |
+| P3 | The `AuraBackground` orbs pushed the page about 60 px wider than the viewport on web. | The container now has `overflow: "hidden"`. On web, `scrollWidth` equals `innerWidth` (390 = 390). |
+| P3 | Found while verifying: `BarChart` put `onPress` on SVG `Rect`/`Text`. On web, react-native-svg forwards responder props to the DOM, which caused six "Unknown event handler property" errors. | Taps now go through a row of transparent `Pressable` slots, one full-height column per bar group, each with an accessibility label. This also fixes the analytics screens that use `BarChart`. `DonutChart` and `SpendingCurveChart` still put `onPress` on SVG shapes; they aren't on the dashboard. |
+
+### Verification of the fixes
+- Web was checked in local test mode against a freshly seeded emulator.
+- With no error suppression at all there were 0 page errors and 0 error-level console messages; the remaining warnings are generic react-native-web deprecations.
+- `scrollWidth` equals `innerWidth`.
+- Income ₹98,000, Spent ₹31,693, and Safe to Spend and Monthly Budget populated from the seeded summaries.
+- One `financialSummaries` listener attach per load.
+- tsc and typecheck:shared are clean; `npm test` passed 5,501 tests.

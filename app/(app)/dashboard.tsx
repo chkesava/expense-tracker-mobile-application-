@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ShieldAlert, Sparkles } from "lucide-react-native";
 
@@ -19,7 +19,6 @@ import { SetupChecklistWidget } from "@/components/dashboard/SetupChecklistWidge
 import {
   DASH_RADIUS,
   useSurfaces,
-  withAlpha,
 } from "@/components/dashboard/primitives";
 import { LazyMount } from "@/components/common/LazyMount";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -28,7 +27,6 @@ import { PageShell } from "@/components/layout/PageShell";
 import { sampleScrollFps, perfEvent, perfMark } from "@/lib/perf";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useAccounts } from "@/hooks/useAccounts";
-import { useDashboardSummary } from "@/hooks/useDashboardSummary";
 import { useDashboardCashFlow } from "@/hooks/useDashboardCashFlow";
 import { useRecentExpenses } from "@/hooks/useRecentExpenses";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
@@ -46,17 +44,13 @@ import {
   getOrderedDashboardWidgets,
   type DashboardWidgetId,
 } from "@/shared/utils/dashboardWidgets";
-import { currentMonthKey, formatDateKey, isInMonth } from "@/shared/utils/dates";
+import { currentMonthKey, formatDateKey } from "@/shared/utils/dates";
 import {
-  cashFlowByMonth,
   computeSpendlyBudget,
-  oldestTrustedCashFlowMonth,
   remainingCommittedThisMonth,
-  trimToTrustedCashFlow,
 } from "@/shared/utils/spendlyBudget";
 import { getNextRenewalDate } from "@/shared/utils/subscriptionProcessor";
 import { useTheme } from "@/theme/ThemeProvider";
-import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 /**
@@ -107,10 +101,22 @@ export default function DashboardScreen() {
   const previousMonth = getPreviousMonthKey(activeMonth);
   const todayKey = formatDateKey(new Date(), settings.timezone);
 
-  const { summary: activeSummary, loading: activeLoading, error: financeError } = useDashboardSummary(activeMonth);
-  const { summary: previousSummary } = useDashboardSummary(previousMonth);
+  // One listener for the six-month window; the active and previous months are
+  // read from it rather than from two more per-month doc listeners.
+  const {
+    summaries: cashFlowSummaries,
+    loading: activeLoading,
+    error: financeError,
+  } = useDashboardCashFlow(activeMonth, 6);
+  const activeSummary = useMemo(
+    () => cashFlowSummaries.find((s) => s.period === activeMonth) ?? null,
+    [cashFlowSummaries, activeMonth]
+  );
+  const previousSummary = useMemo(
+    () => cashFlowSummaries.find((s) => s.period === previousMonth) ?? null,
+    [cashFlowSummaries, previousMonth]
+  );
   const { expenses: recentExpenses, loading: recentLoading } = useRecentExpenses(5);
-  const { summaries: cashFlowSummaries } = useDashboardCashFlow(activeMonth, 6);
 
   const { accounts, loading: accountsLoading } = useAccounts();
   const { subscriptions } = useSubscriptions();
