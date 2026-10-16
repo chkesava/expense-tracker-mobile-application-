@@ -1,6 +1,44 @@
-# Repository-wide agent workflow
+# Spendly — Claude Code Project Rules
 
-For **all** work in this repository, first read and follow **[docs/AGENT_WORKFLOW.md](docs/AGENT_WORKFLOW.md)**, which is shared with Codex. It wins over private memory when they disagree. The Ganesh Seva rules below apply in addition, for Ganesh Seva UI/UX work.
+## Project
+- Repository: `chkesava/expense-tracker-mobile-application-`
+- App: Spendly, Expo + React Native + TypeScript.
+- Backend: Firebase/Firestore. Do not migrate to Flask/PostgreSQL.
+- Preserve existing architecture and shared UI wrappers. Do not add a parallel system or a new UI framework without a demonstrated need.
+
+## Required workflow
+1. For a Jira implementation request, retrieve that specific issue and only its directly relevant linked/blocking issues using the configured Jira integration. If Jira access is unavailable, ask for the issue description rather than guessing.
+2. Inspect the named screen/service and its direct callers, types, tests, and relevant shared utilities. Expand the search only when evidence requires it; do not scan or summarize the entire repository by default.
+3. Write a short plan listing the files likely to change and the invariant that must be preserved. Then implement; do not stop at a plan.
+4. Reuse existing providers, hooks, UI components, Firebase patterns, and error-handling conventions.
+5. Add or update focused tests for the changed behavior. Run the smallest relevant checks first, then typecheck/lint/build if practical.
+6. Report changed files, tests actually run, results, and unresolved risks. Never claim a check passed unless it ran.
+
+## Spendly safety invariants
+- Financial correctness and data integrity take priority over convenience or appearance.
+- Do not invent balances, transactions, schemas, or live data.
+- Preserve Firebase/Firestore data contracts and existing transaction, offline, idempotency, reconciliation, and security behavior.
+- Do not create a parallel ledger or independently recalculate authoritative financial summaries in UI components.
+- Never run destructive production data migrations or bulk repair without a dry-run, variance report, and explicit approval.
+- Keep UI-only work separate from financial logic unless the Jira issue explicitly requires both.
+- Do not commit secrets, service-account credentials, or environment values.
+
+## Token/context efficiency
+- Work only on the requested Jira issue and its direct dependencies.
+- Do not reread large docs, lockfiles, generated files, or the entire repository unless necessary.
+- Prefer targeted searches and small file ranges over dumping full files.
+- Avoid repeating repository summaries in responses. Keep progress and final reports concise.
+- Do not launch multiple agents for routine, single-module work.
+- If the task becomes unrelated to the current issue, stop and ask for a fresh session rather than carrying unrelated context forward.
+
+## Useful commands
+- Use the repository's existing package scripts; inspect `package.json` before choosing commands.
+- Run focused tests first and report exact commands/results.
+
+## Shared agent workflow
+For all work in this repository, also read and follow **[docs/AGENT_WORKFLOW.md](docs/AGENT_WORKFLOW.md)**, which is shared with Codex. It covers branching, Jira, validation and safety, and it wins over private memory when they disagree. The Ganesh Seva rules below apply in addition, for Ganesh Seva UI/UX work.
+
+---
 
 # Ganesh Seva UI/UX Design Instructions
 
