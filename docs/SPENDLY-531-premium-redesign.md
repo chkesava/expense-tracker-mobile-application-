@@ -4,10 +4,25 @@ A phased premium-fintech redesign of the Expense app. It is UI only: no financia
 
 Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (the dashboard) was merged to `main` in `85a83c0` on 2026-10-16. The epic stays open for later phases.
 
+## Phases
+| Phase | Screens | Stories | State |
+|---|---|---|---|
+| 1. Dashboard | Dashboard | SPENDLY-532, SPENDLY-533 | Done; on `main` (`85a83c0`) |
+| 2. Money | Ledger hub and its sections, account / transaction / card-bill detail | SPENDLY-534 to SPENDLY-537 | In progress |
+| 3. Analytics | Insights (monthly and yearly), merchants, fees | not yet created | Planned |
+| 4. Investments | Investments hub (deposits, portfolio, SIPs, EPF), EPF detail | not yet created | Planned |
+| 5. Planning | Goals, financial calendar, runway, what-if, decisions | not yet created | Planned |
+| 6. Vaults, settings and forms | Vaults/splits, settings, add-transaction and other forms, onboarding | not yet created | Planned |
+
+## Stories
 | Story | Title | Branch | State |
 |---|---|---|---|
 | SPENDLY-532 | Phase 1: dashboard redesign | `feature/SPENDLY-532-dashboard-redesign` | Done. On `main` via `85a83c0` (2026-10-16). Android/iOS device QA open. |
 | SPENDLY-533 | Phase 1b: finish the dashboard (remaining widgets, nav lens, shared components, motion) | `feature/SPENDLY-533-dashboard-redesign-completion` | Done. On `main` via `85a83c0` (2026-10-16). Android/iOS device QA open. |
+| SPENDLY-534 | Phase 2a: Money hub and Activity (header, section tabs, period summary, activity list) | `feature/SPENDLY-534-money-hub-activity` | Implemented and committed; awaiting approval to merge into the epic. |
+| SPENDLY-535 | Phase 2b: Accounts and cards | not cut yet | To do |
+| SPENDLY-536 | Phase 2c: Debt, owed and recurring | not cut yet | To do |
+| SPENDLY-537 | Phase 2d: Detail screens | not cut yet | To do |
 
 ## Decisions
 - **Midnight Emerald is a selectable preset, not a forced default.** It's in Settings → Appearance → Custom Presets. Existing users keep their theme.
