@@ -8,10 +8,6 @@ import { CreditSummaryCard } from "@/components/accounts/CreditSummaryCard";
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { CreateCreditCardBillModal } from "@/components/creditCardBills/CreateCreditCardBillModal";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
-import {
-  ACCOUNT_GREEN,
-  CARD_ORANGE,
-} from "@/components/accounts/accountScreenTheme";
 import { EmptyState } from "@/components/common/EmptyState";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
@@ -29,16 +25,14 @@ import {
 } from "@/shared/utils/billingCycle";
 import { roundMoney } from "@/shared/utils/money";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
-const DEFAULT_CARD_ACCENT = "#6D5AE6";
-
 export function CardsList() {
   const router = useRouter();
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  // SPENDLY-535: a card with no colour of its own takes the theme accent.
+  const defaultCardAccent = theme.colors.primary;
   const displayCurrency = useDisplayCurrency();
   const { settings } = useSettings();
   const today = todayDateKey(settings.timezone);
@@ -106,7 +100,7 @@ export function CardsList() {
       return {
         id: card.id,
         name: card.name,
-        color: card.color || "#888",
+        color: card.color || theme.colors.mutedForeground,
         identityLine: formatAccountIdentityLine(card, "Credit Card"),
         reconciliationWarning:
           card.summaryReconciliationStatus === "needs_reconciliation"
@@ -121,11 +115,11 @@ export function CardsList() {
         availableCredit: roundMoney(Math.max(0, limit - unbilledSpend)),
         limit,
         utilization: limit > 0 ? (unbilledSpend / limit) * 100 : 0,
-        accent: card.color || DEFAULT_CARD_ACCENT,
+        accent: card.color || defaultCardAccent,
         openBill: openBillByAccount.get(card.id) ?? null,
       };
     });
-  }, [creditCards, openBillByAccount, today]);
+  }, [creditCards, openBillByAccount, today, defaultCardAccent, theme.colors.mutedForeground]);
 
   const handleOpenCardDetail = useCallback(
     (cardId: string) => {
@@ -189,17 +183,14 @@ export function CardsList() {
           onPress={handleOpenAddCard}
           style={({ pressed }) => [
             styles.actionButton,
-            {
-              backgroundColor: isDark ? "rgba(12, 16, 24, 0.92)" : theme.colors.card,
-              borderColor: isDark ? "rgba(148, 163, 184, 0.16)" : theme.colors.border,
-            },
+            { backgroundColor: theme.colors.card, borderColor: theme.colors.outlineVariant },
             pressed && styles.pressed,
           ]}
           accessibilityRole="button"
           accessibilityLabel="Add card"
         >
-          <Plus size={16} color={CARD_ORANGE} strokeWidth={2.4} />
-          <Text style={[styles.actionButtonText, { color: theme.colors.foreground }]}>
+          <Plus size={16} color={theme.colors.primary} strokeWidth={2.4} />
+          <Text style={[styles.actionButtonText, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}>
             Add Card
           </Text>
         </Pressable>
@@ -208,17 +199,14 @@ export function CardsList() {
           onPress={() => handleOpenPayBill()}
           style={({ pressed }) => [
             styles.actionButton,
-            {
-              backgroundColor: isDark ? "rgba(12, 16, 24, 0.92)" : theme.colors.card,
-              borderColor: isDark ? "rgba(148, 163, 184, 0.16)" : theme.colors.border,
-            },
+            { backgroundColor: theme.colors.card, borderColor: theme.colors.outlineVariant },
             pressed && styles.pressed,
           ]}
           accessibilityRole="button"
           accessibilityLabel="Pay bill"
         >
-          <CheckCircle2 size={16} color={isDark ? ACCOUNT_GREEN : theme.colors.success} />
-          <Text style={[styles.actionButtonText, { color: theme.colors.foreground }]}>
+          <CheckCircle2 size={16} color={theme.colors.primary} />
+          <Text style={[styles.actionButtonText, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}>
             Pay Bill
           </Text>
         </Pressable>
@@ -231,12 +219,12 @@ export function CardsList() {
           description="Keep track of billing statement dates, credit limits, and automatic due date reminders."
           primaryAction={{
             label: "Add Credit Card",
-            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+            icon: <Plus size={16} color={theme.colors.primaryForeground} strokeWidth={2.4} />,
             onPress: handleOpenAddCard,
           }}
           secondaryAction={{
             label: "Record Bill Payment",
-            icon: <CheckCircle2 size={16} color={theme.colors.success} />,
+            icon: <CheckCircle2 size={16} color={theme.colors.primary} />,
             onPress: () => handleOpenPayBill(),
           }}
           tip="Setting your billing cycle reset date enables automated payment countdowns and credit health tracking."
@@ -298,12 +286,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 16,
     borderCurve: "continuous",
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     gap: 8,
   },
   actionButtonText: {
     fontSize: 14,
-    fontWeight: "700",
   },
   pressed: {
     opacity: 0.78,

@@ -74,12 +74,19 @@ export const NetWorthWidget = memo(function NetWorthWidget({ currency }: NetWort
 
 /* ------------------------------------------------------------- Hero card */
 
-function NetWorthHeroCard({
+/**
+ * The net-worth hero, presentational. Exported (SPENDLY-535) so the Money
+ * hub's Accounts section shows the same card from the same summary; it passes
+ * `showAccountsLink={false}` because it already is that screen.
+ */
+export function NetWorthHeroCard({
   netWorth,
   currency,
+  showAccountsLink = true,
 }: {
   netWorth: UnifiedNetWorthSummary;
   currency: string;
+  showAccountsLink?: boolean;
 }) {
   const router = useRouter();
   const { theme } = useTheme();
@@ -95,11 +102,13 @@ function NetWorthHeroCard({
       subtitle={netWorth.secondaryLoading ? "Updating valuations…" : "Assets minus liabilities"}
       icon={<Scale size={16} color={theme.colors.primary} strokeWidth={2.3} />}
       action={
-        <SectionAction
-          label="Accounts"
-          onPress={() => router.push("/ledger?tab=accounts" as Href)}
-          accessibilityLabel="Open accounts"
-        />
+        showAccountsLink ? (
+          <SectionAction
+            label="Accounts"
+            onPress={() => router.push("/ledger?tab=accounts" as Href)}
+            accessibilityLabel="Open accounts"
+          />
+        ) : undefined
       }
     >
       {netWorth.loading ? (

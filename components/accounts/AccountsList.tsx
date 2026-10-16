@@ -4,7 +4,6 @@ import { useRouter } from "expo-router";
 import {
   Banknote,
   BarChart3,
-  ChevronRight,
   CreditCard,
   Landmark,
   PiggyBank,
@@ -19,80 +18,41 @@ import { AccountRow } from "@/components/accounts/AccountRow";
 import { EditAccountModal } from "@/components/accounts/EditAccountModal";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { TransferFundsModal } from "@/components/accounts/TransferFundsModal";
-import { Amount } from "@/components/common/Amount";
 import { LiabilityAmount } from "@/components/common/LiabilityAmount";
 import { EmptyState } from "@/components/common/EmptyState";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
+import { NetWorthHeroCard } from "@/components/dashboard/NetWorthWidget";
+import {
+  MetaLabel,
+  Section,
+  SectionAction,
+  StatTile,
+  useSurfaces,
+} from "@/components/dashboard/primitives";
 import { ManageStockCashModal } from "@/components/portfolio/ManageStockCashModal";
 import { RunwayEntryRow } from "@/components/runway/RunwayEntryRow";
 import { Button } from "@/components/ui/Button";
-import { useAccountEntries } from "@/hooks/useAccountEntries";
-import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccounts } from "@/hooks/useAccounts";
-import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
-import { useBorrowings } from "@/hooks/useBorrowings";
-import { useReceivables } from "@/hooks/useReceivables";
-import { useCreditCardBills } from "@/hooks/useCreditCardBills";
-import { useExpenses } from "@/hooks/useExpenses";
-import { useIncomes } from "@/hooks/useIncomes";
 import { useUnifiedNetWorth } from "@/hooks/useUnifiedNetWorth";
-import { useSettings } from "@/providers/SettingsProvider";
 import type { Account } from "@/shared/types/expense";
-import {
-} from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
-import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
-type AccentTone = {
-  icon: string;
-  softBg: string;
-  softBorder: string;
-};
+type Colors = ReturnType<typeof useTheme>["theme"]["colors"];
 
-function accentForTypeName(
-  typeName: string,
-  isDark: boolean
-): AccentTone {
+/**
+ * SPENDLY-535: one semantic theme colour per account kind, replacing the
+ * per-type hex table. A user-picked `account.color` still wins for the icon.
+ */
+function tintForTypeName(typeName: string, colors: Colors): string {
   const n = typeName.toLowerCase();
-  if (n.includes("credit")) {
-    return {
-      icon: isDark ? "#f87171" : "#dc2626",
-      softBg: isDark ? "rgba(239,68,68,0.14)" : "rgba(239,68,68,0.1)",
-      softBorder: isDark ? "rgba(239,68,68,0.28)" : "rgba(239,68,68,0.18)",
-    };
-  }
-  if (n.includes("stock") || n.includes("demat") || n.includes("broker")) {
-    return {
-      icon: isDark ? "#a78bfa" : "#7c3aed",
-      softBg: isDark ? "rgba(124,58,237,0.16)" : "rgba(124,58,237,0.1)",
-      softBorder: isDark ? "rgba(124,58,237,0.3)" : "rgba(124,58,237,0.18)",
-    };
-  }
-  if (n.includes("fixed") || n.includes("deposit") || n.includes("fd") || n.includes("rd")) {
-    return {
-      icon: isDark ? "#2dd4bf" : "#0d9488",
-      softBg: isDark ? "rgba(13,148,136,0.16)" : "rgba(13,148,136,0.1)",
-      softBorder: isDark ? "rgba(13,148,136,0.3)" : "rgba(13,148,136,0.18)",
-    };
-  }
-  if (n.includes("cash") || n.includes("wallet") || n.includes("hand")) {
-    return {
-      icon: isDark ? "#86efac" : "#15803d",
-      softBg: isDark ? "rgba(34,197,94,0.12)" : "rgba(34,197,94,0.08)",
-      softBorder: isDark ? "rgba(34,197,94,0.24)" : "rgba(34,197,94,0.16)",
-    };
-  }
-  // bank / savings / salary / default
-  return {
-    icon: isDark ? "#4ade80" : "#16a34a",
-    softBg: isDark ? "rgba(37,150,90,0.16)" : "rgba(37,150,90,0.1)",
-    softBorder: isDark ? "rgba(37,150,90,0.28)" : "rgba(37,150,90,0.16)",
-  };
+  if (n.includes("credit")) return colors.destructive;
+  if (n.includes("stock") || n.includes("demat") || n.includes("broker")) return colors.info;
+  if (n.includes("cash") || n.includes("wallet") || n.includes("hand")) return colors.success;
+  return colors.primary;
 }
 
 function iconForTypeName(typeName: string) {
@@ -104,40 +64,25 @@ function iconForTypeName(typeName: string) {
   return Wallet;
 }
 
-/** Mini trend silhouette — decorative only; no fabricated history. */
-function NetWorthTrendMark({ color }: { color: string }) {
-  return (
-    <View style={styles.trendMark} accessibilityElementsHidden>
-      <View style={[styles.trendBar, { height: 8, backgroundColor: color, opacity: 0.35 }]} />
-      <View style={[styles.trendBar, { height: 14, backgroundColor: color, opacity: 0.5 }]} />
-      <View style={[styles.trendBar, { height: 10, backgroundColor: color, opacity: 0.4 }]} />
-      <View style={[styles.trendBar, { height: 18, backgroundColor: color, opacity: 0.65 }]} />
-      <View style={[styles.trendBar, { height: 22, backgroundColor: color, opacity: 0.9 }]} />
-    </View>
-  );
-}
-
+/**
+ * The Money hub's Accounts section (SPENDLY-535): the dashboard's net-worth
+ * hero, where the money sits, the stocks account, then every account grouped
+ * by type. Figures come from `useUnifiedNetWorth` and the accounts' own
+ * balances, exactly as before.
+ */
 export function AccountsList() {
   const { push } = useRouter();
-  const { theme, themeName } = useTheme();
+  const { theme } = useTheme();
   const surfaces = useSurfaces();
-  const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
-  const { settings } = useSettings();
-  const today = todayDateKey(settings.timezone);
 
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
-  const { expenses } = useExpenses();
-  const { incomes } = useIncomes();
-  const { entries } = useAccountEntries();
-  const { payments } = useAccountPayments();
-  const { transfers } = useAccountTransfers();
-  const { borrowings, repayments: borrowingRepayments } = useBorrowings();
-  const { receivables, repayments: receivableRepayments } = useReceivables();
-  const { bills } = useCreditCardBills();
 
-  const netWorth = useUnifiedNetWorth();
+  // Progressive, as on the dashboard: figures show once the core ledger is in
+  // and the hero says "Updating valuations…" until cards, loans and quotes
+  // land. The final totals are the same summary either way (SPENDLY-535).
+  const netWorth = useUnifiedNetWorth({ progressive: true });
 
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -145,7 +90,7 @@ export function AccountsList() {
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
   const [isStockCashModalOpen, setIsStockCashModalOpen] = useState(false);
   const [isPayCreditModalOpen, setIsPayCreditModalOpen] = useState(false);
-  const [selectedPayCardId, setSelectedPayCardId] = useState<string | undefined>();
+  const [selectedPayCardId] = useState<string | undefined>();
 
   const typeMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -230,154 +175,30 @@ export function AccountsList() {
     setIsEditModalOpen(true);
   };
 
-  const green = theme.colors.success;
-  const red = isDark ? "#f87171" : "#dc2626";
-  const purple = isDark ? "#a78bfa" : "#7c3aed";
-  const blue = isDark ? "#60a5fa" : "#2563eb";
-  const ripple = surfaces.track;
+  const openPortfolio = () => {
+    haptic.selection().catch(() => undefined);
+    push("/investments?tab=portfolio" as never);
+  };
+
+  // Where the net worth sits. EPF only when there is some (KAN-71: the
+  // simulated framing lives on the dashboard card and the EPF tab).
+  const breakdown = [
+    { key: "bank", label: "Bank & cash", value: netWorth.liquidBankAssets },
+    { key: "fd", label: "Fixed deposits", value: netWorth.investmentsValue },
+    { key: "stocks", label: "Stocks & demat", value: netWorth.totalStocksValue },
+    ...(netWorth.epfValue > 0 ? [{ key: "epf", label: "EPF", value: netWorth.epfValue }] : []),
+  ];
 
   return (
     <View style={styles.container}>
-      {/* Net Worth */}
-      <View
-        style={[
-          styles.netWorthCard,
-          theme.elevation[2],
-          {
-            backgroundColor: isDark
-              ? "rgba(52, 179, 122, 0.1)"
-              : "rgba(236, 253, 245, 0.95)",
-            borderColor: isDark
-              ? "rgba(52, 179, 122, 0.28)"
-              : "rgba(37, 150, 90, 0.18)",
-          },
-        ]}
-      >
-        <View style={styles.netWorthHeader}>
-          <View style={styles.netWorthTitleRow}>
-            <TrendingUp size={16} color={green} strokeWidth={2.4} />
-            <Text style={[styles.netWorthLabel, { color: theme.colors.mutedForeground }]}>
-              Total Net Worth
-            </Text>
-          </View>
-          <NetWorthTrendMark color={green} />
-        </View>
+      <NetWorthHeroCard netWorth={netWorth} currency={displayCurrency} showAccountsLink={false} />
 
-        <Amount
-          value={netWorth.totalNetWorth}
-          currency={displayCurrency}
-          ghostable
-          style={{
-            fontSize: 32,
-            fontWeight: "800",
-            letterSpacing: -0.6,
-            color:
-              netWorth.totalNetWorth >= 0
-                ? theme.colors.foreground
-                : theme.colors.destructive,
-          }}
-        />
-
-        <View style={styles.netWorthSubRow}>
-          <View style={styles.netWorthStat}>
-            <Text style={[styles.statCaption, { color: theme.colors.mutedForeground }]}>
-              Total Assets
-            </Text>
-            <Amount
-              value={netWorth.totalAssets}
-              currency={displayCurrency}
-              ghostable
-              style={{
-                fontSize: theme.typography.sm,
-                fontWeight: "800",
-                color: theme.colors.foreground,
-              }}
-            />
-          </View>
-
-          <View
-            style={[styles.netWorthDivider, { backgroundColor: theme.colors.outlineVariant }]}
-          />
-
-          <View style={styles.netWorthStat}>
-            <Text style={[styles.statCaption, { color: theme.colors.mutedForeground }]}>
-              Liabilities (credit cards & borrowings)
-            </Text>
-            <Amount
-              value={netWorth.totalLiabilities}
-              currency={displayCurrency}
-              prefix={netWorth.totalLiabilities > 0 ? "-" : ""}
-              ghostable
-              style={{
-                fontSize: theme.typography.sm,
-                fontWeight: "800",
-                color:
-                  netWorth.totalLiabilities > 0
-                    ? red
-                    : theme.colors.mutedForeground,
-              }}
-            />
-          </View>
-        </View>
-
-        <View
-          style={[
-            styles.breakdownRow,
-            {
-              borderTopColor: surfaces.track,
-            },
-          ]}
-        >
-          <View style={styles.breakdownItem}>
-            <Text style={[styles.breakdownLabel, { color: theme.colors.mutedForeground }]}>
-              Bank/Cash
-            </Text>
-            <Amount
-              value={netWorth.liquidBankAssets}
-              currency={displayCurrency}
-              style={{
-                fontSize: 12,
-                fontWeight: "700",
-                color: theme.colors.foreground,
-              }}
-            />
-          </View>
-          <View style={styles.breakdownItem}>
-            <Text style={[styles.breakdownLabel, { color: theme.colors.mutedForeground }]}>
-              Fixed Deposits
-            </Text>
-            <Amount
-              value={netWorth.investmentsValue}
-              currency={displayCurrency}
-              style={{ fontSize: 12, fontWeight: "700", color: green }}
-            />
-          </View>
-          <View style={styles.breakdownItem}>
-            <Text style={[styles.breakdownLabel, { color: theme.colors.mutedForeground }]}>
-              Stocks/Demat
-            </Text>
-            <Amount
-              value={netWorth.totalStocksValue}
-              currency={displayCurrency}
-              style={{ fontSize: 12, fontWeight: "700", color: blue }}
-            />
-          </View>
-          {/* KAN-71: only shown when there is EPF, so this screen is unchanged
-              for the majority who have none. The simulated framing lives on the
-              net-worth widget and the EPF tab, where the label has room. */}
-          {netWorth.epfValue > 0 ? (
-            <View style={styles.breakdownItem}>
-              <Text style={[styles.breakdownLabel, { color: theme.colors.mutedForeground }]}>
-                EPF
-              </Text>
-              <Amount
-                value={netWorth.epfValue}
-                currency={displayCurrency}
-                style={{ fontSize: 12, fontWeight: "700", color: green }}
-              />
-            </View>
-          ) : null}
-        </View>
+      <View style={styles.breakdownGrid}>
+        {breakdown.map((item) => (
+          <StatTile key={item.key} label={item.label} style={styles.breakdownTile}>
+            <FinancialAmount value={item.value} currency={displayCurrency} size="md" weight="bold" />
+          </StatTile>
+        ))}
       </View>
 
       {/* SPENDLY-210: entry to Financial Runway */}
@@ -396,9 +217,9 @@ export function AccountsList() {
           accessibilityLabel="Stocks Cash"
           style={styles.quickAction}
         >
-          <TrendingUp size={18} color={purple} strokeWidth={2.2} />
+          <TrendingUp size={18} color={theme.colors.primary} strokeWidth={2.2} />
           <Text
-            style={[styles.quickActionText, { color: theme.colors.foreground }]}
+            style={[styles.quickActionText, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
             numberOfLines={1}
           >
             Stocks Cash
@@ -416,9 +237,9 @@ export function AccountsList() {
           accessibilityLabel="Adjust Balance"
           style={styles.quickAction}
         >
-          <SlidersHorizontal size={18} color={green} strokeWidth={2.2} />
+          <SlidersHorizontal size={18} color={theme.colors.primary} strokeWidth={2.2} />
           <Text
-            style={[styles.quickActionText, { color: theme.colors.foreground }]}
+            style={[styles.quickActionText, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
             numberOfLines={1}
           >
             Adjust Balance
@@ -427,118 +248,37 @@ export function AccountsList() {
       </View>
 
       {/* Stocks & Demat */}
-      <View style={styles.groupSection}>
-        <Text style={[styles.groupHeader, { color: theme.colors.mutedForeground }]}>
-          STOCKS & DEMAT PORTFOLIO
-        </Text>
-
-        <View
-          style={[
-            styles.stockCard,
-            {
-              backgroundColor: theme.colors.card,
-              borderColor: isDark
-                ? "rgba(124, 58, 237, 0.28)"
-                : "rgba(124, 58, 237, 0.16)",
-            },
-          ]}
-        >
-          <Pressable
-            onPress={() => {
-              haptic.selection().catch(() => undefined);
-              push("/investments?tab=portfolio" as never);
-            }}
-            android_ripple={{ color: ripple, borderless: false }}
-            style={styles.stockCardHeader}
-            accessibilityRole="button"
-            accessibilityLabel="View portfolio"
-          >
-            <View style={styles.stockTitleRow}>
-              <View
-                style={[
-                  styles.accountIconBox,
-                  {
-                    backgroundColor: isDark
-                      ? "rgba(124, 58, 237, 0.16)"
-                      : "rgba(124, 58, 237, 0.1)",
-                  },
-                ]}
-              >
-                <BarChart3 size={18} color={purple} strokeWidth={2.2} />
-              </View>
-              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                <Text
-                  style={[styles.accountName, { color: theme.colors.foreground }]}
-                  numberOfLines={1}
-                >
-                  Stocks Demat Account
-                </Text>
-                <Text
-                  style={[styles.accountSub, { color: theme.colors.mutedForeground }]}
-                  numberOfLines={1}
-                >
-                  Trading Cash & Equities
-                </Text>
-              </View>
-              <ChevronRight size={18} color={theme.colors.mutedForeground} />
-            </View>
-          </Pressable>
-
-          <View style={styles.stockStatsGrid}>
-            <View style={styles.stockStat}>
-              <Text style={[styles.statCaption, { color: theme.colors.mutedForeground }]}>
-                Cash Balance
-              </Text>
-              <Amount
-                value={netWorth.stocksCashBalance}
-                currency={displayCurrency}
-                ghostable
-                style={{
-                  fontSize: theme.typography.md,
-                  fontWeight: "800",
-                  color: theme.colors.foreground,
-                }}
-              />
-            </View>
-            <View style={styles.stockStat}>
-              <Text style={[styles.statCaption, { color: theme.colors.mutedForeground }]}>
-                Holdings Value
-              </Text>
-              <Amount
-                value={netWorth.stocksHoldingsValue}
-                currency={displayCurrency}
-                ghostable
-                style={{
-                  fontSize: theme.typography.md,
-                  fontWeight: "800",
-                  color: blue,
-                }}
-              />
-            </View>
-          </View>
-
-          <View style={styles.stockActionsRow}>
-            <Button
-              size="sm"
-              variant="outline"
-              onPress={() => setIsStockCashModalOpen(true)}
-              style={{ flex: 1 }}
-            >
-              Transfer Cash
-            </Button>
-            <Button
-              size="sm"
-              onPress={() => {
-                haptic.selection().catch(() => undefined);
-                push("/investments?tab=portfolio" as never);
-              }}
-              style={{ flex: 1 }}
-            >
-              View Portfolio
-            </Button>
-          </View>
+      <Section
+        title="Stocks & Demat"
+        subtitle="Trading cash & equities"
+        icon={<BarChart3 size={16} color={theme.colors.info} strokeWidth={2.3} />}
+        iconTint={surfaces.wash(theme.colors.info)}
+        action={
+          <SectionAction label="Portfolio" onPress={openPortfolio} accessibilityLabel="View portfolio" />
+        }
+      >
+        <View style={styles.tileRow}>
+          <StatTile label="Cash balance">
+            <FinancialAmount value={netWorth.stocksCashBalance} currency={displayCurrency} size="md" weight="bold" />
+          </StatTile>
+          <StatTile label="Holdings value">
+            <FinancialAmount value={netWorth.stocksHoldingsValue} currency={displayCurrency} size="md" weight="bold" />
+          </StatTile>
         </View>
-      </View>
+        <View style={styles.stockActionsRow}>
+          <Button
+            size="sm"
+            variant="outline"
+            onPress={() => setIsStockCashModalOpen(true)}
+            style={{ flex: 1 }}
+          >
+            Transfer Cash
+          </Button>
+          <Button size="sm" onPress={openPortfolio} style={{ flex: 1 }}>
+            View Portfolio
+          </Button>
+        </View>
+      </Section>
 
       {/* Grouped accounts. The empty state keys off every account, not just
           deposits: a user holding only credit cards was told "No accounts yet"
@@ -550,56 +290,50 @@ export function AccountsList() {
           description="Add a savings, salary, or cash account to start tracking balances."
           primaryAction={{
             label: "Add Account",
-            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+            icon: <Plus size={16} color={theme.colors.primaryForeground} strokeWidth={2.4} />,
             onPress: handleOpenCreateAccount,
           }}
           secondaryAction={{
             label: "Adjust Balance",
-            icon: <SlidersHorizontal size={16} color={theme.colors.success} />,
+            icon: <SlidersHorizontal size={16} color={theme.colors.primary} />,
             onPress: () => setIsEntryModalOpen(true),
           }}
           tip="Keep opening balances accurate so net worth stays trustworthy."
         />
       ) : (
         groupedAccounts.map((group) => {
-          const accent = accentForTypeName(group.typeName, isDark);
+          const tint = tintForTypeName(group.typeName, theme.colors);
           const TypeIcon = iconForTypeName(group.typeName);
 
           return (
             <View key={group.typeId} style={styles.groupSection}>
-              <Text style={[styles.groupHeader, { color: theme.colors.mutedForeground }]}>
-                {group.typeName.toUpperCase()} ({group.list.length})
-              </Text>
+              <MetaLabel style={styles.groupHeader}>
+                {group.typeName.toUpperCase()} · {group.list.length}
+              </MetaLabel>
 
               <View style={styles.accountList}>
                 {group.list.map((account) => {
                   const balance = accountBalances.get(account.id) ?? 0;
-                  const tint = account.color || accent.icon;
 
                   return (
                     <AccountRow
                       key={account.id}
                       account={account}
                       typeName={group.typeName}
-                      icon={<TypeIcon size={18} color={tint} strokeWidth={2.1} />}
-                      accentBg={accent.softBg}
-                      accentBorder={accent.softBorder}
+                      tint={tint}
+                      icon={
+                        <TypeIcon size={18} color={account.color || tint} strokeWidth={2.1} />
+                      }
                       onPress={() => handleOpenAccountDetail(account)}
                       onLongPress={() => handleOpenEditAccount(account)}
                       accessibilityLabel={`${account.name}, balance`}
                       trailing={
-                        <Amount
+                        <FinancialAmount
                           value={balance}
                           currency={displayCurrency}
-                          ghostable
-                          style={{
-                            fontSize: theme.typography.md,
-                            fontWeight: "700",
-                            color:
-                              balance >= 0
-                                ? theme.colors.foreground
-                                : theme.colors.destructive,
-                          }}
+                          size="md"
+                          weight="bold"
+                          tone={balance < 0 ? "negative" : "default"}
                         />
                       }
                     />
@@ -614,46 +348,34 @@ export function AccountsList() {
       {/* Credit liabilities (still on Accounts for completeness; Cards tab owns primary UX) */}
       {creditAccounts.length > 0 ? (
         <View style={styles.groupSection}>
-          <Text style={[styles.groupHeader, { color: red }]}>
-            CREDIT CARDS & LIABILITIES ({creditAccounts.length})
-          </Text>
+          <MetaLabel style={styles.groupHeader}>
+            CREDIT CARDS & LIABILITIES · {creditAccounts.length}
+          </MetaLabel>
           <View style={styles.accountList}>
             {creditAccounts.map((account) => {
               const outstanding = creditOutstandingById.get(account.id) ?? 0;
-              const accent = accentForTypeName("credit", isDark);
-              const cardColor = account.color || accent.icon;
+              const tint = theme.colors.destructive;
 
               return (
                 <AccountRow
                   key={account.id}
                   account={account}
                   typeName="Credit Card"
-                  icon={<CreditCard size={18} color={cardColor} strokeWidth={2.1} />}
-                  accentBg={accent.softBg}
-                  accentBorder={accent.softBorder}
+                  tint={tint}
+                  icon={<CreditCard size={18} color={account.color || tint} strokeWidth={2.1} />}
                   onPress={() => handleOpenAccountDetail(account)}
                   onLongPress={() => handleOpenEditAccount(account)}
                   accessibilityLabel={`${account.name}, outstanding`}
                   trailing={
-                    <View style={{ alignItems: "flex-end" }}>
+                    <View style={styles.outstanding}>
+                      {/* LiabilityAmount keeps its minus even with amounts hidden. */}
                       <LiabilityAmount
                         value={outstanding}
                         currency={displayCurrency}
                         ghostable
-                        style={{
-                          fontSize: theme.typography.md,
-                          fontWeight: "700",
-                        }}
+                        style={{ fontSize: 16, fontFamily: theme.fontFamily.bold }}
                       />
-                      <Text
-                        style={{
-                          fontSize: 10,
-                          color: theme.colors.mutedForeground,
-                          fontWeight: "600",
-                        }}
-                      >
-                        Outstanding
-                      </Text>
+                      <MetaLabel>Outstanding</MetaLabel>
                     </View>
                   }
                 />
@@ -671,8 +393,10 @@ export function AccountsList() {
         accessibilityLabel="Add Account"
         style={styles.addAccountButton}
       >
-        <Plus size={18} color={green} strokeWidth={2.4} />
-        <Text style={[styles.addAccountText, { color: green }]}>Add Account</Text>
+        <Plus size={18} color={theme.colors.primary} strokeWidth={2.4} />
+        <Text style={[styles.addAccountText, { color: theme.colors.primary, fontFamily: theme.fontFamily.semibold }]}>
+          Add Account
+        </Text>
       </Button>
 
       <Pressable
@@ -684,7 +408,7 @@ export function AccountsList() {
         accessibilityRole="button"
         accessibilityLabel="Transfer between accounts"
       >
-        <Text style={{ color: theme.colors.mutedForeground, fontSize: 13, fontWeight: "600" }}>
+        <Text style={{ color: theme.colors.mutedForeground, fontSize: 13, fontFamily: theme.fontFamily.semibold }}>
           Transfer between accounts
         </Text>
       </Pressable>
@@ -731,80 +455,19 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingBottom: 8,
   },
-  netWorthCard: {
-    padding: 18,
-    borderRadius: 22,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    gap: 12,
-  },
-  netWorthHeader: {
+  breakdownGrid: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  netWorthTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  netWorthLabel: {
-    fontWeight: "700",
-    textTransform: "uppercase",
-    fontSize: 11,
-    letterSpacing: 0.6,
-  },
-  trendMark: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 3,
-    height: 22,
-  },
-  trendBar: {
-    width: 4,
-    borderRadius: 2,
-  },
-  netWorthSubRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-around",
-    paddingTop: 4,
-  },
-  netWorthStat: {
-    alignItems: "center",
-    gap: 4,
-    flex: 1,
-  },
-  netWorthDivider: {
-    width: StyleSheet.hairlineWidth,
-    height: 28,
-  },
-  statCaption: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  breakdownRow: {
-    flexDirection: "row",
-    // Wraps to two rows on a narrow phone rather than squashing four labels
-    // into a quarter of the width each (KAN-71).
     flexWrap: "wrap",
-    justifyContent: "space-between",
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    columnGap: 8,
-    rowGap: 12,
+    gap: 10,
   },
-  breakdownItem: {
+  breakdownTile: {
     flexGrow: 1,
-    flexBasis: "22%",
-    minWidth: 72,
-    alignItems: "center",
-    gap: 4,
+    flexBasis: "45%",
+    minWidth: 140,
   },
-  breakdownLabel: {
-    fontSize: 10,
-    fontWeight: "600",
-    textAlign: "center",
+  tileRow: {
+    flexDirection: "row",
+    gap: 10,
   },
   quickActionsRow: {
     flexDirection: "row",
@@ -812,77 +475,33 @@ const styles = StyleSheet.create({
   },
   quickAction: {
     flex: 1,
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    minHeight: 48,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    overflow: "hidden",
   },
   quickActionText: {
     fontSize: 13,
-    fontWeight: "600",
   },
   groupSection: {
     gap: 8,
   },
   groupHeader: {
-    fontWeight: "800",
-    letterSpacing: 0.7,
-    fontSize: 11,
-    marginLeft: 2,
-  },
-  stockCard: {
-    padding: 14,
-    borderRadius: 18,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    gap: 14,
-  },
-  stockCardHeader: {
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  stockTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  stockStatsGrid: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  stockStat: {
-    flex: 1,
-    gap: 4,
+    letterSpacing: 0.6,
+    paddingHorizontal: 4,
   },
   stockActionsRow: {
     flexDirection: "row",
     gap: 10,
+    marginTop: 12,
   },
   accountList: {
     gap: 8,
   },
-  accountIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    borderCurve: "continuous",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  accountName: {
-    fontSize: 15,
-    fontWeight: "700",
-    letterSpacing: -0.2,
-  },
-  accountSub: {
-    fontSize: 12,
-    fontWeight: "500",
+  outstanding: {
+    alignItems: "flex-end",
+    gap: 1,
   },
   addAccountButton: {
     flexDirection: "row",
@@ -890,21 +509,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     minHeight: 48,
-    borderRadius: 14,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    borderStyle: "dashed",
-    overflow: "hidden",
   },
   addAccountText: {
     fontSize: 14,
-    fontWeight: "700",
   },
   transferLink: {
     alignSelf: "center",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    minHeight: 40,
+    minHeight: 44,
     justifyContent: "center",
+    paddingHorizontal: 12,
   },
 });
