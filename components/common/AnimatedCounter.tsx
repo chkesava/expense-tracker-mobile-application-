@@ -4,6 +4,7 @@ import {
   Easing,
   runOnJS,
   useAnimatedReaction,
+  useReducedMotion,
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
@@ -45,13 +46,15 @@ export function AnimatedCounter({
   );
   const animValue = useSharedValue(startFromZero ? 0 : value);
   const prevTargetRef = useRef(startFromZero ? 0 : value);
+  // SPENDLY-533: under the OS reduced-motion setting the number just changes.
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     const startVal = isFirstMount.current && startFromZero ? 0 : prevTargetRef.current;
     isFirstMount.current = false;
     prevTargetRef.current = value;
 
-    if (startVal === value) {
+    if (startVal === value || reduceMotion) {
       animValue.value = value;
       setDisplayValue(value);
       return;
@@ -62,7 +65,7 @@ export function AnimatedCounter({
       duration,
       easing: Easing.out(Easing.cubic),
     });
-  }, [value, duration, animValue, startFromZero]);
+  }, [value, duration, animValue, startFromZero, reduceMotion]);
 
   useAnimatedReaction(
     () => animValue.value,
@@ -80,7 +83,12 @@ export function AnimatedCounter({
 
   return (
     <Text
-      accessibilityLabel={accessibilityLabel || `Amount ${value}`}
+      // The settled value, formatted, so a screen reader never reads a
+      // mid-animation number or a bare "Amount 205220".
+      accessibilityLabel={
+        accessibilityLabel ||
+        (formatter ? formatter(value) : formatAmount(value, currency, { prefix, fractionDigits }))
+      }
       numberOfLines={numberOfLines}
       adjustsFontSizeToFit={adjustsFontSizeToFit}
       minimumFontScale={minimumFontScale}

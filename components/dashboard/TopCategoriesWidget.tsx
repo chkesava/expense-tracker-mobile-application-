@@ -1,24 +1,20 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withSpring,
-} from "react-native-reanimated";
+import { useRouter, type Href } from "expo-router";
 import { PieChart } from "lucide-react-native";
 
-import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
+import { ProgressIndicator } from "@/components/dashboard/ProgressIndicator";
 import {
   categoryRamp,
-  MetaLabel,
+  RowGlyph,
   Section,
+  SectionAction,
   useSurfaces,
 } from "@/components/dashboard/primitives";
 import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
-import type { Expense } from "@/shared/types/expense";
-import { computeTopCategories } from "@/shared/utils/dashboardWidgets";
+import { topCategoryShares } from "@/shared/utils/dashboardWidgets";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export interface TopCategoriesWidgetProps {
@@ -27,86 +23,45 @@ export interface TopCategoriesWidgetProps {
   activeMonth: string;
 }
 
-function AnimatedCategoryBar({
-  percentage,
-  color,
-  index,
-  height,
-}: {
-  percentage: number;
-  color: string;
-  index: number;
-  height: number;
-}) {
-  const widthProgress = useSharedValue(0);
-
-  useEffect(() => {
-    widthProgress.value = withDelay(
-      index * 60,
-      withSpring(Math.min(100, Math.max(2, percentage)), {
-        damping: 18,
-        stiffness: 180,
-      })
-    );
-  }, [percentage, index, widthProgress]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    width: `${widthProgress.value}%`,
-  }));
-
-  return (
-    <Animated.View
-      style={[
-        { height, borderRadius: height / 2, backgroundColor: color },
-        animatedStyle,
-      ]}
-    />
-  );
-}
-
+/**
+ * Spending breakdown (SPENDLY-533): the month's top five categories, each with
+ * its glyph, amount, share of the total and a bar, from the period summary's
+ * parent-category totals (`topCategoryShares`).
+ */
 export const TopCategoriesWidget = React.memo(function TopCategoriesWidget({
   categoryTotals,
   currency,
-  activeMonth,
 }: TopCategoriesWidgetProps) {
+  const router = useRouter();
   const { theme } = useTheme();
   const surfaces = useSurfaces();
 
-  const { categories, totalSpent } = useMemo(() => {
-    if (!categoryTotals) return { categories: [], totalSpent: 0 };
-    
-    let total = 0;
-    const catArray = Object.entries(categoryTotals).map(([category, amount]) => {
-      total += amount;
-      return { category, amount };
-    });
-    
-    const sorted = catArray.sort((a, b) => b.amount - a.amount).slice(0, 5);
-    const result = sorted.map(c => ({
-      ...c,
-      percentage: total > 0 ? (c.amount / total) * 100 : 0
-    }));
-    
-    return { categories: result, totalSpent: total };
-  }, [categoryTotals]);
+  // Parent categories only: the summary also stores "Parent::Sub" keys, which
+  // would double the total (SPENDLY-533).
+  const { categories, totalSpent } = useMemo(
+    () => topCategoryShares(categoryTotals, 5),
+    [categoryTotals]
+  );
 
   /** Darkest = largest share; ramp carries no positive/negative meaning. */
   const barColors = categoryRamp(theme.colors);
 
+  const openAnalytics = () => router.push("/insights" as Href);
+
   if (categories.length === 0) {
     return (
       <Section
-        title="Top Spending Categories"
+        title="Spending"
         icon={
           <PieChart size={16} color={theme.colors.mutedForeground} strokeWidth={2.3} />
         }
+        iconTint={surfaces.tile}
       >
         <EmptyState
           illustration="analytics"
           compact
-          title="No Spending Data Yet"
-          description="Your category breakdown will automatically appear after recording transactions."
-          tip="Track core essentials first: Home, Food, Travel, and Bills."
+          title="No spending yet this month"
+          description="Your top categories appear here as you record expenses."
         />
       </Section>
     );
@@ -114,64 +69,57 @@ export const TopCategoriesWidget = React.memo(function TopCategoriesWidget({
 
   return (
     <Section
-      title="Top Spending Categories"
-      subtitle={`${activeMonth} · ${currency} ${totalSpent.toLocaleString()} total`}
+      title="Spending"
+      subtitle={`Top ${categories.length} this month`}
       icon={<PieChart size={16} color={theme.colors.primary} strokeWidth={2.3} />}
       iconTint={surfaces.wash(theme.colors.primary)}
+      action={
+        <SectionAction
+          label="Details"
+          onPress={openAnalytics}
+          accessibilityLabel="Open spending analytics"
+        />
+      }
       contentStyle={styles.list}
     >
+      <View style={[styles.totalRow, { backgroundColor: surfaces.tile }]}>
+        <Text
+          style={[styles.totalLabel, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium }]}
+        >
+          Spent across categories
+        </Text>
+        <FinancialAmount value={totalSpent} currency={currency} size="md" weight="bold" />
+      </View>
+
       {categories.map((cat, idx) => {
         const barColor = barColors[idx % barColors.length];
+        const share = Math.round(cat.percentage);
         return (
-          <View key={cat.category} style={styles.item}>
-            <View style={styles.itemTop}>
-              <Text
-                style={[
-                  styles.rank,
-                  {
-                    color: theme.colors.mutedForeground,
-                    fontFamily: theme.fontFamily.semibold,
-                  },
-                ]}
-              >
-                {idx + 1}
-              </Text>
-              <Text style={styles.glyph}>{getCategoryIcon(cat.category)}</Text>
-              <Text
-                style={[
-                  styles.name,
-                  {
-                    color: theme.colors.foreground,
-                    fontFamily: theme.fontFamily.medium,
-                  },
-                ]}
-                numberOfLines={1}
-              >
-                {cat.category}
-              </Text>
-              <Amount
-                value={cat.amount}
-                currency={currency}
-                ghostable
-                animated
-                style={{
-                  fontSize: 14,
-                  fontFamily: theme.fontFamily.semibold,
-                  color: theme.colors.foreground,
-                }}
-              />
-              <MetaLabel style={styles.pct}>{cat.percentage}%</MetaLabel>
-            </View>
-
-            <View style={[styles.track, { backgroundColor: surfaces.track }]}>
-              <AnimatedCategoryBar
-                percentage={cat.percentage}
-                color={barColor}
-                index={idx}
-                height={5}
-              />
-            </View>
-          </View>
+          <ProgressIndicator
+            key={cat.category}
+            pct={cat.percentage}
+            color={barColor}
+            height={5}
+            leading={
+              <RowGlyph size={30} tint={surfaces.tile}>
+                <Text style={styles.glyph} accessible={false}>
+                  {getCategoryIcon(cat.category)}
+                </Text>
+              </RowGlyph>
+            }
+            label={cat.category}
+            value={
+              <View style={styles.valueCol}>
+                <FinancialAmount value={cat.amount} currency={currency} size="sm" />
+                <Text
+                  style={[styles.share, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium }]}
+                >
+                  {share}% of total
+                </Text>
+              </View>
+            }
+            accessibilityLabel={`${cat.category}, ${share}% of spending`}
+          />
         );
       })}
     </Section>
@@ -182,35 +130,29 @@ const styles = StyleSheet.create({
   list: {
     gap: 14,
   },
-  item: {
-    gap: 7,
-  },
-  itemTop: {
+  totalRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderCurve: "continuous",
   },
-  rank: {
-    fontSize: 11,
-    width: 12,
-    textAlign: "center",
+  totalLabel: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12,
   },
   glyph: {
     fontSize: 15,
   },
-  name: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 14,
+  valueCol: {
+    alignItems: "flex-end",
+    gap: 1,
   },
-  pct: {
-    width: 34,
-    textAlign: "right",
-  },
-  track: {
-    height: 5,
-    borderRadius: 2.5,
-    overflow: "hidden",
-    marginLeft: 20,
+  share: {
+    fontSize: 11,
   },
 });

@@ -1,9 +1,9 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
-import { Landmark, Repeat, Wallet } from "lucide-react-native";
+import { CalendarClock, ChevronRight, Landmark, Repeat, Wallet } from "lucide-react-native";
 
-import { Amount } from "@/components/common/Amount";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
 import {
   DataRow,
   MetaLabel,
@@ -18,7 +18,6 @@ import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
 import { useSettings } from "@/providers/SettingsProvider";
 import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
-import type { Subscription } from "@/shared/types/subscription";
 import { formatDateKey } from "@/shared/utils/dates";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import {
@@ -40,18 +39,18 @@ export interface SubscriptionsWidgetProps {
 
 const PREVIEW_LIMIT = 4;
 
-const TYPE_ICONS: Record<Subscription["type"], typeof Repeat> = {
-  subscription: Repeat,
-  emi: Landmark,
-  transfer: Wallet,
-};
-
 function dueLabel(days: number): string {
   if (days <= 0) return "Due today";
   if (days === 1) return "Due tomorrow";
   return `Due in ${days} days`;
 }
 
+/**
+ * Upcoming commitments (SPENDLY-533): the next dues across recurring
+ * payments, open card bills and loans, with the 7-day and monthly totals as
+ * real amounts. Same sources, same idle-deferred card/loan listeners, same
+ * routes as before.
+ */
 export const SubscriptionsWidget = memo(function SubscriptionsWidget({
   currency,
   extraDues: explicitExtraDues,
@@ -140,56 +139,59 @@ export const SubscriptionsWidget = memo(function SubscriptionsWidget({
 
   return (
     <Section
-      title="Upcoming Commitments"
-      subtitle={
-        dueInSeven > 0
-          ? `${currency} ${dueInSeven.toLocaleString()} due in 7 days · ${currency} ${commitments.totalMonthly.toLocaleString()} / mo`
-          : `${commitments.activeCount} active · ${currency} ${commitments.totalMonthly.toLocaleString()} / mo`
-      }
+      title="Upcoming"
+      subtitle={`${commitments.activeCount} active recurring`}
       icon={<Repeat size={16} color={theme.colors.primary} strokeWidth={2.3} />}
       iconTint={surfaces.wash(theme.colors.primary)}
       action={<SectionAction label="Manage" onPress={openSubscriptions} />}
     >
+      <View style={[styles.summary, { backgroundColor: surfaces.tile }]}>
+        <View style={styles.summaryItem}>
+          <MetaLabel>Due in 7 days</MetaLabel>
+          <FinancialAmount
+            value={dueInSeven}
+            currency={currency}
+            size="md"
+            weight="bold"
+            tone={dueInSeven > 0 ? "default" : "muted"}
+          />
+        </View>
+        <View style={[styles.summaryDivider, { backgroundColor: surfaces.divider }]} />
+        <View style={styles.summaryItem}>
+          <MetaLabel>Every month</MetaLabel>
+          <FinancialAmount value={commitments.totalMonthly} currency={currency} size="md" weight="bold" />
+        </View>
+      </View>
+
       {preview.length > 0 ? (
-        <View>
+        <View style={styles.list}>
           {preview.map((item, idx) => {
             const Icon = item.kind === "card" ? Landmark : item.kind === "borrowing" ? Wallet : Repeat;
             const isImminent = item.daysRemaining <= 3;
+            const tint = isImminent ? theme.colors.warning : theme.colors.primary;
             return (
               <DataRow
                 key={`${item.kind}-${item.id}`}
                 onPress={openSubscriptions}
                 divider={idx < preview.length - 1}
                 leading={
-                  <RowGlyph size={34} tint={surfaces.tile}>
-                    <Icon
-                      size={15}
-                      color={theme.colors.mutedForeground}
-                      strokeWidth={2.2}
-                    />
+                  <RowGlyph size={36} tint={surfaces.wash(tint)}>
+                    <Icon size={15} color={tint} strokeWidth={2.2} />
                   </RowGlyph>
                 }
                 title={item.name}
+                meta={
+                  item.kind === "card" ? "Card bill" : item.kind === "borrowing" ? "Loan" : "Recurring"
+                }
                 value={
-                  <Amount
-                    value={item.amount}
-                    currency={currency}
-                    ghostable
-                    style={{
-                      fontSize: 14.5,
-                      fontFamily: theme.fontFamily.semibold,
-                      color: theme.colors.foreground,
-                    }}
-                  />
+                  <FinancialAmount value={item.amount} currency={currency} size="sm" sign="minus" />
                 }
                 valueMeta={
                   <Text
                     style={[
                       styles.due,
                       {
-                        color: isImminent
-                          ? theme.colors.warning
-                          : theme.colors.mutedForeground,
+                        color: isImminent ? theme.colors.warning : theme.colors.mutedForeground,
                         fontFamily: theme.fontFamily.medium,
                       },
                     ]}
@@ -204,9 +206,21 @@ export const SubscriptionsWidget = memo(function SubscriptionsWidget({
           })}
         </View>
       ) : (
-        <MetaLabel numberOfLines={2}>
-          Repeating merchants like Netflix will show up here.
-        </MetaLabel>
+        <View style={styles.empty}>
+          <View style={[styles.emptyGlyph, { backgroundColor: surfaces.wash(theme.colors.primary) }]}>
+            <CalendarClock size={18} color={theme.colors.primary} strokeWidth={2.2} />
+          </View>
+          <View style={styles.emptyText}>
+            <Text
+              style={[styles.emptyTitle, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
+            >
+              Nothing due soon
+            </Text>
+            <MetaLabel numberOfLines={2}>
+              Repeating merchants like Netflix will show up here.
+            </MetaLabel>
+          </View>
+        </View>
       )}
       {/* SPENDLY-179: every due date, by day */}
       <Pressable
@@ -214,19 +228,73 @@ export const SubscriptionsWidget = memo(function SubscriptionsWidget({
         accessibilityRole="link"
         accessibilityLabel="View all commitments in the financial calendar"
         hitSlop={8}
-        style={{ alignSelf: "flex-start", paddingTop: 8, minHeight: 32, justifyContent: "center" }}
+        style={({ pressed }) => [styles.link, pressed && { opacity: 0.7 }]}
       >
-        <Text style={{ color: theme.colors.primary, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.xs }}>
-          View in calendar →
+        <Text style={[styles.linkText, { color: theme.colors.primary, fontFamily: theme.fontFamily.semibold }]}>
+          View in calendar
         </Text>
+        <ChevronRight size={14} color={theme.colors.primary} strokeWidth={2.4} />
       </Pressable>
     </Section>
   );
 });
 
 const styles = StyleSheet.create({
+  summary: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderCurve: "continuous",
+    marginBottom: 6,
+  },
+  summaryItem: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  summaryDivider: {
+    width: StyleSheet.hairlineWidth,
+    marginHorizontal: 12,
+  },
+  list: {
+    marginTop: 2,
+  },
   due: {
     fontSize: 11,
     lineHeight: 15,
+  },
+  empty: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 8,
+  },
+  emptyGlyph: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  emptyTitle: {
+    fontSize: 14,
+  },
+  link: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 1,
+    alignSelf: "flex-start",
+    marginTop: 8,
+    minHeight: 32,
+  },
+  linkText: {
+    fontSize: 13,
   },
 });
