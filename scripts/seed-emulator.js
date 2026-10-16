@@ -317,6 +317,8 @@ function buildDemoData(today = new Date()) {
     },
   };
 
+  const financialSummaries = buildDashboardSummaries(expenses, incomes, today);
+
   return {
     userDoc,
     collections: {
@@ -324,6 +326,7 @@ function buildDemoData(today = new Date()) {
       accounts,
       expenses,
       incomes,
+      financialSummaries,
       categoryBudgets,
       subscriptions,
       financialGoals,
@@ -396,6 +399,52 @@ async function seed() {
   console.log(`Sign in to Spendly Test as ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
 }
 
+/**
+ * The materialized `financialSummaries/dashboard_<YYYY-MM>` docs the Dashboard
+ * reads (Income & expenses, Safe to Spend, budgets). In the app every create
+ * keeps them current through `buildDashboardSummaryOps`
+ * (shared/utils/dashboardMutations.ts); the seed writes rows directly, so it
+ * has to build the same shape itself: totals, `category` and
+ * `category::subcategory` keys, and one transaction count per row.
+ */
+function buildDashboardSummaries(expenses, incomes, calculatedAt) {
+  const byMonth = new Map();
+  const bucket = (month) => {
+    if (!byMonth.has(month)) {
+      byMonth.set(month, {
+        period: month,
+        totalExpenses: 0,
+        totalIncome: 0,
+        categoryTotals: {},
+        transactionCount: 0,
+        summaryVersion: 1,
+        calculatedAt,
+      });
+    }
+    return byMonth.get(month);
+  };
+  const add = (totals, key, amount) => {
+    totals[key] = (totals[key] || 0) + amount;
+  };
+
+  for (const { data } of expenses) {
+    const summary = bucket(data.month);
+    summary.totalExpenses += data.amount;
+    summary.transactionCount += 1;
+    add(summary.categoryTotals, data.category, data.amount);
+    if (data.subcategory) add(summary.categoryTotals, `${data.category}::${data.subcategory}`, data.amount);
+  }
+  for (const { data } of incomes) {
+    const summary = bucket(data.month);
+    summary.totalIncome += data.amount;
+    summary.transactionCount += 1;
+  }
+
+  return [...byMonth.values()]
+    .sort((a, b) => a.period.localeCompare(b.period))
+    .map((data) => ({ id: `dashboard_${data.period}`, data }));
+}
+
 if (require.main === module) {
   seed().catch((error) => {
     console.error(error);
@@ -412,4 +461,5 @@ module.exports = {
   BUDGETS,
   seedSafetyBlocker,
   buildDemoData,
+  buildDashboardSummaries,
 };

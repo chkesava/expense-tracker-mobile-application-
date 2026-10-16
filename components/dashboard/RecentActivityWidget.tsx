@@ -12,13 +12,19 @@ import {
   SectionAction,
   useSurfaces,
 } from "@/components/dashboard/primitives";
+import { useSettings } from "@/providers/SettingsProvider";
+import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
 import type { Expense } from "@/shared/types/expense";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
+import { signedCurrencyPrefix } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export interface RecentActivityWidgetProps {
   expenses: Expense[];
   currency: string;
   loading?: boolean;
+  /** Account id → display name, from the accounts the screen already holds. */
+  accountNames?: ReadonlyMap<string, string>;
   onEditExpense: (expense: Expense) => void;
   onViewAll: () => void;
 }
@@ -29,18 +35,22 @@ export const RecentActivityWidget = memo(function RecentActivityWidget({
   expenses,
   currency,
   loading = false,
+  accountNames,
   onEditExpense,
   onViewAll,
 }: RecentActivityWidgetProps) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
+  const { settings } = useSettings();
 
   const recentTransactions = expenses.slice(0, PREVIEW_LIMIT);
-  const hasMore = expenses.length > PREVIEW_LIMIT;
+  // The feed is a limit-N query, so its length can't tell whether older rows
+  // exist; the full ledger is always one tap away once there is any activity.
+  const canViewAll = recentTransactions.length > 0;
 
   return (
     <Section
-      title="Recent Transactions"
+      title="Recent activity"
       subtitle={
         loading && expenses.length === 0
           ? "Loading transactions..."
@@ -50,12 +60,13 @@ export const RecentActivityWidget = memo(function RecentActivityWidget({
       }
       icon={<Receipt size={16} color={theme.colors.primary} strokeWidth={2.3} />}
       iconTint={surfaces.wash(theme.colors.primary)}
-      action={hasMore ? <SectionAction label="View all" onPress={onViewAll} /> : null}
-      footer={
-        hasMore ? (
-          <View style={styles.seeAll}>
-            <SectionAction label="See all transactions" onPress={onViewAll} />
-          </View>
+      action={
+        canViewAll ? (
+          <SectionAction
+            label="View all"
+            onPress={onViewAll}
+            accessibilityLabel="View all transactions"
+          />
         ) : null
       }
     >
@@ -93,43 +104,48 @@ export const RecentActivityWidget = memo(function RecentActivityWidget({
         />
       ) : (
         <View>
-          {recentTransactions.map((item, index) => (
-            <DataRow
-              key={item.id || `tx-${index}`}
-              onPress={() => onEditExpense(item)}
-              divider={index < recentTransactions.length - 1}
-              leading={
-                <RowGlyph size={34} tint={surfaces.tile}>
-                  <Text
-                    style={[
-                      styles.initial,
-                      {
-                        color: theme.colors.mutedForeground,
-                        fontFamily: theme.fontFamily.semibold,
-                      },
-                    ]}
-                  >
-                    {item.category?.charAt(0).toUpperCase() || "?"}
-                  </Text>
-                </RowGlyph>
-              }
-              title={item.note || item.category || "Expense"}
-              meta={[item.date, item.category].filter(Boolean).join(" · ")}
-              value={
-                <Amount
-                  value={item.amount}
-                  currency={currency}
-                  ghostable
-                  style={{
-                    fontSize: 14.5,
-                    fontFamily: theme.fontFamily.semibold,
-                    color: theme.colors.foreground,
-                  }}
-                />
-              }
-              accessibilityLabel={`Edit ${item.note || item.category || "expense"}`}
-            />
-          ))}
+          {recentTransactions.map((item, index) => {
+            const title = item.note || item.category || "Expense";
+            const accountName = item.accountId ? accountNames?.get(item.accountId) : undefined;
+            const meta = [
+              item.date ? formatDisplayDate(item.date, settings.dateFormat) : null,
+              accountName,
+              item.note ? item.category : null,
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            return (
+              <DataRow
+                key={item.id || `tx-${index}`}
+                onPress={() => onEditExpense(item)}
+                divider={index < recentTransactions.length - 1}
+                leading={
+                  <RowGlyph size={38} tint={surfaces.tile}>
+                    <Text style={styles.glyph} accessible={false}>
+                      {item.category ? getCategoryIcon(item.category) : "📦"}
+                    </Text>
+                  </RowGlyph>
+                }
+                title={title}
+                meta={meta}
+                value={
+                  <Amount
+                    value={item.amount}
+                    currency={currency}
+                    prefix={signedCurrencyPrefix("-", currency)}
+                    ghostable
+                    numberOfLines={1}
+                    style={{
+                      fontSize: 14.5,
+                      fontFamily: theme.fontFamily.semibold,
+                      color: theme.colors.foreground,
+                    }}
+                  />
+                }
+                accessibilityLabel={`Edit ${title}`}
+              />
+            );
+          })}
         </View>
       )}
     </Section>
@@ -137,14 +153,7 @@ export const RecentActivityWidget = memo(function RecentActivityWidget({
 });
 
 const styles = StyleSheet.create({
-  initial: {
-    fontSize: 13,
-  },
-  seeAll: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 2,
-    minHeight: 32,
+  glyph: {
+    fontSize: 17,
   },
 });

@@ -14,7 +14,7 @@ import { haptic } from "@/lib/haptics";
 import { useTranslation } from "@/providers/LocalizationProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
-import { ACCENT_PALETTES } from "@/theme/tokens";
+import { ACCENT_PALETTES, THEME_LABELS, themeOwnsAccent } from "@/theme/tokens";
 
 export function PersonalizationPreviewCard() {
   const { theme, themeName, themeMode, accentColor } = useTheme();
@@ -65,7 +65,9 @@ export function PersonalizationPreviewCard() {
             ]}
           />
           <Text style={[styles.badgeText, { color: theme.colors.primary }]}>
-            {palette.label} · {theme.name.toUpperCase()}
+            {themeOwnsAccent(theme.name)
+              ? THEME_LABELS[theme.name]
+              : `${palette.label} · ${theme.name.toUpperCase()}`}
           </Text>
         </View>
         <Text style={[styles.dateText, { color: theme.colors.mutedForeground }]}>

@@ -24,6 +24,7 @@ import {
   createTheme,
   isAccentColorName,
   isThemeName,
+  themeUsesDarkPalette,
   type AccentColorName,
   type ThemeName,
   type ThemeTokens,
@@ -261,15 +262,7 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
 }
 
 function themeUsesOppositeToggle(name: ThemeName): ThemeName {
-  const darkish = [
-    "dark",
-    "midnight",
-    "midnight-olive",
-    "cyberpunk",
-    "deep-sea",
-    "glass-3d",
-  ].includes(name);
-  return darkish ? "light" : "dark";
+  return themeUsesDarkPalette(name) ? "light" : "dark";
 }
 
 export function useTheme() {
