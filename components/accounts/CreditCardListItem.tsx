@@ -6,20 +6,20 @@ import {
   Calendar,
   CheckCircle2,
   CreditCard,
+  FilePlus2,
 } from "lucide-react-native";
 
-import {
-  ACCOUNT_GREEN,
-  CARD_ORANGE,
-} from "@/components/accounts/accountScreenTheme";
-import { Amount } from "@/components/common/Amount";
+import { shadeCardAccent } from "@/components/accounts/accountScreenTheme";
 import { LiabilityAmount } from "@/components/common/LiabilityAmount";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
+import { ProgressIndicator, type ProgressStatus } from "@/components/dashboard/ProgressIndicator";
+import { MetaLabel } from "@/components/dashboard/primitives";
 import { useSettings } from "@/providers/SettingsProvider";
 import type { CreditCardBill } from "@/shared/types/creditCardBill";
+import { creditUtilizationBand } from "@/shared/utils/creditCardPresentation";
 import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 
 export type CreditCardRowModel = {
   id: string;
@@ -44,6 +44,15 @@ export type CreditCardRowModel = {
   openBill: CreditCardBill | null;
 };
 
+/**
+ * One credit card in the Cards section (SPENDLY-535).
+ *
+ * The body (identity, figures, utilisation, open statement) is one pressable
+ * that opens the card; the actions live in a footer beside it. They used to be
+ * pressables inside the card's pressable — buttons inside a button, which
+ * React rejects on web and which made the presses compete on native. The card
+ * keeps the user's own colour on its plastic; everything else is theme tokens.
+ */
 export const CreditCardListItem = memo(function CreditCardListItem({
   row,
   currency,
@@ -59,278 +68,196 @@ export const CreditCardListItem = memo(function CreditCardListItem({
   onAddStatement: (id: string) => void;
   onPay: (id: string) => void;
 }) {
-  const { theme, themeName } = useTheme();
+  const { theme } = useTheme();
   const surfaces = useSurfaces();
   const { settings } = useSettings();
-  const isDark = themeUsesDarkPalette(themeName);
   const utilizationPercent = Math.round(Math.min(100, Math.max(0, row.utilization)));
+  const band = creditUtilizationBand(utilizationPercent);
+  const utilStatus: ProgressStatus =
+    band.level === "high" ? "over" : band.level === "moderate" ? "watch" : "good";
 
   return (
-    <Pressable
-      onPress={() => onPress(row.id)}
-      onLongPress={() => onLongPress(row.id)}
-      style={({ pressed }) => [
+    <View
+      style={[
         styles.card,
-        {
-          backgroundColor: isDark ? "#10141C" : theme.colors.card,
-          borderColor: isDark ? "rgba(148, 163, 184, 0.12)" : theme.colors.border,
-          opacity: pressed ? 0.94 : 1,
-        },
+        { backgroundColor: theme.colors.card, borderColor: theme.colors.outlineVariant },
       ]}
-      accessibilityRole="button"
-      accessibilityLabel={`${row.name}, ${utilizationPercent} percent used`}
     >
-      <View style={styles.topRow}>
-        <View style={styles.identity}>
-          <LinearGradient
-            colors={[row.accent, shadeAccent(row.accent)]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.plastic}
-          >
-            <View style={styles.chip} />
-            <CreditCard size={16} color="#FFFFFF" strokeWidth={2.2} />
-          </LinearGradient>
-          <View style={styles.copy}>
-            <Text
-              style={[styles.name, { color: theme.colors.foreground }]}
-              numberOfLines={1}
+      <Pressable
+        onPress={() => onPress(row.id)}
+        onLongPress={() => onLongPress(row.id)}
+        android_ripple={{ color: surfaces.track, borderless: false }}
+        style={({ pressed }) => [styles.body, pressed && styles.pressed]}
+        accessibilityRole="button"
+        accessibilityLabel={`${row.name}, ${utilizationPercent} percent used`}
+      >
+        <View style={styles.topRow}>
+          <View style={styles.identity}>
+            <LinearGradient
+              colors={[row.accent, shadeCardAccent(row.accent)]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.plastic}
             >
-              {row.name}
+              <View style={styles.chip} />
+              <CreditCard size={16} color="#FFFFFF" strokeWidth={2.2} />
+            </LinearGradient>
+            <View style={styles.copy}>
+              <Text
+                style={[styles.name, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
+                numberOfLines={1}
+              >
+                {row.name}
+              </Text>
+              <Text
+                style={[styles.identityLine, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+                numberOfLines={1}
+              >
+                {row.identityLine}
+              </Text>
+              {row.reconciliationWarning ? (
+                <View style={styles.warningRow}>
+                  <AlertTriangle size={12} color={theme.colors.warning} strokeWidth={2.4} />
+                  <Text
+                    style={[styles.warningText, { color: theme.colors.warning, fontFamily: theme.fontFamily.medium }]}
+                    numberOfLines={2}
+                  >
+                    {row.reconciliationWarning}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+          <View style={[styles.resetBadge, { backgroundColor: surfaces.control }]}>
+            <Calendar size={12} color={theme.colors.mutedForeground} />
+            <Text style={[styles.resetText, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium }]}>
+              {row.billDayConfigured ? `Resets in ${row.daysRemaining}d` : "Set bill date"}
             </Text>
-            <Text
-              style={[styles.identityLine, { color: theme.colors.mutedForeground }]}
-              numberOfLines={1}
-            >
-              {row.identityLine}
-            </Text>
-            {row.reconciliationWarning ? (
-              <View style={styles.warningRow}>
-                <AlertTriangle size={12} color={CARD_ORANGE} strokeWidth={2.4} />
-                <Text style={styles.warningText} numberOfLines={1}>
-                  {row.reconciliationWarning}
-                </Text>
+          </View>
+        </View>
+
+        <View style={styles.metrics}>
+          <View style={styles.metricCol}>
+            <MetaLabel>Outstanding</MetaLabel>
+            {/* LiabilityAmount keeps its minus even with amounts hidden. */}
+            <LiabilityAmount
+              value={row.outstanding}
+              currency={currency}
+              ghostable
+              style={[styles.metricValue, { fontFamily: theme.fontFamily.bold }]}
+            />
+          </View>
+          <View style={[styles.metricCol, styles.metricRight]}>
+            <MetaLabel>Available limit</MetaLabel>
+            <FinancialAmount value={row.availableCredit} currency={currency} size="lg" weight="bold" tone="positive" />
+          </View>
+        </View>
+
+        <View style={[styles.splitBox, { backgroundColor: surfaces.tile }]}>
+          <SplitFigure label="Statement due" value={row.statementDue} currency={currency} />
+          <SplitFigure label="Unbilled" value={row.usedThisCycle} currency={currency} />
+          {row.cancelledSpend ? (
+            <SplitFigure label="Cancelled" value={row.cancelledSpend} currency={currency} />
+          ) : null}
+        </View>
+
+        <ProgressIndicator
+          pct={utilizationPercent}
+          status={utilStatus}
+          statusLabel={`${band.word} utilisation`}
+          trailing={`${utilizationPercent}% used`}
+          accessibilityLabel={`${row.name} credit utilisation`}
+        />
+
+        {row.openBill ? (
+          <View style={[styles.statement, { borderTopColor: surfaces.divider }]}>
+            <MetaLabel>Statement · {row.openBill.status.replaceAll("_", " ").toLowerCase()}</MetaLabel>
+            <View style={styles.statementRow}>
+              <FinancialAmount value={row.openBill.statementAmount} currency={currency} size="md" weight="bold" />
+              <Text style={[styles.due, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium }]}>
+                Due {formatDisplayDate(row.openBill.dueDate, settings.dateFormat)}
+              </Text>
+            </View>
+            {row.openBill.minimumDueAmount > 0 ? (
+              <View style={styles.statementRow}>
+                <MetaLabel>Minimum due</MetaLabel>
+                <FinancialAmount value={row.openBill.minimumDueAmount} currency={currency} size="sm" />
               </View>
             ) : null}
           </View>
-        </View>
-        <View
-          style={[
-            styles.resetBadge,
-            {
-              backgroundColor: surfaces.control,
-              borderColor: isDark ? "rgba(148,163,184,0.14)" : theme.colors.border,
-            },
-          ]}
-        >
-          <Calendar size={12} color={theme.colors.mutedForeground} />
-          <Text style={[styles.resetText, { color: theme.colors.mutedForeground }]}>
-            {row.billDayConfigured ? `Resets in ${row.daysRemaining}d` : "Set bill date"}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.metrics}>
-        <View style={styles.metricCol}>
-          <Text style={[styles.metricLabel, { color: theme.colors.mutedForeground }]}>
-            Outstanding
-          </Text>
-          <LiabilityAmount
-            value={row.outstanding}
-            currency={currency}
-            ghostable
-            style={styles.metricValue}
-          />
-        </View>
-        <View style={[styles.metricCol, styles.metricRight]}>
-          <Text style={[styles.metricLabel, { color: theme.colors.mutedForeground }]}>
-            Available Limit
-          </Text>
-          <Amount
-            value={row.availableCredit}
-            currency={currency}
-            ghostable
-            style={[
-              styles.metricValue,
-              { color: isDark ? ACCOUNT_GREEN : theme.colors.success },
-            ]}
-          />
-        </View>
-      </View>
-
-      <View style={styles.splitRow}>
-        <Text style={[styles.splitLabel, { color: theme.colors.mutedForeground }]}>
-          Statement due
-        </Text>
-        <Amount
-          value={row.statementDue}
-          currency={currency}
-          ghostable
-          style={[styles.splitValue, { color: theme.colors.foreground }]}
-        />
-        <Text style={[styles.splitLabel, { color: theme.colors.mutedForeground }]}>
-          · Unbilled
-        </Text>
-        <Amount
-          value={row.usedThisCycle}
-          currency={currency}
-          ghostable
-          style={[styles.splitValue, { color: theme.colors.foreground }]}
-        />
-        {row.cancelledSpend ? (
-          <>
-            <Text
-              style={[styles.splitLabel, { color: theme.colors.mutedForeground }]}
-            >
-              · Cancelled
-            </Text>
-            <Amount
-              value={row.cancelledSpend}
-              currency={currency}
-              ghostable
-              style={[styles.splitValue, { color: theme.colors.foreground }]}
-            />
-          </>
         ) : null}
-      </View>
+      </Pressable>
 
-      <View style={styles.utilRow}>
-        <View
-          style={[
-            styles.track,
-            { backgroundColor: surfaces.track },
-          ]}
-        >
-          <View
-            style={[
-              styles.fill,
-              {
-                width: `${Math.min(100, Math.max(0, row.utilization))}%`,
-                backgroundColor: row.accent,
-              },
-            ]}
-          />
+      <View style={[styles.footer, { borderTopColor: surfaces.divider }]}>
+        <View style={styles.limit}>
+          <MetaLabel>Limit</MetaLabel>
+          <FinancialAmount value={row.limit} currency={currency} size="xs" tone="muted" />
         </View>
-        <Text style={[styles.utilLabel, { color: theme.colors.mutedForeground }]}>
-          {utilizationPercent}% Used
-        </Text>
-      </View>
-
-      {row.openBill ? (
-        <View
-          style={[
-            styles.statement,
-            { borderTopColor: isDark ? "rgba(148,163,184,0.12)" : theme.colors.border },
-          ]}
-        >
-          <Text style={[styles.statementKicker, { color: theme.colors.mutedForeground }]}>
-            Statement · {row.openBill.status.replaceAll("_", " ")}
-          </Text>
-          <View style={styles.statementRow}>
-            <Amount
-              value={row.openBill.statementAmount}
-              currency={currency}
-              ghostable
-            />
-            <Text style={[styles.due, { color: theme.colors.mutedForeground }]}>
-              Due {formatDisplayDate(row.openBill.dueDate, settings.dateFormat)}
-            </Text>
-          </View>
-          {row.openBill.minimumDueAmount > 0 ? (
-            <View style={styles.statementRow}>
-              <Text style={[styles.minDueLabel, { color: theme.colors.mutedForeground }]}>
-                Minimum due
-              </Text>
-              <Amount
-                value={row.openBill.minimumDueAmount}
-                currency={currency}
-                ghostable
-                style={[styles.minDueValue, { color: theme.colors.foreground }]}
-              />
-            </View>
-          ) : null}
-        </View>
-      ) : (
-        <Pressable
-          onPress={(event) => {
-            event.stopPropagation();
-            onAddStatement(row.id);
-          }}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Add statement bill"
-        >
-          <Text style={styles.addStatement}>+ Add statement bill</Text>
-        </Pressable>
-      )}
-
-      <View style={styles.footer}>
-        <Text style={[styles.limit, { color: theme.colors.mutedForeground }]}>
-          Limit
-        </Text>
-        <Amount
-          value={row.limit}
-          currency={currency}
-          ghostable
-          style={[styles.limitAmount, { color: theme.colors.mutedForeground }]}
-        />
-        <View style={{ flex: 1 }} />
-        <Pressable
-          onPress={(event) => {
-            event.stopPropagation();
-            onPay(row.id);
-          }}
-          style={[
-            styles.payBtn,
-            {
-              backgroundColor: isDark ? "rgba(74, 222, 128, 0.12)" : "rgba(22, 163, 74, 0.1)",
-              borderColor: isDark ? "rgba(74, 222, 128, 0.35)" : theme.colors.success,
-            },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Pay bill"
-        >
-          <CheckCircle2 size={13} color={isDark ? ACCOUNT_GREEN : theme.colors.success} />
-          <Text
-            style={[
-              styles.payLabel,
-              { color: isDark ? ACCOUNT_GREEN : theme.colors.success },
+        {row.openBill ? null : (
+          <Pressable
+            onPress={() => onAddStatement(row.id)}
+            hitSlop={6}
+            style={({ pressed }) => [
+              styles.footerBtn,
+              { backgroundColor: surfaces.control },
+              pressed && styles.pressed,
             ]}
+            accessibilityRole="button"
+            accessibilityLabel={`Add statement bill for ${row.name}`}
           >
-            Pay Bill
+            <FilePlus2 size={13} color={theme.colors.foreground} />
+            <Text style={[styles.footerLabel, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}>
+              Statement
+            </Text>
+          </Pressable>
+        )}
+        <Pressable
+          onPress={() => onPay(row.id)}
+          hitSlop={6}
+          style={({ pressed }) => [
+            styles.footerBtn,
+            {
+              backgroundColor: surfaces.wash(theme.colors.primary),
+              borderColor: withAlpha(theme.colors.primary, 0.35),
+              borderWidth: StyleSheet.hairlineWidth,
+            },
+            pressed && styles.pressed,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={`Pay ${row.name} bill`}
+        >
+          <CheckCircle2 size={13} color={theme.colors.primary} />
+          <Text style={[styles.footerLabel, { color: theme.colors.primary, fontFamily: theme.fontFamily.semibold }]}>
+            Pay bill
           </Text>
         </Pressable>
       </View>
-    </Pressable>
+    </View>
   );
 });
 
-function shadeAccent(hex: string): string {
-  const raw = hex.replace("#", "");
-  const full =
-    raw.length === 3
-      ? raw
-          .split("")
-          .map((char) => char + char)
-          .join("")
-      : raw;
-  if (full.length !== 6 || Number.isNaN(Number.parseInt(full, 16))) {
-    return "#312E81";
-  }
-  const value = Number.parseInt(full, 16);
-  const r = Math.max(0, ((value >> 16) & 255) - 36);
-  const g = Math.max(0, ((value >> 8) & 255) - 42);
-  const b = Math.max(0, (value & 255) - 18);
-  return `#${[r, g, b].map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+function SplitFigure({ label, value, currency }: { label: string; value: number; currency: string }) {
+  return (
+    <View style={styles.splitFigure}>
+      <MetaLabel>{label}</MetaLabel>
+      <FinancialAmount value={value} currency={currency} size="sm" weight="semibold" />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
   card: {
-    padding: 16,
     borderRadius: 20,
     borderCurve: "continuous",
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
+  },
+  body: {
+    padding: 16,
     gap: 14,
+  },
+  pressed: {
+    opacity: 0.88,
   },
   topRow: {
     flexDirection: "row",
@@ -340,179 +267,124 @@ const styles = StyleSheet.create({
   },
   identity: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 12,
     flex: 1,
     minWidth: 0,
   },
   plastic: {
     width: 48,
-    height: 36,
-    borderRadius: 10,
-    borderCurve: "continuous",
-    padding: 6,
+    height: 32,
+    borderRadius: 7,
+    padding: 5,
     justifyContent: "space-between",
+    alignItems: "flex-end",
   },
   chip: {
+    alignSelf: "flex-start",
     width: 10,
-    height: 8,
+    height: 7,
     borderRadius: 2,
-    backgroundColor: "rgba(253, 230, 138, 0.92)",
+    backgroundColor: "rgba(255,255,255,0.65)",
   },
   copy: {
     flex: 1,
     minWidth: 0,
-    gap: 3,
+    gap: 2,
   },
   name: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 15,
+    letterSpacing: -0.2,
   },
   identityLine: {
     fontSize: 12,
-    fontWeight: "500",
   },
   warningRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
     marginTop: 2,
   },
   warningText: {
     flex: 1,
-    color: CARD_ORANGE,
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 11,
   },
   resetBadge: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8,
+    gap: 5,
+    paddingHorizontal: 9,
     paddingVertical: 5,
-    borderRadius: 10,
-    borderWidth: 1,
-    gap: 4,
-    flexShrink: 0,
+    borderRadius: 999,
   },
   resetText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 11,
   },
   metrics: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
     gap: 12,
   },
   metricCol: {
-    gap: 4,
     flex: 1,
+    minWidth: 0,
+    gap: 3,
   },
   metricRight: {
     alignItems: "flex-end",
   },
-  metricLabel: {
-    fontSize: 12,
-    fontWeight: "500",
-  },
   metricValue: {
-    fontSize: 18,
-    fontWeight: "800",
-    fontVariant: ["tabular-nums"],
+    fontSize: 20,
   },
-  splitRow: {
+  splitBox: {
     flexDirection: "row",
-    alignItems: "center",
     flexWrap: "wrap",
-    gap: 6,
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderCurve: "continuous",
   },
-  splitLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  splitValue: {
-    fontSize: 11,
-    fontWeight: "700",
-    fontVariant: ["tabular-nums"],
-  },
-  utilRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  track: {
-    flex: 1,
-    height: 6,
-    borderRadius: 999,
-    overflow: "hidden",
-  },
-  fill: {
-    height: "100%",
-    borderRadius: 999,
-  },
-  utilLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    fontVariant: ["tabular-nums"],
+  splitFigure: {
+    flexGrow: 1,
+    minWidth: 80,
+    gap: 2,
   },
   statement: {
-    gap: 4,
-    paddingTop: 10,
+    paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  statementKicker: {
-    fontSize: 11,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    gap: 6,
   },
   statementRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
   },
   due: {
-    fontSize: 13,
-  },
-  minDueLabel: {
     fontSize: 12,
-    fontWeight: "600",
-  },
-  minDueValue: {
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  addStatement: {
-    color: CARD_ORANGE,
-    fontSize: 13,
-    fontWeight: "700",
   },
   footer: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   limit: {
-    fontSize: 11,
-    fontWeight: "600",
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
   },
-  limitAmount: {
-    fontSize: 11,
-    fontWeight: "700",
-    fontVariant: ["tabular-nums"],
-  },
-  payBtn: {
+  footerBtn: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 6,
+    minHeight: 40,
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 12,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    gap: 5,
+    borderRadius: 999,
   },
-  payLabel: {
-    fontSize: 11,
-    fontWeight: "700",
+  footerLabel: {
+    fontSize: 12.5,
   },
 });

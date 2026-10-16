@@ -7,7 +7,7 @@ import { NeedsReconciliationText } from "@/components/accounts/NeedsReconciliati
 import type { Account } from "@/shared/types/expense";
 import { formatAccountIdentityLine } from "@/shared/utils/accountIdentity";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 
 /**
  * One account in the Accounts list (SPENDLY-139).
@@ -16,13 +16,17 @@ import { useSurfaces } from "@/theme/surfaces";
  * this markup that had already drifted apart — only the deposit copy carried an
  * accessibility label. They differ solely in their icon and in what sits on the
  * right, so both of those are passed in and everything else is shared.
+ *
+ * SPENDLY-535: the row and its edit pencil are sibling pressables inside one
+ * card. The pencil used to sit inside the row's Pressable — a button inside a
+ * button, which React rejects on web and which made the two presses compete
+ * on native. The icon tile now takes one theme `tint` instead of fixed hexes.
  */
 export function AccountRow({
   account,
   typeName,
   icon,
-  accentBg,
-  accentBorder,
+  tint,
   trailing,
   onPress,
   onLongPress,
@@ -32,8 +36,8 @@ export function AccountRow({
   /** Drives the identity line. */
   typeName: string;
   icon: ReactNode;
-  accentBg: string;
-  accentBorder: string;
+  /** Semantic theme colour for the icon tile (washed for the fill). */
+  tint: string;
   /** The value block — a balance, or an outstanding amount with its caption. */
   trailing: ReactNode;
   onPress: () => void;
@@ -42,105 +46,111 @@ export function AccountRow({
 }) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
-  const ripple = surfaces.track;
 
   return (
-    <Pressable
-      onPress={onPress}
-      onLongPress={onLongPress}
-      android_ripple={{ color: ripple, borderless: false }}
-      style={({ pressed }) => [
-        styles.accountRow,
-        {
-          backgroundColor: theme.colors.card,
-          borderColor: theme.colors.outlineVariant,
-          opacity: pressed ? 0.92 : 1,
-        },
+    <View
+      style={[
+        styles.card,
+        { backgroundColor: theme.colors.card, borderColor: theme.colors.outlineVariant },
       ]}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
     >
-      <View
-        style={[
-          styles.accountIconBox,
-          {
-            backgroundColor: accentBg,
-            borderColor: accentBorder,
-            borderWidth: StyleSheet.hairlineWidth,
-          },
-        ]}
+      <Pressable
+        onPress={onPress}
+        onLongPress={onLongPress}
+        android_ripple={{ color: surfaces.track, borderless: false }}
+        style={({ pressed }) => [styles.main, pressed && styles.pressed]}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
       >
-        {icon}
-      </View>
-
-      <View style={styles.accountMeta}>
-        <Text
-          style={[styles.accountName, { color: theme.colors.foreground }]}
-          numberOfLines={1}
+        <View
+          style={[
+            styles.iconBox,
+            {
+              backgroundColor: surfaces.wash(tint),
+              borderColor: withAlpha(tint, 0.24),
+            },
+          ]}
         >
-          {account.name}
-        </Text>
-        <Text
-          style={[styles.accountSub, { color: theme.colors.mutedForeground }]}
-          numberOfLines={1}
-        >
-          {formatAccountIdentityLine(account, typeName)}
-        </Text>
-        <NeedsReconciliationText account={account} />
-      </View>
+          {icon}
+        </View>
 
-      <View style={styles.accountRight}>
-        {trailing}
-        <AccountEditButton
-          label={`Edit ${account.name}`}
-          color={theme.colors.mutedForeground}
-          onPress={onLongPress}
-        />
+        <View style={styles.meta}>
+          <Text
+            style={[styles.name, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
+            numberOfLines={1}
+          >
+            {account.name}
+          </Text>
+          <Text
+            style={[styles.sub, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+            numberOfLines={1}
+          >
+            {formatAccountIdentityLine(account, typeName)}
+          </Text>
+          <NeedsReconciliationText account={account} />
+        </View>
+
+        <View style={styles.trailing}>{trailing}</View>
         <ChevronRight size={16} color={theme.colors.mutedForeground} />
-      </View>
-    </Pressable>
+      </Pressable>
+
+      <AccountEditButton
+        label={`Edit ${account.name}`}
+        color={theme.colors.mutedForeground}
+        onPress={onLongPress}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  accountRow: {
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 16,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
+    paddingRight: 2,
+  },
+  main: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    minHeight: 56,
+    minHeight: 64,
     paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    overflow: "hidden",
+    paddingLeft: 14,
+    paddingRight: 4,
   },
-  accountIconBox: {
+  pressed: {
+    opacity: 0.88,
+  },
+  iconBox: {
     width: 40,
     height: 40,
     borderRadius: 12,
     borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
     justifyContent: "center",
   },
-  accountMeta: {
+  meta: {
     flex: 1,
     minWidth: 0,
     gap: 2,
   },
-  accountName: {
+  name: {
     fontSize: 15,
-    fontWeight: "700",
     letterSpacing: -0.2,
   },
-  accountSub: {
+  sub: {
     fontSize: 12,
-    fontWeight: "500",
   },
-  accountRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+  trailing: {
+    alignItems: "flex-end",
     flexShrink: 0,
+    maxWidth: "45%",
   },
 });

@@ -1,20 +1,31 @@
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Plus } from "lucide-react-native";
+import { CreditCard, History, Plus, ReceiptText } from "lucide-react-native";
 
-import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { CreateCreditCardBillModal } from "@/components/creditCardBills/CreateCreditCardBillModal";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
+import {
+  DataRow,
+  RowGlyph,
+  Section,
+  toneColor,
+  useSurfaces,
+} from "@/components/dashboard/primitives";
+import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
+import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { useSettings } from "@/providers/SettingsProvider";
 import type { CreditCardBill, CreditCardBillStatus } from "@/shared/types/creditCardBill";
+import { billStatusPresentation } from "@/shared/utils/creditCardPresentation";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 
 type FilterKey =
@@ -43,29 +54,17 @@ const FILTERS: { key: FilterKey; label: string; statuses?: CreditCardBillStatus[
     { key: "paid", label: "Paid", statuses: ["PAID"] },
   ];
 
-function statusColor(
-  status: CreditCardBillStatus,
-  colors: { primary: string; destructive: string; mutedForeground: string; warning?: string }
-): string {
-  switch (status) {
-    case "OVERDUE":
-      return colors.destructive;
-    case "DUE_TODAY":
-    case "DUE_SOON":
-      return colors.primary;
-    case "PAID":
-      return colors.mutedForeground;
-    case "PARTIALLY_PAID":
-      return colors.primary;
-    default:
-      return colors.mutedForeground;
-  }
-}
-
+/**
+ * The Money hub's Card bills section (SPENDLY-535): statements grouped into
+ * current and history, each a row with its card, due date, amount and status
+ * word. Filters, sorting, the manual-bill modal and navigation are unchanged.
+ */
 export function CreditCardBillsList() {
   const router = useRouter();
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
+  const currency = useDisplayCurrency();
+  const { settings } = useSettings();
   const { bills, loading } = useCreditCardBills();
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
@@ -89,156 +88,126 @@ export function CreditCardBillsList() {
   const current = filtered.filter((b) => b.status !== "PAID" && b.status !== "CANCELLED");
   const history = filtered.filter((b) => b.status === "PAID" || b.status === "CANCELLED");
 
-  const renderBill = (bill: CreditCardBill) => (
-    <Pressable
-      key={bill.id}
-      onPress={() => {
-        haptic.selection().catch(() => undefined);
-        router.push(`/credit-card-bills/${bill.id}`);
-      }}
-      style={{ marginBottom: 10 }}
-    >
-      <Card>
-        <View style={{ gap: 6 }}>
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <Text
-              style={{
-                color: theme.colors.foreground,
-                fontWeight: "600",
-                fontSize: theme.typography.md,
-              }}
-            >
-              {accountName(bill.accountId)}
+  const openCreate = () => {
+    haptic.light().catch(() => undefined);
+    setCreateOpen(true);
+  };
+
+  const renderBill = (bill: CreditCardBill, index: number, list: CreditCardBill[]) => {
+    const status = billStatusPresentation(bill.status);
+    const statusColor = toneColor(theme.colors, status.tone);
+    const period =
+      bill.billingPeriodStart && bill.billingPeriodEnd
+        ? `${formatDisplayDate(bill.billingPeriodStart, settings.dateFormat)} – ${formatDisplayDate(bill.billingPeriodEnd, settings.dateFormat)}`
+        : null;
+    const partlyPaid = bill.remainingAmount > 0 && bill.amountPaid > 0;
+
+    return (
+      <DataRow
+        key={bill.id}
+        onPress={() => router.push(`/credit-card-bills/${bill.id}`)}
+        divider={index < list.length - 1}
+        leading={
+          <RowGlyph size={38} tint={surfaces.wash(statusColor)}>
+            <CreditCard size={17} color={statusColor} strokeWidth={2.2} />
+          </RowGlyph>
+        }
+        title={accountName(bill.accountId)}
+        meta={[`Due ${formatDisplayDate(bill.dueDate, settings.dateFormat)}`, period].filter(Boolean).join(" · ")}
+        value={
+          <FinancialAmount value={bill.statementAmount} currency={currency} size="sm" weight="bold" fit={false} />
+        }
+        valueMeta={
+          <View style={styles.statusCol}>
+            <Text style={[styles.status, { color: statusColor, fontFamily: theme.fontFamily.semibold }]}>
+              {status.word}
             </Text>
-            <Text
-              style={{
-                color: statusColor(bill.status, theme.colors),
-                fontSize: theme.typography.xs,
-                fontWeight: "700",
-                letterSpacing: 0.4,
-              }}
-            >
-              {bill.status.replaceAll("_", " ")}
-            </Text>
+            {partlyPaid ? (
+              <View style={styles.remaining}>
+                <Text style={[styles.remainingLabel, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
+                  Left
+                </Text>
+                <FinancialAmount value={bill.remainingAmount} currency={currency} size="xs" tone="muted" fit={false} />
+              </View>
+            ) : null}
           </View>
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-            }}
-          >
-            <Amount value={bill.statementAmount} />
-            <Text style={{ color: theme.colors.mutedForeground }}>
-              Due {bill.dueDate}
-            </Text>
-          </View>
-          {bill.billingPeriodStart && bill.billingPeriodEnd ? (
-            <Text
-              style={{
-                color: theme.colors.mutedForeground,
-                fontSize: theme.typography.sm,
-              }}
-            >
-              {bill.billingPeriodStart} → {bill.billingPeriodEnd}
-            </Text>
-          ) : null}
-          {bill.remainingAmount > 0 && bill.amountPaid > 0 ? (
-            <View style={{ flexDirection: "row", gap: 4, alignItems: "center" }}>
-              <Text
-                style={{
-                  color: theme.colors.mutedForeground,
-                  fontSize: theme.typography.sm,
-                }}
-              >
-                Remaining
-              </Text>
-              <Amount value={bill.remainingAmount} />
-            </View>
-          ) : null}
-        </View>
-      </Card>
-    </Pressable>
-  );
+        }
+        accessibilityLabel={`${accountName(bill.accountId)} bill, ${status.word}`}
+      />
+    );
+  };
 
   return (
-    <View style={{ gap: 12, paddingBottom: 24 }}>
-      <View
-        style={{
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <Text
-          style={{
-            color: theme.colors.foreground,
-            fontWeight: "700",
-            fontSize: theme.typography.lg,
-          }}
-        >
-          Credit Card Bills
-        </Text>
-        <Button
-          size="sm"
-          onPress={() => {
-            haptic.light().catch(
-              () => undefined
-            );
-            setCreateOpen(true);
-          }}
-        >
-          <Plus size={14} color="#fff" /> Add Bill
+    <View style={styles.container}>
+      <View style={styles.headerRow}>
+        <View style={styles.headerText}>
+          <Text style={[styles.title, { color: theme.colors.foreground, fontFamily: theme.fontFamily.bold }]}>
+            Card bills
+          </Text>
+          <Text style={[styles.subtitle, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
+            Statements by due date
+          </Text>
+        </View>
+        <Button size="sm" onPress={openCreate} accessibilityLabel="Add bill" style={styles.addBtn}>
+          <Plus size={14} color={theme.colors.primaryForeground} strokeWidth={2.4} />
+          <Text style={[styles.addLabel, { color: theme.colors.primaryForeground, fontFamily: theme.fontFamily.semibold }]}>
+            Add bill
+          </Text>
         </Button>
       </View>
 
-      <ScrollFilters
-        filter={filter}
-        onChange={setFilter}
-        isDark={isDark}
-      />
+      <HorizontalSwipeBoundary>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRow}
+          accessibilityRole="tablist"
+        >
+          {FILTERS.map((f) => (
+            <Chip
+              key={f.key}
+              label={f.label}
+              selected={filter === f.key}
+              accessibilityRole="tab"
+              onPress={() => setFilter(f.key)}
+            />
+          ))}
+        </ScrollView>
+      </HorizontalSwipeBoundary>
 
-      {loading ? (
-        <Text style={{ color: theme.colors.mutedForeground }}>Loading…</Text>
+      {loading && bills.length === 0 ? (
+        <DashboardSkeleton variant="section" rows={3} />
       ) : filtered.length === 0 ? (
         <EmptyState
-          title="No bills yet"
-          description="Statements are created automatically on each card’s bill generation day from that cycle’s spend. Due date is 5 days later. Set a bill generation day on the card if nothing appears. You can still add a bill manually."
+          illustration="cards"
+          title={filter === "all" ? "No bills yet" : "No bills in this filter"}
+          description="Statements are created on each card’s bill generation day from that cycle’s spend, due 5 days later. Set a bill day on the card if nothing appears, or add a bill yourself."
+          primaryAction={{
+            label: "Add bill",
+            icon: <Plus size={16} color={theme.colors.primaryForeground} strokeWidth={2.4} />,
+            onPress: openCreate,
+          }}
         />
       ) : (
         <>
           {current.length > 0 ? (
-            <View style={{ gap: 4 }}>
-              <Text
-                style={{
-                  color: theme.colors.mutedForeground,
-                  fontWeight: "600",
-                  marginBottom: 4,
-                }}
-              >
-                Current Bills
-              </Text>
-              {current.map(renderBill)}
-            </View>
+            <Section
+              title="Current bills"
+              subtitle={`${current.length} open`}
+              icon={<ReceiptText size={16} color={theme.colors.primary} strokeWidth={2.3} />}
+              iconTint={surfaces.wash(theme.colors.primary)}
+            >
+              {current.map((bill, index) => renderBill(bill, index, current))}
+            </Section>
           ) : null}
           {history.length > 0 ? (
-            <View style={{ gap: 4, marginTop: 8 }}>
-              <Text
-                style={{
-                  color: theme.colors.mutedForeground,
-                  fontWeight: "600",
-                  marginBottom: 4,
-                }}
-              >
-                History
-              </Text>
-              {history.map(renderBill)}
-            </View>
+            <Section
+              title="History"
+              subtitle={`${history.length} paid or cancelled`}
+              icon={<History size={16} color={theme.colors.mutedForeground} strokeWidth={2.3} />}
+            >
+              {history.map((bill, index) => renderBill(bill, index, history))}
+            </Section>
           ) : null}
         </>
       )}
@@ -253,43 +222,55 @@ export function CreditCardBillsList() {
   );
 }
 
-function ScrollFilters({
-  filter,
-  onChange,
-  isDark,
-}: {
-  filter: FilterKey;
-  onChange: (f: FilterKey) => void;
-  isDark: boolean;
-}) {
-  return (
-    <View style={styles.filterRow}>
-      {FILTERS.map((f) => {
-        const selected = filter === f.key;
-        return (
-          <Chip
-            key={f.key}
-            label={f.label}
-            selected={selected}
-            onPress={() => onChange(f.key)}
-          />
-        );
-      })}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
+  container: {
+    gap: 14,
+    paddingBottom: 24,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  headerText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  title: {
+    fontSize: 18,
+    letterSpacing: -0.3,
+  },
+  subtitle: {
+    fontSize: 12,
+  },
+  addBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  addLabel: {
+    fontSize: 13,
+  },
   filterRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 8,
+    paddingVertical: 2,
   },
-  filterPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderCurve: "continuous",
+  statusCol: {
+    alignItems: "flex-end",
+    gap: 1,
+  },
+  status: {
+    fontSize: 11.5,
+  },
+  remaining: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  remainingLabel: {
+    fontSize: 11,
   },
 });

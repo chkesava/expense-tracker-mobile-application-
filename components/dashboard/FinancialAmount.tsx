@@ -1,7 +1,8 @@
 import { memo } from "react";
-import type { StyleProp, TextStyle } from "react-native";
+import { Text, type StyleProp, type TextStyle } from "react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { useSettings } from "@/providers/SettingsProvider";
 import { signedCurrencyPrefix } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -65,6 +66,7 @@ export const FinancialAmount = memo(function FinancialAmount({
   style,
 }: FinancialAmountProps) {
   const { theme } = useTheme();
+  const { settings } = useSettings();
   const scale = AMOUNT_SIZES[size];
 
   let display = value;
@@ -96,6 +98,29 @@ export const FinancialAmount = memo(function FinancialAmount({
                 : theme.colors.foreground
             : theme.colors.foreground;
 
+  const textStyle = [
+    scale,
+    { color, fontFamily: theme.fontFamily[weight], fontVariant: ["tabular-nums" as const] },
+    style,
+  ];
+
+  // SPENDLY-535: `Amount` drops its prefix when amounts are hidden, which
+  // would erase "money in" vs "money out". Keep the sign: "-••••••".
+  if (settings?.ghostMode) {
+    const signChar = prefix?.startsWith("-") ? "-" : prefix?.startsWith("+") ? "+" : "";
+    return (
+      <Text
+        style={textStyle}
+        numberOfLines={1}
+        accessibilityLabel={
+          signChar === "-" ? "Hidden amount, money out" : signChar === "+" ? "Hidden amount, money in" : "Hidden amount"
+        }
+      >
+        {signChar}••••••
+      </Text>
+    );
+  }
+
   return (
     <Amount
       value={display}
@@ -107,11 +132,7 @@ export const FinancialAmount = memo(function FinancialAmount({
       numberOfLines={1}
       adjustsFontSizeToFit={fit}
       minimumFontScale={fit ? 0.65 : undefined}
-      style={[
-        scale,
-        { color, fontFamily: theme.fontFamily[weight], fontVariant: ["tabular-nums"] },
-        style,
-      ]}
+      style={textStyle}
     />
   );
 });
