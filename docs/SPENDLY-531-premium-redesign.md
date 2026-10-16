@@ -2,12 +2,12 @@
 
 A phased premium-fintech redesign of the Expense app. It is UI only: no financial calculations, Firestore write paths, listeners or rules change. Ganesh Seva and Nutrition are out of scope.
 
-Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`.
+Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (the dashboard) was merged to `main` in `85a83c0` on 2026-10-16. The epic stays open for later phases.
 
 | Story | Title | Branch | State |
 |---|---|---|---|
-| SPENDLY-532 | Phase 1: dashboard redesign | `feature/SPENDLY-532-dashboard-redesign` | Merged into the epic (`f800dca`, 2026-10-16). In Progress until the epic reaches `main`. Android/iOS device QA open. |
-| SPENDLY-533 | Phase 1b: finish the dashboard (remaining widgets, nav lens, shared components, motion) | `feature/SPENDLY-533-dashboard-redesign-completion` | Merged into the epic (2026-10-16). In Progress until the epic reaches `main`. Android/iOS device QA open. |
+| SPENDLY-532 | Phase 1: dashboard redesign | `feature/SPENDLY-532-dashboard-redesign` | Done. On `main` via `85a83c0` (2026-10-16). Android/iOS device QA open. |
+| SPENDLY-533 | Phase 1b: finish the dashboard (remaining widgets, nav lens, shared components, motion) | `feature/SPENDLY-533-dashboard-redesign-completion` | Done. On `main` via `85a83c0` (2026-10-16). Android/iOS device QA open. |
 
 ## Decisions
 - **Midnight Emerald is a selectable preset, not a forced default.** It's in Settings → Appearance → Custom Presets. Existing users keep their theme.
