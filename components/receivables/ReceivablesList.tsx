@@ -1,9 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { Plus } from "lucide-react-native";
+import { AlertTriangle, HandCoins, Plus } from "lucide-react-native";
 
-import { CARD_ORANGE } from "@/components/accounts/accountScreenTheme";
-import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { SearchBar } from "@/components/common/SearchBar";
 import { SkeletonCard } from "@/components/common/Skeleton";
@@ -12,7 +10,13 @@ import { ReceivableCard } from "@/components/receivables/ReceivableCard";
 import { ReceivableDetailModal } from "@/components/receivables/ReceivableDetailModal";
 import { useOpenFromRouteParam } from "@/hooks/useOpenFromRouteParam";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
+import {
+  HeroSection,
+  MetaLabel,
+  StatTile,
+  StatusStrip,
+} from "@/components/dashboard/primitives";
 import { useReceivables } from "@/hooks/useReceivables";
 import type { Receivable, ReceivableStatus } from "@/shared/types/receivable";
 import { summarizeReceivables } from "@/shared/utils/receivableMath";
@@ -109,80 +113,51 @@ export function ReceivablesList() {
   return (
     <View style={styles.container}>
       {receivables.length > 0 ? (
-        <Card style={styles.summaryCard}>
-          <View style={styles.summaryGrid}>
-            <View style={styles.summaryCell}>
-              <Text
-                style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
-              >
-                TOTAL RECEIVABLE
-              </Text>
-              <Amount
-                value={portfolio.totalOutstanding}
-                currency={displayCurrency}
-                style={{
-                  fontSize: 18,
-                  fontWeight: "900",
-                  color: theme.colors.foreground,
-                }}
-              />
+        // SPENDLY-536: the deep hero, as on Borrowings. Every figure is
+        // ghost-safe now; the interest line had printed a bare number.
+        <HeroSection
+          variant="deep"
+          title="Money lent"
+          subtitle="Still to come back to you"
+          icon={<HandCoins size={16} color={theme.colors.primary} strokeWidth={2.3} />}
+        >
+          <MetaLabel>Total receivable</MetaLabel>
+          <FinancialAmount value={portfolio.totalOutstanding} currency={displayCurrency} size="hero" weight="bold" />
+          {portfolio.totalInterest > 0 ? (
+            <View style={styles.interestLine}>
+              <MetaLabel>Includes accrued interest</MetaLabel>
+              <FinancialAmount value={portfolio.totalInterest} currency={displayCurrency} size="xs" tone="muted" />
             </View>
+          ) : null}
 
-            <View style={styles.summaryCell}>
-              <Text
-                style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
-              >
-                OVERDUE
-              </Text>
-              <Amount
+          <View style={styles.summaryTiles}>
+            <StatTile label="Overdue" style={styles.summaryTile}>
+              <FinancialAmount
                 value={portfolio.overdueAmount}
                 currency={displayCurrency}
-                style={{ fontSize: 18, fontWeight: "900", color: "#EF4444" }}
+                size="sm"
+                weight="bold"
+                tone={portfolio.overdueAmount > 0 ? "negative" : "default"}
               />
-            </View>
-
-            <View style={styles.summaryCell}>
-              <Text
-                style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
-              >
-                DUE THIS MONTH
-              </Text>
-              <Amount
-                value={portfolio.dueThisMonthAmount}
-                currency={displayCurrency}
-                style={{ fontSize: 18, fontWeight: "900", color: CARD_ORANGE }}
-              />
-            </View>
-
-            <View style={styles.summaryCell}>
-              <Text
-                style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
-              >
-                REPAID
-              </Text>
-              <Amount
-                value={portfolio.totalReceived}
-                currency={displayCurrency}
-                style={{ fontSize: 18, fontWeight: "900", color: "#10B981" }}
-              />
-            </View>
+            </StatTile>
+            <StatTile label="Due this month" style={styles.summaryTile}>
+              <FinancialAmount value={portfolio.dueThisMonthAmount} currency={displayCurrency} size="sm" weight="bold" />
+            </StatTile>
+            <StatTile label="Repaid" style={styles.summaryTile}>
+              <FinancialAmount value={portfolio.totalReceived} currency={displayCurrency} size="sm" weight="bold" tone="positive" />
+            </StatTile>
           </View>
 
-          {portfolio.totalInterest > 0 ? (
-            <Text
-              style={[styles.overdueNote, { color: theme.colors.mutedForeground }]}
-            >
-              Includes {portfolio.totalInterest} of accrued interest
-            </Text>
-          ) : null}
-
           {portfolio.overdueCount > 0 ? (
-            <Text style={[styles.overdueNote, { color: "#EF4444" }]}>
-              {portfolio.overdueCount} receivable
-              {portfolio.overdueCount === 1 ? "" : "s"} past the due date
-            </Text>
+            <View style={styles.overdueStrip}>
+              <StatusStrip
+                tone="negative"
+                icon={<AlertTriangle size={14} color={theme.colors.destructive} strokeWidth={2.4} />}
+                message={`${portfolio.overdueCount} receivable${portfolio.overdueCount === 1 ? "" : "s"} past the due date`}
+              />
+            </View>
           ) : null}
-        </Card>
+        </HeroSection>
       ) : null}
 
       {receivables.length > 0 ? (
@@ -244,7 +219,7 @@ export function ReceivablesList() {
           }
           primaryAction={{
             label: "Record Money Lent",
-            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+            icon: <Plus size={16} color={theme.colors.primaryForeground} strokeWidth={2.4} />,
             onPress: () => setIsCreateOpen(true),
           }}
           secondaryAction={
@@ -322,27 +297,24 @@ const styles = StyleSheet.create({
   container: {
     gap: 14,
   },
-  summaryCard: {
-    borderRadius: 18,
-    borderCurve: "continuous",
+  interestLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
   },
-  summaryGrid: {
+  summaryTiles: {
     flexDirection: "row",
     flexWrap: "wrap",
-    rowGap: 14,
+    gap: 8,
+    marginTop: 14,
   },
-  summaryCell: {
-    width: "50%",
-    gap: 2,
+  summaryTile: {
+    flexGrow: 1,
+    flexBasis: "30%",
+    minWidth: 90,
   },
-  summaryLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  overdueNote: {
-    fontSize: 11,
-    fontWeight: "700",
+  overdueStrip: {
     marginTop: 12,
   },
   pillRow: {

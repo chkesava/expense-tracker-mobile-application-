@@ -21,7 +21,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | SPENDLY-533 | Phase 1b: finish the dashboard (remaining widgets, nav lens, shared components, motion) | `feature/SPENDLY-533-dashboard-redesign-completion` | Done. On `main` via `85a83c0` (2026-10-16). Android/iOS device QA open. |
 | SPENDLY-534 | Phase 2a: Money hub and Activity (header, section tabs, period summary, activity list) | `feature/SPENDLY-534-money-hub-activity` | Merged into the epic (2026-10-16). In Progress until the epic reaches `main`. |
 | SPENDLY-535 | Phase 2b: Accounts and cards | `feature/SPENDLY-535-money-accounts-cards` | Merged into the epic (2026-10-17). In Progress until the epic reaches `main`. |
-| SPENDLY-536 | Phase 2c: Debt, owed and recurring | not cut yet | To do |
+| SPENDLY-536 | Phase 2c: Debt, owed and recurring | `feature/SPENDLY-536-money-debt-owed-recurring` | Implemented and committed; awaiting approval to merge into the epic. |
 | SPENDLY-537 | Phase 2d: Detail screens | not cut yet | To do |
 
 ## Decisions
