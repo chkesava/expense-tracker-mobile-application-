@@ -1,10 +1,11 @@
 import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Calendar, Wallet } from "lucide-react-native";
+import { Calendar, Eye, EyeOff } from "lucide-react-native";
 
 import { useSurfaces, withAlpha } from "@/components/dashboard/primitives";
 import { haptic } from "@/lib/haptics";
 import { useAuth } from "@/providers/AuthProvider";
+import { useSettings } from "@/providers/SettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 
 function greetingForHour(hour: number): string {
@@ -14,8 +15,10 @@ function greetingForHour(hour: number): string {
 }
 
 /**
- * Compact dashboard hero. Deliberately lightweight — it establishes identity
- * and the active month, then hands vertical space to the data below.
+ * Compact dashboard header. Deliberately lightweight — it establishes identity
+ * and the active month, then hands vertical space to the data below. Branding,
+ * search, inbox and profile live in the app bar above it, so they are not
+ * repeated here; the one control is the amount-privacy toggle (SPENDLY-532).
  */
 export const DashboardWelcome = memo(function DashboardWelcome({
   monthLabel,
@@ -27,6 +30,8 @@ export const DashboardWelcome = memo(function DashboardWelcome({
   const { user } = useAuth();
   const { theme } = useTheme();
   const surfaces = useSurfaces();
+  const { settings, setGhostMode } = useSettings();
+  const hidden = Boolean(settings.ghostMode);
 
   const firstName =
     user?.displayName?.trim()?.split(/\s+/)[0] ||
@@ -71,7 +76,7 @@ export const DashboardWelcome = memo(function DashboardWelcome({
           ]}
           numberOfLines={1}
         >
-          Your financial overview
+          Your money at a glance
         </Text>
 
         {!!monthLabel && onOpenMonthPicker ? (
@@ -81,23 +86,23 @@ export const DashboardWelcome = memo(function DashboardWelcome({
               onOpenMonthPicker();
             }}
             android_ripple={{
-              color: withAlpha(theme.colors.success, 0.16),
+              color: withAlpha(theme.colors.primary, 0.16),
               borderless: false,
             }}
             style={({ pressed }) => [
               styles.monthChip,
-              { backgroundColor: surfaces.wash(theme.colors.success) },
+              { backgroundColor: surfaces.wash(theme.colors.primary) },
               pressed && { opacity: 0.8 },
             ]}
             accessibilityRole="button"
             accessibilityLabel={`Change month, currently ${monthLabel}`}
           >
-            <Calendar size={13} color={theme.colors.success} strokeWidth={2.2} />
+            <Calendar size={13} color={theme.colors.primary} strokeWidth={2.2} />
             <Text
               style={[
                 styles.monthChipText,
                 {
-                  color: theme.colors.success,
+                  color: theme.colors.primary,
                   fontFamily: theme.fontFamily.semibold,
                 },
               ]}
@@ -108,28 +113,31 @@ export const DashboardWelcome = memo(function DashboardWelcome({
         ) : null}
       </View>
 
-      <View
-        style={[
-          styles.mark,
-          { backgroundColor: withAlpha(theme.colors.primary, 0.92) },
+      <Pressable
+        onPress={() => {
+          void haptic.selection();
+          setGhostMode(!hidden);
+        }}
+        hitSlop={6}
+        android_ripple={{ color: surfaces.control, borderless: true }}
+        style={({ pressed }) => [
+          styles.privacy,
+          {
+            backgroundColor: hidden ? surfaces.wash(theme.colors.primary) : surfaces.control,
+            borderColor: hidden ? theme.colors.primary : theme.colors.border,
+          },
+          pressed && { opacity: 0.8 },
         ]}
+        accessibilityRole="switch"
+        accessibilityState={{ checked: hidden }}
+        accessibilityLabel={hidden ? "Show amounts" : "Hide amounts"}
       >
-        <Wallet size={22} color={theme.colors.primaryForeground} strokeWidth={2.2} />
-        <View
-          style={[
-            styles.dot,
-            styles.dotTop,
-            { backgroundColor: theme.colors.warning },
-          ]}
-        />
-        <View
-          style={[
-            styles.dot,
-            styles.dotBottom,
-            { backgroundColor: theme.colors.success },
-          ]}
-        />
-      </View>
+        {hidden ? (
+          <EyeOff size={18} color={theme.colors.primary} strokeWidth={2.2} />
+        ) : (
+          <Eye size={18} color={theme.colors.foreground} strokeWidth={2.2} />
+        )}
+      </Pressable>
     </View>
   );
 });
@@ -174,27 +182,13 @@ const styles = StyleSheet.create({
   monthChipText: {
     fontSize: 12.5,
   },
-  mark: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    borderCurve: "continuous",
+  privacy: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
     justifyContent: "center",
-    position: "relative",
-  },
-  dot: {
-    position: "absolute",
-    width: 11,
-    height: 11,
-    borderRadius: 6,
-  },
-  dotTop: {
-    top: -3,
-    right: -3,
-  },
-  dotBottom: {
-    bottom: -3,
-    left: -3,
+    overflow: "hidden",
   },
 });

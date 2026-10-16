@@ -210,6 +210,35 @@ describe("seed-emulator.js", () => {
     // Straight to the Dashboard, no onboarding.
     expect(userDoc.onboarding).toMatchObject({ welcomeCompleted: true, onboardingDismissed: true, setupStartedAt: "" });
   });
+
+  it("writes the dashboard summaries the seeded rows add up to", () => {
+    const today = new Date(2026, 8, 26, 12);
+    const { collections } = seedModule.buildDemoData(today);
+    const rows = [...collections.expenses, ...collections.incomes];
+    const months = [...new Set(rows.map((row) => row.data.month as string))].sort();
+    const summaries = collections.financialSummaries;
+
+    expect(summaries.map((s) => s.id)).toEqual(months.map((m) => `dashboard_${m}`));
+    for (const { id, data } of summaries) {
+      const month = id.slice("dashboard_".length);
+      const expenses = collections.expenses.filter((row) => row.data.month === month);
+      const incomes = collections.incomes.filter((row) => row.data.month === month);
+      const sum = (list: typeof rows) => list.reduce((total, row) => total + (row.data.amount as number), 0);
+
+      expect(data.period).toBe(month);
+      expect(data.totalExpenses).toBe(sum(expenses));
+      expect(data.totalIncome).toBe(sum(incomes));
+      expect(data.transactionCount).toBe(expenses.length + incomes.length);
+      const categoryTotals = data.categoryTotals as Record<string, number>;
+      const parents = Object.entries(categoryTotals).filter(([key]) => !key.includes("::"));
+      expect(parents.reduce((total, [, amount]) => total + amount, 0)).toBe(data.totalExpenses);
+      for (const row of expenses) {
+        expect(categoryTotals).toHaveProperty([`${row.data.category}::${row.data.subcategory}`]);
+      }
+    }
+    // The current month has a summary, so the Dashboard shows real totals.
+    expect(summaries.some((s) => s.id === "dashboard_2026-09")).toBe(true);
+  });
 });
 
 describe("withLocalTestCleartext", () => {

@@ -50,6 +50,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    // The orbs sit partly off-screen on purpose; clip them so they never
+    // widen the page (on web they pushed scrollWidth ~60px past the viewport).
+    overflow: "hidden",
   },
   glowOrb: {
     position: "absolute",

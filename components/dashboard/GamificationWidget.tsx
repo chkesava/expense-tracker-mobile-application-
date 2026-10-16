@@ -1,16 +1,16 @@
 import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Activity, Flame, Trophy } from "lucide-react-native";
+import { Activity, Check, Flame, Trophy } from "lucide-react-native";
 
 import {
   MetaLabel,
   Pill,
-  ProgressTrack,
+  RowGlyph,
   Section,
-  StatTile,
   useSurfaces,
   withAlpha,
 } from "@/components/dashboard/primitives";
+import { ProgressIndicator } from "@/components/dashboard/ProgressIndicator";
 import { useGamification } from "@/hooks/useGamification";
 import { BADGES } from "@/shared/types/stats";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -26,6 +26,11 @@ const BADGE_ICONS: Record<string, typeof Trophy> = {
   saver_pro: Trophy,
 };
 
+/**
+ * Financial Health (SPENDLY-533): level and XP toward the next level, the
+ * logging streak, then the badges as quiet chips. Values come straight from
+ * `useGamification`; nothing here scores or awards anything.
+ */
 export const GamificationWidget = memo(function GamificationWidget({
   streak = 0,
   budgetHealthScore = 85,
@@ -49,61 +54,42 @@ export const GamificationWidget = memo(function GamificationWidget({
     >
       <View style={styles.body}>
         {/* XP meter — value first, meter second, target third. */}
-        <View style={styles.xpBlock}>
-          <View style={styles.xpRow}>
+        <ProgressIndicator
+          pct={levelInfo.progress}
+          status="good"
+          leading={
             <Text
-              style={[
-                styles.xpValue,
-                {
-                  color: theme.colors.foreground,
-                  fontFamily: theme.fontFamily.bold,
-                },
-              ]}
+              style={[styles.xpValue, { color: theme.colors.foreground, fontFamily: theme.fontFamily.bold }]}
+              numberOfLines={1}
             >
               {levelInfo.points.toLocaleString()}
               <Text
-                style={[
-                  styles.xpUnit,
-                  {
-                    color: theme.colors.mutedForeground,
-                    fontFamily: theme.fontFamily.medium,
-                  },
-                ]}
+                style={[styles.xpUnit, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium }]}
               >
                 {" "}
                 XP
               </Text>
             </Text>
-            <MetaLabel>Next level {levelInfo.nextThreshold.toLocaleString()}</MetaLabel>
-          </View>
-          <ProgressTrack
-            pct={levelInfo.progress}
-            color={theme.colors.success}
-            height={6}
-          />
-        </View>
+          }
+          value={<MetaLabel>Next level {levelInfo.nextThreshold.toLocaleString()}</MetaLabel>}
+          trailing={`${levelInfo.progress}% to level ${levelInfo.level + 1}`}
+          accessibilityLabel={`${levelInfo.points} XP, ${levelInfo.progress}% of the way to level ${levelInfo.level + 1}`}
+        />
 
-        <View style={styles.tiles}>
-          <StatTile
-            label="Logging streak"
-            meta={<MetaLabel>Am I building good habits?</MetaLabel>}
+        <View style={[styles.streakRow, { backgroundColor: surfaces.tile }]}>
+          <RowGlyph size={34} tint={surfaces.wash(theme.colors.success)}>
+            <Flame size={16} color={theme.colors.success} strokeWidth={2.3} />
+          </RowGlyph>
+          <View style={styles.streakText}>
+            <MetaLabel>Logging streak</MetaLabel>
+            <MetaLabel numberOfLines={2}>Am I building good habits?</MetaLabel>
+          </View>
+          <Text
+            style={[styles.streakValue, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
+            numberOfLines={1}
           >
-            <View style={styles.tileValueRow}>
-              <Flame size={15} color={theme.colors.success} strokeWidth={2.3} />
-              <Text
-                style={[
-                  styles.tileValue,
-                  {
-                    color: theme.colors.foreground,
-                    fontFamily: theme.fontFamily.semibold,
-                  },
-                ]}
-                numberOfLines={1}
-              >
-                {currentStreak} {currentStreak === 1 ? "day" : "days"}
-              </Text>
-            </View>
-          </StatTile>
+            {currentStreak} {currentStreak === 1 ? "day" : "days"}
+          </Text>
         </View>
 
         {/* Badges kept, but muted to metadata weight rather than game trophies. */}
@@ -111,20 +97,20 @@ export const GamificationWidget = memo(function GamificationWidget({
           {Object.values(BADGES).map((b) => {
             const earned = stats?.badges?.includes(b.id) ?? false;
             const BadgeIcon = BADGE_ICONS[b.id] ?? Trophy;
-            const color = earned
-              ? theme.colors.foreground
-              : theme.colors.mutedForeground;
             return (
               <View
                 key={b.id}
                 style={[
                   styles.badge,
-                  {
-                    backgroundColor: earned
-                      ? withAlpha(theme.colors.success, surfaces.isDark ? 0.14 : 0.09)
-                      : surfaces.tile,
-                  },
+                  earned
+                    ? {
+                        backgroundColor: withAlpha(theme.colors.success, surfaces.isDark ? 0.14 : 0.09),
+                        borderColor: withAlpha(theme.colors.success, surfaces.isDark ? 0.32 : 0.24),
+                      }
+                    : { backgroundColor: surfaces.tile, borderColor: theme.colors.border },
                 ]}
+                accessible
+                accessibilityLabel={`${b.name}, ${earned ? "earned" : "not earned yet"}`}
               >
                 <BadgeIcon
                   size={12}
@@ -134,12 +120,17 @@ export const GamificationWidget = memo(function GamificationWidget({
                 <Text
                   style={[
                     styles.badgeText,
-                    { color, fontFamily: theme.fontFamily.medium },
+                    {
+                      color: earned ? theme.colors.foreground : theme.colors.mutedForeground,
+                      fontFamily: theme.fontFamily.medium,
+                    },
                   ]}
                   numberOfLines={1}
                 >
                   {b.name}
                 </Text>
+                {/* Earned state in a mark, not colour alone. */}
+                {earned ? <Check size={11} color={theme.colors.success} strokeWidth={2.8} /> : null}
               </View>
             );
           })}
@@ -153,33 +144,29 @@ const styles = StyleSheet.create({
   body: {
     gap: 14,
   },
-  xpBlock: {
-    gap: 8,
-  },
-  xpRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: 8,
-  },
   xpValue: {
-    fontSize: 24,
-    letterSpacing: -0.7,
+    fontSize: 22,
+    letterSpacing: -0.6,
   },
   xpUnit: {
     fontSize: 13,
     letterSpacing: 0,
   },
-  tiles: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  tileValueRow: {
+  streakRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderCurve: "continuous",
   },
-  tileValue: {
+  streakText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  streakValue: {
     fontSize: 16,
     letterSpacing: -0.3,
   },
@@ -195,8 +182,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    maxWidth: "100%",
   },
   badgeText: {
     fontSize: 11.5,
+    flexShrink: 1,
   },
 });

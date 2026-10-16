@@ -1,0 +1,15 @@
+diff --git a/node_modules/react-native-css-interop/dist/runtime/web/color-scheme.js b/node_modules/react-native-css-interop/dist/runtime/web/color-scheme.js
+index c8fb1d2..aade097 100644
+--- a/node_modules/react-native-css-interop/dist/runtime/web/color-scheme.js
++++ b/node_modules/react-native-css-interop/dist/runtime/web/color-scheme.js
+@@ -33,6 +33,10 @@ else if ("window" in globalThis) {
+         const flags = darkModeFlag.split(" ");
+         darkMode = flags[0];
+         darkModeValue = flags[1];
++        // Spendly patch: under darkMode "media" the scheme already follows the
++        // system, and set() would throw "Cannot manually set color scheme".
++        if (darkMode === "media")
++            return;
+         exports.colorScheme.set(globalThis.window.document.documentElement.classList.contains(darkModeValue)
+             ? "dark"
+             : "system");

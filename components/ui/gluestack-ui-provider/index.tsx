@@ -27,6 +27,11 @@ export function GluestackUIProvider({
   const { colorScheme, setColorScheme } = useColorScheme();
 
   useEffect(() => {
+    // "system" is NativeWind's default already. Setting it explicitly throws on
+    // web while tailwind.config.js uses `darkMode: 'media'` ("Cannot manually
+    // set color scheme"), and the app root always passes "system". Only an
+    // explicit light/dark override needs the call.
+    if (mode === 'system') return;
     setColorScheme(mode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);

@@ -1,16 +1,14 @@
 import { memo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Eye, EyeOff, Wallet } from "lucide-react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { Wallet } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { Skeleton } from "@/components/common/Skeleton";
 import {
-  DASH_TYPE,
-  HeroSection,
+  Section,
+  useSurfaces,
   withAlpha,
 } from "@/components/dashboard/primitives";
-import { haptic } from "@/lib/haptics";
-import { useSettings } from "@/providers/SettingsProvider";
 import {
   budgetStatusMessage,
   type SpendlyBudget,
@@ -38,47 +36,28 @@ export const SafeToSpendWidget = memo(function SafeToSpendWidget({
   loading = false,
 }: SafeToSpendWidgetProps) {
   const { theme } = useTheme();
-  const { settings, setGhostMode } = useSettings();
-  const onHero = theme.colors.primaryForeground;
-  // Same status vocabulary as BudgetAlertsWidget (KAN-62) — the hero card and
+  const surfaces = useSurfaces();
+  const ink = theme.colors.foreground;
+  const subtle = theme.colors.mutedForeground;
+  // Same status vocabulary as BudgetAlertsWidget (KAN-62) — this card and
   // the Monthly Budget card must always agree on tone for the same budget.
   const statusColor = statusToneColor(budget.status, theme.colors);
 
+  // SPENDLY-532: the net-worth card is now the dashboard's one hero, so Safe
+  // to Spend sits on the standard surface; the privacy toggle moved to the
+  // dashboard header.
   return (
-    <HeroSection
+    <Section
       title="Safe to Spend"
       subtitle="How much can I spend?"
-      icon={<Wallet size={16} color={onHero} strokeWidth={2.3} />}
-      action={
-        <Pressable
-          onPress={() => {
-            void haptic.selection();
-            setGhostMode(!settings.ghostMode);
-          }}
-          hitSlop={8}
-          style={({ pressed }) => [
-            styles.eyeButton,
-            { backgroundColor: withAlpha(onHero, 0.16) },
-            pressed && { opacity: 0.8 },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel={
-            settings.ghostMode ? "Show amounts" : "Hide amounts"
-          }
-        >
-          {settings.ghostMode ? (
-            <EyeOff size={15} color={onHero} strokeWidth={2.3} />
-          ) : (
-            <Eye size={15} color={onHero} strokeWidth={2.3} />
-          )}
-        </Pressable>
-      }
+      icon={<Wallet size={16} color={theme.colors.primary} strokeWidth={2.3} />}
+      iconTint={surfaces.wash(theme.colors.primary)}
     >
       <View style={styles.hero}>
         <Text
           style={[
             styles.heroLabel,
-            { color: withAlpha(onHero, 0.78), fontFamily: theme.fontFamily.medium },
+            { color: subtle, fontFamily: theme.fontFamily.medium },
           ]}
         >
           Per remaining day
@@ -93,18 +72,19 @@ export const SafeToSpendWidget = memo(function SafeToSpendWidget({
               value={budget.safeToSpendDaily}
               currency={currency}
               ghostable
+              numberOfLines={1}
               style={{
-                fontSize: DASH_TYPE.heroValue,
-                lineHeight: DASH_TYPE.heroValueLine,
-                letterSpacing: -1,
+                fontSize: 30,
+                lineHeight: 36,
+                letterSpacing: -0.8,
                 fontFamily: theme.fontFamily.bold,
-                color: onHero,
+                color: ink,
               }}
             />
             <Text
               style={[
                 styles.perDay,
-                { color: withAlpha(onHero, 0.72), fontFamily: theme.fontFamily.medium },
+                { color: subtle, fontFamily: theme.fontFamily.medium },
               ]}
             >
               / day
@@ -118,7 +98,7 @@ export const SafeToSpendWidget = memo(function SafeToSpendWidget({
           <Text
             style={[
               styles.metaLabel,
-              { color: withAlpha(onHero, 0.72), fontFamily: theme.fontFamily.medium },
+              { color: subtle, fontFamily: theme.fontFamily.medium },
             ]}
           >
             Flexible remaining
@@ -133,7 +113,7 @@ export const SafeToSpendWidget = memo(function SafeToSpendWidget({
               style={{
                 fontSize: 15,
                 fontFamily: theme.fontFamily.semibold,
-                color: onHero,
+                color: ink,
               }}
             />
           )}
@@ -142,7 +122,7 @@ export const SafeToSpendWidget = memo(function SafeToSpendWidget({
           <Text
             style={[
               styles.metaLabel,
-              { color: withAlpha(onHero, 0.72), fontFamily: theme.fontFamily.medium },
+              { color: subtle, fontFamily: theme.fontFamily.medium },
             ]}
           >
             Days left
@@ -154,7 +134,7 @@ export const SafeToSpendWidget = memo(function SafeToSpendWidget({
               style={{
                 fontSize: 15,
                 fontFamily: theme.fontFamily.semibold,
-                color: onHero,
+                color: ink,
               }}
             >
               {budget.daysLeft}
@@ -169,7 +149,7 @@ export const SafeToSpendWidget = memo(function SafeToSpendWidget({
         <View
           style={[
             styles.statusStrip,
-            { backgroundColor: withAlpha(statusColor, 0.22) },
+            { backgroundColor: withAlpha(statusColor, surfaces.isDark ? 0.16 : 0.1) },
           ]}
         >
           <Text
@@ -183,7 +163,7 @@ export const SafeToSpendWidget = memo(function SafeToSpendWidget({
           </Text>
         </View>
       )}
-    </HeroSection>
+    </Section>
   );
 });
 
@@ -204,13 +184,6 @@ const styles = StyleSheet.create({
   perDay: {
     fontSize: 13,
     marginBottom: 4,
-  },
-  eyeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
   },
   metaRow: {
     flexDirection: "row",

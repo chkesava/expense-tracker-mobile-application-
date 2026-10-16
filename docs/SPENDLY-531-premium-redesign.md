@@ -1,0 +1,23 @@
+# SPENDLY-531: Spendly Premium Redesign (Midnight Emerald)
+
+A phased premium-fintech redesign of the Expense app. It is UI only: no financial calculations, Firestore write paths, listeners or rules change. Ganesh Seva and Nutrition are out of scope.
+
+Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`.
+
+| Story | Title | Branch | State |
+|---|---|---|---|
+| SPENDLY-532 | Phase 1: dashboard redesign | `feature/SPENDLY-532-dashboard-redesign` | Merged into the epic (`f800dca`, 2026-10-16). In Progress until the epic reaches `main`. Android/iOS device QA open. |
+| SPENDLY-533 | Phase 1b: finish the dashboard (remaining widgets, nav lens, shared components, motion) | `feature/SPENDLY-533-dashboard-redesign-completion` | Merged into the epic (2026-10-16). In Progress until the epic reaches `main`. Android/iOS device QA open. |
+
+## Decisions
+- **Midnight Emerald is a selectable preset, not a forced default.** It's in Settings → Appearance → Custom Presets. Existing users keep their theme.
+- **The preset owns its accent.** The accent picker is replaced by a note while it's active.
+- **Redesigned components use theme tokens only**, so they work in light, dark and Midnight Emerald.
+- **One hero per screen.** On the dashboard it's net worth, using the `HeroSection` `deep` variant. Safe to Spend moved to a standard section.
+- **Account cards are a pure selection** of `useUnifiedNetWorth` fields (`shared/utils/dashboardAccountCards.ts`). The UI never re-derives net worth.
+- **No fabricated values.** A missing or errored monthly summary shows "—" with an explanation, not ₹0. No trends are shown without real prior-period data.
+- **The web colour-scheme fix is a `patch-package` patch** (`patches/react-native-css-interop+0.2.6.patch`, applied on `postinstall`), not `darkMode: 'class'`, so the shared `Button`/`Input` keep their `dark:` variants on web. Re-check the patch on any NativeWind upgrade.
+- **Dashboard amounts, progress bars, skeletons and entrances each have one component** (`FinancialAmount`, `ProgressIndicator`, `DashboardSkeleton`, `DashboardEntrance`), and timings live in `theme/motion.ts`. Every decorative animation checks `useMotionReduced()`.
+- **The entrance avoids Reanimated `entering` layout animations**, which overlapped cards on web; it uses plain shared values instead.
+- **The nav lens is theme-aware**, but only Midnight Emerald differs; the SPENDLY-172 lens is unchanged elsewhere.
+- **Later phases reuse these foundations**: the theme preset, `HeroSection` `deep`, `Section`, the dashboard tokens, and `signedCurrencyPrefix`.

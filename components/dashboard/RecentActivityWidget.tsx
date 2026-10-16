@@ -1,10 +1,10 @@
 import { memo } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { Receipt } from "lucide-react-native";
+import { StyleSheet, Text } from "react-native";
+import { ArrowDownLeft, Receipt } from "lucide-react-native";
 
-import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
-import { Skeleton } from "@/components/common/Skeleton";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
 import {
   DataRow,
   RowGlyph,
@@ -12,139 +12,135 @@ import {
   SectionAction,
   useSurfaces,
 } from "@/components/dashboard/primitives";
-import type { Expense } from "@/shared/types/expense";
+import { useSettings } from "@/providers/SettingsProvider";
+import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
+import type { Expense, Income } from "@/shared/types/expense";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
+import type { RecentActivityItem } from "@/shared/utils/recentActivity";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export interface RecentActivityWidgetProps {
-  expenses: Expense[];
+  /** Newest-first expenses and incomes from `mergeRecentActivity`. */
+  items: RecentActivityItem[];
   currency: string;
   loading?: boolean;
+  /** Account id → display name, from the accounts the screen already holds. */
+  accountNames?: ReadonlyMap<string, string>;
   onEditExpense: (expense: Expense) => void;
+  onEditIncome: (income: Income) => void;
   onViewAll: () => void;
 }
 
-const PREVIEW_LIMIT = 5;
-
+/**
+ * Recent activity (SPENDLY-532/533): money out and money in together. Income
+ * rows carry a "+" and an "Income" caption, expenses a "-", so the direction
+ * never depends on colour alone.
+ */
 export const RecentActivityWidget = memo(function RecentActivityWidget({
-  expenses,
+  items,
   currency,
   loading = false,
+  accountNames,
   onEditExpense,
+  onEditIncome,
   onViewAll,
 }: RecentActivityWidgetProps) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
+  const { settings } = useSettings();
 
-  const recentTransactions = expenses.slice(0, PREVIEW_LIMIT);
-  const hasMore = expenses.length > PREVIEW_LIMIT;
+  if (loading && items.length === 0) {
+    return <DashboardSkeleton variant="section" rows={3} />;
+  }
 
   return (
     <Section
-      title="Recent Transactions"
-      subtitle={
-        loading && expenses.length === 0
-          ? "Loading transactions..."
-          // SPENDLY-413: `expenses.length` is the staged recent-first page
-          // count (SPENDLY-409), not the lifetime total — don't assert one.
-          : "Latest activity"
-      }
+      title="Recent activity"
+      // SPENDLY-413: the feed is a recent-first page, not the lifetime ledger,
+      // so the subtitle never asserts a count.
+      subtitle="Latest money in and out"
       icon={<Receipt size={16} color={theme.colors.primary} strokeWidth={2.3} />}
       iconTint={surfaces.wash(theme.colors.primary)}
-      action={hasMore ? <SectionAction label="View all" onPress={onViewAll} /> : null}
-      footer={
-        hasMore ? (
-          <View style={styles.seeAll}>
-            <SectionAction label="See all transactions" onPress={onViewAll} />
-          </View>
+      action={
+        // A limit-N feed can't tell whether older rows exist; the full ledger
+        // is always one tap away once there is any activity.
+        items.length > 0 ? (
+          <SectionAction
+            label="View all"
+            onPress={onViewAll}
+            accessibilityLabel="View all transactions"
+          />
         ) : null
       }
     >
-      {loading && recentTransactions.length === 0 ? (
-        <View style={{ gap: 14, paddingVertical: 8 }}>
-          {[1, 2, 3].map((key) => (
-            <View
-              key={key}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
-              >
-                <Skeleton width={34} height={34} borderRadius={10} />
-                <View style={{ gap: 6 }}>
-                  <Skeleton width={120} height={14} borderRadius={4} />
-                  <Skeleton width={70} height={10} borderRadius={3} />
-                </View>
-              </View>
-              <Skeleton width={60} height={16} borderRadius={4} />
-            </View>
-          ))}
-        </View>
-      ) : recentTransactions.length === 0 ? (
+      {items.length === 0 ? (
         <EmptyState
           illustration="expenses"
           compact
-          title="No Recent Transactions"
-          description="Add your first expense or income to see live activity here."
-          tip="Tap the bottom '+' button to quickly log your first transaction."
+          title="No recent activity"
+          description="Add an expense or income and it shows up here."
+          tip="Tap the '+' button to log your first transaction."
         />
       ) : (
-        <View>
-          {recentTransactions.map((item, index) => (
+        items.map((item, index) => {
+          const isIncome = item.kind === "income";
+          const title = isIncome
+            ? item.row.note || item.row.source || "Income"
+            : item.row.note || item.row.category || "Expense";
+          const accountName = item.row.accountId ? accountNames?.get(item.row.accountId) : undefined;
+          const meta = [
+            item.date ? formatDisplayDate(item.date, settings.dateFormat) : null,
+            accountName,
+            isIncome
+              ? item.row.note
+                ? item.row.source || "Income"
+                : "Income"
+              : item.row.note
+                ? item.row.category
+                : null,
+          ]
+            .filter(Boolean)
+            .join(" · ");
+
+          return (
             <DataRow
-              key={item.id || `tx-${index}`}
-              onPress={() => onEditExpense(item)}
-              divider={index < recentTransactions.length - 1}
+              key={item.key}
+              onPress={() => (item.kind === "income" ? onEditIncome(item.row) : onEditExpense(item.row))}
+              divider={index < items.length - 1}
               leading={
-                <RowGlyph size={34} tint={surfaces.tile}>
-                  <Text
-                    style={[
-                      styles.initial,
-                      {
-                        color: theme.colors.mutedForeground,
-                        fontFamily: theme.fontFamily.semibold,
-                      },
-                    ]}
-                  >
-                    {item.category?.charAt(0).toUpperCase() || "?"}
-                  </Text>
+                <RowGlyph size={38} tint={isIncome ? surfaces.wash(theme.colors.success) : surfaces.tile}>
+                  {isIncome ? (
+                    <ArrowDownLeft size={17} color={theme.colors.success} strokeWidth={2.4} />
+                  ) : (
+                    <Text style={styles.glyph} accessible={false}>
+                      {item.row.category ? getCategoryIcon(item.row.category) : "📦"}
+                    </Text>
+                  )}
                 </RowGlyph>
               }
-              title={item.note || item.category || "Expense"}
-              meta={[item.date, item.category].filter(Boolean).join(" · ")}
+              title={title}
+              meta={meta}
               value={
-                <Amount
-                  value={item.amount}
+                <FinancialAmount
+                  value={item.row.amount}
                   currency={currency}
-                  ghostable
-                  style={{
-                    fontSize: 14.5,
-                    fontFamily: theme.fontFamily.semibold,
-                    color: theme.colors.foreground,
-                  }}
+                  size="sm"
+                  sign={isIncome ? "plus" : "minus"}
+                  tone={isIncome ? "positive" : "default"}
+                  fit={false}
                 />
               }
-              accessibilityLabel={`Edit ${item.note || item.category || "expense"}`}
+              accessibilityLabel={`Edit ${isIncome ? "income" : "expense"} ${title}`}
             />
-          ))}
-        </View>
+          );
+        })
       )}
     </Section>
   );
 });
 
 const styles = StyleSheet.create({
-  initial: {
-    fontSize: 13,
-  },
-  seeAll: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 2,
-    minHeight: 32,
+  glyph: {
+    fontSize: 17,
   },
 });

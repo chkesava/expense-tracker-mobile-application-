@@ -9,6 +9,7 @@ import {
   DEFAULT_DASHBOARD_ORDER,
   getOrderedDashboardWidgets,
   KNOWN_DASHBOARD_WIDGETS,
+  topCategoryShares,
 } from "./dashboardWidgets";
 
 describe("dashboardWidgets utilities", () => {
@@ -256,4 +257,32 @@ describe("dashboardWidgets utilities", () => {
     });
   });
 
+
+  describe("topCategoryShares", () => {
+    it("counts parent categories only, so subcategory keys never double the total", () => {
+      const { categories, totalSpent } = topCategoryShares({
+        "Food & Groceries": 600,
+        "Food & Groceries::Dining": 400,
+        "Food & Groceries::Groceries": 200,
+        Transport: 400,
+        "Transport::Cab": 400,
+      });
+      expect(totalSpent).toBe(1000);
+      expect(categories).toEqual([
+        { category: "Food & Groceries", amount: 600, percentage: 60 },
+        { category: "Transport", amount: 400, percentage: 40 },
+      ]);
+    });
+
+    it("keeps the top N by amount and drops zero, negative and non-finite entries", () => {
+      const totals = { A: 10, B: 50, C: 30, D: 0, E: -5, F: Number.NaN, G: 20 };
+      const { categories, totalSpent } = topCategoryShares(totals, 3);
+      expect(categories.map((c) => c.category)).toEqual(["B", "C", "G"]);
+      expect(totalSpent).toBe(110);
+    });
+
+    it("returns nothing for a missing summary", () => {
+      expect(topCategoryShares(null)).toEqual({ categories: [], totalSpent: 0 });
+    });
+  });
 });

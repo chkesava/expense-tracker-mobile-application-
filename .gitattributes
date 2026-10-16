@@ -1,0 +1,2 @@
+# patch-package diffs must keep LF or they stop applying on Windows checkouts.
+patches/*.patch text eol=lf

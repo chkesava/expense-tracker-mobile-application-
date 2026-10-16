@@ -7,6 +7,7 @@ import {
 } from "react-native";
 import Animated, {
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withRepeat,
   withSequence,
@@ -36,8 +37,14 @@ export function Skeleton({
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const opacity = useSharedValue(0.35);
+  // Reduced motion: a still placeholder, no endless pulse (SPENDLY-533).
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
+    if (reduceMotion) {
+      opacity.value = 0.6;
+      return;
+    }
     opacity.value = withRepeat(
       withSequence(
         withTiming(0.85, {
@@ -52,7 +59,7 @@ export function Skeleton({
       -1,
       true
     );
-  }, [opacity]);
+  }, [opacity, reduceMotion]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,

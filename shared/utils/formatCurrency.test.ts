@@ -3,6 +3,7 @@ import {
   currencySymbol,
   formatAmount,
   formatAmountNumber,
+  signedCurrencyPrefix,
 } from "./formatCurrency";
 
 describe("formatCurrency", () => {
@@ -21,5 +22,16 @@ describe("formatCurrency", () => {
 
   it("respects custom prefix", () => {
     expect(formatAmount(10, "INR", { prefix: "" })).toBe("10");
+  });
+});
+
+describe("signedCurrencyPrefix", () => {
+  it("keeps the currency symbol after the sign", () => {
+    expect(formatAmount(112, "INR", { prefix: signedCurrencyPrefix("-", "INR") })).toBe("-₹112");
+    expect(signedCurrencyPrefix("+", "USD")).toBe("+$");
+  });
+
+  it("falls back to INR when no currency is given", () => {
+    expect(signedCurrencyPrefix("-", "")).toBe("-₹");
   });
 });

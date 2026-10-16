@@ -33,6 +33,14 @@ export function currencySymbol(currencyCode = "INR"): string {
   return CURRENCY_SYMBOLS[currencyCode] || currencyCode;
 }
 
+/**
+ * A `prefix` for `formatAmount`/`<Amount>` that signs a value without losing
+ * its symbol — `prefix` replaces the symbol, so a bare "-" renders "-112".
+ */
+export function signedCurrencyPrefix(sign: "+" | "-", currencyCode = "INR"): string {
+  return `${sign}${currencySymbol(currencyCode || "INR")}`;
+}
+
 export function currencyLocale(currencyCode = "INR"): string {
   return CURRENCY_LOCALES[currencyCode] || "en-IN";
 }

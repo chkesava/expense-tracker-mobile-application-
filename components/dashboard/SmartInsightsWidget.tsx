@@ -8,6 +8,7 @@ import {
 } from "lucide-react-native";
 
 import {
+  RowGlyph,
   Section,
   toneColor,
   type Tone,
@@ -30,6 +31,12 @@ export interface SmartInsightsWidgetProps {
   todayKey: string;
 }
 
+/**
+ * Smart Insights (SPENDLY-533): one compact row per insight — a severity glyph,
+ * the severity word and the message. Insight rules live in
+ * `shared/utils/smartInsights`; this file only presents them.
+ */
+
 /** Semantic tone + glyph per insight type. */
 function presentation(tone: SmartInsight["tone"]): {
   tone: Tone;
@@ -48,7 +55,7 @@ function presentation(tone: SmartInsight["tone"]): {
   }
 }
 
-/** The emoji prefixes duplicate the glyph rail, so strip them. */
+/** The emoji prefixes duplicate the severity glyph, so strip them. */
 function stripLeadingEmoji(text: string): string {
   return text.replace(/^[^\p{L}\p{N}]+/u, "").trim() || text;
 }
@@ -101,34 +108,41 @@ export const SmartInsightsWidget = memo(function SmartInsightsWidget({
       subtitle="What needs my attention?"
       icon={<Lightbulb size={16} color={theme.colors.warning} strokeWidth={2.3} />}
       iconTint={surfaces.wash(theme.colors.warning)}
-      contentStyle={styles.list}
     >
-      {ordered.map(({ insight, tone, Icon, label }) => {
+      {ordered.map(({ insight, tone, Icon, label }, index) => {
         const color = toneColor(theme.colors, tone);
+        const text = stripLeadingEmoji(insight.text);
         return (
-          <View key={insight.id} style={styles.row}>
-            {/* Semantic rail carries the importance; text stays readable. */}
-            <View style={[styles.rail, { backgroundColor: color }]} />
-            <Icon size={15} color={color} strokeWidth={2.3} />
+          <View
+            key={insight.id}
+            style={[
+              styles.row,
+              index < ordered.length - 1 && {
+                borderBottomWidth: StyleSheet.hairlineWidth,
+                borderBottomColor: surfaces.divider,
+              },
+            ]}
+            accessible
+            accessibilityLabel={`${label}: ${text}`}
+          >
+            {/* Glyph + severity word carry the importance; colour only reinforces it. */}
+            <RowGlyph size={34} tint={surfaces.wash(color)}>
+              <Icon size={15} color={color} strokeWidth={2.3} />
+            </RowGlyph>
             <View style={styles.copy}>
               <Text
-                style={[
-                  styles.label,
-                  { color, fontFamily: theme.fontFamily.semibold },
-                ]}
+                style={[styles.label, { color, fontFamily: theme.fontFamily.semibold }]}
+                numberOfLines={1}
               >
                 {label}
               </Text>
               <Text
                 style={[
                   styles.text,
-                  {
-                    color: theme.colors.foreground,
-                    fontFamily: theme.fontFamily.regular,
-                  },
+                  { color: theme.colors.foreground, fontFamily: theme.fontFamily.regular },
                 ]}
               >
-                {stripLeadingEmoji(insight.text)}
+                {text}
               </Text>
             </View>
           </View>
@@ -139,30 +153,22 @@ export const SmartInsightsWidget = memo(function SmartInsightsWidget({
 });
 
 const styles = StyleSheet.create({
-  list: {
-    gap: 4,
-  },
   row: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 9,
-  },
-  rail: {
-    width: 3,
-    alignSelf: "stretch",
-    borderRadius: 2,
-    minHeight: 18,
+    alignItems: "flex-start",
+    gap: 12,
+    paddingVertical: 10,
   },
   copy: {
     flex: 1,
     minWidth: 0,
     gap: 2,
+    paddingTop: 1,
   },
   label: {
     fontSize: 11,
     textTransform: "uppercase",
-    letterSpacing: 0.3,
+    letterSpacing: 0.4,
   },
   text: {
     fontSize: 13.5,

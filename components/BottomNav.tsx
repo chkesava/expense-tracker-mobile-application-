@@ -45,13 +45,11 @@ import { GlassSurface } from "@/components/ui/GlassSurface";
 import {
   SMOKE_INACTIVE_ALPHA,
   SMOKE_INACTIVE_ICON_ALPHA,
-  SMOKE_LENS_BORDER,
-  SMOKE_LENS_BOTTOM,
-  SMOKE_LENS_TOP,
   glassAccent,
   rgbaString,
   smokeActiveLens,
   smokeActivePill,
+  smokeLensFor,
 } from "@/components/ui/glassTokens";
 import { haptic } from "@/lib/haptics";
 import { useModals } from "@/providers/ModalProvider";
@@ -63,7 +61,7 @@ import {
   type NavigationItem,
   type NavSectionId,
 } from "@/shared/config/navigation";
-import { durations, easing } from "@/theme/motion";
+import { durations, easing, useMotionReduced } from "@/theme/motion";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
@@ -148,6 +146,9 @@ export function BottomNav() {
   const investmentsEnabled = useInvestmentsEnabled();
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const keyboardProgress = useSharedValue(0);
+  // SPENDLY-533: under reduced motion the lens and the keyboard hide just jump.
+  const reduceMotion = useMotionReduced();
+  const motionMs = reduceMotion ? 0 : durations.medium;
 
   const navLinks = CORE_NAV_ITEMS.filter(
     (item) =>
@@ -169,13 +170,13 @@ export function BottomNav() {
     const show = Keyboard.addListener(showEvent, () => {
       setKeyboardOpen(true);
       keyboardProgress.set(
-        withTiming(1, { duration: durations.medium, easing: easing.standard })
+        withTiming(1, { duration: motionMs, easing: easing.standard })
       );
     });
     const hide = Keyboard.addListener(hideEvent, () => {
       setKeyboardOpen(false);
       keyboardProgress.set(
-        withTiming(0, { duration: durations.medium, easing: easing.standard })
+        withTiming(0, { duration: motionMs, easing: easing.standard })
       );
     });
 
@@ -183,7 +184,7 @@ export function BottomNav() {
       show.remove();
       hide.remove();
     };
-  }, [keyboardProgress]);
+  }, [keyboardProgress, motionMs]);
 
   // ---- Sliding active indicator -------------------------------------------
   // SPENDLY-172: React owns where the lens is and whether it shows; Reanimated
@@ -203,14 +204,14 @@ export function BottomNav() {
   useLayoutEffect(() => {
     const from = previousIndex.current;
     previousIndex.current = activeIndex;
-    if (from < 0 || activeIndex < 0 || from === activeIndex || tabWidth <= 0) return;
+    if (from < 0 || activeIndex < 0 || from === activeIndex || tabWidth <= 0 || reduceMotion) return;
     slideOffset.set(
       withSequence(
         withTiming((from - activeIndex) * tabWidth, { duration: 0 }),
         withTiming(0, { duration: durations.medium, easing: easing.standard })
       )
     );
-  }, [activeIndex, tabWidth, slideOffset]);
+  }, [activeIndex, tabWidth, slideOffset, reduceMotion]);
 
   const slideStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: slideOffset.get() }],
@@ -243,15 +244,17 @@ export function BottomNav() {
   // white only as far as it needs to read, inside a blue/purple lens.
   // lib/navContrast.test.ts pins both against the lightest backdrops.
   const isDark = themeUsesDarkPalette(themeName);
+  // Every theme keeps the blue/purple lens except Midnight Emerald (SPENDLY-533).
+  const lens = smokeLensFor(themeName);
   const { primary, background, card } = theme.colors;
   const activeColor = useMemo(
     () =>
       glassAccent(
         primary,
-        smokeActivePill([background, card], isDark),
-        smokeActiveLens([background, card], isDark)
+        smokeActivePill([background, card], isDark, lens),
+        smokeActiveLens([background, card], isDark, lens)
       ),
-    [primary, background, card, isDark]
+    [primary, background, card, isDark, lens]
   );
   const inactiveColor = `rgba(255, 255, 255, ${SMOKE_INACTIVE_ALPHA})`;
   const inactiveIconColor = `rgba(255, 255, 255, ${SMOKE_INACTIVE_ICON_ALPHA})`;
@@ -284,24 +287,24 @@ export function BottomNav() {
           accessibilityRole="tablist"
           onLayout={(event) => setRowWidth(event.nativeEvent.layout.width)}
         >
-          {/* A subtle blue/purple lens, contained inside the capsule. */}
+          {/* A subtle tinted lens, contained inside the capsule. */}
           {showLens ? (
             <Animated.View
               pointerEvents="none"
               style={[
                 styles.indicator,
                 styles.indicatorLens,
-                { left: activeIndex * tabWidth, width: tabWidth },
+                { left: activeIndex * tabWidth, width: tabWidth, borderColor: lens.border },
                 slideStyle,
               ]}
             >
               <LinearGradient
-                colors={[rgbaString(SMOKE_LENS_TOP), rgbaString(SMOKE_LENS_BOTTOM)]}
+                colors={[rgbaString(lens.top), rgbaString(lens.bottom)]}
                 style={StyleSheet.absoluteFill}
               />
               {/* The lens's own glint along its top edge. */}
               <LinearGradient
-                colors={["rgba(220, 225, 255, 0)", "rgba(220, 225, 255, 0.4)", "rgba(220, 225, 255, 0)"]}
+                colors={[`rgba(${lens.glint}, 0)`, `rgba(${lens.glint}, 0.4)`, `rgba(${lens.glint}, 0)`]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.lensGlint}
@@ -380,7 +383,6 @@ const styles = StyleSheet.create({
   indicatorLens: {
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: SMOKE_LENS_BORDER,
   },
   tab: {
     flex: 1,

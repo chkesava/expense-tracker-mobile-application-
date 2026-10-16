@@ -8,6 +8,7 @@ export type ThemeName =
   | "dark"
   | "midnight"
   | "midnight-olive"
+  | "midnight-emerald"
   | "vintage-parchment"
   | "sakura-bloom"
   | "cyberpunk"
@@ -21,6 +22,7 @@ export const THEME_NAMES: ThemeName[] = [
   "dark",
   "midnight",
   "midnight-olive",
+  "midnight-emerald",
   "vintage-parchment",
   "sakura-bloom",
   "cyberpunk",
@@ -34,6 +36,7 @@ const DARK_APPEARANCE: ReadonlySet<ThemeName> = new Set([
   "dark",
   "midnight",
   "midnight-olive",
+  "midnight-emerald",
   "cyberpunk",
   "deep-sea",
   "glass-3d",
@@ -335,6 +338,50 @@ export const darkColors: ColorTokens = {
   infoForeground: "#080A14",
 };
 
+/**
+ * Midnight Emerald (SPENDLY-532) — the premium fintech preset. Unlike the
+ * light/dark palettes it owns its accent: emerald for primary actions and
+ * positive values, a soft red only for negatives, a cool blue for info.
+ */
+export const midnightEmeraldColors: ColorTokens = {
+  background: "#080D0D",
+  foreground: "#F5F8F6",
+  card: "#101A18",
+  cardForeground: "#F5F8F6",
+  primary: "#35E889",
+  primaryForeground: "#04130C",
+  secondary: "#151D1B",
+  secondaryForeground: "#F5F8F6",
+  muted: "#151D1B",
+  mutedForeground: "#9CAAA5",
+  destructive: "#FF7777",
+  destructiveForeground: "#1A0707",
+  success: "#35E889",
+  successForeground: "#04130C",
+  warning: "#F5C451",
+  warningForeground: "#1C1407",
+  border: "#233A30",
+  tint: "#35E889",
+  tabIconDefault: "#6F7F79",
+  tabIconSelected: "#35E889",
+  primaryContainer: "#0F3A26",
+  onPrimaryContainer: "#B8F7D5",
+  secondaryContainer: "#17241F",
+  onSecondaryContainer: "#DCE7E2",
+  surfaceVariant: "#151D1B",
+  onSurfaceVariant: "#B5C2BD",
+  outline: "#2E4A3D",
+  outlineVariant: "#1C2B25",
+  scrim: "rgba(0, 0, 0, 0.72)",
+  info: "#78B8FF",
+  infoForeground: "#06111F",
+};
+
+/** Presets that ship their own accent; the accent picker does not apply. */
+export function themeOwnsAccent(name: ThemeName): boolean {
+  return name === "midnight-emerald";
+}
+
 export type AccentColorName =
   | "indigo"
   | "emerald"
@@ -588,6 +635,34 @@ export function createTheme(
   const palette = ACCENT_PALETTES[accentColor] || ACCENT_PALETTES.indigo;
   const accentOverrides = isDark ? palette.dark : palette.light;
 
+  if (themeOwnsAccent(name)) {
+    return {
+      name,
+      accentColor,
+      colors: { ...midnightEmeraldColors },
+      space,
+      radius,
+      typography,
+      fontFamily,
+      elevation,
+      iconSize,
+      chart: {
+        categorical: [
+          "#35E889",
+          "#78B8FF",
+          "#F5C451",
+          "#B794F6",
+          "#F28CC0",
+          "#4FD1C5",
+          "#FF7777",
+        ],
+        positive: "#35E889",
+        negative: "#FF7777",
+      },
+      type,
+    };
+  }
+
   const colors: ColorTokens = {
     ...baseColors,
     ...accentOverrides,
@@ -630,6 +705,7 @@ export const THEME_LABELS: Record<ThemeName, string> = {
   dark: "Dark",
   midnight: "Midnight",
   "midnight-olive": "Midnight Olive",
+  "midnight-emerald": "Midnight Emerald",
   "vintage-parchment": "Vintage Parchment",
   "sakura-bloom": "Sakura Bloom",
   cyberpunk: "Cyberpunk",

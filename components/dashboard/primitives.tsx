@@ -257,7 +257,21 @@ export function Section({
 
 /* -------------------------------------------------------------- HeroSection */
 
+/**
+ * `bold` is the saturated accent gradient. `deep` (SPENDLY-532) is the premium
+ * variant: the card surface with a restrained accent wash, an accent hairline
+ * and normal ink — readable in every theme, and the one the net-worth hero uses.
+ */
+export type HeroVariant = "bold" | "deep";
+
+/** Text colour for content placed on a `HeroSection` of the given variant. */
+export function useHeroInk(variant: HeroVariant = "bold"): string {
+  const { theme } = useTheme();
+  return variant === "deep" ? theme.colors.foreground : theme.colors.primaryForeground;
+}
+
 export type HeroSectionProps = {
+  variant?: HeroVariant;
   title?: string;
   subtitle?: string;
   icon?: ReactNode;
@@ -275,6 +289,7 @@ export type HeroSectionProps = {
  * reads correctly across all themes (light, dark, and the named palettes).
  */
 export function HeroSection({
+  variant = "bold",
   title,
   subtitle,
   icon,
@@ -285,27 +300,48 @@ export function HeroSection({
 }: HeroSectionProps) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
+  const onHero = useHeroInk(variant);
+  const isDeep = variant === "deep";
 
-  const baseColor = theme.colors.primary;
-  const deepColor = mixColors(
-    theme.colors.primary,
-    surfaces.isDark ? "#000000" : theme.colors.foreground,
-    surfaces.isDark ? 0.55 : 0.4
-  );
-  const onHero = theme.colors.primaryForeground;
+  const gradient: [string, string] = isDeep
+    ? [
+        mixColors(theme.colors.card, theme.colors.primary, surfaces.isDark ? 0.1 : 0.06),
+        theme.colors.card,
+      ]
+    : [
+        theme.colors.primary,
+        mixColors(
+          theme.colors.primary,
+          surfaces.isDark ? "#000000" : theme.colors.foreground,
+          surfaces.isDark ? 0.55 : 0.4
+        ),
+      ];
+  // The deep variant's glow is the accent itself, kept faint; the bold one
+  // lifts its own ink for a soft sheen.
+  const glow = isDeep
+    ? withAlpha(theme.colors.primary, surfaces.isDark ? 0.14 : 0.08)
+    : withAlpha(onHero, 0.14);
+  const iconTile = isDeep ? surfaces.wash(theme.colors.primary) : withAlpha(onHero, 0.16);
 
   return (
     <LinearGradient
       testID={testID}
-      colors={[baseColor, deepColor]}
+      colors={gradient}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
-      style={[styles.heroSurface, style]}
+      style={[
+        styles.heroSurface,
+        isDeep && {
+          borderWidth: 1,
+          borderColor: withAlpha(theme.colors.primary, surfaces.isDark ? 0.22 : 0.18),
+        },
+        style,
+      ]}
     >
       <LinearGradient
-        colors={[withAlpha(onHero, 0.14), withAlpha(onHero, 0)]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0.6, y: 0.8 }}
+        colors={[glow, withAlpha(isDeep ? theme.colors.primary : onHero, 0)]}
+        start={isDeep ? { x: 1, y: 0 } : { x: 0, y: 0 }}
+        end={isDeep ? { x: 0.35, y: 0.75 } : { x: 0.6, y: 0.8 }}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
@@ -315,10 +351,7 @@ export function HeroSection({
           <View style={styles.heroHeaderLeft}>
             {icon ? (
               <View
-                style={[
-                  styles.heroIconTile,
-                  { backgroundColor: withAlpha(onHero, 0.16) },
-                ]}
+                style={[styles.heroIconTile, { backgroundColor: iconTile }]}
               >
                 {icon}
               </View>
@@ -340,7 +373,7 @@ export function HeroSection({
                   style={[
                     styles.heroSubtitle,
                     {
-                      color: withAlpha(onHero, 0.78),
+                      color: isDeep ? theme.colors.mutedForeground : withAlpha(onHero, 0.78),
                       fontFamily: theme.fontFamily.regular,
                     },
                   ]}
@@ -666,6 +699,20 @@ export function TrendText({
         numberOfLines={2}
       >
         {suffix}
+      </Text>
+    );
+  }
+
+  if (delta === 0) {
+    return (
+      <Text
+        style={[
+          styles.trend,
+          { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium },
+        ]}
+        numberOfLines={2}
+      >
+        No change {suffix}
       </Text>
     );
   }
