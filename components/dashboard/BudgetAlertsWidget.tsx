@@ -1,20 +1,24 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Wallet } from "lucide-react-native";
+import { Target, Wallet } from "lucide-react-native";
 
-import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
+import {
+  ProgressIndicator,
+  type ProgressStatus,
+} from "@/components/dashboard/ProgressIndicator";
 import {
   MetaLabel,
   Pill,
-  ProgressTrack,
+  RowGlyph,
   Section,
-  StatusStrip,
+  SectionAction,
   useSurfaces,
 } from "@/components/dashboard/primitives";
 import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
-import type { Expense } from "@/shared/types/expense";
+import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
 import {
   computeActiveCategoryBudgets,
   type CategoryBudgetAlertItem,
@@ -46,6 +50,38 @@ function statusColorOf(
   return colors.success;
 }
 
+/** The monthly status mapped onto the shared progress vocabulary (KAN-62). */
+function progressStatusOf(status: SpendlyBudget["status"]): ProgressStatus {
+  if (status === "attention") return "over";
+  if (status === "watch") return "watch";
+  return "good";
+}
+
+/** One labelled figure in the monthly summary grid. */
+function Figure({
+  label,
+  children,
+  align = "left",
+}: {
+  label: string;
+  children: ReactNode;
+  align?: "left" | "right";
+}) {
+  return (
+    <View style={[styles.figure, align === "right" && styles.figureRight]}>
+      <MetaLabel>{label}</MetaLabel>
+      {children}
+    </View>
+  );
+}
+
+/**
+ * Budgets (SPENDLY-533): the monthly budget as one summary card (progress,
+ * spent / remaining / projected / daily limit and the shared status message),
+ * then the category budgets as progress rows. Every figure and threshold comes
+ * from `computeSpendlyBudget` / `computeActiveCategoryBudgets`, as before;
+ * status is always spelled out, never colour alone.
+ */
 export const BudgetAlertsWidget = memo(function BudgetAlertsWidget({
   monthlyBudget,
   monthlySpent,
@@ -87,17 +123,17 @@ export const BudgetAlertsWidget = memo(function BudgetAlertsWidget({
       <Section
         title="Monthly Budget"
         icon={<Wallet size={16} color={theme.colors.mutedForeground} strokeWidth={2.3} />}
+        iconTint={surfaces.tile}
       >
         <EmptyState
           illustration="budgets"
           compact
-          title="No Budget Configured"
-          description="Set a monthly target to receive spending alerts and pacing forecasts."
+          title="No budget set yet"
+          description="Set a monthly target to get spending alerts and a month-end forecast."
           primaryAction={{
-            label: "Configure Budget",
+            label: "Set a budget",
             onPress: () => router.push("/settings/money" as never),
           }}
-          tip="Budgets help prevent overspending by alerting you at 80% and 100% thresholds."
         />
       </Section>
     );
@@ -108,112 +144,67 @@ export const BudgetAlertsWidget = memo(function BudgetAlertsWidget({
       {monthlyBudget > 0 ? (
         <Section
           title="Monthly Budget"
-          subtitle={`Target ${currency} ${monthlyBudget.toLocaleString()}`}
+          subtitle="Spending against this month's target"
           icon={<Wallet size={16} color={statusColor} strokeWidth={2.3} />}
           iconTint={surfaces.wash(statusColor)}
-          badge={<Pill label={`${budget.pctUsed}%`} tone={statusTone} />}
+          badge={<Pill label={`${budget.pctUsed}% used`} tone={statusTone} />}
         >
-          <ProgressTrack pct={budget.pctUsed} color={statusColor} height={8} />
-
-          <View style={styles.footerRow}>
-            <View style={styles.footerItem}>
-              <MetaLabel>Spent</MetaLabel>
-              <Amount
-                value={monthlySpent}
-                currency={currency}
-                ghostable
-                style={{
-                  fontSize: 14.5,
-                  fontFamily: theme.fontFamily.semibold,
-                  color: theme.colors.foreground,
-                }}
-              />
-            </View>
-            <View style={[styles.footerItem, styles.footerRight]}>
-              <MetaLabel>{remainingLabel}</MetaLabel>
-              <Amount
-                value={remainingValue}
-                currency={currency}
-                ghostable
-                style={{
-                  fontSize: 14.5,
-                  fontFamily: theme.fontFamily.semibold,
-                  color: statusColor,
-                }}
-              />
-            </View>
-          </View>
-
-          <View style={styles.forecastRow}>
-            <View style={styles.footerItem}>
-              <MetaLabel>Projected</MetaLabel>
-              <Amount
-                value={budget.projectedMonthEnd}
-                currency={currency}
-                ghostable
-                style={{
-                  fontSize: 13.5,
-                  fontFamily: theme.fontFamily.semibold,
-                  color: theme.colors.foreground,
-                }}
-              />
-            </View>
-            <View style={[styles.footerItem, styles.footerRight]}>
-              <MetaLabel>Daily limit left</MetaLabel>
-              <Amount
-                value={budget.requiredDailyLimit}
-                currency={currency}
-                ghostable
-                style={{
-                  fontSize: 13.5,
-                  fontFamily: theme.fontFamily.semibold,
-                  color: theme.colors.foreground,
-                }}
-              />
-            </View>
-          </View>
-
-          {budget.committedMonthly > 0 ? (
-            <View style={styles.forecastRow}>
-              <View style={styles.footerItem}>
-                <MetaLabel>Committed left</MetaLabel>
-                <Amount
-                  value={budget.committedMonthly}
-                  currency={currency}
-                  ghostable
-                  style={{
-                    fontSize: 13.5,
-                    fontFamily: theme.fontFamily.medium,
-                    color: theme.colors.mutedForeground,
-                  }}
-                />
-              </View>
-              <View style={[styles.footerItem, styles.footerRight]}>
-                <MetaLabel>Flexible</MetaLabel>
-                <Amount
-                  value={budget.flexibleRemaining}
-                  currency={currency}
-                  ghostable
-                  style={{
-                    fontSize: 13.5,
-                    fontFamily: theme.fontFamily.medium,
-                    color: theme.colors.mutedForeground,
-                  }}
-                />
-              </View>
-            </View>
-          ) : null}
-
-          <StatusStrip
-            tone={
-              budget.status === "attention"
-                ? "negative"
-                : budget.status === "watch"
-                  ? "warning"
-                  : "positive"
-            }
-            message={budgetStatusMessage(budget)}
+          <ProgressIndicator
+            pct={budget.pctUsed}
+            status={progressStatusOf(budget.status)}
+            height={8}
+            label="Target"
+            value={<FinancialAmount value={monthlyBudget} currency={currency} size="sm" tone="muted" />}
+            statusLabel={budgetStatusMessage(budget)}
+            accessibilityLabel={`Monthly budget, ${budget.pctUsed}% used`}
           />
+
+          <View style={[styles.grid, { borderTopColor: surfaces.divider }]}>
+            <View style={styles.gridRow}>
+              <Figure label="Spent">
+                <FinancialAmount value={monthlySpent} currency={currency} size="md" />
+              </Figure>
+              <Figure label={remainingLabel} align="right">
+                <FinancialAmount
+                  value={remainingValue}
+                  currency={currency}
+                  size="md"
+                  sign={budget.isOverBudget ? "minus" : "none"}
+                  tone={budget.isOverBudget ? "negative" : "positive"}
+                />
+              </Figure>
+            </View>
+            <View style={styles.gridRow}>
+              <Figure label="Projected">
+                <FinancialAmount value={budget.projectedMonthEnd} currency={currency} size="sm" />
+              </Figure>
+              <Figure label="Daily limit left" align="right">
+                <FinancialAmount value={budget.requiredDailyLimit} currency={currency} size="sm" />
+              </Figure>
+            </View>
+            {budget.committedMonthly > 0 ? (
+              <View style={styles.gridRow}>
+                <Figure label="Committed left">
+                  <FinancialAmount
+                    value={budget.committedMonthly}
+                    currency={currency}
+                    size="sm"
+                    tone="muted"
+                    weight="medium"
+                  />
+                </Figure>
+                <Figure label="Flexible" align="right">
+                  <FinancialAmount
+                    value={budget.flexibleRemaining}
+                    currency={currency}
+                    size="sm"
+                    tone="muted"
+                    weight="medium"
+                  />
+                </Figure>
+              </View>
+            ) : null}
+          </View>
         </Section>
       ) : null}
 
@@ -221,42 +212,58 @@ export const BudgetAlertsWidget = memo(function BudgetAlertsWidget({
         <Section
           title="Category Budgets"
           subtitle={`${activeMonth} · ${activeCategoryBudgets.length} budgeted`}
+          icon={<Target size={16} color={theme.colors.primary} strokeWidth={2.3} />}
+          iconTint={surfaces.wash(theme.colors.primary)}
+          action={
+            monthlyBudget === 0 ? (
+              <SectionAction
+                label="Manage"
+                onPress={() => router.push("/settings/money" as never)}
+                accessibilityLabel="Manage budgets"
+              />
+            ) : null
+          }
           contentStyle={styles.categoryList}
         >
           {activeCategoryBudgets.map((b) => {
-            const color = b.isOver
-              ? theme.colors.destructive
-              : b.isWarning
-                ? theme.colors.warning
-                : theme.colors.success;
+            const status: ProgressStatus = b.isOver ? "over" : b.isWarning ? "watch" : "good";
+            const statusLabel = b.isOver ? "Over limit" : b.isWarning ? "Close to limit" : "On track";
+            const name = `${b.category}${b.subcategory ? ` › ${b.subcategory}` : ""}`;
             return (
-              <View key={b.id} style={styles.categoryItem}>
-                <View style={styles.categoryTop}>
-                  <Text
-                    style={[
-                      styles.categoryName,
-                      {
-                        color: theme.colors.foreground,
-                        fontFamily: theme.fontFamily.medium,
-                      },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {b.category}
-                    {b.subcategory ? ` › ${b.subcategory}` : ""}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.categoryMeta,
-                      { color, fontFamily: theme.fontFamily.medium },
-                    ]}
-                  >
-                    {b.pct}% · {currency} {b.spent.toLocaleString()} /{" "}
-                    {b.amount.toLocaleString()}
-                  </Text>
-                </View>
-                <ProgressTrack pct={b.pct} color={color} height={5} />
-              </View>
+              <ProgressIndicator
+                key={b.id}
+                pct={b.pct}
+                status={status}
+                height={5}
+                leading={
+                  <RowGlyph size={30} tint={surfaces.tile}>
+                    <Text style={styles.glyph} accessible={false}>
+                      {getCategoryIcon(b.category)}
+                    </Text>
+                  </RowGlyph>
+                }
+                label={name}
+                value={
+                  <View style={styles.spentOf}>
+                    <FinancialAmount value={b.spent} currency={currency} size="xs" />
+                    <Text
+                      style={[styles.of, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+                    >
+                      {" / "}
+                    </Text>
+                    <FinancialAmount
+                      value={b.amount}
+                      currency={currency}
+                      size="xs"
+                      tone="muted"
+                      weight="medium"
+                    />
+                  </View>
+                }
+                statusLabel={statusLabel}
+                trailing={`${b.pct}%`}
+                accessibilityLabel={`${name}, ${b.pct}% of budget, ${statusLabel}`}
+              />
             );
           })}
         </Section>
@@ -269,42 +276,36 @@ const styles = StyleSheet.create({
   stack: {
     gap: 12,
   },
-  footerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 12,
+  grid: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 12,
   },
-  footerItem: {
+  gridRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  figure: {
     flex: 1,
     minWidth: 0,
     gap: 2,
   },
-  footerRight: {
+  figureRight: {
     alignItems: "flex-end",
   },
-  forecastRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 10,
-  },
   categoryList: {
-    gap: 12,
+    gap: 16,
   },
-  categoryItem: {
-    gap: 6,
+  glyph: {
+    fontSize: 15,
   },
-  categoryTop: {
+  spentOf: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
+    alignItems: "baseline",
+    flexShrink: 1,
   },
-  categoryName: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 13.5,
-  },
-  categoryMeta: {
-    fontSize: 11,
+  of: {
+    fontSize: 12,
   },
 });

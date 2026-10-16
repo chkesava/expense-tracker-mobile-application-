@@ -1,7 +1,6 @@
 import { memo, useMemo, type ComponentType } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
-import Animated, { FadeIn } from "react-native-reanimated";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -18,6 +17,7 @@ import {
 
 import { Amount } from "@/components/common/Amount";
 import { Skeleton } from "@/components/common/Skeleton";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import {
   DASH_RADIUS,
   DASH_TYPE,
@@ -52,6 +52,17 @@ export interface NetWorthWidgetProps {
  */
 export const NetWorthWidget = memo(function NetWorthWidget({ currency }: NetWorthWidgetProps) {
   const netWorth = useUnifiedNetWorth({ progressive: true });
+
+  // First load: placeholders shaped like the hero and two account cards, so
+  // nothing jumps when the totals land (SPENDLY-533).
+  if (netWorth.loading) {
+    return (
+      <View style={styles.stack}>
+        <DashboardSkeleton variant="hero" />
+        <DashboardSkeleton variant="cards" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.stack}>
@@ -96,7 +107,7 @@ function NetWorthHeroCard({
           <Skeleton width={190} height={DASH_TYPE.heroValueLine} borderRadius={10} />
         </View>
       ) : (
-        <Animated.View entering={FadeIn.duration(220)} style={styles.heroValueSlot}>
+        <View style={styles.heroValueSlot}>
           <Amount
             value={Math.abs(netWorth.totalNetWorth)}
             currency={currency}
@@ -124,7 +135,7 @@ function NetWorthHeroCard({
               You owe more than you hold
             </Text>
           ) : null}
-        </Animated.View>
+        </View>
       )}
 
       {!netWorth.loading && netWorth.liquidBalanceMayBePartial ? (

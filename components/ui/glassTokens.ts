@@ -3,6 +3,8 @@
  * Pure module (no react-native) so lib/navContrast.test.ts can import it.
  */
 
+import type { ThemeName } from "@/theme/tokens";
+
 /**
  * SPENDLY-154/170/172: "smoke" is the iOS-style glass used by the capsule nav:
  * a backdrop blur under a cool blue/indigo tint, a subtle cool rim, a restrained
@@ -68,6 +70,38 @@ export const SMOKE_LENS_TOP = { rgb: [120, 110, 255] as const, alpha: 0.16 } as 
 export const SMOKE_LENS_BOTTOM = { rgb: [80, 90, 180] as const, alpha: 0.08 } as const;
 export const SMOKE_LENS_BORDER = "rgba(160, 170, 255, 0.10)";
 
+/** The active-tab lens: gradient stops, hairline and top-edge glint (`r, g, b`). */
+export type SmokeLens = {
+  top: { rgb: readonly [number, number, number]; alpha: number };
+  bottom: { rgb: readonly [number, number, number]; alpha: number };
+  border: string;
+  glint: string;
+};
+
+/** The blue/purple lens every theme has used since SPENDLY-172. */
+export const SMOKE_LENS: SmokeLens = {
+  top: SMOKE_LENS_TOP,
+  bottom: SMOKE_LENS_BOTTOM,
+  border: SMOKE_LENS_BORDER,
+  glint: "220, 225, 255",
+};
+
+/**
+ * SPENDLY-533: Midnight Emerald's lens. The same smoke glass and alphas, tinted
+ * emerald so the active tab matches the theme instead of a blue/purple accent.
+ */
+export const EMERALD_LENS: SmokeLens = {
+  top: { rgb: [53, 232, 137], alpha: 0.16 },
+  bottom: { rgb: [20, 120, 80], alpha: 0.08 },
+  border: "rgba(53, 232, 137, 0.14)",
+  glint: "190, 255, 220",
+};
+
+/** The lens for a theme. Only Midnight Emerald has its own. */
+export function smokeLensFor(themeName: ThemeName): SmokeLens {
+  return themeName === "midnight-emerald" ? EMERALD_LENS : SMOKE_LENS;
+}
+
 /** `{rgb, alpha}` as a CSS colour string. */
 export function rgbaString({ rgb, alpha }: { rgb: readonly number[]; alpha: number }): string {
   return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
@@ -109,18 +143,18 @@ export function over(fg: RGB, bg: RGB, alpha: number): RGB {
  * smoke glass over the lightest surface that can scroll beneath the capsule,
  * plus the lens tint. `backdrops` are that theme's page and card colours.
  */
-export function smokeActivePill(backdrops: string[], isDark: boolean): RGB {
-  return overLens(smokeGlass(lightestOf(backdrops), isDark));
+export function smokeActivePill(backdrops: string[], isDark: boolean, lens: SmokeLens = SMOKE_LENS): RGB {
+  return overLens(smokeGlass(lightestOf(backdrops), isDark), lens);
 }
 
 /** The active lens at the icon's height, where the top gloss adds to it. */
-export function smokeActiveLens(backdrops: string[], isDark: boolean): RGB {
+export function smokeActiveLens(backdrops: string[], isDark: boolean, lens: SmokeLens = SMOKE_LENS): RGB {
   const glossed = over([255, 255, 255], smokeGlass(lightestOf(backdrops), isDark), SMOKE_GLOSS_ALPHA);
-  return overLens(glossed);
+  return overLens(glossed, lens);
 }
 
-function overLens(glass: RGB): RGB {
-  return over([...SMOKE_LENS_TOP.rgb] as RGB, glass, SMOKE_LENS_TOP.alpha);
+function overLens(glass: RGB, lens: SmokeLens): RGB {
+  return over([...lens.top.rgb] as RGB, glass, lens.top.alpha);
 }
 
 function lightestOf(backdrops: string[]): RGB {

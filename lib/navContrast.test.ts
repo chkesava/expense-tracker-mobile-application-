@@ -7,7 +7,6 @@ import {
   themeUsesDarkPalette,
 } from "@/theme/tokens";
 import {
-  SMOKE_LENS_TOP,
   SMOKE_INACTIVE_ALPHA,
   SMOKE_INACTIVE_ICON_ALPHA,
   SMOKE_BLUR_RADIUS_DP,
@@ -21,6 +20,7 @@ import {
   glassAccent,
   smokeActiveLens,
   smokeActivePill,
+  smokeLensFor,
   hexToRgb as rgb,
   luminance,
   over,
@@ -70,15 +70,21 @@ describe("capsule nav contrast (smoke glass)", () => {
     expect(contrast(icon, glass)).toBeGreaterThanOrEqual(4.5);
   });
 
-  // The lens is a blue/purple tint over the glass (SPENDLY-172), modelled at
-  // its brighter top stop.
-  const LENS: RGB = [...SMOKE_LENS_TOP.rgb] as RGB;
+  // The lens is a tint over the glass, modelled at its brighter top stop:
+  // blue/purple in every theme (SPENDLY-172), emerald in Midnight Emerald
+  // (SPENDLY-533).
+  const lensTop = (name: (typeof THEME_NAMES)[number]) => smokeLensFor(name).top;
 
   it.each(COMBOS)("%s / %s: the accent active tab reads on its lens", (name, accent) => {
     const t = createTheme(name, accent);
-    const pill = over(LENS, glassOver(name, accent), SMOKE_LENS_TOP.alpha);
+    const top = lensTop(name);
+    const pill = over([...top.rgb] as RGB, glassOver(name, accent), top.alpha);
     // BottomNav's pill model must agree with this test's independent one.
-    const navPill = smokeActivePill([t.colors.background, t.colors.card], themeUsesDarkPalette(name));
+    const navPill = smokeActivePill(
+      [t.colors.background, t.colors.card],
+      themeUsesDarkPalette(name),
+      smokeLensFor(name)
+    );
     expect(navPill).toEqual(pill);
     expect(contrast(rgb(glassAccent(t.colors.primary, navPill)), pill)).toBeGreaterThanOrEqual(4.5);
   });
@@ -90,12 +96,17 @@ describe("capsule nav contrast (smoke glass)", () => {
     const glossed = over(WHITE, glassOver(name, accent), SMOKE_GLOSS_ALPHA);
     const icon = over(WHITE, glossed, SMOKE_INACTIVE_ICON_ALPHA);
     expect(contrast(icon, glossed)).toBeGreaterThanOrEqual(3);
-    const lens = over(LENS, glossed, SMOKE_LENS_TOP.alpha);
+    const top = lensTop(name);
+    const lens = over([...top.rgb] as RGB, glossed, top.alpha);
     const backdrops = [t.colors.background, t.colors.card];
     const dark = themeUsesDarkPalette(name);
-    const navLens = smokeActiveLens(backdrops, dark);
+    const navLens = smokeActiveLens(backdrops, dark, smokeLensFor(name));
     expect(navLens).toEqual(lens);
-    const accentColor = glassAccent(t.colors.primary, smokeActivePill(backdrops, dark), navLens);
+    const accentColor = glassAccent(
+      t.colors.primary,
+      smokeActivePill(backdrops, dark, smokeLensFor(name)),
+      navLens
+    );
     expect(contrast(rgb(accentColor), lens)).toBeGreaterThanOrEqual(3);
   });
 
@@ -121,5 +132,15 @@ describe("capsule nav contrast (smoke glass)", () => {
   it("stays readable without blur", () => {
     // The no-blur fallback is denser, so it is never worse than the blurred case.
     expect(SMOKE_TINT_ALPHA_NO_BLUR).toBeGreaterThanOrEqual(SMOKE_TINT_ALPHA.light);
+  });
+});
+
+describe("theme lens (SPENDLY-533)", () => {
+  it("keeps the SPENDLY-172 blue/purple lens for every theme but Midnight Emerald", () => {
+    for (const name of THEME_NAMES) {
+      const lens = smokeLensFor(name);
+      if (name === "midnight-emerald") expect(lens.top.rgb).toEqual([53, 232, 137]);
+      else expect(lens.top.rgb).toEqual([120, 110, 255]);
+    }
   });
 });

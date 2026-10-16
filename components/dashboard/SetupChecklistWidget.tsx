@@ -1,24 +1,24 @@
-import React, { useEffect } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import Animated, {
-  FadeInDown,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
-import { Sparkles, Wand2 } from "lucide-react-native";
+import React from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Check, ChevronRight, Sparkles, Wand2 } from "lucide-react-native";
 
+import { DashboardEntrance } from "@/components/dashboard/DashboardEntrance";
 import { Pill, Section } from "@/components/dashboard/primitives";
-import { SetupStepItem } from "@/components/onboarding/SetupStepItem";
+import { ProgressIndicator } from "@/components/dashboard/ProgressIndicator";
 import { Button } from "@/components/ui/Button";
 import {
   useSetupProgress,
   type SetupStep,
 } from "@/providers/SetupProgressProvider";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 
+/**
+ * Getting Started checklist (SPENDLY-533): a completion summary with one
+ * progress bar, the wizard shortcut, then one row per step with a done / to-do
+ * mark. Steps, completion and actions all come from `useSetupProgress`.
+ */
 export const SetupChecklistWidget = React.memo(function SetupChecklistWidget() {
   const {
     steps,
@@ -31,21 +31,6 @@ export const SetupChecklistWidget = React.memo(function SetupChecklistWidget() {
   } = useSetupProgress();
   const { theme } = useTheme();
   const surfaces = useSurfaces();
-
-  const progressWidth = useSharedValue(0);
-
-  useEffect(() => {
-    progressWidth.value = withSpring(progress, {
-      damping: 18,
-      stiffness: 90,
-    });
-  }, [progress, progressWidth]);
-
-  const animatedProgressStyle = useAnimatedStyle(() => {
-    return {
-      width: `${Math.round(progressWidth.value * 100)}%`,
-    };
-  });
 
   if (!isOnboarding) {
     return null;
@@ -63,52 +48,30 @@ export const SetupChecklistWidget = React.memo(function SetupChecklistWidget() {
     launchSetupWizard(firstPendingIdx >= 0 ? Math.min(firstPendingIdx, 4) : 0);
   };
 
+  const remaining = Math.max(0, totalCount - completedCount);
+  const pct = Math.round((progress || 0) * 100);
+
   return (
-    <Animated.View
-      entering={FadeInDown.springify().damping(15)}
-      style={styles.wrap}
-    >
+    // The shared card entrance (no layout animation; reduced motion respected).
+    <DashboardEntrance style={styles.wrap}>
       <Section
         title="Getting Started"
         icon={<Sparkles size={16} color={theme.colors.primary} />}
         iconTint={surfaces.wash(theme.colors.primary)}
         badge={<Pill label={`${completedCount} / ${totalCount} Completed`} />}
       >
-        {/* Segmented Block Progress Bar (10 Segment Units) */}
-        <View style={styles.segmentsRow}>
-          {Array.from({ length: totalCount || 10 }).map((_, index) => {
-            const isFilled = index < completedCount;
-            return (
-              <View
-                key={index}
-                style={[
-                  styles.segmentBlock,
-                  {
-                    backgroundColor: isFilled
-                      ? theme.colors.primary
-                      : surfaces.track,
-                  },
-                ]}
-              />
-            );
-          })}
-        </View>
-
-        {/* Continuous Smooth Progress Bar */}
-        <View
-          style={[
-            styles.progressBarBg,
-            { backgroundColor: surfaces.control },
-          ]}
-        >
-          <Animated.View
-            style={[
-              styles.progressBarFill,
-              { backgroundColor: theme.colors.primary },
-              animatedProgressStyle,
-            ]}
-          />
-        </View>
+        <ProgressIndicator
+          pct={pct}
+          status={remaining === 0 ? "good" : "neutral"}
+          statusLabel={
+            remaining === 0
+              ? "All steps done"
+              : `${remaining} step${remaining === 1 ? "" : "s"} to go`
+          }
+          trailing={`${pct}%`}
+          accessibilityLabel={`Setup ${completedCount} of ${totalCount} steps completed`}
+          style={styles.progress}
+        />
 
         {/* Setup Wizard Quick CTA */}
         {completedCount < totalCount && (
@@ -133,14 +96,14 @@ export const SetupChecklistWidget = React.memo(function SetupChecklistWidget() {
           </Button>
         )}
 
-        {/* 10 Checklist Step Items */}
         <View style={styles.list}>
-          {steps.map((step: SetupStep) => (
-            <SetupStepItem
+          {steps.map((step: SetupStep, index: number) => (
+            <StepRow
               key={step.id}
               label={step.label}
               completed={step.completed}
               onPress={step.completed ? undefined : step.onNavigate}
+              divider={index < steps.length - 1}
             />
           ))}
         </View>
@@ -157,45 +120,94 @@ export const SetupChecklistWidget = React.memo(function SetupChecklistWidget() {
           <Text
             style={[
               styles.dismissText,
-              { color: theme.colors.mutedForeground },
+              { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.semibold },
             ]}
           >
             Dismiss Checklist
           </Text>
         </Button>
       </Section>
-    </Animated.View>
+    </DashboardEntrance>
   );
 });
+
+/** One step: a done / to-do mark, the label, and a chevron when it can be opened. */
+function StepRow({
+  label,
+  completed,
+  onPress,
+  divider,
+}: {
+  label: string;
+  completed: boolean;
+  onPress?: () => void;
+  divider: boolean;
+}) {
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
+
+  const handlePress = () => {
+    if (onPress) {
+      haptic.selection().catch(() => undefined);
+      onPress();
+    }
+  };
+
+  return (
+    <Pressable
+      onPress={handlePress}
+      disabled={!onPress || completed}
+      android_ripple={{ color: withAlpha(theme.colors.primary, 0.1), borderless: false }}
+      style={({ pressed }) => [
+        styles.stepRow,
+        divider && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: surfaces.divider },
+        pressed && !completed && { opacity: 0.8 },
+      ]}
+      accessibilityRole={onPress && !completed ? "button" : undefined}
+      accessibilityState={{ checked: completed, disabled: !onPress || completed }}
+      accessibilityLabel={`${label}, ${completed ? "done" : "to do"}`}
+    >
+      <View
+        style={[
+          styles.mark,
+          completed
+            ? { backgroundColor: theme.colors.success, borderColor: theme.colors.success }
+            : { borderColor: withAlpha(theme.colors.mutedForeground, 0.45) },
+        ]}
+      >
+        {completed ? (
+          <Check size={13} color={theme.colors.successForeground} strokeWidth={3} />
+        ) : null}
+      </View>
+      <Text
+        style={[
+          styles.stepLabel,
+          {
+            color: completed ? theme.colors.mutedForeground : theme.colors.foreground,
+            fontFamily: completed ? theme.fontFamily.regular : theme.fontFamily.medium,
+          },
+          completed && styles.stepLabelDone,
+        ]}
+        numberOfLines={2}
+      >
+        {label}
+      </Text>
+      {!completed && onPress ? (
+        <ChevronRight size={16} color={theme.colors.mutedForeground} />
+      ) : null}
+    </Pressable>
+  );
+}
 
 const styles = StyleSheet.create({
   wrap: {
     marginBottom: 16,
   },
-  segmentsRow: {
-    flexDirection: "row",
-    gap: 4,
-    width: "100%",
-    marginBottom: 8,
-  },
-  segmentBlock: {
-    flex: 1,
-    height: 6,
-    borderRadius: 3,
-  },
-  progressBarBg: {
-    height: 3,
-    borderRadius: 2,
-    width: "100%",
-    marginBottom: 16,
-    overflow: "hidden",
-  },
-  progressBarFill: {
-    height: "100%",
-    borderRadius: 2,
+  progress: {
+    marginBottom: 14,
   },
   wizardCta: {
-    marginBottom: 12,
+    marginBottom: 8,
   },
   wizardCtaText: {
     fontSize: 14,
@@ -203,11 +215,36 @@ const styles = StyleSheet.create({
   list: {
     marginBottom: 8,
   },
+  stepRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 48,
+    paddingVertical: 8,
+    paddingHorizontal: 2,
+  },
+  mark: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepLabel: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 14,
+    lineHeight: 19,
+  },
+  stepLabelDone: {
+    textDecorationLine: "line-through",
+    opacity: 0.7,
+  },
   dismissButton: {
     alignSelf: "center",
   },
   dismissText: {
     fontSize: 13,
-    fontWeight: "600",
   },
 });

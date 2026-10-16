@@ -21,6 +21,7 @@ import {
   useSurfaces,
 } from "@/components/dashboard/primitives";
 import { LazyMount } from "@/components/common/LazyMount";
+import { DashboardEntrance } from "@/components/dashboard/DashboardEntrance";
 import { ErrorState } from "@/components/common/ErrorState";
 import { WelcomeScreen } from "@/components/onboarding/WelcomeScreen";
 import { PageShell } from "@/components/layout/PageShell";
@@ -28,6 +29,7 @@ import { sampleScrollFps, perfEvent, perfMark } from "@/lib/perf";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useDashboardCashFlow } from "@/hooks/useDashboardCashFlow";
+import { useIncomes } from "@/hooks/useIncomes";
 import { useRecentExpenses } from "@/hooks/useRecentExpenses";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
 import { useAuth } from "@/providers/AuthProvider";
@@ -39,12 +41,14 @@ import {
   type DateFormatOption,
 } from "@/shared/utils/dateDisplay";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
-import type { Expense } from "@/shared/types/expense";
+import type { Expense, Income } from "@/shared/types/expense";
 import {
   getOrderedDashboardWidgets,
   type DashboardWidgetId,
 } from "@/shared/utils/dashboardWidgets";
 import { currentMonthKey, formatDateKey } from "@/shared/utils/dates";
+import { activeLedgerRows } from "@/shared/utils/ledgerRow";
+import { mergeRecentActivity } from "@/shared/utils/recentActivity";
 import {
   computeSpendlyBudget,
   remainingCommittedThisMonth,
@@ -94,7 +98,7 @@ export default function DashboardScreen() {
   const { settings } = useSettings();
   const investmentsEnabled = useInvestmentsEnabled();
   const { globalMonth, setIsMonthDrawerOpen } = useGlobalMonth();
-  const { setIsAddExpenseOpen, setIsAddSheetOpen, setEditingExpense } =
+  const { setIsAddExpenseOpen, setIsAddSheetOpen, setEditingExpense, setEditingIncome } =
     useModalActions();
 
   const activeMonth = globalMonth || currentMonthKey(settings.timezone);
@@ -116,7 +120,16 @@ export default function DashboardScreen() {
     () => cashFlowSummaries.find((s) => s.period === previousMonth) ?? null,
     [cashFlowSummaries, previousMonth]
   );
-  const { expenses: recentExpenses, loading: recentLoading } = useRecentExpenses(5);
+  const { expenses: recentFeed, loading: recentLoading } = useRecentExpenses(5);
+  // Incomes are already loaded app-wide by FinanceDataProvider — no new read.
+  const { incomes } = useIncomes();
+  // SPENDLY-533: soft-deleted rows keep their docs (`deletedAt`), so the
+  // limit-N feed can include them; nothing on the dashboard may count them.
+  const recentExpenses = useMemo(() => activeLedgerRows(recentFeed), [recentFeed]);
+  const recentActivity = useMemo(
+    () => mergeRecentActivity(recentExpenses, incomes, 5),
+    [recentExpenses, incomes]
+  );
 
   const { accounts, loading: accountsLoading } = useAccounts();
   const { subscriptions } = useSubscriptions();
@@ -221,6 +234,12 @@ export default function DashboardScreen() {
     setIsAddExpenseOpen(true);
   }, [setEditingExpense, setIsAddExpenseOpen]);
 
+  // Same pair the ledger uses to open an income for editing.
+  const handleEditIncome = useCallback((income: Income) => {
+    setEditingIncome(income);
+    setIsAddExpenseOpen(true);
+  }, [setEditingIncome, setIsAddExpenseOpen]);
+
   const handleOpenAddSheet = useCallback(() => {
     setIsAddSheetOpen(true);
   }, [setIsAddSheetOpen]);
@@ -281,11 +300,12 @@ export default function DashboardScreen() {
           return (
             <RecentActivityWidget
               key="recentActivity"
-              expenses={recentExpenses}
+              items={recentActivity}
               currency={displayCurrency}
-              loading={recentLoading && recentExpenses.length === 0}
+              loading={recentLoading && recentActivity.length === 0}
               accountNames={accountNames}
               onEditExpense={handleEditExpense}
+              onEditIncome={handleEditIncome}
               onViewAll={handleViewLedger}
             />
           );
@@ -334,8 +354,12 @@ export default function DashboardScreen() {
 
     if (!node) return null;
 
+    // SPENDLY-533: one short entrance per card, staggered by position. It runs
+    // when the card mounts, so data updates never replay it.
+    const card = <DashboardEntrance index={index}>{node}</DashboardEntrance>;
+
     if (ABOVE_FOLD_WIDGETS.includes(widgetId)) {
-      return node;
+      return card;
     }
 
     const delayMs = 40 + Math.max(0, index) * 40;
@@ -356,7 +380,7 @@ export default function DashboardScreen() {
             : undefined
         }
       >
-        {node}
+        {card}
       </LazyMount>
     );
   };
@@ -364,6 +388,7 @@ export default function DashboardScreen() {
   const insertInsightsAfter = displayWidgetIds.findIndex((id) => id === "budgetAlerts");
 
   const cashFlowOverview = (
+    <DashboardEntrance index={heroCount}>
     <QuickInsightsWidget
       monthlySpent={monthlySpent}
       monthlyIncome={monthlyIncome}
@@ -376,6 +401,7 @@ export default function DashboardScreen() {
       monthLabel={activeMonthChipLabel}
       onOpenMonthPicker={handleOpenMonthPicker}
     />
+    </DashboardEntrance>
   );
 
   return (

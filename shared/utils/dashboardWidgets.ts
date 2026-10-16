@@ -189,6 +189,35 @@ export interface CategoryBudgetAlertItem {
   isWarning: boolean;
 }
 
+export type CategoryShare = { category: string; amount: number; percentage: number };
+
+/**
+ * SPENDLY-533 — the Spending breakdown's top categories from a period
+ * summary's `categoryTotals`. Summaries store each expense under its parent
+ * (`"Food & Groceries"`) AND its subcategory (`"Food & Groceries::Dining"`), so
+ * only the parent keys partition the month's spend; summing every key counted
+ * each rupee twice and listed subcategories as categories of their own.
+ */
+export function topCategoryShares(
+  categoryTotals: Record<string, number> | null | undefined,
+  limit = 5
+): { categories: CategoryShare[]; totalSpent: number } {
+  if (!categoryTotals) return { categories: [], totalSpent: 0 };
+  const parents = Object.entries(categoryTotals).filter(
+    ([key, amount]) => !key.includes("::") && Number.isFinite(amount) && amount > 0
+  );
+  const totalSpent = parents.reduce((sum, [, amount]) => sum + amount, 0);
+  const categories = parents
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, Math.max(0, limit))
+    .map(([category, amount]) => ({
+      category,
+      amount,
+      percentage: totalSpent > 0 ? (amount / totalSpent) * 100 : 0,
+    }));
+  return { categories, totalSpent };
+}
+
 /**
  * Derives progress and alert thresholds for category/subcategory budgets in a given month.
  */

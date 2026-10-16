@@ -1,11 +1,13 @@
 import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Calendar, Lightbulb, Sprout, Target } from "lucide-react-native";
+import { Calendar, ChevronRight, Sprout, Target } from "lucide-react-native";
 
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
+import { ProgressIndicator } from "@/components/dashboard/ProgressIndicator";
 import {
   MetaLabel,
-  ProgressTrack,
   Section,
   SectionAction,
   useSurfaces,
@@ -13,55 +15,61 @@ import {
 import { Button } from "@/components/ui/Button";
 import { useFinancialGoals } from "@/hooks/useFinancialGoals";
 import { haptic } from "@/lib/haptics";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export interface FinancialGoalsWidgetProps {
   currency: string;
 }
 
+/**
+ * Financial goals (SPENDLY-533): name, target date and a progress row per goal,
+ * with saved / target as real amounts and the status spelled out. Same goals,
+ * same two-goal preview and same routes as before.
+ */
 export const FinancialGoalsWidget = memo(function FinancialGoalsWidget({
   currency,
 }: FinancialGoalsWidgetProps) {
-  const { goals } = useFinancialGoals();
+  const { goals, loading } = useFinancialGoals();
   const router = useRouter();
   const { theme } = useTheme();
   const surfaces = useSurfaces();
+  const { settings } = useSettings();
 
   const openGoals = () => {
     void haptic.selection();
     router.push("/settings/money" as never);
   };
 
-  /**
-   * Compact empty state — the illustration-heavy version used ~3x the height
-   * for the same two affordances (explain, create).
-   */
+  if (loading && goals.length === 0) {
+    return <DashboardSkeleton variant="progress" rows={2} />;
+  }
+
   if (goals.length === 0) {
     return (
       <Section
         title="Financial Goals"
-        subtitle="Create savings targets to visualise progress."
         icon={<Sprout size={16} color={theme.colors.success} strokeWidth={2.3} />}
         iconTint={surfaces.wash(theme.colors.success)}
       >
-        <Button variant="primary" size="sm" onPress={openGoals}>
-          Create goal
-        </Button>
-
-        <View style={[styles.tip, { backgroundColor: surfaces.tile }]}>
-          <Lightbulb size={13} color={theme.colors.warning} strokeWidth={2.2} />
+        <View style={styles.empty}>
+          <View style={[styles.emptyGlyph, { backgroundColor: surfaces.wash(theme.colors.success) }]}>
+            <Target size={20} color={theme.colors.success} strokeWidth={2.2} />
+          </View>
           <Text
-            style={[
-              styles.tipText,
-              {
-                color: theme.colors.mutedForeground,
-                fontFamily: theme.fontFamily.regular,
-              },
-            ]}
+            style={[styles.emptyTitle, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
           >
-            Tracking dedicated savings goals keeps you motivated and discourages
-            impulse buying.
+            No savings goals yet
           </Text>
+          <Text
+            style={[styles.emptyText, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+          >
+            Set a target, like an emergency fund or a trip, and watch it fill up.
+          </Text>
+          <Button variant="primary" size="sm" onPress={openGoals} style={styles.emptyButton}>
+            Create goal
+          </Button>
         </View>
       </Section>
     );
@@ -81,20 +89,13 @@ export const FinancialGoalsWidget = memo(function FinancialGoalsWidget({
         const target = goal.targetAmount || 1;
         const pct = Math.min(100, Math.round((current / target) * 100));
         const isComplete = current >= target;
-        const color = isComplete ? theme.colors.success : theme.colors.primary;
 
         return (
           <View key={goal.id} style={styles.goal}>
             <View style={styles.goalTop}>
               <View style={styles.goalNameCol}>
                 <Text
-                  style={[
-                    styles.goalName,
-                    {
-                      color: theme.colors.foreground,
-                      fontFamily: theme.fontFamily.medium,
-                    },
-                  ]}
+                  style={[styles.goalName, { color: theme.colors.foreground, fontFamily: theme.fontFamily.medium }]}
                   numberOfLines={1}
                 >
                   {goal.name}
@@ -102,28 +103,34 @@ export const FinancialGoalsWidget = memo(function FinancialGoalsWidget({
                 {goal.deadline ? (
                   <View style={styles.deadline}>
                     <Calendar size={11} color={theme.colors.mutedForeground} />
-                    <MetaLabel>Target {goal.deadline}</MetaLabel>
+                    <MetaLabel>
+                      By {formatDisplayDate(goal.deadline, settings.dateFormat)}
+                    </MetaLabel>
                   </View>
                 ) : null}
               </View>
-
               <View style={styles.goalValueCol}>
-                <Text
-                  style={[
-                    styles.goalPct,
-                    { color, fontFamily: theme.fontFamily.semibold },
-                  ]}
-                >
-                  {pct}%
-                </Text>
-                <MetaLabel>
-                  {currency} {current.toLocaleString()} /{" "}
-                  {target.toLocaleString()}
-                </MetaLabel>
+                <FinancialAmount value={current} currency={currency} size="sm" />
+                <View style={styles.ofRow}>
+                  <MetaLabel>of</MetaLabel>
+                  <FinancialAmount
+                    value={target}
+                    currency={currency}
+                    size="xs"
+                    tone="muted"
+                    weight="medium"
+                  />
+                </View>
               </View>
             </View>
 
-            <ProgressTrack pct={pct} color={color} height={5} />
+            <ProgressIndicator
+              pct={pct}
+              status={isComplete ? "good" : "neutral"}
+              statusLabel={isComplete ? "Goal reached" : "In progress"}
+              trailing={`${pct}%`}
+              accessibilityLabel={`${goal.name}, ${pct}% saved`}
+            />
           </View>
         );
       })}
@@ -133,37 +140,48 @@ export const FinancialGoalsWidget = memo(function FinancialGoalsWidget({
         accessibilityRole="link"
         accessibilityLabel="Plan how to fund your goals"
         hitSlop={8}
-        style={{ alignSelf: "flex-start", paddingTop: 8, minHeight: 32, justifyContent: "center" }}
+        style={({ pressed }) => [styles.link, pressed && { opacity: 0.7 }]}
       >
-        <Text style={{ color: theme.colors.primary, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.xs }}>Plan funding →</Text>
+        <Text style={[styles.linkText, { color: theme.colors.primary, fontFamily: theme.fontFamily.semibold }]}>
+          Plan funding
+        </Text>
+        <ChevronRight size={14} color={theme.colors.primary} strokeWidth={2.4} />
       </Pressable>
     </Section>
   );
 });
 
 const styles = StyleSheet.create({
-  ctaText: {
-    fontSize: 13.5,
+  empty: {
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
   },
-  tip: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    marginTop: 12,
-    padding: 11,
-    borderRadius: 14,
-    borderCurve: "continuous",
+  emptyGlyph: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
   },
-  tipText: {
-    flex: 1,
-    fontSize: 12,
-    lineHeight: 17,
+  emptyTitle: {
+    fontSize: 15,
+  },
+  emptyText: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    textAlign: "center",
+    maxWidth: 280,
+  },
+  emptyButton: {
+    marginTop: 8,
   },
   list: {
-    gap: 14,
+    gap: 16,
   },
   goal: {
-    gap: 7,
+    gap: 8,
   },
   goalTop: {
     flexDirection: "row",
@@ -187,8 +205,21 @@ const styles = StyleSheet.create({
   goalValueCol: {
     alignItems: "flex-end",
     gap: 1,
+    maxWidth: "50%",
   },
-  goalPct: {
-    fontSize: 14,
+  ofRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  link: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 1,
+    alignSelf: "flex-start",
+    minHeight: 32,
+  },
+  linkText: {
+    fontSize: 13,
   },
 });

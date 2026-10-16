@@ -5,6 +5,7 @@ import Animated, {
   FadeIn,
   FadeOut,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
@@ -92,10 +93,15 @@ export function BarChart({
     () => data.map((d) => `${d.value}:${d.secondaryValue ?? 0}`).join("|"),
     [data]
   );
+  const reduceMotion = useReducedMotion();
   useEffect(() => {
+    if (reduceMotion) {
+      grow.value = 1;
+      return;
+    }
     grow.value = 0;
     grow.value = withSpring(1, { damping: 17, stiffness: 200, mass: 0.8 });
-  }, [dataKey, grow]);
+  }, [dataKey, grow, reduceMotion]);
   const growStyle = useAnimatedStyle(() => ({
     transform: [{ scaleY: grow.value }],
   }));
@@ -156,8 +162,8 @@ export function BarChart({
       {/* Selected Item Tooltip Header with Reanimated Fade */}
       {selectedItem && (
         <Animated.View
-          entering={FadeIn.duration(180)}
-          exiting={FadeOut.duration(120)}
+          entering={reduceMotion ? undefined : FadeIn.duration(180)}
+          exiting={reduceMotion ? undefined : FadeOut.duration(120)}
           style={[
             styles.tooltipBadge,
             {
