@@ -57,7 +57,7 @@ export const CalendarMonthGrid = memo(function CalendarMonthGrid({
                 <Text style={{ color: fg, fontFamily: c.isToday ? theme.fontFamily.bold : theme.fontFamily.regular, fontSize: theme.typography.sm }}>{c.day}</Text>
                 <View style={styles.marks}>
                   {c.outCount ? <View style={[styles.dot, { backgroundColor: c.isSelected ? fg : theme.colors.destructive }]} /> : null}
-                  {c.inCount ? <View style={[styles.ring, { borderColor: c.isSelected ? fg : theme.colors.primary }]} /> : null}
+                  {c.inCount ? <View style={[styles.ring, { borderColor: c.isSelected ? fg : theme.colors.success }]} /> : null}
                   {c.otherCount ? <View style={[styles.square, { backgroundColor: c.isSelected ? fg : muted }]} /> : null}
                   {c.overdue ? <Text style={{ color: c.isSelected ? fg : theme.colors.destructive, fontSize: 9, fontFamily: theme.fontFamily.bold }}>!</Text> : null}
                 </View>
@@ -81,7 +81,7 @@ export function CalendarLegend() {
         <Text style={text}>Money out</Text>
       </View>
       <View style={styles.legendItem}>
-        <View style={[styles.ring, { borderColor: theme.colors.primary }]} />
+        <View style={[styles.ring, { borderColor: theme.colors.success }]} />
         <Text style={text}>Money in</Text>
       </View>
       <View style={styles.legendItem}>
