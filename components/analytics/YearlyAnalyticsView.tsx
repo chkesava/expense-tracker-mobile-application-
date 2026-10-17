@@ -31,7 +31,7 @@ import {
 } from "@/components/analytics/yearly/YearlyInsightGrid";
 import { CategoryDistributionCard } from "@/components/analytics/shared/CategoryDistributionCard";
 import { PeriodSelector } from "@/components/analytics/shared/PeriodSelector";
-import { insightAccents } from "@/components/analytics/insightsTheme";
+import { useInsightAccents } from "@/components/analytics/insightsTheme";
 import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -47,7 +47,6 @@ import { COLORS } from "@/shared/utils/chartColors";
 import { isInMonth } from "@/shared/utils/dates";
 import type { BarChartItem } from "@/components/charts/BarChart";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 const MONTH_NAMES = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -90,8 +89,7 @@ export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
   const router = useRouter();
   const { theme, themeName } = useTheme();
   const listBottomPadding = usePageListBottomPadding();
-  const isDark = themeUsesDarkPalette(themeName);
-  const accents = insightAccents(isDark);
+  const accents = useInsightAccents();
   const tileText = useYearlyTileTextStyles();
   const {
     expenses,
@@ -229,21 +227,21 @@ export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
       {
         label: "Total Spent",
         value: totalAnnualExpense,
-        color: accents.pink,
+        color: accents.spend,
         delta: delta(totalAnnualExpense, prevYearTotals.spent),
         riseIsGood: false,
       },
       {
         label: "Total Income",
         value: totalAnnualIncome,
-        color: accents.green,
+        color: accents.positive,
         delta: delta(totalAnnualIncome, prevYearTotals.income),
         riseIsGood: true,
       },
       {
         label: "Net Savings",
         value: netAnnualSavings,
-        color: netAnnualSavings >= 0 ? accents.green : accents.pink,
+        color: netAnnualSavings >= 0 ? accents.positive : accents.negative,
         delta: delta(netAnnualSavings, prevYearTotals.net),
         riseIsGood: true,
       },
@@ -258,8 +256,9 @@ export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
       },
     ];
   }, [
-    accents.green,
-    accents.pink,
+    accents.negative,
+    accents.positive,
+    accents.spend,
     monthlyAverageExpense,
     netAnnualSavings,
     prevYearTotals,
@@ -276,8 +275,8 @@ export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
       tiles.push({
         id: "highestSpendMonth",
         label: "Highest Spend Month",
-        icon: <ArrowUpRight size={15} color={accents.pink} strokeWidth={2.5} />,
-        tintRgb: "244, 63, 94",
+        icon: <ArrowUpRight size={15} color={accents.spend} strokeWidth={2.5} />,
+        tint: accents.spend,
         value: <Text style={tileText.value}>{peakSpend.label}</Text>,
         sub: (
           <Amount
@@ -295,8 +294,8 @@ export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
       tiles.push({
         id: "lowestSpendMonth",
         label: "Lowest Spend Month",
-        icon: <ArrowDownRight size={15} color={accents.green} strokeWidth={2.5} />,
-        tintRgb: "74, 222, 128",
+        icon: <ArrowDownRight size={15} color={accents.positive} strokeWidth={2.5} />,
+        tint: accents.positive,
         value: <Text style={tileText.value}>{lowestSpend.label}</Text>,
         sub: (
           <Amount
@@ -313,8 +312,8 @@ export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
     tiles.push({
       id: "avgMonthlySpend",
       label: "Avg Monthly Spend",
-      icon: <CalendarClock size={15} color={accents.amber} strokeWidth={2.5} />,
-      tintRgb: "251, 191, 36",
+      icon: <CalendarClock size={15} color={accents.highlight} strokeWidth={2.5} />,
+      tint: accents.highlight,
       value: (
         <Amount
           value={monthlyAverageExpense}
@@ -336,11 +335,11 @@ export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
         icon: (
           <PiggyBank
             size={15}
-            color={savingsRate >= 0 ? accents.green : accents.pink}
+            color={savingsRate >= 0 ? accents.positive : accents.negative}
             strokeWidth={2.5}
           />
         ),
-        tintRgb: savingsRate >= 0 ? "74, 222, 128" : "244, 63, 94",
+        tint: savingsRate >= 0 ? accents.positive : accents.negative,
         value: (
           <Text style={savingsRate >= 0 ? tileText.positive : tileText.negative}>
             {savingsRate}%
@@ -354,7 +353,7 @@ export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
       id: "transactionCount",
       label: "Transactions Logged",
       icon: <Receipt size={15} color={theme.colors.mutedForeground} strokeWidth={2.5} />,
-      tintRgb: "148, 163, 184",
+      tint: theme.colors.mutedForeground,
       value: <Text style={tileText.value}>{yearExpenses.length}</Text>,
       sub: (
         <Text style={tileText.sub}>
@@ -370,11 +369,11 @@ export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
         label: "Income Growth",
         icon:
           incomeGrowth >= 0 ? (
-            <ArrowUpRight size={15} color={accents.green} strokeWidth={2.5} />
+            <ArrowUpRight size={15} color={accents.positive} strokeWidth={2.5} />
           ) : (
-            <ArrowDownRight size={15} color={accents.pink} strokeWidth={2.5} />
+            <ArrowDownRight size={15} color={accents.negative} strokeWidth={2.5} />
           ),
-        tintRgb: incomeGrowth >= 0 ? "74, 222, 128" : "244, 63, 94",
+        tint: incomeGrowth >= 0 ? accents.positive : accents.negative,
         value: (
           <Text style={incomeGrowth >= 0 ? tileText.positive : tileText.negative}>
             {incomeGrowth > 0 ? "+" : ""}
@@ -387,9 +386,10 @@ export function YearlyAnalyticsView({ listHeader }: YearlyAnalyticsViewProps) {
 
     return tiles;
   }, [
-    accents.amber,
-    accents.green,
-    accents.pink,
+    accents.highlight,
+    accents.negative,
+    accents.positive,
+    accents.spend,
     currency,
     lowestSpend,
     monthlyAverageExpense,
