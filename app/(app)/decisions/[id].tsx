@@ -33,8 +33,8 @@ import {
 } from "@/shared/utils/decisionModel";
 import { getDecisionTemplate } from "@/shared/data/decisionTemplates";
 import { removeLink, resolveDecisionLink } from "@/shared/utils/decisionLinks";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useDecisionFormat } from "@/components/decisions/useDecisionFormat";
 
 const ACTION_LABELS: Partial<Record<DecisionStatus, string>> = {
   draft: "Back to draft",
@@ -63,6 +63,8 @@ export default function DecisionDetailScreen() {
   const [busy, setBusy] = useState(false);
   const linkSources = useDecisionLinkSources();
   const currency = useDisplayCurrency();
+  // SPENDLY-547: display currency (not INR), ghost mode and the user's date format.
+  const { money, date } = useDecisionFormat();
   const resolvedLinks = useMemo(() => (decision ? decision.links.map((l) => resolveDecisionLink(l, linkSources)) : []), [decision, linkSources]);
 
   const header = (
@@ -211,9 +213,9 @@ export default function DecisionDetailScreen() {
               <Text style={muted}>{decisionCategoryLabel(decision.category)}</Text>
             </View>
             <Text style={muted}>
-              Started {new Date(decision.createdAtMs).toISOString().slice(0, 10)}
-              {decision.decidedAtMs ? ` · Decided ${new Date(decision.decidedAtMs).toISOString().slice(0, 10)}` : ""}
-              {decision.reviewDate ? ` · Review on ${decision.reviewDate}` : ""}
+              Started {date(decision.createdAtMs)}
+              {decision.decidedAtMs ? ` · Decided ${date(decision.decidedAtMs)}` : ""}
+              {decision.reviewDate ? ` · Review on ${date(decision.reviewDate)}` : ""}
             </Text>
             {decision.templateId ? <Text style={muted}>Started from the {getDecisionTemplate(decision.templateId, decision.templateVersion).label} template</Text> : null}
             {decision.status === "draft" ? (
@@ -290,8 +292,8 @@ export default function DecisionDetailScreen() {
           <Section title="What you expected" subtitle="Your expectation at the time">
             <View style={{ gap: theme.space.xs }}>
               {decision.expected.summary ? <Text style={body}>{decision.expected.summary}</Text> : null}
-              {decision.expected.amount !== undefined ? <Text style={body}>{formatAmount(decision.expected.amount, "INR")} (your estimate)</Text> : null}
-              {decision.expected.byDate ? <Text style={muted}>By {decision.expected.byDate}</Text> : null}
+              {decision.expected.amount !== undefined ? <Text style={body}>{money(decision.expected.amount)} (your estimate)</Text> : null}
+              {decision.expected.byDate ? <Text style={muted}>By {date(decision.expected.byDate)}</Text> : null}
             </View>
           </Section>
         ) : null}
@@ -318,7 +320,7 @@ export default function DecisionDetailScreen() {
 
         {decision.decisionSnapshot ? (
           <Text style={muted}>
-            Your reasoning was saved as it stood on {new Date(decision.decisionSnapshot.frozenAtMs).toISOString().slice(0, 10)}. Later edits don't change that record.
+            Your reasoning was saved as it stood on {date(decision.decisionSnapshot.frozenAtMs)}. Later edits don't change that record.
           </Text>
         ) : null}
 

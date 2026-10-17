@@ -32,7 +32,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | SPENDLY-544 | Phase 4c: EPF | `feature/SPENDLY-544-epf` | Done. On `main` via `d6c9e4b` (2026-10-17) ([doc](SPENDLY-544-epf.md)) |
 | SPENDLY-545 | Phase 5a: Calendar and Runway | `feature/SPENDLY-545-calendar-runway` | In Progress. Merged into the epic ([doc](SPENDLY-545-calendar-runway.md)) |
 | SPENDLY-546 | Phase 5b: What-If and Goal optimizer | `feature/SPENDLY-546-what-if-optimizer` | In Progress. Merged into the epic ([doc](SPENDLY-546-what-if-optimizer.md)) |
-| SPENDLY-547 | Phase 5c: Money Decisions | `feature/SPENDLY-547-money-decisions` | In Progress |
+| SPENDLY-547 | Phase 5c: Money Decisions | `feature/SPENDLY-547-money-decisions` | In Progress. Built; awaiting merge into the epic ([doc](SPENDLY-547-money-decisions.md)) |
 
 ## Phase 4 plan: Investments (2026-10-17)
 The Investments hub is `app/(app)/investments.tsx`, with four tabs: Investments (deposits), Stocks, Virtual SIPs and EPF. There is also the EPF establishment screen `app/(app)/epf/[establishmentId].tsx`. Together that is about 13.5k lines.
