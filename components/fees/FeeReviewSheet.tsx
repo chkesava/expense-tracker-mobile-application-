@@ -28,10 +28,12 @@ import {
   uncertainReasonText,
   type FeeReviewDraft,
 } from "@/shared/utils/feeReviewForm";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
 import type { FeeReviewDecision } from "@/shared/types/fee";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 
 export interface FeeReviewSubmit {
   record: FeeRecord;
@@ -72,6 +74,9 @@ export function FeeReviewSheet({
   onClose,
 }: FeeReviewSheetProps) {
   const { theme } = useTheme();
+  const money = useGhostMoney(currency);
+  const { settings } = useSettings();
+  const date = (value: string) => formatDisplayDate(value, settings?.dateFormat);
   const surfaces = useSurfaces();
   const [draft, setDraft] = useState<FeeReviewDraft | null>(null);
   const [showErrors, setShowErrors] = useState(false);
@@ -138,7 +143,7 @@ export function FeeReviewSheet({
             <Text style={{ flex: 1, color: theme.colors.foreground, fontFamily: theme.fontFamily.bold, fontSize: theme.typography.md }}>
               {feeRecordTitle(record)}
             </Text>
-            <Amount value={amount} currency={currency} style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.bold, fontSize: theme.typography.md }} />
+            <Amount ghostable value={amount} currency={currency} style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.bold, fontSize: theme.typography.md }} />
           </View>
           {record.source.merchant ? (
             <Text style={{ color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.sm }}>
@@ -148,7 +153,7 @@ export function FeeReviewSheet({
           <View style={[styles.headerRow, { gap: theme.space.sm }]}>
             <FeeStatusBadge status={record.status} />
             <Text style={{ color: theme.colors.mutedForeground, fontSize: theme.typography.xs, fontFamily: theme.fontFamily.regular }}>
-              {[record.source.date, accountName, record.source.direction === "credit" ? "Money in" : "Money out"].filter(Boolean).join(" · ")}
+              {[date(record.source.date), accountName, record.source.direction === "credit" ? "Money in" : "Money out"].filter(Boolean).join(" · ")}
             </Text>
           </View>
           {reason ? (
@@ -244,7 +249,7 @@ export function FeeReviewSheet({
                 </Button>
               ) : null}
               <Text style={{ flex: 1, textAlign: "right", fontSize: theme.typography.xs, fontFamily: theme.fontFamily.medium, color: remainder === 0 ? theme.colors.success : theme.colors.destructive }}>
-                {remainder === null ? "Check the amounts" : remainder === 0 ? "Adds up" : `${remainder > 0 ? "Left" : "Over"}: ${formatAmount(Math.abs(remainder), currency)}`}
+                {remainder === null ? "Check the amounts" : remainder === 0 ? "Adds up" : `${remainder > 0 ? "Left" : "Over"}: ${money(Math.abs(remainder))}`}
               </Text>
             </View>
           </View>
@@ -265,13 +270,13 @@ export function FeeReviewSheet({
               {linkOptions.map((option) => (
                 <Chip
                   key={option.key}
-                  label={`${option.source.date} · ${formatAmount(option.source.amount, currency)}`}
+                  label={`${date(option.source.date)} · ${money(option.source.amount)}`}
                   icon={(color) => <Link2 size={14} color={color} />}
                   selected={draft.linkedKey === option.key}
                   onPress={() => setDraft({ ...draft, linkedKey: option.key })}
                   size="sm"
                   accessibilityRole="radio"
-                  accessibilityLabel={`Link to ${feeRecordTitle(option)} of ${formatAmount(option.source.amount, currency)} on ${option.source.date}`}
+                  accessibilityLabel={`Link to ${feeRecordTitle(option)} of ${money(option.source.amount)} on ${date(option.source.date)}`}
                 />
               ))}
             </View>

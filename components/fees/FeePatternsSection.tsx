@@ -11,9 +11,9 @@ import { feeTypeLabel } from "@/shared/data/feeTaxonomy";
 import type { FeeRecord } from "@/shared/types/fee";
 import type { FeeDashboardFilters } from "@/shared/utils/feeDashboard";
 import { detectFeePatterns, feePatternLabel, type FeePattern } from "@/shared/utils/feePatterns";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 
 export interface FeePatternsSectionProps {
   records: readonly FeeRecord[];
@@ -32,6 +32,7 @@ export interface FeePatternsSectionProps {
  */
 export function FeePatternsSection({ records, filters, today, currency, accountNames, onOpenRecord }: FeePatternsSectionProps) {
   const { theme } = useTheme();
+  const money = useGhostMoney(currency);
   const [openId, setOpenId] = useState<string | null>(null);
 
   const patterns = useMemo(() => {
@@ -85,9 +86,9 @@ export function FeePatternsSection({ records, filters, today, currency, accountN
               <Text style={{ color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs }}>
                 Estimated per year
               </Text>
-              <Amount value={open.estimatedYearly} currency={currency} style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.bold, fontSize: 24 }} />
+              <Amount ghostable value={open.estimatedYearly} currency={currency} style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.bold, fontSize: 24 }} />
               <Text style={{ color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs }}>
-                {open.estimateBasis} Total so far: {formatAmount(open.totalCost, currency)}.
+                {open.estimateBasis} Total so far: {money(open.totalCost)}.
               </Text>
             </View>
 
@@ -126,6 +127,7 @@ export function FeePatternsSection({ records, filters, today, currency, accountN
 
 function PatternRow({ pattern, where, currency, onPress }: { pattern: FeePattern; where: string; currency: string; onPress: () => void }) {
   const { theme } = useTheme();
+  const money = useGhostMoney(currency);
   const surfaces = useSurfaces();
   const Icon = feeTypeIcon(pattern.feeType);
   const TrendIcon = pattern.trend === "rising" ? TrendingUp : pattern.trend === "falling" ? TrendingDown : Repeat;
@@ -135,7 +137,7 @@ function PatternRow({ pattern, where, currency, onPress }: { pattern: FeePattern
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${feeTypeLabel(pattern.feeType)} at ${where}. ${sub}. Estimated ${formatAmount(pattern.estimatedYearly, currency)} a year.`}
+      accessibilityLabel={`${feeTypeLabel(pattern.feeType)} at ${where}. ${sub}. Estimated ${money(pattern.estimatedYearly)} a year.`}
       style={({ pressed }) => [styles.row, { gap: theme.space.md, backgroundColor: pressed ? surfaces.tile : "transparent", borderRadius: theme.radius.md }]}
     >
       <View style={[styles.icon, { backgroundColor: surfaces.tile, borderRadius: theme.radius.sm }]}>
@@ -151,7 +153,7 @@ function PatternRow({ pattern, where, currency, onPress }: { pattern: FeePattern
       </View>
       <View style={{ alignItems: "flex-end", gap: 2 }}>
         <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm }}>
-          ~{formatAmount(pattern.estimatedYearly, currency)}/yr
+          ~{money(pattern.estimatedYearly)}/yr
         </Text>
         <TrendIcon size={14} color={pattern.trend === "rising" ? theme.colors.warning : theme.colors.mutedForeground} />
       </View>

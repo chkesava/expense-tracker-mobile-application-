@@ -9,6 +9,8 @@ import type { FeeRecord } from "@/shared/types/fee";
 import { feeRecordTitle } from "@/shared/utils/feeReviewForm";
 import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 
 export interface FeeRecordRowProps {
   record: FeeRecord;
@@ -39,7 +41,8 @@ export const FeeRecordRow = memo(function FeeRecordRow({
   const Icon = feeRecordIcon(record);
   const title = feeRecordTitle(record);
   const credit = record.source.direction === "credit";
-  const context = [record.source.date, accountName].filter(Boolean).join(" · ");
+  const { settings } = useSettings();
+  const context = [formatDisplayDate(record.source.date, settings?.dateFormat), accountName].filter(Boolean).join(" · ");
 
   return (
     <Pressable
@@ -99,6 +102,7 @@ export const FeeRecordRow = memo(function FeeRecordRow({
         <Amount
           value={credit ? record.source.amount : -record.source.amount}
           currency={currency}
+          ghostable
           style={{
             color: credit ? theme.colors.success : theme.colors.foreground,
             fontFamily: theme.fontFamily.semibold,
