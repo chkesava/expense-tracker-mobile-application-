@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   findOnSnapshotCollections,
+  findOnSnapshotCollectionsResolved,
   isCollectionQueryBounded,
   verifyNoDuplicateListeners,
+  verifyNoProviderCollectionRelisten,
   verifyOnDemandGatingPresent,
   verifyReferenceQueriesBounded,
   verifyStartupGuardrails,
@@ -73,5 +75,36 @@ describe("verifyReferenceQueriesBounded (SPENDLY-415)", () => {
 describe("verifyOnDemandGatingPresent (SPENDLY-415)", () => {
   it("finds every expected on-demand listener gate present in the current codebase", () => {
     expect(verifyOnDemandGatingPresent()).toEqual([]);
+  });
+});
+
+describe("findOnSnapshotCollectionsResolved (SPENDLY-501)", () => {
+  it("follows a collection held in a variable through a query variable", () => {
+    const content = `
+      const ref = collection(db, "users", uid, "expenses");
+      const q = query(ref, orderBy("date", "desc"), limit(5));
+      const unsubscribe = onSnapshot(q, () => {});`;
+    expect([...findOnSnapshotCollectionsResolved(content)]).toEqual(["expenses"]);
+  });
+
+  it("follows an inline query over a collection variable", () => {
+    const content = `
+      const expensesCol = collection(db, ...base, "expenses");
+      onSnapshot(query(expensesCol, limit(300)), () => {});`;
+    expect([...findOnSnapshotCollectionsResolved(content)]).toEqual(["expenses"]);
+  });
+
+  it("ignores a collection variable that is only read once", () => {
+    const content = `
+      const ref = collection(db, "users", uid, "expenses");
+      await getDocs(ref);
+      onSnapshot(doc(db, "users", uid), () => {});`;
+    expect([...findOnSnapshotCollectionsResolved(content)]).toEqual([]);
+  });
+});
+
+describe("verifyNoProviderCollectionRelisten (SPENDLY-501)", () => {
+  it("finds no hook, screen or component re-subscribing to a provider collection", () => {
+    expect(verifyNoProviderCollectionRelisten()).toEqual([]);
   });
 });
