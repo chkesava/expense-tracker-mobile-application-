@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Status | **Proposed: evidence complete; recommendation NO-GO; awaiting the user's sign-off (§12)** |
-| Decision date | Pricing verified **2026-10-17**. The ADR is decided on the date the user signs off |
+| Status | **Decided 2026-10-17 by the user: GO, option C (no Blaze), dedicated Supabase project.** See §0 |
+| Decision date | **2026-10-17** (pricing verified the same day) |
 | Story | [SPENDLY-502](https://kesavach.atlassian.net/browse/SPENDLY-502) (Phase 0) |
 | Epic | [SPENDLY-494](https://kesavach.atlassian.net/browse/SPENDLY-494) |
 | Supersedes | nothing |
@@ -14,6 +14,35 @@ This ADR records the decisions that SPENDLY-502 lists and the evidence for each.
 - Where the evidence is missing, it says so. Nothing here is estimated silently.
 - Every decision that belongs to the user is marked **PENDING** until the user signs off in a Jira comment on SPENDLY-502.
 - Until then, **no Phase 1+ story starts** (SPENDLY-502 blocks 504, 505 and 506).
+
+## 0. Decision (user, 2026-10-17)
+
+| # | Decision | User's answer | Note |
+|---|---|---|---|
+| 1 | Go / no-go | **GO** | Against this ADR's no-go recommendation (§3). Recorded as the user's call |
+| 2 | Blaze on `expenseapp-27f94` | **REFUSED: stay on Spark** | |
+| 3 | Capture option | **C: scheduled reconciler only** | Follows from 2. Options B and D stay rejected (§4) |
+| 4 | Supabase project | **Dedicated Spendly project** (2nd Free project) | The earlier "use the shared project" answer was superseded by this choice |
+| 5 | Read identity | Third-party auth + RLS, Netlify broker fallback (§7) | Not changed by the user. See the Blaze note below |
+
+**What option C changes. This ticket requires these follow-ups, and they are *not* done by this story:**
+- **Phase 4 (SPENDLY-514…518) becomes Won't Do.** Current balances, cards, investments and net worth stay on Firestore. Changing the Jira status needs the user's explicit instruction.
+- **SPENDLY-506** ("`onDocumentWritten` sync") cannot be built as written without Blaze. It must be re-scoped to "the reconciler is the capture path", which merges it with SPENDLY-509.
+- **Freshness SLOs** for Phase 3 screens are revised to **"as of the last sync run"**, shown with a "last synced" label (§8).
+- **Read identity without Blaze:** the `role: authenticated` claim can't be set by an `onCreate` function or a blocking function. It must come from a Netlify function at sign-in (§7). Netlify is on the **Free** plan, with a hard 300-credit limit that pauses all sites when exhausted, so its usage must be watched.
+
+**The read-budget constraint on option C. This decides how often sync may run.**
+- Without triggers, every reconciler run must **re-read the synced documents from Firestore**, because there is no uniform `updatedAt` to query on (audit §3). Those reads count against the **same 50K/day Spark quota** the app already peaks at ≈ 44K (§2). If the quota is exceeded, the app's own reads fail for the rest of the day.
+- With today's data (§10: ≈ 3,770 Wave 1 docs, ≈ 4,500 in total), a full Wave 1 pass costs ≈ 3,800 reads.
+
+| Sync schedule | Extra reads/day | Data age on screen | Verdict |
+|---|---|---|---|
+| Every hour | ≈ 91,000 | ≤ 1 h | **Not possible**: alone it is ~2× the quota |
+| Every 6 h | ≈ 15,000 | ≤ 6 h | Unsafe while daily peaks reach ≈ 44K |
+| **Once a day (night, IST)** | **≈ 3,800** | ≤ 24 h | **Chosen default.** Re-evaluate after the 501 release shows lower reads |
+
+- The reconciler must also check its own budget. It stops early and resumes next run once it has used a fixed daily read allowance. It also never runs if the day's usage is already high, where measurable.
+- Count-first checks (`count()` aggregation, about 1 read per 1,000 entries) find missing or extra rows cheaply. They cannot detect edits, so edits wait for the full pass.
 
 **Evidence grades used below:**
 - **M-prod:** measured in production.
@@ -73,7 +102,7 @@ What is true today:
 | Go, goal = read cost | **Not supported by the evidence** (§2). Do 501 instead |
 | **No-go** | Close the epic as Won't Do. Keep 495–501 (they matter without Supabase). Phase 1+ stories never start |
 
-**Recommendation (with the production numbers): NO-GO for now.**
+**Recommendation (with the production numbers): NO-GO for now.** *The user decided GO on 2026-10-17 (§0); the reasoning is kept for the record.*
 - The real problem is read volume near the Spark quota. The read model would not touch that for months, and it adds a second database, a sync pipeline and an auth bridge to protect ~4,500 documents.
 - The faster, cheaper fixes stay inside Firestore:
   - release 501;
@@ -108,7 +137,7 @@ What is true today:
 
 ## 5. Decision 3: the Blaze plan (PENDING, user)
 
-**Statement for sign-off:** *"The user DOES / DOES NOT approve upgrading `expenseapp-27f94` to Blaze for SPENDLY-494."* Status: **PENDING**.
+**Statement for sign-off:** *"The user DOES NOT approve upgrading `expenseapp-27f94` to Blaze for SPENDLY-494."* Status: **DECIDED 2026-10-17 (refused).**
 
 **Evidence:**
 - **What Blaze keeps (Doc):**

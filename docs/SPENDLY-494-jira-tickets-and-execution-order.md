@@ -146,5 +146,5 @@ The ordering rules:
 
 | Key | State | Branch | Doc | Notes |
 |---|---|---|---|---|
-| SPENDLY-502 | In Progress: ADR drafted, awaiting the user's decisions | `feature/SPENDLY-502-phase-0-adr-go-no-go` | `docs/SPENDLY-494-adr.md` | Inventory script + emulator dry-run done; production export, production inventory and Blaze decision pending |
+| SPENDLY-502 | In Progress: ADR decided (GO, option C, dedicated project); awaiting merge approval | `feature/SPENDLY-502-phase-0-adr-go-no-go` | `docs/SPENDLY-494-adr.md` | Inventory script + emulator dry-run done; production export, production inventory and Blaze decision pending |
 | 503–520 | To Do: blocked on the 502 sign-off | — | — | No Phase 1+ story starts before the sign-off |
