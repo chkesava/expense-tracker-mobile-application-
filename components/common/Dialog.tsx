@@ -10,6 +10,7 @@ import {
   AlertDialogFooter
 } from "@/components/ui/alert-dialog";
 import { Text } from "react-native";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 
 export type DialogAction = {
   label: string;
@@ -49,6 +50,7 @@ export function Dialog({
 
   // Keep existing action styles
   const isStacked = layout === "stacked";
+  const scopeVars = useSpendlyScopeVars();
 
   return (
     <AlertDialog
@@ -59,7 +61,7 @@ export function Dialog({
       useRNModal
     >
       <AlertDialogBackdrop />
-      <AlertDialogContent className="p-6 bg-card border-none max-w-[400px]">
+      <AlertDialogContent className="p-6 bg-card border-none max-w-[400px]" style={scopeVars ?? undefined}>
         <AlertDialogHeader className="mb-2 p-0 border-none">
           <Text className="text-xl font-bold text-foreground">{title}</Text>
         </AlertDialogHeader>

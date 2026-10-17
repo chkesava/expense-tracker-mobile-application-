@@ -5,10 +5,11 @@ import {
   Calendar,
   Clock,
   History,
+  Trash2,
   TrendingUp,
 } from "lucide-react-native";
 
-import { SkeletonHero, SkeletonList } from "@/components/common/Skeleton";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 
 import { useSips } from "@/hooks/useSips";
 import { useMarketQuotes } from "@/hooks/useMarketQuotes";
@@ -20,19 +21,26 @@ import {
   SipNotificationsModal,
 } from "@/components/sip";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import type { SipPlan, VirtualPositionWithMetrics } from "@/shared/features/sip/types";
+import { DataRow, Pill, Section } from "@/components/dashboard/primitives";
+import { Chip } from "@/components/ui/Chip";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { appDialog } from "@/lib/appDialog";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
+import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 type SipSubTab = "plans" | "positions" | "history";
 
 export function SipDashboard() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
+  const { settings } = useSettings();
   const displayCurrency = useDisplayCurrency();
+  const money = useGhostMoney(displayCurrency);
 
   const {
     plans,
@@ -148,8 +156,8 @@ export function SipDashboard() {
   if (loading) {
     return (
       <View style={[styles.container, { gap: 16 }]}>
-        <SkeletonHero />
-        <SkeletonList count={3} />
+        <DashboardSkeleton variant="hero" />
+        <DashboardSkeleton variant="section" rows={3} />
       </View>
     );
   }
@@ -188,106 +196,128 @@ export function SipDashboard() {
             styles.notifBtn,
             {
               borderColor: theme.colors.border,
-              backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+              backgroundColor: surfaces.control,
             },
             pressed && { opacity: 0.7 },
           ]}
+          accessibilityRole="button"
+          accessibilityLabel={
+            activeNotifsCount > 0
+              ? `SIP notifications, ${activeNotifsCount} unread`
+              : "SIP notifications"
+          }
         >
           <Bell size={18} color={theme.colors.foreground} />
           {activeNotifsCount > 0 ? (
             <View style={[styles.badge, { backgroundColor: theme.colors.destructive }]}>
-              <Text style={styles.badgeText}>{activeNotifsCount}</Text>
+              <Text style={[styles.badgeText, { color: theme.colors.destructiveForeground }]}>
+                {activeNotifsCount}
+              </Text>
             </View>
           ) : null}
         </Pressable>
       </View>
 
       {/* Sub-tab Selection */}
-      <View style={styles.tabRow}>
+      <View style={styles.tabRow} accessibilityRole="tablist">
         {[
-          { id: "plans", label: "Plans", icon: <Calendar size={14} color={subTab === "plans" ? "#FFF" : theme.colors.foreground} /> },
-          { id: "positions", label: "Compounded", icon: <TrendingUp size={14} color={subTab === "positions" ? "#FFF" : theme.colors.foreground} /> },
-          { id: "history", label: "Logs", icon: <History size={14} color={subTab === "history" ? "#FFF" : theme.colors.foreground} /> },
-        ].map((tab) => {
-          const active = subTab === tab.id;
-          return (
-            <Pressable
-              key={tab.id}
-              onPress={() => {
-                haptic.selection().catch(() => undefined);
-                setSubTab(tab.id as SipSubTab);
-              }}
-              style={[
-                styles.tabPill,
-                {
-                  backgroundColor: active ? theme.colors.primary : isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                  borderColor: active ? theme.colors.primary : theme.colors.border,
-                },
-              ]}
-            >
-              {tab.icon}
-              <Text
-                style={{
-                  fontSize: 12,
-                  fontWeight: active ? "800" : "600",
-                  color: active ? "#FFFFFF" : theme.colors.foreground,
-                  marginLeft: 4,
-                }}
-              >
-                {tab.label}
-              </Text>
-            </Pressable>
-          );
-        })}
+          { id: "plans", label: "Plans", Icon: Calendar },
+          { id: "positions", label: "Compounded", Icon: TrendingUp },
+          { id: "history", label: "Logs", Icon: History },
+        ].map((tab) => (
+          <Chip
+            key={tab.id}
+            label={tab.label}
+            selected={subTab === tab.id}
+            appearance="outline"
+            accessibilityRole="tab"
+            haptic={subTab !== tab.id}
+            icon={(color) => <tab.Icon size={14} color={color} />}
+            onPress={() => setSubTab(tab.id as SipSubTab)}
+          />
+        ))}
       </View>
 
       {/* Active Tab Screen Content */}
       {subTab === "plans" && (
         <View style={{ gap: 10 }}>
           {plans.length === 0 ? (
-            <Card>
+            <Section>
               <View style={styles.empty}>
-                <Calendar size={36} color={theme.colors.mutedForeground} />
-                <Text style={{ color: theme.colors.foreground, fontWeight: "700", marginTop: 8 }}>
-                  No Active SIP Plans
+                <Calendar size={32} color={theme.colors.mutedForeground} />
+                <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, marginTop: 8 }}>
+                  No SIP plans yet
                 </Text>
-                <Text style={{ color: theme.colors.mutedForeground, fontSize: 11, textAlign: "center", marginTop: 4 }}>
-                  Schedule automated recurring mock stock/crypto investments.
+                <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, textAlign: "center", marginTop: 4 }}>
+                  Schedule recurring virtual stock or crypto investments to see how they compound.
                 </Text>
               </View>
-            </Card>
+            </Section>
           ) : (
-            plans.map((plan) => (
-              <Card
-                key={plan.id}
-                title={plan.assetName}
-                subtitle={`${plan.frequency.toUpperCase()} • ₹${plan.investmentAmount} • Next run: ${plan.nextExecutionDate}`}
-                headerRight={
-                  <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-                    <Pressable
-                      onPress={() => toggleSipPlan(plan.id, plan.status)}
-                      style={[
-                        styles.actionPill,
-                        {
-                          backgroundColor: plan.status === "active" ? "rgba(34, 197, 94, 0.15)" : "rgba(100, 116, 139, 0.15)",
-                        },
-                      ]}
-                    >
-                      <Text style={{ fontSize: 10, fontWeight: "800", color: plan.status === "active" ? "#22C55E" : "#64748B" }}>
-                        {plan.status.toUpperCase()}
-                      </Text>
-                    </Pressable>
-                    <Pressable onPress={() => deleteSipPlan(plan.id)}>
-                      <Text style={{ fontSize: 11, color: theme.colors.destructive, fontWeight: "700" }}>Delete</Text>
-                    </Pressable>
-                  </View>
-                }
-              />
-            ))
+            <Section title="SIP plans" subtitle={`${plans.length} plan${plans.length === 1 ? "" : "s"}`}>
+              {plans.map((plan, index) => {
+                const toggleable = plan.status === "active" || plan.status === "paused";
+                // SPENDLY-542: the amount used a hardcoded "₹" and ignored
+                // ghost mode; the next run was a raw ISO date.
+                const meta = `${money(plan.investmentAmount)} ${plan.frequency} · Next ${formatDisplayDate(plan.nextExecutionDate, settings?.dateFormat)}`;
+                return (
+                  <DataRow
+                    key={plan.id}
+                    title={plan.assetName}
+                    meta={meta}
+                    divider={index < plans.length - 1}
+                    value={
+                      <View style={styles.planActions}>
+                        {toggleable ? (
+                          <Pressable
+                            onPress={() => {
+                              haptic.selection().catch(() => undefined);
+                              void toggleSipPlan(plan.id, plan.status);
+                            }}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${plan.status === "active" ? "Pause" : "Resume"} ${plan.assetName}`}
+                            hitSlop={6}
+                          >
+                            <Pill
+                              label={plan.status === "active" ? "Active" : "Paused"}
+                              tone={plan.status === "active" ? "positive" : "muted"}
+                            />
+                          </Pressable>
+                        ) : (
+                          <Pill label={plan.status === "completed" ? "Completed" : "Cancelled"} tone="muted" />
+                        )}
+                        <Pressable
+                          onPress={() =>
+                            appDialog.alert(
+                              "Delete SIP plan",
+                              `Delete the ${plan.assetName} plan? Its past logs stay in history.`,
+                              [
+                                { text: "Cancel", style: "cancel" },
+                                {
+                                  text: "Delete",
+                                  style: "destructive",
+                                  onPress: () => void deleteSipPlan(plan.id),
+                                },
+                              ]
+                            )
+                          }
+                          accessibilityRole="button"
+                          accessibilityLabel={`Delete ${plan.assetName} plan`}
+                          hitSlop={8}
+                          style={styles.deleteBtn}
+                        >
+                          <Trash2 size={16} color={theme.colors.destructive} />
+                        </Pressable>
+                      </View>
+                    }
+                  />
+                );
+              })}
+            </Section>
           )}
 
           <Button onPress={() => setFormOpen(true)} style={{ marginTop: 8 }}>
-            <Text style={{ color: "#FFF", fontWeight: "800" }}>+ Create SIP Plan</Text>
+            <Text style={{ color: theme.colors.primaryForeground, fontWeight: "800" }}>+ Create SIP Plan</Text>
           </Button>
         </View>
       )}
@@ -361,11 +391,19 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 9,
     fontWeight: "900",
-    color: "#FFF",
   },
   tabRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
+  },
+  planActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  deleteBtn: {
+    padding: 4,
   },
   tabPill: {
     flexDirection: "row",

@@ -13,13 +13,11 @@ import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { INVESTMENT_HUB_TAB_IDS } from "@/shared/config/navigation";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export type InvestmentsTab = (typeof INVESTMENT_HUB_TAB_IDS)[number];
 
 export default function InvestmentsScreen() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
   const { settings } = useSettings();
   const { settings: system } = useSystemSettings();
   const params = useLocalSearchParams<{ tab?: string }>();
@@ -41,7 +39,7 @@ export default function InvestmentsScreen() {
   }
 
   const tabIconColor = (id: InvestmentsTab) =>
-    activeTab === id ? theme.colors.success : theme.colors.mutedForeground;
+    activeTab === id ? theme.colors.primary : theme.colors.mutedForeground;
 
   const tabs: PageHeaderTab[] = [
     {
@@ -73,10 +71,7 @@ export default function InvestmentsScreen() {
       title="Investments"
       subtitle="Holdings, stocks & SIPs"
       icon={
-        <TrendingUp
-          size={22}
-          color={isDark ? "#FFFFFF" : theme.colors.success}
-        />
+        <TrendingUp size={22} color={theme.colors.primary} />
       }
       activeTab={activeTab}
       onTabChange={(tab) => setActiveTab(tab as InvestmentsTab)}
