@@ -1,23 +1,21 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 
-import {
-  ACCOUNT_GREEN,
-  ACCOUNT_RED,
-  CARD_ORANGE,
-} from "@/components/accounts/accountScreenTheme";
 import { Amount } from "@/components/common/Amount";
 import { haptic } from "@/lib/haptics";
 import type { CreditCardBill, CreditCardBillStatus } from "@/shared/types/creditCardBill";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
-function statementStatusColor(status: CreditCardBillStatus): string {
-  if (status === "PAID") return ACCOUNT_GREEN;
-  if (status === "PARTIALLY_PAID") return CARD_ORANGE;
-  if (status === "OVERDUE") return ACCOUNT_RED;
-  return CARD_ORANGE;
+type Colors = ReturnType<typeof useTheme>["theme"]["colors"];
+
+function statementStatusColor(status: CreditCardBillStatus, colors: Colors): string {
+  if (status === "PAID") return colors.success;
+  if (status === "PARTIALLY_PAID") return colors.warning;
+  if (status === "OVERDUE") return colors.destructive;
+  return colors.warning;
 }
 
 export function CreditStatementCard({
@@ -33,10 +31,10 @@ export function CreditStatementCard({
   onOpen: () => void;
   isLoading?: boolean;
 }) {
-  const { theme, themeName } = useTheme();
+  const { theme } = useTheme();
+  const { settings } = useSettings();
   const surfaces = useSurfaces();
-  const isDark = themeUsesDarkPalette(themeName);
-  const statusColor = bill ? statementStatusColor(bill.status) : CARD_ORANGE;
+  const statusColor = bill ? statementStatusColor(bill.status, theme.colors) : theme.colors.warning;
 
   return (
     <Pressable
@@ -48,8 +46,8 @@ export function CreditStatementCard({
       style={({ pressed }) => [
         styles.card,
         {
-          backgroundColor: isDark ? "#10141C" : theme.colors.card,
-          borderColor: isDark ? "rgba(148, 163, 184, 0.12)" : theme.colors.border,
+          backgroundColor: theme.colors.card,
+          borderColor: theme.colors.outlineVariant,
         },
         pressed ? styles.pressed : null,
       ]}
@@ -97,7 +95,7 @@ export function CreditStatementCard({
                 value={bill.amountPaid}
                 currency={currency}
                 ghostable
-                style={[styles.value, { color: ACCOUNT_GREEN }]}
+                style={[styles.value, { color: theme.colors.success }]}
               />
             </View>
             {bill.minimumDueAmount > 0 ? (
@@ -118,7 +116,7 @@ export function CreditStatementCard({
                 Due
               </Text>
               <Text style={[styles.value, { color: theme.colors.foreground }]}>
-                {bill.dueDate}
+                {formatDisplayDate(bill.dueDate, settings.dateFormat)}
               </Text>
             </View>
             <View style={styles.row}>
@@ -147,7 +145,7 @@ export function CreditStatementCard({
       ) : (
         <View style={styles.addRow}>
           <View style={{ flex: 1, paddingRight: 12 }}>
-            <Text style={styles.add}>No active statement</Text>
+            <Text style={[styles.add, { color: theme.colors.warning }]}>No active statement</Text>
             <Text style={{ fontSize: 13, color: theme.colors.mutedForeground, marginTop: 4 }}>
               Statements will appear here when generated. Tap to add manually.
             </Text>
@@ -182,7 +180,6 @@ const styles = StyleSheet.create({
   },
   add: {
     flex: 1,
-    color: CARD_ORANGE,
     fontSize: 14,
     fontWeight: "700",
   },

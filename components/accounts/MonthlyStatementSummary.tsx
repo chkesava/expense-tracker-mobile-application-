@@ -3,10 +3,6 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
-import {
-  accountAccent,
-  ACCOUNT_RED,
-} from "@/components/accounts/accountScreenTheme";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
@@ -51,7 +47,7 @@ export function MonthlyStatementSummary({
   const { theme, themeName } = useTheme();
   const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
-  const accent = accountAccent(isDark);
+  const accent = theme.colors.primary;
 
   const label = useMemo(() => monthLabel(summary.month), [summary.month]);
   const transfersTotal = summary.transfersIn - summary.transfersOut;
@@ -74,9 +70,7 @@ export function MonthlyStatementSummary({
         styles.step,
         {
           backgroundColor: surfaces.tile,
-          borderColor: isDark
-            ? "rgba(148,163,184,0.16)"
-            : "rgba(15,23,42,0.08)",
+          borderColor: theme.colors.outlineVariant,
           opacity: enabled ? 1 : 0.35,
         },
       ]}
@@ -156,7 +150,7 @@ export function MonthlyStatementSummary({
           "expenses",
           "Expenses",
           summary.expenses,
-          summary.expenses > 0 ? ACCOUNT_RED : undefined
+          summary.expenses > 0 ? theme.colors.destructive : undefined
         )}
         {row("transfers", "Transfers", transfersTotal)}
         {row(
@@ -167,7 +161,7 @@ export function MonthlyStatementSummary({
             ? undefined
             : summary.netChange > 0
               ? accent
-              : ACCOUNT_RED
+              : theme.colors.destructive
         )}
         {hasBalances ? row("closing", "Closing balance", summary.closingBalance) : null}
       </View>

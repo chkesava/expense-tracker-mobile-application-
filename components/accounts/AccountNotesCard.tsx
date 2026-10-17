@@ -2,7 +2,6 @@ import { useMemo, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { NotebookPen, Pencil, Pin, PinOff, Trash2 } from "lucide-react-native";
 
-import { accountAccent } from "@/components/accounts/accountScreenTheme";
 import { Button } from "@/components/ui/Button";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -49,7 +48,7 @@ export function AccountNotesCard({
 }) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const accent = accountAccent(isDark);
+  const accent = theme.colors.primary;
 
   const subtitle = useMemo(() => {
     if (loading) return "Loading…";

@@ -21,6 +21,7 @@ import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { formatCardLabel } from "@/services/creditCardBills/billNotificationCopy";
 import { isCashbackPayment, type AccountPayment } from "@/shared/types/expense";
 import { roundMoney } from "@/shared/utils/money";
@@ -277,14 +278,14 @@ export default function CreditCardBillDetailScreen() {
                 <AmountRow label="of which cashback" value={cashbackApplied} />
               ) : null}
               <AmountRow label="Remaining" value={bill.remainingAmount} />
-              <Row label="Statement date" value={bill.statementDate} />
+              <Row label="Statement date" value={formatDisplayDate(bill.statementDate, settings.dateFormat)} />
               {bill.billingPeriodStart && bill.billingPeriodEnd ? (
                 <Row
                   label="Billing period"
-                  value={`${bill.billingPeriodStart} → ${bill.billingPeriodEnd}`}
+                  value={`${formatDisplayDate(bill.billingPeriodStart, settings.dateFormat)} → ${formatDisplayDate(bill.billingPeriodEnd, settings.dateFormat)}`}
                 />
               ) : null}
-              <Row label="Due date" value={bill.dueDate} />
+              <Row label="Due date" value={formatDisplayDate(bill.dueDate, settings.dateFormat)} />
               {bill.paymentDate ? (
                 <Row label="Payment date" value={bill.paymentDate} />
               ) : null}
@@ -330,10 +331,10 @@ export default function CreditCardBillDetailScreen() {
                           fontSize: theme.typography.xs,
                         }}
                       >
-                        {payment.date}
+                        {formatDisplayDate(payment.date, settings.dateFormat)}
                       </Text>
                     </View>
-                    <Amount value={payment.amount} />
+                    <Amount ghostable value={payment.amount} />
                     <Button
                       variant="tonal"
                       size="icon"
@@ -503,7 +504,7 @@ function AmountRow({ label, value }: { label: string; value: number }) {
       }}
     >
       <Text style={{ color: theme.colors.mutedForeground }}>{label}</Text>
-      <Amount value={value} />
+      <Amount ghostable value={value} />
     </View>
   );
 }

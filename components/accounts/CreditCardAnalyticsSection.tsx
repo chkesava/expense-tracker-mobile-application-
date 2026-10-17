@@ -9,6 +9,8 @@ import {
   buildCardAnalyticsWorkspace,
   type CardAnalyticsPeriodMode,
 } from "@/shared/utils/creditCardAnalytics";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { useTheme } from "@/theme/ThemeProvider";
 
 type Props = {
@@ -48,7 +50,7 @@ function MetricChip({
       <Text style={[styles.metricLabel, { color: theme.colors.mutedForeground }]}>
         {label}
       </Text>
-      <Amount
+      <Amount ghostable
         value={value}
         currency={currency}
         style={[styles.metricValue, { color: theme.colors.foreground }]}
@@ -74,6 +76,7 @@ export function CreditCardAnalyticsSection({
   onFocusPeriod,
 }: Props) {
   const { theme } = useTheme();
+  const { settings } = useSettings();
   const [mode, setMode] = useState<CardAnalyticsPeriodMode>("billing_cycles");
 
   const workspace = useMemo(
@@ -218,13 +221,13 @@ export function CreditCardAnalyticsSection({
               >
                 Spend{" "}
                 {comparison.spendDelta >= 0 ? "+" : ""}
-                <Amount value={comparison.spendDelta} currency={currency} />
+                <Amount ghostable value={comparison.spendDelta} currency={currency} />
                 {" · "}Billed{" "}
                 {comparison.billedDelta >= 0 ? "+" : ""}
-                <Amount value={comparison.billedDelta} currency={currency} />
+                <Amount ghostable value={comparison.billedDelta} currency={currency} />
                 {" · "}Cashback{" "}
                 {comparison.cashbackDelta >= 0 ? "+" : ""}
-                <Amount value={comparison.cashbackDelta} currency={currency} />
+                <Amount ghostable value={comparison.cashbackDelta} currency={currency} />
               </Text>
             </Pressable>
           ) : null}
@@ -255,7 +258,7 @@ export function CreditCardAnalyticsSection({
                     <Text
                       style={[styles.rowTitle, { color: theme.colors.foreground }]}
                     >
-                      {cycle.periodStart} → {cycle.periodEnd}
+                      {formatDisplayDate(cycle.periodStart, settings.dateFormat)} → {formatDisplayDate(cycle.periodEnd, settings.dateFormat)}
                       {cycle.isOpen ? " (open)" : ""}
                     </Text>
                     <Text
@@ -264,9 +267,9 @@ export function CreditCardAnalyticsSection({
                         { color: theme.colors.mutedForeground },
                       ]}
                     >
-                      Billed <Amount value={cycle.billed} currency={currency} />
+                      Billed <Amount ghostable value={cycle.billed} currency={currency} />
                       {" · "}Paid{" "}
-                      <Amount value={cycle.userPaid} currency={currency} />
+                      <Amount ghostable value={cycle.userPaid} currency={currency} />
                       {cycle.cashbackApplied > 0
                         ? ` · CB ${cycle.cashbackApplied}`
                         : ""}
@@ -305,7 +308,7 @@ export function CreditCardAnalyticsSection({
                   >
                     {point.month}
                   </Text>
-                  <Amount
+                  <Amount ghostable
                     value={point.spend}
                     currency={currency}
                     style={[styles.rowSide, { color: theme.colors.foreground }]}
@@ -320,7 +323,11 @@ export function CreditCardAnalyticsSection({
               <Text
                 style={[styles.subhead, { color: theme.colors.mutedForeground }]}
               >
-                Categories ({workspace.focusPeriod.label})
+                Categories (
+                {/^\d{4}-\d{2}-\d{2}$/.test(workspace.focusPeriod.start)
+                  ? `${formatDisplayDate(workspace.focusPeriod.start, settings.dateFormat)} → ${formatDisplayDate(workspace.focusPeriod.end, settings.dateFormat)}`
+                  : workspace.focusPeriod.label}
+                )
               </Text>
               {workspace.categorySummary.slice(0, 5).map((row) => (
                 <View
@@ -339,7 +346,7 @@ export function CreditCardAnalyticsSection({
                   >
                     {row.category}
                   </Text>
-                  <Amount
+                  <Amount ghostable
                     value={row.value}
                     currency={currency}
                     style={[styles.rowSide, { color: theme.colors.foreground }]}
@@ -386,7 +393,7 @@ export function CreditCardAnalyticsSection({
                       {row.count} txn{row.count === 1 ? "" : "s"}
                     </Text>
                   </View>
-                  <Amount
+                  <Amount ghostable
                     value={row.total}
                     currency={currency}
                     style={[styles.rowSide, { color: theme.colors.foreground }]}

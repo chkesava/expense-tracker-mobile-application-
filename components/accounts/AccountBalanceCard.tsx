@@ -3,17 +3,12 @@ import { LinearGradient } from "expo-linear-gradient";
 import { ArrowLeftRight, Calendar, SlidersHorizontal } from "lucide-react-native";
 
 import { AccountSafeIllustration } from "@/components/accounts/AccountSafeIllustration";
-import {
-  ACCOUNT_GREEN_GLOW,
-  accountAccent,
-  accountAccentBorder,
-} from "@/components/accounts/accountScreenTheme";
 import { Amount } from "@/components/common/Amount";
 import { useSettings } from "@/providers/SettingsProvider";
 import { currencySymbol, formatAmountNumber } from "@/shared/utils/formatCurrency";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 
 function HeroCurrencyAmount({
   value,
@@ -27,15 +22,16 @@ function HeroCurrencyAmount({
   const isGhosted = !!settings?.ghostMode;
 
   if (isGhosted) {
+    // Keep the sign when hidden: an overdrawn account must not look funded.
     return (
       <Text
-        accessibilityLabel="Hidden amount"
+        accessibilityLabel={value < 0 ? "Hidden amount, overdrawn" : "Hidden amount"}
         style={[
           styles.heroWhole,
           { color: theme.colors.foreground, fontFamily: theme.fontFamily.bold },
         ]}
       >
-        ••••••
+        {value < 0 ? "-" : ""}••••••
       </Text>
     );
   }
@@ -104,37 +100,37 @@ export function AccountBalanceCard({
   onTransfer: () => void;
   onAdjust: () => void;
 }) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const accent = accountAccent(isDark);
-  const border = accountAccentBorder(isDark);
-  // #4ADE80 is light enough to need dark text; #16A34A is not.
-  const onAccent = isDark ? "#07120C" : "#FFFFFF";
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
+  // SPENDLY-537: the theme accent and its own foreground, on the same deep
+  // surface as the dashboard hero, instead of a fixed green palette.
+  const accent = theme.colors.primary;
+  const onAccent = theme.colors.primaryForeground;
 
   return (
     <View
       style={[
         styles.card,
         {
-          borderColor: border,
-          backgroundColor: isDark ? "#0B100E" : "#F4FBF6",
+          borderColor: withAlpha(accent, surfaces.isDark ? 0.22 : 0.18),
+          backgroundColor: theme.colors.card,
         },
       ]}
     >
       <LinearGradient
         pointerEvents="none"
-        colors={
-          isDark
-            ? ["rgba(74,222,128,0.14)", "rgba(12,22,18,0.0)", "#070B09"]
-            : ["rgba(22,163,74,0.10)", "rgba(244,251,246,0.4)", "#F8FAFC"]
-        }
+        colors={[
+          withAlpha(accent, surfaces.isDark ? 0.14 : 0.08),
+          withAlpha(accent, 0),
+          theme.colors.card,
+        ]}
         start={{ x: 0.1, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
       <View
         pointerEvents="none"
-        style={[styles.glow, { backgroundColor: ACCOUNT_GREEN_GLOW }]}
+        style={[styles.glow, { backgroundColor: withAlpha(accent, surfaces.isDark ? 0.16 : 0.1) }]}
       />
       <View pointerEvents="none" style={styles.safeSlot}>
         <AccountSafeIllustration size={132} />
@@ -157,8 +153,8 @@ export function AccountBalanceCard({
           style={[
             styles.metaPanel,
             {
-              backgroundColor: isDark ? "rgba(8,12,10,0.72)" : "rgba(255,255,255,0.72)",
-              borderColor: isDark ? "rgba(148,163,184,0.12)" : "rgba(15,23,42,0.08)",
+              backgroundColor: surfaces.tile,
+              borderColor: theme.colors.outlineVariant,
             },
           ]}
         >
@@ -180,7 +176,7 @@ export function AccountBalanceCard({
           <View
             style={[
               styles.metaDivider,
-              { backgroundColor: isDark ? "rgba(148,163,184,0.18)" : "rgba(15,23,42,0.1)" },
+              { backgroundColor: surfaces.divider },
             ]}
           />
           <View style={styles.metaCol}>
@@ -239,8 +235,8 @@ export function AccountBalanceCard({
             style={({ pressed }) => [
               styles.actionBtn,
               {
-                backgroundColor: isDark ? "rgba(8,12,10,0.65)" : "rgba(255,255,255,0.8)",
-                borderColor: isDark ? "rgba(148,163,184,0.16)" : "rgba(15,23,42,0.1)",
+                backgroundColor: surfaces.control,
+                borderColor: theme.colors.outlineVariant,
               },
               pressed && styles.pressed,
             ]}

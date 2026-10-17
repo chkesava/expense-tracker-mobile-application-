@@ -5,7 +5,10 @@ import { useState } from "react";
 import { Amount } from "@/components/common/Amount";
 import { Button } from "@/components/ui/Button";
 import type { CashbackHistoryEntry, CashbackSummary } from "@/shared/utils/cashbackHistory";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 
 export function CashbackHistoryCard({
   summary,
@@ -15,6 +18,8 @@ export function CashbackHistoryCard({
   currency: string;
 }) {
   const { theme } = useTheme();
+  const surfaces = useSurfaces();
+  const { settings } = useSettings();
   const [expanded, setExpanded] = useState(false);
 
   const hasEntries = summary.entries.length > 0;
@@ -32,7 +37,7 @@ export function CashbackHistoryCard({
         </Text>
         {hasEntries && (
           <Text style={[styles.totalLabel, { color: theme.colors.foreground }]}>
-            Total: <Amount value={summary.totalReceived} currency={currency} />
+            Total: <Amount ghostable value={summary.totalReceived} currency={currency} />
           </Text>
         )}
       </View>
@@ -75,7 +80,7 @@ export function CashbackHistoryCard({
                 },
               ]}
             >
-              <View style={styles.iconContainer}>
+              <View style={[styles.iconContainer, { backgroundColor: surfaces.control }]}>
                 <Gift size={20} color={theme.colors.primary} />
               </View>
               <View style={styles.details}>
@@ -89,7 +94,7 @@ export function CashbackHistoryCard({
                   >
                     {entry.kind === "statement_credit" ? "Statement Credit" : "Reward"}
                   </Text>
-                  <Amount
+                  <Amount ghostable
                     value={entry.amount}
                     currency={currency}
                     style={[
@@ -101,10 +106,10 @@ export function CashbackHistoryCard({
                 </View>
                 <View style={styles.metaRow}>
                   <Text style={[styles.metaText, { color: theme.colors.mutedForeground }]}>
-                    {entry.date}
+                    {formatDisplayDate(entry.date, settings.dateFormat)}
                   </Text>
                   {entry.isVoided ? (
-                    <View style={styles.badge}>
+                    <View style={[styles.badge, { backgroundColor: surfaces.wash(theme.colors.destructive) }]}>
                       <Text style={[styles.badgeText, { color: theme.colors.destructive }]}>
                         Voided
                       </Text>
@@ -195,7 +200,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(148, 163, 184, 0.12)",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -233,7 +237,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
   },
   badgeText: {
     fontSize: 11,

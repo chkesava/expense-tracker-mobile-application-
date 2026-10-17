@@ -1,7 +1,6 @@
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { MoreHorizontal } from "lucide-react-native";
 
-import { accountAccent } from "@/components/accounts/accountScreenTheme";
 import { Chip } from "@/components/ui/Chip";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -41,7 +40,7 @@ export function AccountSectionTabs({
   const { theme, themeName } = useTheme();
   const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
-  const accent = accountAccent(isDark);
+  const accent = theme.colors.primary;
 
 
   return (

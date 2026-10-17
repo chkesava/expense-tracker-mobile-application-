@@ -22,7 +22,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | SPENDLY-534 | Phase 2a: Money hub and Activity (header, section tabs, period summary, activity list) | `feature/SPENDLY-534-money-hub-activity` | Merged into the epic (2026-10-16). In Progress until the epic reaches `main`. |
 | SPENDLY-535 | Phase 2b: Accounts and cards | `feature/SPENDLY-535-money-accounts-cards` | Merged into the epic (2026-10-17). In Progress until the epic reaches `main`. |
 | SPENDLY-536 | Phase 2c: Debt, owed and recurring | `feature/SPENDLY-536-money-debt-owed-recurring` | Merged into the epic (2026-10-17). In Progress until the epic reaches `main`. |
-| SPENDLY-537 | Phase 2d: Detail screens | not cut yet | To do |
+| SPENDLY-537 | Phase 2d: Detail screens | `feature/SPENDLY-537-money-detail-screens` | Implemented and committed; awaiting approval to merge into the epic. |
 
 ## Decisions
 - **Midnight Emerald is a selectable preset, not a forced default.** It's in Settings → Appearance → Custom Presets. Existing users keep their theme.

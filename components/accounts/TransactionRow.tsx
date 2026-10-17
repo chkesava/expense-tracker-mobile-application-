@@ -2,20 +2,10 @@ import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ArrowDownLeft, ArrowUpRight, ChevronRight } from "lucide-react-native";
 
-import {
-  ACCOUNT_RED,
-  ACCOUNT_RED_DIM,
-  ACCOUNT_GREEN_DIM,
-  EXPENSE_BADGE_BG,
-  EXPENSE_BADGE_FG,
-  INCOME_BADGE_BG,
-  INCOME_BADGE_FG,
-  accountAccent,
-} from "@/components/accounts/accountScreenTheme";
 import { Amount } from "@/components/common/Amount";
 import { currencySymbol } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces } from "@/theme/surfaces";
 
 export type TransactionRowProps = {
   id: string;
@@ -46,13 +36,14 @@ export const TransactionRow = memo(function TransactionRow({
   showRunningBalance,
   onPress,
 }: TransactionRowProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const accent = accountAccent(isDark);
-  const amountColor = isCredit ? accent : isDark ? ACCOUNT_RED : theme.colors.destructive;
-  const badgeBg = isCredit ? INCOME_BADGE_BG : EXPENSE_BADGE_BG;
-  const badgeFg = isCredit ? INCOME_BADGE_FG : EXPENSE_BADGE_FG;
-  const iconBg = isCredit ? ACCOUNT_GREEN_DIM : ACCOUNT_RED_DIM;
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
+  // SPENDLY-537: same vocabulary as the Activity list — money in is success
+  // green with "+", money out is ink with "-"; red is kept for real negatives.
+  const amountColor = isCredit ? theme.colors.success : theme.colors.foreground;
+  const badgeBg = isCredit ? surfaces.wash(theme.colors.success) : surfaces.control;
+  const badgeFg = isCredit ? theme.colors.success : theme.colors.mutedForeground;
+  const iconBg = isCredit ? surfaces.wash(theme.colors.success) : surfaces.tile;
   const prefix = `${isCredit ? "+ " : "- "}${currencySymbol(currency)}`;
 
   return (
@@ -61,8 +52,8 @@ export const TransactionRow = memo(function TransactionRow({
       style={[
         styles.row,
         {
-          backgroundColor: isDark ? "rgba(12,15,20,0.92)" : theme.colors.card,
-          borderColor: isDark ? "rgba(148,163,184,0.08)" : theme.colors.border,
+          backgroundColor: theme.colors.card,
+          borderColor: theme.colors.outlineVariant,
         },
       ]}
       accessibilityRole="button"
@@ -71,7 +62,7 @@ export const TransactionRow = memo(function TransactionRow({
     >
       <View style={[styles.icon, { backgroundColor: iconBg }]}>
         {isCredit ? (
-          <ArrowDownLeft size={16} color={accent} strokeWidth={2.4} />
+          <ArrowDownLeft size={16} color={theme.colors.success} strokeWidth={2.4} />
         ) : (
           <ArrowUpRight size={16} color={amountColor} strokeWidth={2.4} />
         )}
