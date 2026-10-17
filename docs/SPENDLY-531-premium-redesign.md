@@ -8,7 +8,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | Phase | Screens | Stories | State |
 |---|---|---|---|
 | 1. Dashboard | Dashboard | SPENDLY-532, SPENDLY-533 | Done; on `main` (`85a83c0`) |
-| 2. Money | Ledger hub and its sections, account / transaction / card-bill detail | SPENDLY-534 to SPENDLY-537 | In progress |
+| 2. Money | Ledger hub and its sections, account / transaction / card-bill detail | SPENDLY-534 to SPENDLY-537 | All stories merged into the epic (2026-10-17); not yet on `main` |
 | 3. Analytics | Insights (monthly and yearly), merchants, fees | not yet created | Planned |
 | 4. Investments | Investments hub (deposits, portfolio, SIPs, EPF), EPF detail | not yet created | Planned |
 | 5. Planning | Goals, financial calendar, runway, what-if, decisions | not yet created | Planned |
@@ -22,7 +22,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | SPENDLY-534 | Phase 2a: Money hub and Activity (header, section tabs, period summary, activity list) | `feature/SPENDLY-534-money-hub-activity` | Merged into the epic (2026-10-16). In Progress until the epic reaches `main`. |
 | SPENDLY-535 | Phase 2b: Accounts and cards | `feature/SPENDLY-535-money-accounts-cards` | Merged into the epic (2026-10-17). In Progress until the epic reaches `main`. |
 | SPENDLY-536 | Phase 2c: Debt, owed and recurring | `feature/SPENDLY-536-money-debt-owed-recurring` | Merged into the epic (2026-10-17). In Progress until the epic reaches `main`. |
-| SPENDLY-537 | Phase 2d: Detail screens | `feature/SPENDLY-537-money-detail-screens` | Implemented and committed; awaiting approval to merge into the epic. |
+| SPENDLY-537 | Phase 2d: Detail screens | `feature/SPENDLY-537-money-detail-screens` | Merged into the epic (2026-10-17). In Progress until the epic reaches `main`. |
 
 ## Decisions
 - **Midnight Emerald is a selectable preset, not a forced default.** It's in Settings → Appearance → Custom Presets. Existing users keep their theme.
