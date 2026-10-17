@@ -2,7 +2,9 @@ import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ChevronRight, Scale } from "lucide-react-native";
 
+import { RowGlyph } from "@/components/dashboard/primitives";
 import { DecisionStatusBadge } from "@/components/decisions/DecisionStatusBadge";
+import { useDecisionFormat } from "@/components/decisions/useDecisionFormat";
 import type { MoneyDecision } from "@/shared/types/decision";
 import { outcomeStatus } from "@/shared/utils/decisionHistory";
 import { decisionCategoryLabel } from "@/shared/utils/decisionModel";
@@ -19,8 +21,10 @@ export const DecisionRow = memo(function DecisionRow({
 }) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
+  // SPENDLY-547: dates in the user's format (were UTC ISO slices).
+  const { date } = useDecisionFormat();
   const chosen = decision.alternatives.find((a) => a.id === decision.selectedAlternativeId)?.title;
-  const when = decision.decidedAtMs ? `Decided ${new Date(decision.decidedAtMs).toISOString().slice(0, 10)}` : `Started ${new Date(decision.createdAtMs).toISOString().slice(0, 10)}`;
+  const when = decision.decidedAtMs ? `Decided ${date(decision.decidedAtMs)}` : `Started ${date(decision.createdAtMs)}`;
   const outcome = outcomeStatus(decision);
   const meta = [
     decisionCategoryLabel(decision.category),
@@ -42,11 +46,11 @@ export const DecisionRow = memo(function DecisionRow({
         { paddingHorizontal: theme.space.lg, paddingVertical: theme.space.md, gap: theme.space.md, borderBottomColor: surfaces.divider, backgroundColor: pressed ? surfaces.tile : "transparent" },
       ]}
     >
-      <View style={[styles.icon, { backgroundColor: surfaces.tile, borderRadius: theme.radius.md }]}>
-        <Scale size={18} color={theme.colors.primary} />
-      </View>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text numberOfLines={2} style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm }}>
+      <RowGlyph tint={decision.status === "archived" ? undefined : surfaces.wash(theme.colors.primary)}>
+        <Scale size={18} color={decision.status === "archived" ? theme.colors.mutedForeground : theme.colors.primary} />
+      </RowGlyph>
+      <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
+        <Text numberOfLines={2} style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.medium, fontSize: theme.typography.sm }}>
           {decision.title}
         </Text>
         <Text numberOfLines={2} style={{ color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs }}>
@@ -61,5 +65,4 @@ export const DecisionRow = memo(function DecisionRow({
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", minHeight: 64, borderBottomWidth: StyleSheet.hairlineWidth },
-  icon: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
 });

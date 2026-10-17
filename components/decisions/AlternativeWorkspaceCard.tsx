@@ -8,8 +8,9 @@ import { Input } from "@/components/ui/Input";
 import { DECISION_LIMITS } from "@/shared/types/decision";
 import { FIRST_YEAR_BASIS, alternativeTotals, draftsToInputs, type InputDraft } from "@/shared/utils/decisionComparison";
 import { newItemId } from "@/shared/utils/decisionForm";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useDecisionFormat } from "@/components/decisions/useDecisionFormat";
+import { currencySymbol } from "@/shared/utils/formatCurrency";
 
 export interface AlternativeWorkspaceState {
   id: string;
@@ -43,9 +44,11 @@ export function AlternativeWorkspaceCard({
   width?: number;
 }) {
   const { theme } = useTheme();
+  // SPENDLY-547: the display currency instead of a hardcoded INR, ghost-aware.
+  const { currency, money: fmt } = useDecisionFormat();
   const parsed = draftsToInputs(state.inputs);
   const totals = parsed.ok ? alternativeTotals({ inputs: parsed.inputs }) : null;
-  const money = (v: number | null) => (v === null ? "Not entered" : formatAmount(v, "INR"));
+  const money = (v: number | null) => (v === null ? "Not entered" : fmt(v));
   const muted = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
   const label = (t: string) => <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm }}>{t}</Text>;
   const setInput = (id: string, patch: Partial<InputDraft>) => onChange({ ...state, inputs: state.inputs.map((i) => (i.id === id ? { ...i, ...patch } : i)) });
@@ -76,7 +79,7 @@ export function AlternativeWorkspaceCard({
                 <Trash2 size={16} color={theme.colors.destructive} />
               </Button>
             </View>
-            <Input value={input.amount} onChangeText={(v) => setInput(input.id, { amount: v })} keyboardType="decimal-pad" placeholder="Amount in ₹" accessibilityLabel={`Input ${index + 1} amount`} error={bad.includes("amount_invalid") ? "Enter an amount like 2500" : undefined} helperText="Your input" />
+            <Input value={input.amount} onChangeText={(v) => setInput(input.id, { amount: v })} keyboardType="decimal-pad" placeholder={`Amount in ${currencySymbol(currency)}`} accessibilityLabel={`Input ${index + 1} amount`} error={bad.includes("amount_invalid") ? "Enter an amount like 2500" : undefined} helperText="Your input" />
             <View style={[styles.wrap, { gap: theme.space.xs }]}>
               <Chip label="Cost" size="sm" selected={input.direction === "cost"} onPress={() => setInput(input.id, { direction: "cost" })} accessibilityRole="radio" />
               <Chip label="Benefit" size="sm" selected={input.direction === "benefit"} onPress={() => setInput(input.id, { direction: "benefit" })} accessibilityRole="radio" />
@@ -98,7 +101,7 @@ export function AlternativeWorkspaceCard({
         {totals ? (
           <>
             <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm }}>
-              First year: {totals.firstYearNet === null ? "Not entered" : `${totals.firstYearNet >= 0 ? "+" : "−"}${formatAmount(Math.abs(totals.firstYearNet), "INR")}`}
+              First year: {totals.firstYearNet === null ? "Not entered" : `${totals.firstYearNet >= 0 ? "+" : "−"}${fmt(Math.abs(totals.firstYearNet))}`}
             </Text>
             <Text style={muted}>{FIRST_YEAR_BASIS}</Text>
           </>

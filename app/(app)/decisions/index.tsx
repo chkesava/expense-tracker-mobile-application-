@@ -2,14 +2,16 @@ import { useCallback, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { useRouter, type Href } from "expo-router";
-import { Lightbulb, Plus, Scale, SlidersHorizontal, WifiOff } from "lucide-react-native";
+import { CalendarClock, Lightbulb, Plus, Scale, SlidersHorizontal, WifiOff } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
-import { LoadingState } from "@/components/common/LoadingState";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { Section } from "@/components/dashboard/primitives";
 import { Modal } from "@/components/common/Modal";
 import { SearchBar } from "@/components/common/SearchBar";
 import { DecisionRow } from "@/components/decisions/DecisionRow";
+import { useDecisionFormat } from "@/components/decisions/useDecisionFormat";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageListStateScroll } from "@/components/layout/PageListStateScroll";
 import { PageShell } from "@/components/layout/PageShell";
@@ -34,6 +36,7 @@ import {
 } from "@/shared/utils/decisionHistory";
 import { decisionCategoryLabel } from "@/shared/utils/decisionModel";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces } from "@/theme/surfaces";
 
 const QUICK: Array<{ id: string; label: string; statuses: DecisionStatus[] }> = [
   { id: "all", label: "All", statuses: [] },
@@ -69,10 +72,13 @@ const OUTCOME: Array<{ id: OutcomeFilter; label: string }> = [
  */
 export default function DecisionsScreen() {
   const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const router = useRouter();
   const { isOnline } = useNetwork();
   const { decisions, loading, error, retry } = useDecisions();
   const bottomPadding = usePageListBottomPadding();
+  // SPENDLY-547: follow-up dates in the user's format.
+  const { date } = useDecisionFormat();
   const today = todayDateKey();
   const [filters, setFilters] = useState<DecisionHistoryFilters>(EMPTY_DECISION_FILTERS);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -116,7 +122,7 @@ export default function DecisionsScreen() {
       <View style={[styles.row, { gap: theme.space.sm }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: theme.space.sm }} style={{ flex: 1 }} accessibilityRole="tablist">
           {QUICK.map((q) => (
-            <Chip key={q.id} label={q.label} size="sm" selected={quick === q.id} onPress={() => setFilters({ ...filters, statuses: q.statuses })} accessibilityRole="tab" />
+            <Chip key={q.id} label={q.label} size="sm" appearance="outline" selected={quick === q.id} onPress={() => setFilters({ ...filters, statuses: q.statuses })} accessibilityRole="tab" />
           ))}
         </ScrollView>
         <Chip
@@ -154,7 +160,11 @@ export default function DecisionsScreen() {
       </PageListStateScroll>
     );
   } else if (loading) {
-    body = <LoadingState variant="list" count={5} />;
+    body = (
+      <View style={{ padding: theme.space.lg }}>
+        <DashboardSkeleton variant="section" rows={5} />
+      </View>
+    );
   } else if (decisions.length === 0) {
     body = (
       <PageListStateScroll>
@@ -198,8 +208,8 @@ export default function DecisionsScreen() {
                     </View>
                   ) : null}
                   {comingUp.length > 0 && !filters.query ? (
-                    <View style={{ paddingHorizontal: theme.space.lg, paddingVertical: theme.space.sm, gap: theme.space.xs }} accessibilityRole="summary">
-                      <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm }}>Coming up</Text>
+                    <View style={{ paddingHorizontal: theme.space.lg, paddingVertical: theme.space.sm }} accessibilityRole="summary">
+                      <Section title="Coming up" subtitle="Reviews and commitments that are due" icon={<CalendarClock size={16} color={theme.colors.primary} />} iconTint={surfaces.wash(theme.colors.primary)}>
                       {comingUp.map((f) => (
                         <Text
                           key={f.key}
@@ -208,9 +218,10 @@ export default function DecisionsScreen() {
                           style={{ color: f.state === "overdue" ? theme.colors.destructive : theme.colors.foreground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs, paddingVertical: 4 }}
                         >
                           {DUE_LABELS[f.state]} · {f.kind === "review" ? `Review "${f.decisionTitle}"` : `${f.text} (${f.decisionTitle})`}
-                          {f.date ? ` · ${f.date}` : ""}
+                          {f.date ? ` · ${date(f.date)}` : ""}
                         </Text>
                       ))}
+                      </Section>
                     </View>
                   ) : null}
                 </View>
