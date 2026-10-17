@@ -4,12 +4,11 @@ import { CalendarRange, TrendingDown, TrendingUp } from "lucide-react-native";
 
 import { AnalyticsCard } from "@/components/analytics/shared/AnalyticsCard";
 import {
-  insightAccents,
-  insightSurface,
+  useInsightAccents,
+  useInsightSurface,
 } from "@/components/analytics/insightsTheme";
 import { Amount } from "@/components/common/Amount";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 /** A year-over-year delta. Null whenever the prior year can't support one. */
 export type YoyDelta = {
@@ -39,15 +38,14 @@ export function AnnualOverviewCard({
   metrics,
   currency,
 }: AnnualOverviewCardProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const surface = insightSurface(isDark);
-  const accents = insightAccents(isDark);
+  const { theme } = useTheme();
+  const surface = useInsightSurface();
+  const accents = useInsightAccents();
 
   return (
     <AnalyticsCard
       title={`${year} Annual Overview`}
-      icon={<CalendarRange size={16} color={accents.green} strokeWidth={2.4} />}
+      icon={<CalendarRange size={16} color={accents.positive} strokeWidth={2.4} />}
       gap={12}
     >
       <View style={styles.grid}>
@@ -55,8 +53,8 @@ export function AnnualOverviewCard({
           const rose = (metric.delta?.percent ?? 0) > 0;
           const badgeColor = metric.delta
             ? rose === metric.riseIsGood
-              ? accents.green
-              : accents.pink
+              ? accents.positive
+              : accents.negative
             : theme.colors.mutedForeground;
 
           return (
