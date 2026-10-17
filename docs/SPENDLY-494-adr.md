@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Proposed. Awaiting the user's decisions (§12)** |
+| Status | **Proposed: evidence complete; recommendation NO-GO; awaiting the user's sign-off (§12)** |
 | Decision date | Pricing verified **2026-10-17**. The ADR is decided on the date the user signs off |
 | Story | [SPENDLY-502](https://kesavach.atlassian.net/browse/SPENDLY-502) (Phase 0) |
 | Epic | [SPENDLY-494](https://kesavach.atlassian.net/browse/SPENDLY-494) |
@@ -50,15 +50,20 @@ What is true today:
 | Reads per day, typical | 6,000–10,000 | **E**: 10–15 opens/day assumed | `docs/SPENDLY-415-read-budget.md:58` |
 | Pre-epic baseline | ≈ 24,000/day | E | `docs/FIRESTORE_READ_INVENTORY.md` §1/§3 (cited by 415) |
 | Spark free quota | 50,000 reads, 20,000 writes, 20,000 deletes per day; 1 GiB stored | Doc | firebase.google.com/pricing; firebase.google.com/docs/firestore/pricing |
-| **7-day production reads, writes and deletes** | **MISSING** | needs M-prod | The Firebase console (Firestore → Usage), exported by the user. See §13 |
+| **7-day production reads** (Oct 10–17, 2026) | **159K total ≈ 22.7K/day average; peak ≈ 44K on Oct 11** | **M-prod** | Firebase console → Firestore → Usage, screenshot supplied by the user on 2026-10-17 |
+| 7-day production writes | ≈ 1K total ≈ 150/day | M-prod | same |
+| 7-day production deletes | ≈ 0 | M-prod | same |
+| Production data size (all users) | 24 user trees, ≈ 4,500 documents; Wave 1 ≈ 3,770 docs | M-prod | §10 inventory, 2026-10-17 |
 
-**What this means:**
-- Even the high estimate is 20% of the Spark read quota. **Read cost alone does not justify the epic.** The only valid justification is the relational reporting and analytics capability.
-- Until the production export exists, this table cannot be upgraded from M-dev/E to M-prod.
+**What this means (updated with production numbers):**
+- **The estimate was wrong in the other direction.** Real reads average ≈ 22.7K/day, 2–4× the 6–10K estimate. **The Oct 11 peak (≈ 44K) reached ≈ 88% of the Spark daily read quota (50K).** On Spark, crossing the quota makes reads fail for the rest of the day, so the app would stop loading data. **That is a real availability risk.**
+- **The data itself is tiny.** About 4,500 documents across all users, so each document is read ~5 times a day on average. The reads come from the app **re-reading the same small data** on each launch (native cache is memory-only, `lib/firebase.ts:120-143`), not from data volume.
+- **Writes are negligible** (~150/day), so change-capture cost (option A) would be trivially inside any free tier.
+- **A Supabase read model does not fix this risk soon.** No read moves to Supabase until Phase 3, after a 14-day parity gate (SPENDLY-510). The reads that hit the quota today are launch-time listeners on Firestore; they only go away by changing the app.
 
-**SPENDLY-501 (read quick wins) is To Do.** It has produced no results.
-- Its main lever, removing the second `categories` read (~287 per launch, about a third of the measured launch), needs no Supabase at all.
-- If the user's goal is fewer reads, 501 is the cheaper route and should be done regardless of this ADR.
+**SPENDLY-501 (read quick wins) is now Done on `main` (`eb9bdba`, 2026-10-17)**, but not yet released, so the numbers above do **not** include it.
+- It removes the second `categories` read at login (production: 2,090 category docs across 11 users) and the dashboard's duplicate `expenses` listener.
+- Its effect will show in the console only after a release. Re-check the Usage tab ~7 days after the next build reaches users.
 
 ## 3. Decision 1: go / no-go and the primary goal (PENDING, user)
 
@@ -68,8 +73,14 @@ What is true today:
 | Go, goal = read cost | **Not supported by the evidence** (§2). Do 501 instead |
 | **No-go** | Close the epic as Won't Do. Keep 495–501 (they matter without Supabase). Phase 1+ stories never start |
 
-**Recommendation:** decide only after the 7-day production export.
-- If production confirms the estimate (well inside Spark), choose go only if relational reporting is wanted for its own sake. Otherwise choose **no-go + do 501**.
+**Recommendation (with the production numbers): NO-GO for now.**
+- The real problem is read volume near the Spark quota. The read model would not touch that for months, and it adds a second database, a sync pipeline and an auth bridge to protect ~4,500 documents.
+- The faster, cheaper fixes stay inside Firestore:
+  - release 501;
+  - give native a durable cache, so launches stop re-reading everything;
+  - bound the remaining full-ledger listeners once 496/497/499 make that safe.
+- Relational reporting over ~4,500 documents can also be computed on the client from data the app already loads.
+- Revisit this ADR if data grows by an order of magnitude, or if a reporting need appears that the client cannot serve.
 - **Rollback:** none needed at this stage. Nothing is built yet.
 
 ## 4. Decision 2: change-capture option (PENDING, tied to Blaze)
@@ -134,7 +145,9 @@ Pro costs **from $25/month**, with 8 GB disk and 7-day backups.
 
 The read model is rebuildable from Firestore (SPENDLY-509 backfill), so the lack of backups is acceptable on Free. A pause is handled by the Firestore fallback (§8).
 
-**Sizing is UNKNOWN.** The production inventory with `--doc-counts` (§10) is what tells us whether 500 MB is enough.
+**Sizing (measured, §10):** ≈ 4,500 documents in total, so 500 MB is not a constraint.
+
+**User answer (2026-10-17):** the account has **one** Supabase project, and the user prefers to **use the existing shared project** rather than create a second. If the decision is ever go, this ADR still recommends a dedicated project, for the service-role blast radius. That choice only matters on a go.
 
 **Rollback:** drop the project. Nothing in Firestore changes.
 
@@ -213,7 +226,7 @@ The read model is rebuildable from Firestore (SPENDLY-509 backfill), so the lack
 | Run | Status | Result |
 |---|---|---|
 | Emulator, seeded `demo-spendly` (2026-10-17) | **Done** (M-dev) | 1 user, 0 duress. Present: wave 1 `accounts`, `accountTypes`, `expenses`, `incomes`; wave 2 `subscriptions`; wave 3 `holdings`, `portfolioSettings`; excluded `financialSummaries`; unassigned `categoryBudgets`, `financialGoals`. **This only proves the tool works.** The seed is synthetic and says nothing about production |
-| Production (`--production --doc-counts`) | **NOT RUN.** Needs the user's approval and a service account | Will answer which legacy collections (`focus`, `goals`, `profile`, Nutrition docs, …) exist per user, and how large each wave is against the 500 MB limit |
+| Production (`--production --doc-counts`), 2026-10-17, approved by the user | **Done** (M-prod) | **24 user trees, 0 duress trees, ≈ 4,500 documents.** Wave 1 ≈ 3,770 docs (`categories` 2,090 across 11 users; `expenses` 1,352 across 12; `accountEntries` 142; `incomes` 44; `creditCardBills` 34; `accountTransfers` 27; `accounts` 26; `accountTypes` 22; `accountPayments` 19; `ledgerEvents` 17). Wave 2: `subscriptions` 22, `borrowings` 3; `borrowingRepayments`, `receivables` and `receivableRepayments` exist for no user. Wave 3 ≈ 110 docs (EPF, holdings, portfolio). Excluded: `meta` 322, `financialSummaries` 84, `stats` 23, `notifications` 3. Unassigned/legacy: `portfolioSnapshots` 129, `creditCardBillReminderLogs` 83, `daily_logs` 7, `focus` 1, `goals` 1, `profile` 1, `weight_history` 1, `pandalMemberships` 4, and a few single docs. **The whole read model would fit in well under 1% of Supabase Free's 500 MB** |
 
 **Collections the rules allow that are in no wave yet** (`firestore.rules` `users/{uid}` matches and the catch-all at `:980-990`): `categoryBudgets`, `financialGoals`, `goalFundingPlans`, `sipPlans`, `sipTransactions`, `trips`, `spaces`, `decisions`, `whatIfScenarios`, `runwaySettings`, `merchantOverrides`, `feeReviews`, `focus`, `goals`, `profile`, `daily_logs`, `weight_history`, and others. **Decision:** they stay out of the read model until a later story assigns them a wave. `daily_logs` and `weight_history` are presumed Nutrition and excluded; confirm with the production inventory.
 
@@ -229,7 +242,7 @@ The SPENDLY-494 description says these block it. Their status in Jira on 2026-10
 | SPENDLY-498 | Holding adjustments never committed (P0 silent data loss) | To Do | 514, 517 |
 | SPENDLY-499 | Consolidate the summary rebuilds | To Do | 500, 503, 510, 518 |
 | SPENDLY-500 | Production reconciliation (436 apply, HDFC) | To Do | 503, 515, 516 |
-| SPENDLY-501 | Read quick wins | To Do | relates to 502 |
+| SPENDLY-501 | Read quick wins | **Done** on `main` (`eb9bdba`), not yet released | relates to 502 |
 
 These matter **with or without** Supabase. A no-go keeps all of them.
 
@@ -252,17 +265,15 @@ SPENDLY-494 ADR sign-off (date: ____)
 - **Go + C:** Phase 4 (514…518) goes to Won't Do and the §8 SLOs are revised, by the user or on their explicit instruction.
 - **Go + A:** Phase 1 (504, 505, 506) may start **one story at a time**, each with approval.
 
-## 13. Evidence still to collect before sign-off
+## 13. Evidence status (2026-10-17)
 
-1. **7-day Firebase usage export**, from the Firebase console → Firestore → Usage: reads, writes, deletes. It replaces the M-dev/E rows in §2.
-2. **Production inventory**, once the user approves:
-   ```
-   GOOGLE_APPLICATION_CREDENTIALS=<path> node scripts/inventory-user-collections.js --production --doc-counts
-   ```
-   It is read-only, and `count()` is billed at one read per 1,000 index entries.
-3. **Firestore per-region operation prices** from cloud.google.com/firestore/pricing, for the database's location.
-4. **Supabase account:** how many active projects already exist (the Free limit is 2).
-5. **Netlify:** which plan the Spendly site is on, and its current monthly credit use. The Free hard limit pauses every site.
+| Item | Status | Result |
+|---|---|---|
+| 7-day Firebase usage | **Collected** (user screenshot) | §2: ≈ 159K reads, ≈ 1K writes, ≈ 0 deletes; peak ≈ 44K reads/day |
+| Production inventory | **Run** with user approval (read-only, aggregates only) | §10: 24 user trees, ≈ 4,500 docs, 0 duress trees |
+| Supabase account | **Answered** | One project (`ganesh-seva-storage`). The user prefers to use it rather than create a second one |
+| Netlify plan | **Answered** | Free (300 credits/month, hard limit; all sites pause when exhausted) |
+| Firestore per-region operation prices | **Not retrieved** | Only needed if the user chooses Blaze |
 
 ## 14. Pricing sources (fetched 2026-10-17)
 
