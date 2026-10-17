@@ -146,5 +146,7 @@ The ordering rules:
 
 | Key | State | Branch | Doc | Notes |
 |---|---|---|---|---|
-| SPENDLY-502 | In Progress: ADR decided (GO, option C, dedicated project); awaiting merge approval | `feature/SPENDLY-502-phase-0-adr-go-no-go` | `docs/SPENDLY-494-adr.md` | Production usage + inventory recorded; Blaze refused (option C); daily sync by default |
-| 503–520 | To Do: blocked on the 502 sign-off | — | — | No Phase 1+ story starts before the sign-off |
+| SPENDLY-502 | Merged into the epic (`9cefa5e`); Done when the epic reaches main | `feature/SPENDLY-502-phase-0-adr-go-no-go` | `docs/SPENDLY-494-adr.md` | Production usage + inventory recorded; Blaze refused (option C); daily sync by default |
+| SPENDLY-504 | In Progress: schema, CI and tests built; waiting for the user to create the project | `feature/SPENDLY-504-supabase-project-schema` | `docs/SPENDLY-504-readmodel-schema.md` | Production apply needs the project ref and user approval |
+| SPENDLY-514–518 | Closed (`wont-do`): option C | — | — | ADR §0 |
+| SPENDLY-506 | To Do: rewritten for option C (daily sync job) | — | — | |
