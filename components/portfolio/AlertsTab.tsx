@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/Input";
 import { alertSchema } from "@/shared/features/portfolio/schemas";
 import type { AlertCondition, PriceAlert } from "@/shared/features/portfolio/types";
 import { useTheme } from "@/theme/ThemeProvider";
+import { withAlpha } from "@/theme/surfaces";
 
 const CONDITIONS: { id: AlertCondition; label: string }[] = [
   { id: "price_above", label: "Price above" },
@@ -100,10 +101,10 @@ export function AlertsTab({ alerts, onAdd, onToggle, onDelete }: AlertsTabProps)
               {CONDITIONS.find((item) => item.id === alert.condition)?.label} {alert.threshold}{alert.condition.includes("profit") || alert.condition.includes("loss") ? "%" : ""}
             </Text>
           </View>
-          <Pressable onPress={() => void onToggle(alert.id, !alert.isActive)} style={[styles.status, { backgroundColor: alert.isActive ? "rgba(16,185,129,0.14)" : theme.colors.muted }]}>
-            <Text style={{ color: alert.isActive ? "#059669" : theme.colors.mutedForeground, fontSize: 11, fontWeight: "800" }}>{alert.isActive ? "Active" : "Paused"}</Text>
+          <Pressable onPress={() => void onToggle(alert.id, !alert.isActive)} accessibilityRole="button" accessibilityLabel={`${alert.isActive ? "Pause" : "Resume"} ${alert.symbol} alert`} style={[styles.status, { backgroundColor: alert.isActive ? withAlpha(theme.colors.success, 0.14) : theme.colors.muted }]}>
+            <Text style={{ color: alert.isActive ? theme.colors.success : theme.colors.mutedForeground, fontSize: 11, fontWeight: "800" }}>{alert.isActive ? "Active" : "Paused"}</Text>
           </Pressable>
-          <Pressable onPress={() => void onDelete(alert.id)} hitSlop={10} style={styles.delete}><Trash2 size={16} color={theme.colors.destructive} /></Pressable>
+          <Pressable onPress={() => void onDelete(alert.id)} hitSlop={10} style={styles.delete} accessibilityRole="button" accessibilityLabel={`Delete ${alert.symbol} alert`}><Trash2 size={16} color={theme.colors.destructive} /></Pressable>
         </View>
       ))}
     </View>

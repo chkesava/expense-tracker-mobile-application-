@@ -9,11 +9,7 @@ import {
 import { FlashList } from "@shopify/flash-list";
 import { Download, Plus } from "lucide-react-native";
 
-import {
-  ACCOUNT_GREEN,
-  ACCOUNT_GREEN_BORDER,
-  CARD_ORANGE,
-} from "@/components/accounts/accountScreenTheme";
+import { Chip } from "@/components/ui/Chip";
 import { EmptyState } from "@/components/common/EmptyState";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { HoldingCard, HoldingTableHeader } from "@/components/portfolio/HoldingCard";
@@ -32,8 +28,7 @@ import type {
   InstrumentType,
 } from "@/shared/features/portfolio/types";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
@@ -69,7 +64,6 @@ export function HoldingsList({ holdings, listHeader }: { holdings: HoldingWithMe
   const { theme, themeName } = useTheme();
   const surfaces = useSurfaces();
   const listBottomPadding = usePageListBottomPadding();
-  const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
 
   // Tablet / web layouts get the dense table row; phones keep the compact
@@ -298,7 +292,7 @@ export function HoldingsList({ holdings, listHeader }: { holdings: HoldingWithMe
             onChangeText={setSearch}
             placeholder="Search holdings..."
             accessibilityLabel="Search holdings"
-            accentColor={CARD_ORANGE}
+            accentColor={theme.colors.primary}
             containerStyle={styles.searchBarFlex}
           />
           <Pressable
@@ -311,15 +305,13 @@ export function HoldingsList({ holdings, listHeader }: { holdings: HoldingWithMe
             style={({ pressed }) => [
               styles.csvButton,
               {
-                backgroundColor: isDark ? "#10141C" : theme.colors.card,
-                borderColor: isDark
-                  ? "rgba(251, 191, 36, 0.35)"
-                  : "rgba(217, 119, 6, 0.35)",
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.outlineVariant,
               },
               pressed && styles.pressed,
             ]}
           >
-            <Download size={16} color={CARD_ORANGE} strokeWidth={2.3} />
+            <Download size={16} color={theme.colors.primary} strokeWidth={2.3} />
             <Text style={[styles.csvLabel, { color: theme.colors.foreground }]}>
               CSV
             </Text>
@@ -331,48 +323,19 @@ export function HoldingsList({ holdings, listHeader }: { holdings: HoldingWithMe
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.filterRow}
+            accessibilityRole="tablist"
           >
-            {FILTERS.map((item) => {
-              const active = filter === item.value;
-              return (
-                <Pressable
-                  key={item.value}
-                  onPress={() => {
-                    void haptic.selection();
-                    setFilter(item.value);
-                  }}
-                  style={({ pressed }) => [
-                    styles.filterChip,
-                    {
-                      backgroundColor: active
-                        ? CARD_ORANGE
-                        : surfaces.control,
-                      borderColor: active
-                        ? CARD_ORANGE
-                        : isDark
-                          ? "rgba(148,163,184,0.16)"
-                          : theme.colors.border,
-                    },
-                    pressed && styles.pressed,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  accessibilityLabel={item.label}
-                >
-                  <Text
-                    style={[
-                      styles.filterLabel,
-                      {
-                        color: active ? "#111827" : theme.colors.mutedForeground,
-                        fontWeight: active ? "800" : "600",
-                      },
-                    ]}
-                  >
-                    {item.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
+            {FILTERS.map((item) => (
+              <Chip
+                key={item.value}
+                label={item.label}
+                selected={filter === item.value}
+                appearance="outline"
+                accessibilityRole="tab"
+                haptic={filter !== item.value}
+                onPress={() => setFilter(item.value)}
+              />
+            ))}
           </ScrollView>
         </HorizontalSwipeBoundary>
 
@@ -398,7 +361,7 @@ export function HoldingsList({ holdings, listHeader }: { holdings: HoldingWithMe
                   style={[
                     styles.sortOption,
                     {
-                      color: active ? CARD_ORANGE : theme.colors.mutedForeground,
+                      color: active ? theme.colors.primary : theme.colors.mutedForeground,
                       fontWeight: active ? "800" : "600",
                     },
                   ]}
@@ -415,10 +378,8 @@ export function HoldingsList({ holdings, listHeader }: { holdings: HoldingWithMe
           style={({ pressed }) => [
             styles.addBtn,
             {
-              borderColor: isDark ? ACCOUNT_GREEN_BORDER : "rgba(22,163,74,0.35)",
-              backgroundColor: isDark
-                ? "rgba(14, 22, 18, 0.7)"
-                : "rgba(240,253,244,0.9)",
+              borderColor: withAlpha(theme.colors.primary, 0.35),
+              backgroundColor: surfaces.wash(theme.colors.primary),
             },
             pressed && styles.pressed,
           ]}
@@ -427,7 +388,7 @@ export function HoldingsList({ holdings, listHeader }: { holdings: HoldingWithMe
         >
           <Plus
             size={16}
-            color={isDark ? ACCOUNT_GREEN : theme.colors.success}
+            color={theme.colors.primary}
             strokeWidth={2.4}
           />
           <Text style={[styles.addLabel, { color: theme.colors.foreground }]}>
@@ -459,7 +420,7 @@ export function HoldingsList({ holdings, listHeader }: { holdings: HoldingWithMe
         emptyKind === "none"
           ? {
               label: "Add Investment",
-              icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+              icon: <Plus size={16} color={theme.colors.primaryForeground} strokeWidth={2.4} />,
               onPress: openAdd,
             }
           : emptyKind === "search"
@@ -495,7 +456,7 @@ export function HoldingsList({ holdings, listHeader }: { holdings: HoldingWithMe
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: listBottomPadding }}
-        extraData={`${filter}-${sort}-${search}-${isDark}-${detailHoldingId}-${trade?.id ?? ""}-${wide}`}
+        extraData={`${filter}-${sort}-${search}-${themeName}-${detailHoldingId}-${trade?.id ?? ""}-${wide}`}
         onScrollBeginDrag={() => sampleScrollFps("portfolio_holdings")}
       />
 
@@ -593,17 +554,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     paddingRight: 8,
-  },
-  filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    flexShrink: 0,
-  },
-  filterLabel: {
-    fontSize: 13,
   },
   sortRow: {
     flexDirection: "row",

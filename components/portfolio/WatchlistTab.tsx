@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { watchlistSchema } from "@/shared/features/portfolio/schemas";
 import type { MarketQuote, WatchlistItem } from "@/shared/features/portfolio/types";
+import { formatSignedPercent } from "@/shared/utils/investmentPresentation";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
@@ -91,9 +92,7 @@ export function WatchlistTab({ watchlist, quotes, currency, onAdd, onRemove }: W
           {filtered.map((item) => {
             const quote = quotes.get(item.yahooSymbol);
             const price = quote?.currentPrice ?? 0;
-            const change = quote?.dayChange ?? 0;
             const changePercent = quote?.dayChangePercent ?? 0;
-            const positive = change >= 0;
             return (
               <View key={item.id} style={[styles.item, { borderColor: theme.colors.border, backgroundColor: surfaces.tile }]}>
                 <View style={{ flex: 1 }}>
@@ -101,9 +100,9 @@ export function WatchlistTab({ watchlist, quotes, currency, onAdd, onRemove }: W
                   <Text style={{ color: theme.colors.mutedForeground, fontSize: 11 }} numberOfLines={1}>{item.name}</Text>
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
-                  {price > 0 ? <><Amount value={price} currency={currency} ghostable style={{ color: theme.colors.foreground, fontSize: 14, fontWeight: "800" }} /><Text style={{ color: positive ? "#10B981" : "#EF4444", fontSize: 11, fontWeight: "700" }}>{positive ? "+" : ""}{changePercent.toFixed(2)}%</Text></> : <Text style={{ color: theme.colors.mutedForeground, fontSize: 11 }}>No quote</Text>}
+                  {price > 0 ? <><Amount value={price} currency={currency} ghostable style={{ color: theme.colors.foreground, fontSize: 14, fontWeight: "800" }} /><Text style={{ color: changePercent > 0 ? theme.colors.success : changePercent < 0 ? theme.colors.destructive : theme.colors.mutedForeground, fontSize: 11, fontWeight: "700" }}>{formatSignedPercent(changePercent, 2)}</Text></> : <Text style={{ color: theme.colors.mutedForeground, fontSize: 11 }}>No quote</Text>}
                 </View>
-                <Pressable onPress={() => { haptic.selection().catch(() => undefined); void onRemove(item.id); }} style={styles.removeButton} hitSlop={8}><Trash2 size={15} color={theme.colors.destructive} /></Pressable>
+                <Pressable onPress={() => { haptic.selection().catch(() => undefined); void onRemove(item.id); }} style={styles.removeButton} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Remove ${item.symbol} from watchlist`}><Trash2 size={15} color={theme.colors.destructive} /></Pressable>
               </View>
             );
           })}
