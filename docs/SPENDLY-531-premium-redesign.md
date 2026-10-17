@@ -9,8 +9,8 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 |---|---|---|---|
 | 1. Dashboard | Dashboard | SPENDLY-532, SPENDLY-533 | Done; on `main` (`85a83c0`) |
 | 2. Money | Ledger hub and its sections, account / transaction / card-bill detail | SPENDLY-534 to SPENDLY-537 | Done; on `main` (`b0dc4de`) |
-| 3. Analytics | Insights (monthly, yearly, search & lab, AI advisor), merchants, fees | SPENDLY-538 to SPENDLY-541 | Done on the epic, not on main |
-| 4. Investments | Investments hub (deposits, portfolio, SIPs, EPF), EPF detail | SPENDLY-542 to SPENDLY-544 | In progress |
+| 3. Analytics | Insights (monthly, yearly, search & lab, AI advisor), merchants, fees | SPENDLY-538 to SPENDLY-541 | Done; on `main` (`d6c9e4b`) |
+| 4. Investments | Investments hub (deposits, portfolio, SIPs, EPF), EPF detail | SPENDLY-542 to SPENDLY-544 | Done; on `main` (`d6c9e4b`) |
 | 5. Planning | Goals, financial calendar, runway, what-if, decisions | not yet created | Planned |
 | 6. Vaults, settings and forms | Vaults/splits, settings, add-transaction and other forms, onboarding | not yet created | Planned |
 
@@ -23,13 +23,13 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | SPENDLY-535 | Phase 2b: Accounts and cards | `feature/SPENDLY-535-money-accounts-cards` | Done. On `main` via `b0dc4de` (2026-10-17). |
 | SPENDLY-536 | Phase 2c: Debt, owed and recurring | `feature/SPENDLY-536-money-debt-owed-recurring` | Done. On `main` via `b0dc4de` (2026-10-17). |
 | SPENDLY-537 | Phase 2d: Detail screens | `feature/SPENDLY-537-money-detail-screens` | Done. On `main` via `b0dc4de` (2026-10-17). |
-| SPENDLY-538 | Phase 3a: Insights shell and Monthly analytics | `feature/SPENDLY-538-insights-monthly` | Merged into the epic ([doc](SPENDLY-538-insights-monthly.md)) |
-| SPENDLY-539 | Phase 3b: Yearly analytics | `feature/SPENDLY-539-insights-yearly` | Merged into the epic ([doc](SPENDLY-539-insights-yearly.md)) |
-| SPENDLY-540 | Phase 3c: Search & Lab and AI Advisor | `feature/SPENDLY-540-insights-search-advisor` | Merged into the epic ([doc](SPENDLY-540-insights-search-advisor.md)) |
-| SPENDLY-541 | Phase 3d: Merchants and Fees | `feature/SPENDLY-541-merchants-fees` | Merged into the epic ([doc](SPENDLY-541-merchants-fees.md)) |
-| SPENDLY-542 | Phase 4a: Investments hub, Deposits and Virtual SIPs | `feature/SPENDLY-542-investments-hub-deposits-sips` | Merged into the epic ([doc](SPENDLY-542-investments-hub-deposits-sips.md)) |
-| SPENDLY-543 | Phase 4b: Stocks portfolio | `feature/SPENDLY-543-stocks-portfolio` | Merged into the epic ([doc](SPENDLY-543-stocks-portfolio.md)) |
-| SPENDLY-544 | Phase 4c: EPF | `feature/SPENDLY-544-epf` | Merged into the epic ([doc](SPENDLY-544-epf.md)) |
+| SPENDLY-538 | Phase 3a: Insights shell and Monthly analytics | `feature/SPENDLY-538-insights-monthly` | Done. On `main` via `d6c9e4b` (2026-10-17) ([doc](SPENDLY-538-insights-monthly.md)) |
+| SPENDLY-539 | Phase 3b: Yearly analytics | `feature/SPENDLY-539-insights-yearly` | Done. On `main` via `d6c9e4b` (2026-10-17) ([doc](SPENDLY-539-insights-yearly.md)) |
+| SPENDLY-540 | Phase 3c: Search & Lab and AI Advisor | `feature/SPENDLY-540-insights-search-advisor` | Done. On `main` via `d6c9e4b` (2026-10-17) ([doc](SPENDLY-540-insights-search-advisor.md)) |
+| SPENDLY-541 | Phase 3d: Merchants and Fees | `feature/SPENDLY-541-merchants-fees` | Done. On `main` via `d6c9e4b` (2026-10-17) ([doc](SPENDLY-541-merchants-fees.md)) |
+| SPENDLY-542 | Phase 4a: Investments hub, Deposits and Virtual SIPs | `feature/SPENDLY-542-investments-hub-deposits-sips` | Done. On `main` via `d6c9e4b` (2026-10-17) ([doc](SPENDLY-542-investments-hub-deposits-sips.md)) |
+| SPENDLY-543 | Phase 4b: Stocks portfolio | `feature/SPENDLY-543-stocks-portfolio` | Done. On `main` via `d6c9e4b` (2026-10-17) ([doc](SPENDLY-543-stocks-portfolio.md)) |
+| SPENDLY-544 | Phase 4c: EPF | `feature/SPENDLY-544-epf` | Done. On `main` via `d6c9e4b` (2026-10-17) ([doc](SPENDLY-544-epf.md)) |
 
 ## Phase 4 plan: Investments (2026-10-17)
 The Investments hub is `app/(app)/investments.tsx`, with four tabs: Investments (deposits), Stocks, Virtual SIPs and EPF. There is also the EPF establishment screen `app/(app)/epf/[establishmentId].tsx`. Together that is about 13.5k lines.
