@@ -69,6 +69,8 @@ Money is always `numeric(18,2)`. Fields that are not listed stay in `doc`.
 
 ## Creating the project (user, one time)
 
+**Done 2026-10-17:** project ref `spmsgncjbnbkxvsbpqlu` (`https://spmsgncjbnbkxvsbpqlu.supabase.co`), created by the user.
+
 1. Go to https://supabase.com/dashboard and choose **New project**.
 2. Set the name to `spendly-read-model` and the region to **South Asia (Mumbai)**. Store the database password in a password manager.
 3. Record the **project ref** (the `xxxx` in `https://xxxx.supabase.co`) in a Jira comment on SPENDLY-504.
