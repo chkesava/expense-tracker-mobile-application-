@@ -3,12 +3,12 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
 
 import {
-  insightAccents,
-  insightSurface,
+  useInsightAccents,
+  useInsightSurface,
 } from "@/components/analytics/insightsTheme";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { withAlpha } from "@/theme/surfaces";
 
 export interface PeriodSelectorProps {
   /** Already-formatted period label, e.g. "August 2026" or "2026". */
@@ -33,10 +33,9 @@ export function PeriodSelector({
   prevLabel = "Previous month",
   nextLabel = "Next month",
 }: PeriodSelectorProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const surface = insightSurface(isDark);
-  const accents = insightAccents(isDark);
+  const { theme } = useTheme();
+  const surface = useInsightSurface();
+  const accents = useInsightAccents();
 
   const renderArrow = (
     direction: "prev" | "next",
@@ -91,14 +90,12 @@ export function PeriodSelector({
             style={[
               styles.badge,
               {
-                backgroundColor: accents.pinkDim,
-                borderColor: isDark
-                  ? "rgba(244, 63, 94, 0.32)"
-                  : "rgba(220, 38, 38, 0.2)",
+                backgroundColor: accents.accentDim,
+                borderColor: withAlpha(accents.accent, 0.3),
               },
             ]}
           >
-            <Text style={[styles.badgeText, { color: accents.pink }]} numberOfLines={1}>
+            <Text style={[styles.badgeText, { color: accents.accent }]} numberOfLines={1}>
               {badge}
             </Text>
           </View>

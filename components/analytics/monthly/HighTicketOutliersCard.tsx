@@ -6,10 +6,12 @@ import {
   AnalyticsCard,
   AnalyticsCardMeta,
 } from "@/components/analytics/shared/AnalyticsCard";
-import { insightAccents } from "@/components/analytics/insightsTheme";
+import { useInsightAccents } from "@/components/analytics/insightsTheme";
 import { Amount } from "@/components/common/Amount";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { withAlpha } from "@/theme/surfaces";
 
 export interface OutlierRow {
   id: string;
@@ -28,14 +30,14 @@ export function HighTicketOutliersCard({
   outliers,
   currency,
 }: HighTicketOutliersCardProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const accents = insightAccents(isDark);
+  const { theme } = useTheme();
+  const accents = useInsightAccents();
+  const { settings } = useSettings();
 
   return (
     <AnalyticsCard
       title="High-Ticket Outliers"
-      icon={<Flame size={16} color={accents.pink} strokeWidth={2.4} />}
+      icon={<Flame size={16} color={accents.spend} strokeWidth={2.4} />}
       right={<AnalyticsCardMeta>&gt;2x monthly average</AnalyticsCardMeta>}
       gap={8}
     >
@@ -50,12 +52,8 @@ export function HighTicketOutliersCard({
             style={[
               styles.row,
               {
-                backgroundColor: isDark
-                  ? "rgba(244, 63, 94, 0.08)"
-                  : "rgba(220, 38, 38, 0.045)",
-                borderColor: isDark
-                  ? "rgba(244, 63, 94, 0.22)"
-                  : "rgba(220, 38, 38, 0.16)",
+                backgroundColor: accents.spendDim,
+                borderColor: withAlpha(accents.spend, 0.22),
               },
             ]}
           >
@@ -71,7 +69,7 @@ export function HighTicketOutliersCard({
                 style={[styles.meta, { color: theme.colors.mutedForeground }]}
                 numberOfLines={1}
               >
-                {item.date} · {item.category}
+                {formatDisplayDate(item.date, settings?.dateFormat)} · {item.category}
               </Text>
             </View>
             <Amount
@@ -79,7 +77,7 @@ export function HighTicketOutliersCard({
               currency={currency}
               ghostable
               numberOfLines={1}
-              style={[styles.amount, { color: accents.pink }]}
+              style={[styles.amount, { color: accents.spend }]}
             />
           </View>
         ))

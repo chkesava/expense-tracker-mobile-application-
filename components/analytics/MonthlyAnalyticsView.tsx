@@ -72,7 +72,7 @@ export interface MonthlyAnalyticsViewProps {
 
 export function MonthlyAnalyticsView({ listHeader }: MonthlyAnalyticsViewProps) {
   const router = useRouter();
-  const { themeName } = useTheme();
+  const { theme, themeName } = useTheme();
   const listBottomPadding = usePageListBottomPadding();
   const { settings: userSettings } = useSettings();
 
@@ -382,7 +382,7 @@ export function MonthlyAnalyticsView({ listHeader }: MonthlyAnalyticsViewProps) 
           description="Log a few expenses or incomes in this month to generate category breakdowns, spending velocity, and cash flow trends."
           primaryAction={{
             label: "Log Expense",
-            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+            icon: <Plus size={16} color={theme.colors.primaryForeground} strokeWidth={2.4} />,
             onPress: () => router.dismissTo("/dashboard"),
           }}
           secondaryAction={{
