@@ -104,8 +104,9 @@ What is true today:
   - "No-cost usage from Spark plan included" on Blaze.
   - Cloud Functions on Blaze have no cost up to **2M invocations/month** (then **$0.40/million**), **400K GB-seconds/month**, **200K CPU-seconds/month**, and **5 GB/month** outbound (then **$0.12/GB**).
   - Source: firebase.google.com/pricing, fetched 2026-10-17.
-- **Upper bound, an estimate (E) with the assumption stated:**
-  - Spark caps writes at 20,000/day. Every write fires at most one trigger, so the ceiling is ≈ 600,000 invocations/month. That is **30% of the free invocation tier**.
+- **Bound on today's volume, an estimate (E) with the assumption stated:**
+  - On Spark, today's traffic can't exceed 20,000 writes + 20,000 deletes per day. Each fires at most one `onDocumentWritten` invocation, so **today's** volume is at most ≈ 1.2M invocations/month, which is **60% of the free invocation tier**. That covers all collections, not just the allowlist.
+  - **This bound disappears on Blaze.** Blaze does not enforce the Spark daily caps, so growth or a runaway write loop is billed rather than refused. The real figure must come from the 7-day usage export (§13).
   - GB-seconds and CPU-seconds depend on function memory and duration. These must be checked against measured runs in Phase 1. They are not asserted here.
 - **Firestore per-operation prices above the free quota: NOT VERIFIED.**
   - The Google Cloud pricing page did not return per-region rates when fetched.
