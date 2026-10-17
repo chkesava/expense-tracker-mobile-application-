@@ -1,9 +1,5 @@
 import { StyleSheet, Text, View } from "react-native";
 
-import {
-  accountAccent,
-  ACCOUNT_RED,
-} from "@/components/accounts/accountScreenTheme";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -23,10 +19,10 @@ export function ActivityStatisticsCard({ stats }: { stats: AccountActivityStats 
   const { theme, themeName } = useTheme();
   const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
-  const accent = accountAccent(isDark);
+  const accent = theme.colors.primary;
 
   const tileBackground = surfaces.tile;
-  const tileBorder = isDark ? "rgba(148,163,184,0.14)" : "rgba(15,23,42,0.07)";
+  const tileBorder = theme.colors.outlineVariant;
 
   const tile = (
     key: string,
@@ -119,7 +115,7 @@ export function ActivityStatisticsCard({ stats }: { stats: AccountActivityStats 
               "Expenses",
               String(stats.expenseCount),
               undefined,
-              stats.expenseCount > 0 ? ACCOUNT_RED : undefined
+              stats.expenseCount > 0 ? theme.colors.destructive : undefined
             )}
             {tile(
               "transfers",

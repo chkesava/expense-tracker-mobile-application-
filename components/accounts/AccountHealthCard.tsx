@@ -1,10 +1,6 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Amount } from "@/components/common/Amount";
-import {
-  accountAccent,
-  ACCOUNT_RED,
-} from "@/components/accounts/accountScreenTheme";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -46,7 +42,7 @@ export function AccountHealthCard({
   const { theme, themeName } = useTheme();
   const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
-  const accent = accountAccent(isDark);
+  const accent = theme.colors.primary;
 
   const metric = (
     key: string,
@@ -61,9 +57,7 @@ export function AccountHealthCard({
         styles.metric,
         {
           backgroundColor: surfaces.tile,
-          borderColor: isDark
-            ? "rgba(148,163,184,0.14)"
-            : "rgba(15,23,42,0.07)",
+          borderColor: theme.colors.outlineVariant,
         },
       ]}
     >
@@ -165,7 +159,7 @@ export function AccountHealthCard({
           "Average spend",
           metrics.averageMonthlySpend,
           "per month",
-          metrics.averageMonthlySpend ? ACCOUNT_RED : undefined
+          metrics.averageMonthlySpend ? theme.colors.destructive : undefined
         )}
         {metric(
           "highest",

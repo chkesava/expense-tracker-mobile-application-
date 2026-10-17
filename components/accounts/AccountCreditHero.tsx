@@ -3,17 +3,11 @@ import { LinearGradient } from "expo-linear-gradient";
 import { MAX_UNBILLED_PERCENT } from "@/shared/utils/creditCardLedger";
 import { Calendar, CheckCircle2 } from "lucide-react-native";
 
-import {
-  ACCOUNT_GREEN,
-  ACCOUNT_RED,
-  CARD_ORANGE,
-} from "@/components/accounts/accountScreenTheme";
 import { Amount } from "@/components/common/Amount";
 import { Button } from "@/components/ui/Button";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 
 export function AccountCreditHero({
   usedThisCycle,
@@ -55,30 +49,30 @@ export function AccountCreditHero({
   onSetLimit?: () => void;
   isLoading?: boolean;
 }) {
-  const { theme, themeName } = useTheme();
+  const { theme } = useTheme();
   const surfaces = useSurfaces();
-  const isDark = themeUsesDarkPalette(themeName);
+  // SPENDLY-537: theme tokens on the deep-hero surface, replacing the fixed
+  // indigo/gold palette. The accent is the user's theme accent.
+  const accent = theme.colors.primary;
   const utilizationRate =
     creditLimit > 0 ? Math.min(100, (usedThisCycle / creditLimit) * 100) : 0;
-  const usedColor = isDark ? ACCOUNT_RED : theme.colors.destructive;
-  const availableColor = isDark ? ACCOUNT_GREEN : theme.colors.success;
+  const usedColor = theme.colors.destructive;
+  const availableColor = theme.colors.success;
 
   return (
     <View
       style={[
         styles.card,
         {
-          borderColor: isDark ? "rgba(251, 191, 36, 0.85)" : "rgba(217, 119, 6, 0.45)",
-          backgroundColor: isDark ? "#16132C" : "#F5F3FF",
+          borderColor: withAlpha(accent, surfaces.isDark ? 0.22 : 0.18),
+          backgroundColor: theme.colors.card,
         },
       ]}
     >
       <LinearGradient
         pointerEvents="none"
         colors={
-          isDark
-            ? ["rgba(99, 72, 210, 0.32)", "rgba(22, 19, 44, 0.2)", "#12101F"]
-            : ["rgba(124, 58, 237, 0.12)", "#F8FAFC", "#F5F3FF"]
+          [withAlpha(accent, surfaces.isDark ? 0.14 : 0.08), withAlpha(accent, 0), theme.colors.card]
         }
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -88,7 +82,7 @@ export function AccountCreditHero({
         pointerEvents="none"
         style={[
           styles.glow,
-          { backgroundColor: isDark ? "rgba(251, 191, 36, 0.14)" : "rgba(251, 191, 36, 0.1)" },
+          { backgroundColor: withAlpha(accent, surfaces.isDark ? 0.16 : 0.1) },
         ]}
       />
 
@@ -101,8 +95,8 @@ export function AccountCreditHero({
             UNBILLED (THIS CYCLE)
           </Text>
           {!isLoading && usedThisCycle > creditLimit * MAX_UNBILLED_PERCENT && (
-            <View style={styles.warningBadge}>
-              <Text style={styles.warningText}>⚠️ Near limit</Text>
+            <View style={[styles.warningBadge, { backgroundColor: surfaces.wash(theme.colors.warning) }]}>
+              <Text style={[styles.warningText, { color: theme.colors.warning }]}>⚠️ Near limit</Text>
             </View>
           )}
           {!isLoading && (
@@ -112,7 +106,7 @@ export function AccountCreditHero({
               style={[
                 styles.resetPill,
                 {
-                  backgroundColor: isDark ? "rgba(15,23,42,0.55)" : "rgba(255,255,255,0.86)",
+                  backgroundColor: surfaces.control,
                 },
               ]}
             >
@@ -131,7 +125,8 @@ export function AccountCreditHero({
             value={usedThisCycle}
             currency={currency}
             ghostable
-            style={[styles.heroAmount, { color: usedColor }]}
+            // Red only when something is actually owed this cycle.
+            style={[styles.heroAmount, { color: usedThisCycle > 0 ? usedColor : theme.colors.foreground }]}
           />
         )}
 
@@ -206,7 +201,7 @@ export function AccountCreditHero({
           <View
             style={[
               styles.track,
-              { backgroundColor: isDark ? "rgba(15, 12, 28, 0.85)" : "rgba(15, 23, 42, 0.08)" },
+              { backgroundColor: surfaces.track },
             ]}
             accessibilityLabel={`${Math.round(utilizationRate)} percent of credit limit used`}
           >
@@ -243,7 +238,7 @@ export function AccountCreditHero({
           <View
             style={[
               styles.divider,
-              { backgroundColor: isDark ? "rgba(148, 163, 184, 0.22)" : "rgba(15, 23, 42, 0.1)" },
+              { backgroundColor: surfaces.divider },
             ]}
           />
           <View style={styles.metricCol}>
@@ -268,10 +263,10 @@ export function AccountCreditHero({
             onPay();
           }}
           accessibilityLabel={payLabel}
-          style={styles.cta}
+          style={[styles.cta, { backgroundColor: accent, borderColor: accent }]}
         >
-          <CheckCircle2 size={18} color="#111111" strokeWidth={2.4} />
-          <Text style={styles.ctaLabel}>{payLabel}</Text>
+          <CheckCircle2 size={18} color={theme.colors.primaryForeground} strokeWidth={2.4} />
+          <Text style={[styles.ctaLabel, { color: theme.colors.primaryForeground }]}>{payLabel}</Text>
         </Button>
       </View>
     </View>
@@ -370,14 +365,12 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   warningBadge: {
-    backgroundColor: 'rgba(255,165,0,0.2)',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     marginTop: 4,
   },
   warningText: {
-    color: 'rgba(255,69,0,0.9)',
     fontSize: 10,
     fontWeight: '600',
   },
@@ -394,10 +387,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderCurve: "continuous",
     gap: 8,
-    backgroundColor: CARD_ORANGE,
   },
   ctaLabel: {
-    color: "#111111",
     fontWeight: "800",
     fontSize: 15,
   },

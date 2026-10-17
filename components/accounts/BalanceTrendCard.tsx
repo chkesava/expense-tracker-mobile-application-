@@ -3,10 +3,6 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { SpendingCurveChart } from "@/components/charts/SpendingCurveChart";
-import {
-  accountAccent,
-  ACCOUNT_RED,
-} from "@/components/accounts/accountScreenTheme";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
@@ -61,7 +57,7 @@ export function BalanceTrendCard({
   const { theme, themeName } = useTheme();
   const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
-  const accent = accountAccent(isDark);
+  const accent = theme.colors.primary;
 
   const points = useMemo(
     () =>
@@ -164,7 +160,7 @@ export function BalanceTrendCard({
             points={points}
             height={180}
             currency={currency}
-            lineColor={movedUp ? accent : ACCOUNT_RED}
+            lineColor={movedUp ? accent : theme.colors.destructive}
             showYAxis
             xTickCount={4}
             autoDomain

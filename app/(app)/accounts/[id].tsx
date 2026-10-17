@@ -68,6 +68,7 @@ import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useReceivables } from "@/hooks/useReceivables";
 import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 import type {
   AccountActivity,
@@ -1065,7 +1066,9 @@ export default function AccountDetailScreen() {
 
         return {
           id: bill.id,
-          rangeLabel: startStr ? `${startStr} → ${endStr}` : endStr,
+          rangeLabel: startStr
+            ? `${formatDisplayDate(startStr, settings.dateFormat)} → ${formatDisplayDate(endStr, settings.dateFormat)}`
+            : formatDisplayDate(endStr, settings.dateFormat),
           billedAmount: bill.statementAmount,
           paidAmount: bill.amountPaid,
           remainingAmount: bill.remainingAmount,
@@ -1076,7 +1079,7 @@ export default function AccountDetailScreen() {
           billId: bill.id,
         };
       });
-  }, [account, isCreditCard, bills]);
+  }, [account, isCreditCard, bills, settings.dateFormat]);
 
   const cashbackSummary = useMemo(() => {
     if (!account || !isCreditCard) return null;
@@ -1269,13 +1272,11 @@ export default function AccountDetailScreen() {
             availableBalance={bankBalance}
             currency={currency}
             openingBalance={account.openingBalance || 0}
-            baselineLabel={
-              effectiveBalanceAsOfDate(
-                account.balanceAsOfDate,
-                [],
-                today
-              ) || "Creation"
-            }
+            baselineLabel={(() => {
+              const asOf = effectiveBalanceAsOfDate(account.balanceAsOfDate, [], today);
+              // SPENDLY-537: in the user's date format, not raw ISO.
+              return asOf ? formatDisplayDate(asOf, settings.dateFormat) : "Creation";
+            })()}
             onTransfer={() => setIsTransferModalOpen(true)}
             onAdjust={() => setIsEntryModalOpen(true)}
           />
