@@ -11,7 +11,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | 2. Money | Ledger hub and its sections, account / transaction / card-bill detail | SPENDLY-534 to SPENDLY-537 | Done; on `main` (`b0dc4de`) |
 | 3. Analytics | Insights (monthly, yearly, search & lab, AI advisor), merchants, fees | SPENDLY-538 to SPENDLY-541 | Done; on `main` (`d6c9e4b`) |
 | 4. Investments | Investments hub (deposits, portfolio, SIPs, EPF), EPF detail | SPENDLY-542 to SPENDLY-544 | Done; on `main` (`d6c9e4b`) |
-| 5. Planning | Goals, financial calendar, runway, what-if, decisions | not yet created | Planned |
+| 5. Planning | Goal optimizer, financial calendar, runway, what-if, decisions | 3 stories proposed (see Phase 5 plan) | Planning |
 | 6. Vaults, settings and forms | Vaults/splits, settings, add-transaction and other forms, onboarding | not yet created | Planned |
 
 ## Stories
@@ -54,6 +54,36 @@ Phase 4 is UI only, like Phases 1–3:
 
 Out of scope for Phase 4 (left for Phase 6): `CreateInvestmentModal`, `AddHoldingModal`, `HoldingAdjustmentModal`, `ManageStockCashModal`, `MockTradeModal`, `CsvImportModal`, `PortfolioRecalibrationModal`, `OnboardingFlow`, `SipPlanFormModal`, `SipNotificationsModal` and the EPF form modals/sheets.
 
+
+## Phase 5 plan: Planning (proposed, 2026-10-17)
+Phase 5 covers about 4.5k lines across five areas:
+- the financial calendar (`app/(app)/calendar`, `components/calendar`);
+- runway (`app/(app)/runway`, `components/runway`);
+- what-if (`app/(app)/what-if`, `components/whatIf`);
+- the goal-funding optimizer (`app/(app)/goals/optimizer.tsx`, `components/goals`);
+- Money Decisions (`app/(app)/decisions`, `components/decisions`).
+
+The goals list itself is under Settings, so it belongs to Phase 6.
+
+Like Phases 1–4, Phase 5 is UI only:
+- no calendar, runway, what-if, optimizer or decision calculation or write-path changes;
+- the editor sheets and forms (`ReminderEditorSheet`, `WhatIfChangeSheet`, `GoalPlanInputsSheet`, `decisions/edit.tsx`) stay for Phase 6, apart from privacy and currency bugs.
+
+**What the survey found:**
+- **Colours and building blocks.** There are almost no fixed colours (one hex in runway) and no old palette imports. The screens are mostly hand-built Views with local styles on `PageShell`/`PageHeader`; only four use `Section`.
+- **Ghost mode is ignored throughout.** Amounts are formatted as strings by local `fmt`/`money` helpers on every Planning screen: the optimizer, calendar, runway and runway sources, what-if result/edit and `WhatIfResults`, and the decision outcome/alternatives/linked records. None of it masks in ghost mode.
+- **Hardcoded INR.** Three decision views format with a hardcoded `"INR"` instead of the display currency: `AlternativeWorkspaceCard`, `DecisionOutcomeSection` and the expected amount in `decisions/[id]`.
+- **Raw ISO dates in Decisions:** review dates, "by" dates, outcome dates, commitment target dates and the list's follow-up dates.
+
+| Story | Scope | Main fixes |
+|---|---|---|
+| 5a: Calendar and Runway | `calendar/index`, `CalendarMonthGrid` and the agenda/detail views; `runway/index`, `runway/sources`, `RunwaySourceRow` | `useGhostMoney` for every amount; month grid and agenda on the foundations; the runway headline as a hero; the one hex removed |
+| 5b: What-If and Goal optimizer | `what-if/index`, `[id]`, `WhatIfResults`; `goals/optimizer` and the goal-funding components | Ghost-aware results and comparisons; scenario cards and results on `Section`/`DataRow`/`FinancialAmount`; signed deltas |
+| 5c: Money Decisions | `decisions/index`, `[id]`, `compare`, `insights` and `components/decisions/*` | The display currency instead of `"INR"`; ghost-aware outcome/alternative/linked amounts; every decision date in the user's format; list and detail on the foundations |
+
+Out of scope (Phase 6): `decisions/edit.tsx`, `what-if/edit.tsx` (beyond its ghost fix), and the reminder, what-if change and goal plan-input sheets. Calendar notification text is native notification content, not screen UI, so it is unchanged.
+
+The stories are not yet in Jira.
 
 ## Decisions
 - **Midnight Emerald is a selectable preset, not a forced default.** It's in Settings → Appearance → Custom Presets. Existing users keep their theme.
