@@ -23,7 +23,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | SPENDLY-535 | Phase 2b: Accounts and cards | `feature/SPENDLY-535-money-accounts-cards` | Done. On `main` via `b0dc4de` (2026-10-17). |
 | SPENDLY-536 | Phase 2c: Debt, owed and recurring | `feature/SPENDLY-536-money-debt-owed-recurring` | Done. On `main` via `b0dc4de` (2026-10-17). |
 | SPENDLY-537 | Phase 2d: Detail screens | `feature/SPENDLY-537-money-detail-screens` | Done. On `main` via `b0dc4de` (2026-10-17). |
-| SPENDLY-538 | Phase 3a: Insights shell and Monthly analytics | `feature/SPENDLY-538-insights-monthly` | Built, awaiting merge into the epic ([doc](SPENDLY-538-insights-monthly.md)) |
+| SPENDLY-538 | Phase 3a: Insights shell and Monthly analytics | `feature/SPENDLY-538-insights-monthly` | Merged into the epic ([doc](SPENDLY-538-insights-monthly.md)) |
 | SPENDLY-539 | Phase 3b: Yearly analytics | not cut yet | To do |
 | SPENDLY-540 | Phase 3c: Search & Lab and AI Advisor | not cut yet | To do |
 | SPENDLY-541 | Phase 3d: Merchants and Fees | not cut yet | To do |
