@@ -185,7 +185,8 @@ export default function TransactionDetailsScreen() {
     [transfers, ref]
   );
 
-  const { events } = useLedgerEvents({ enabled: !!journalKind });
+  // SPENDLY-501: scoped to this row, not the whole audit trail.
+  const { events } = useLedgerEvents({ enabled: !!journalKind && !!ref?.id, docId: ref?.id });
   const editEvents = useMemo(
     () =>
       journalKind

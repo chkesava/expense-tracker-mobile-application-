@@ -31,6 +31,81 @@ function findOnSnapshotCollections(content) {
 }
 
 /**
+ * SPENDLY-501: like `findOnSnapshotCollections`, but also follows a collection
+ * assigned to a variable first (`const ref = collection(db, …, "expenses")`
+ * … `onSnapshot(query(ref, …))`). The forward-only scan misses that shape,
+ * which is how a second dashboard `expenses` listener went unflagged.
+ */
+function findOnSnapshotCollectionsResolved(content) {
+  const names = findOnSnapshotCollections(content);
+  const varToCollection = new Map();
+  const assignRe = /(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*collection\(\s*[\w$]+\s*,[^)]*?"([a-zA-Z0-9_]+)"\s*\)/g;
+  let assign;
+  while ((assign = assignRe.exec(content))) varToCollection.set(assign[1], assign[2]);
+  if (varToCollection.size === 0) return names;
+
+  // A query held in a variable (`const q = query(ref, …)`) resolves through it.
+  const queryRe = /(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*query\(\s*([A-Za-z_$][\w$]*)/g;
+  let q;
+  while ((q = queryRe.exec(content))) {
+    const target = varToCollection.get(q[2]);
+    if (target) varToCollection.set(q[1], target);
+  }
+
+  const callRe = /onSnapshot\(/g;
+  let match;
+  while ((match = callRe.exec(content))) {
+    const head = content.slice(match.index, match.index + 200);
+    const first = head.match(/onSnapshot\(\s*(?:query\(\s*)?([A-Za-z_$][\w$]*)/);
+    if (first && varToCollection.has(first[1])) names.add(varToCollection.get(first[1]));
+  }
+  return names;
+}
+
+function listSourceFiles(dir) {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return listSourceFiles(full);
+    return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [full] : [];
+  });
+}
+
+/**
+ * SPENDLY-501: a collection a provider already streams must not get a second
+ * `onSnapshot` from a hook, screen or component — that is a duplicate listener
+ * the provider-only check below cannot see (the dashboard's old
+ * `useRecentExpenses` was one).
+ */
+function verifyNoProviderCollectionRelisten(scanDirs = ['hooks', 'app', 'components']) {
+  const providersDir = path.join(ROOT_DIR, 'providers');
+  const ownerByCollection = new Map();
+  for (const file of listSourceFiles(providersDir)) {
+    for (const name of findOnSnapshotCollectionsResolved(fs.readFileSync(file, 'utf8'))) {
+      if (!ownerByCollection.has(name)) ownerByCollection.set(name, path.relative(ROOT_DIR, file));
+    }
+  }
+
+  const violations = [];
+  for (const dir of scanDirs) {
+    for (const file of listSourceFiles(path.join(ROOT_DIR, dir))) {
+      const rel = path.relative(ROOT_DIR, file);
+      for (const name of findOnSnapshotCollectionsResolved(fs.readFileSync(file, 'utf8'))) {
+        const owner = ownerByCollection.get(name);
+        if (!owner) continue;
+        violations.push({
+          rule: 'Duplicate Firestore Listener',
+          error: `Collection "${name}" is streamed by ${owner} and again by ${rel}`,
+          why: 'A second listener on a provider-owned collection pays for the same documents twice.',
+          fix: `Read "${name}" from ${owner}'s context in ${rel} instead of subscribing again.`,
+        });
+      }
+    }
+  }
+  return violations;
+}
+
+/**
  * SPENDLY-415: flags a Firestore collection name subscribed via `onSnapshot`
  * in more than one `providers/*.tsx` file — each collection in this app is
  * meant to have exactly one shared listener (SPENDLY-408 verified this; this
@@ -230,6 +305,10 @@ function verifyStartupGuardrails() {
   //    listener on the same collection.
   violations.push(...verifyNoDuplicateListeners());
 
+  // 5b. Guardrail (SPENDLY-501): hooks, screens and components don't
+  //     re-subscribe to a collection a provider already streams.
+  violations.push(...verifyNoProviderCollectionRelisten());
+
   // 6. Guardrail (SPENDLY-415): on-demand listener gates (SPENDLY-401/411)
   //    are still present where they were added.
   violations.push(...verifyOnDemandGatingPresent());
@@ -264,8 +343,10 @@ if (require.main === module) {
 module.exports = {
   verifyStartupGuardrails,
   verifyNoDuplicateListeners,
+  verifyNoProviderCollectionRelisten,
   verifyOnDemandGatingPresent,
   verifyReferenceQueriesBounded,
   findOnSnapshotCollections,
+  findOnSnapshotCollectionsResolved,
   isCollectionQueryBounded,
 };
