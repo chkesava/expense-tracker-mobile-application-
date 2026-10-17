@@ -30,8 +30,8 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | SPENDLY-542 | Phase 4a: Investments hub, Deposits and Virtual SIPs | `feature/SPENDLY-542-investments-hub-deposits-sips` | Done. On `main` via `d6c9e4b` (2026-10-17) ([doc](SPENDLY-542-investments-hub-deposits-sips.md)) |
 | SPENDLY-543 | Phase 4b: Stocks portfolio | `feature/SPENDLY-543-stocks-portfolio` | Done. On `main` via `d6c9e4b` (2026-10-17) ([doc](SPENDLY-543-stocks-portfolio.md)) |
 | SPENDLY-544 | Phase 4c: EPF | `feature/SPENDLY-544-epf` | Done. On `main` via `d6c9e4b` (2026-10-17) ([doc](SPENDLY-544-epf.md)) |
-| SPENDLY-545 | Phase 5a: Calendar and Runway | `feature/SPENDLY-545-calendar-runway` | In Progress. Built; awaiting merge into the epic ([doc](SPENDLY-545-calendar-runway.md)) |
-| SPENDLY-546 | Phase 5b: What-If and Goal optimizer | `feature/SPENDLY-546-what-if-optimizer` | To Do |
+| SPENDLY-545 | Phase 5a: Calendar and Runway | `feature/SPENDLY-545-calendar-runway` | In Progress. Merged into the epic ([doc](SPENDLY-545-calendar-runway.md)) |
+| SPENDLY-546 | Phase 5b: What-If and Goal optimizer | `feature/SPENDLY-546-what-if-optimizer` | In Progress |
 | SPENDLY-547 | Phase 5c: Money Decisions | `feature/SPENDLY-547-money-decisions` | To Do |
 
 ## Phase 4 plan: Investments (2026-10-17)
