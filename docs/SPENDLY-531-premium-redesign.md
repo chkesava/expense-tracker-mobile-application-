@@ -11,7 +11,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | 2. Money | Ledger hub and its sections, account / transaction / card-bill detail | SPENDLY-534 to SPENDLY-537 | Done; on `main` (`b0dc4de`) |
 | 3. Analytics | Insights (monthly, yearly, search & lab, AI advisor), merchants, fees | SPENDLY-538 to SPENDLY-541 | Done; on `main` (`d6c9e4b`) |
 | 4. Investments | Investments hub (deposits, portfolio, SIPs, EPF), EPF detail | SPENDLY-542 to SPENDLY-544 | Done; on `main` (`d6c9e4b`) |
-| 5. Planning | Goal optimizer, financial calendar, runway, what-if, decisions | SPENDLY-545 to SPENDLY-547 | Done on the epic; not yet on `main` |
+| 5. Planning | Goal optimizer, financial calendar, runway, what-if, decisions | SPENDLY-545 to SPENDLY-547 | Done; on `main` (`742060d`) |
 | 6. Vaults, settings and forms | Vaults/splits, settings, add-transaction and other forms, onboarding | not yet created | Planned |
 
 ## Stories
@@ -30,9 +30,9 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | SPENDLY-542 | Phase 4a: Investments hub, Deposits and Virtual SIPs | `feature/SPENDLY-542-investments-hub-deposits-sips` | Done. On `main` via `d6c9e4b` (2026-10-17) ([doc](SPENDLY-542-investments-hub-deposits-sips.md)) |
 | SPENDLY-543 | Phase 4b: Stocks portfolio | `feature/SPENDLY-543-stocks-portfolio` | Done. On `main` via `d6c9e4b` (2026-10-17) ([doc](SPENDLY-543-stocks-portfolio.md)) |
 | SPENDLY-544 | Phase 4c: EPF | `feature/SPENDLY-544-epf` | Done. On `main` via `d6c9e4b` (2026-10-17) ([doc](SPENDLY-544-epf.md)) |
-| SPENDLY-545 | Phase 5a: Calendar and Runway | `feature/SPENDLY-545-calendar-runway` | In Progress. Merged into the epic ([doc](SPENDLY-545-calendar-runway.md)) |
-| SPENDLY-546 | Phase 5b: What-If and Goal optimizer | `feature/SPENDLY-546-what-if-optimizer` | In Progress. Merged into the epic ([doc](SPENDLY-546-what-if-optimizer.md)) |
-| SPENDLY-547 | Phase 5c: Money Decisions | `feature/SPENDLY-547-money-decisions` | In Progress. Merged into the epic ([doc](SPENDLY-547-money-decisions.md)) |
+| SPENDLY-545 | Phase 5a: Calendar and Runway | `feature/SPENDLY-545-calendar-runway` | Done. On `main` via `742060d` (2026-10-17) ([doc](SPENDLY-545-calendar-runway.md)) |
+| SPENDLY-546 | Phase 5b: What-If and Goal optimizer | `feature/SPENDLY-546-what-if-optimizer` | Done. On `main` via `742060d` (2026-10-17) ([doc](SPENDLY-546-what-if-optimizer.md)) |
+| SPENDLY-547 | Phase 5c: Money Decisions | `feature/SPENDLY-547-money-decisions` | Done. On `main` via `742060d` (2026-10-17) ([doc](SPENDLY-547-money-decisions.md)) |
 
 ## Phase 4 plan: Investments (2026-10-17)
 The Investments hub is `app/(app)/investments.tsx`, with four tabs: Investments (deposits), Stocks, Virtual SIPs and EPF. There is also the EPF establishment screen `app/(app)/epf/[establishmentId].tsx`. Together that is about 13.5k lines.
