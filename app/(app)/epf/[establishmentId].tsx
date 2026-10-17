@@ -5,7 +5,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
-import { SkeletonCard } from "@/components/common/Skeleton";
 import { EpfBackfillScreen } from "@/components/epf/EpfBackfillScreen";
 import { EpfBalanceTab } from "@/components/epf/EpfBalanceTab";
 import { EpfContributionHistory } from "@/components/epf/EpfContributionHistory";
@@ -21,6 +20,9 @@ import {
 import { deriveEmploymentState, maskIdentifier } from "@/shared/features/epf/utils";
 import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import { useTheme } from "@/theme/ThemeProvider";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 
 type Tab = "balance" | "current" | "history" | "backfill" | "transfers";
 
@@ -33,6 +35,7 @@ type Tab = "balance" | "current" | "history" | "backfill" | "transfers";
  */
 export default function EpfEstablishmentContributionsScreen() {
   const { establishmentId } = useLocalSearchParams<{ establishmentId: string }>();
+  const { settings } = useSettings();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -144,8 +147,9 @@ export default function EpfEstablishmentContributionsScreen() {
           </Text>
           {establishment ? (
             <Text style={[styles.subtitle, { color: theme.colors.mutedForeground }]}>
-              {maskIdentifier(establishment.memberId)} · {establishment.dateJoined} –{" "}
-              {establishment.dateLeft ?? "Present"}
+              {maskIdentifier(establishment.memberId)} ·{" "}
+              {formatDisplayDate(establishment.dateJoined, settings?.dateFormat)} –{" "}
+              {establishment.dateLeft ? formatDisplayDate(establishment.dateLeft, settings?.dateFormat) : "Present"}
             </Text>
           ) : null}
         </View>
@@ -153,8 +157,8 @@ export default function EpfEstablishmentContributionsScreen() {
 
       {establishmentsLoading ? (
         <View style={styles.body}>
-          <SkeletonCard />
-          <SkeletonCard />
+          <DashboardSkeleton variant="section" rows={3} />
+          <DashboardSkeleton variant="section" rows={2} />
         </View>
       ) : !establishment ? (
         <View style={styles.body}>

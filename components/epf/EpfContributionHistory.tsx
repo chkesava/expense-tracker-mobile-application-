@@ -5,9 +5,7 @@ import { IdCard } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
-import { SkeletonCard } from "@/components/common/Skeleton";
 import { EpfContributionRow } from "@/components/epf/EpfContributionRow";
-import { Card } from "@/components/ui/Card";
 import { useSpendlyBottomClearance } from "@/components/layout/useSpendlyBottomClearance";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
@@ -23,9 +21,11 @@ import {
   summarizeContributions,
 } from "@/shared/features/epf/utils/contributions";
 import { financialYearLabel } from "@/shared/utils/financialYear";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 import { monthLabel } from "@/shared/utils/monthLabel";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { Section } from "@/components/dashboard/primitives";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 
 type HistoryItem =
   | { type: "header"; id: string; title: string; meta: string }
@@ -49,7 +49,8 @@ export function EpfContributionHistory({
   } = useEpfContributions(establishment.id);
   const { interestEntries } = useEpfInterest();
 
-  const money = useCallback((value: number) => formatAmount(value, currency), [currency]);
+  // SPENDLY-544: ghost-aware; EPF ignored ghost mode almost everywhere.
+  const money = useGhostMoney(currency);
 
   const expectedMonths = useMemo(
     () => contributionMonthsFor(establishment, epfCurrentMonth()),
@@ -111,8 +112,8 @@ export function EpfContributionHistory({
   if (contributionsLoading) {
     return (
       <View style={styles.container}>
-        <SkeletonCard />
-        <SkeletonCard />
+        <DashboardSkeleton variant="section" rows={3} />
+        <DashboardSkeleton variant="section" rows={2} />
       </View>
     );
   }
@@ -147,7 +148,7 @@ export function EpfContributionHistory({
       getItemType={(item) => item.type}
       contentContainerStyle={[styles.listContent, { paddingBottom: bottomClearance }]}
       ListHeaderComponent={
-        <Card>
+        <Section>
           <Text style={[styles.totalLabel, { color: theme.colors.mutedForeground }]}>
             Total credited to EPF
           </Text>
@@ -164,7 +165,7 @@ export function EpfContributionHistory({
               {excludedLabel}
             </Text>
           ) : null}
-        </Card>
+        </Section>
       }
       renderItem={({ item }) => {
         if (item.type === "header") {

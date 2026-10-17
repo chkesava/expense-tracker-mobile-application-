@@ -2,12 +2,12 @@ import { StyleSheet, Text, View } from "react-native";
 import { PiggyBank } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
-import { Card } from "@/components/ui/Card";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfNetWorth } from "@/hooks/useEpfNetWorth";
 import { useTheme } from "@/theme/ThemeProvider";
 
 import { withAlpha } from "@/theme/surfaces";
+import { Section } from "@/components/dashboard/primitives";
 /**
  * Total EPF across every employer — KAN-71.
  *
@@ -25,18 +25,25 @@ export function EpfPortfolioCard() {
 
   if (!hasProfile || loading || !summary || summary.currentBalance === 0) return null;
 
+  // SPENDLY-544: the EPF summary doc is built with Firestore `increment()`,
+  // which only writes a total once it moves, so a user with no interest or
+  // adjustments yet has no such field and the card showed "₹NaN" (and an
+  // Adjustments row, since undefined !== 0). A missing total means nothing
+  // was recorded, i.e. 0. Display only; the stored summary is unchanged.
+  const total = (value: number | undefined) => (Number.isFinite(value) ? (value as number) : 0);
+
   const rows: { key: string; label: string; value: number; hint?: string }[] = [
-    { key: "employee", label: "Your contributions", value: summary.employeeContributionTotal },
-    { key: "employer", label: "Employer's share", value: summary.employerContributionTotal },
-    { key: "interest", label: "Interest", value: summary.interestTotal },
+    { key: "employee", label: "Your contributions", value: total(summary.employeeContributionTotal) },
+    { key: "employer", label: "Employer's share", value: total(summary.employerContributionTotal) },
+    { key: "interest", label: "Interest", value: total(summary.interestTotal) },
   ];
 
-  if (summary.adjustmentsTotal !== 0) {
-    rows.push({ key: "adjustments", label: "Adjustments", value: summary.adjustmentsTotal });
+  if (total(summary.adjustmentsTotal) !== 0) {
+    rows.push({ key: "adjustments", label: "Adjustments", value: total(summary.adjustmentsTotal) });
   }
 
   return (
-    <Card>
+    <Section>
       <View style={styles.header}>
         <View style={[styles.iconBadge, { backgroundColor: withAlpha(theme.colors.success, 0.1) }]}>
           <PiggyBank size={theme.iconSize.md} color={theme.colors.success} />
@@ -77,7 +84,7 @@ export function EpfPortfolioCard() {
 
       {/* EPS is pension, not provident fund. Showing it inside the balance
           would be exactly the conflation KAN-66 introduced epfCredit to stop. */}
-    </Card>
+    </Section>
   );
 }
 

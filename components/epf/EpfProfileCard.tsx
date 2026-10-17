@@ -2,13 +2,13 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Eye, EyeOff, IdCard, Pencil } from "lucide-react-native";
 
-import { Card } from "@/components/ui/Card";
 import { haptic } from "@/lib/haptics";
 import type { EpfProfile } from "@/shared/features/epf/types";
 import { formatUan, maskUan } from "@/shared/features/epf/utils";
 import { useTheme } from "@/theme/ThemeProvider";
 
 import { withAlpha } from "@/theme/surfaces";
+import { Section } from "@/components/dashboard/primitives";
 type Props = {
   profile: EpfProfile;
   onEdit: () => void;
@@ -26,7 +26,7 @@ export function EpfProfileCard({ profile, onEdit }: Props) {
   };
 
   return (
-    <Card>
+    <Section>
       <View style={styles.header}>
         <View style={[styles.iconBadge, { backgroundColor: withAlpha(theme.colors.primary, 0.1) }]}>
           <IdCard size={theme.iconSize.md} color={theme.colors.primary} />
@@ -68,7 +68,7 @@ export function EpfProfileCard({ profile, onEdit }: Props) {
       {profile.notes ? (
         <Text style={[styles.notes, { color: theme.colors.mutedForeground }]}>{profile.notes}</Text>
       ) : null}
-    </Card>
+    </Section>
   );
 }
 
