@@ -12,7 +12,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | 3. Analytics | Insights (monthly, yearly, search & lab, AI advisor), merchants, fees | SPENDLY-538 to SPENDLY-541 | Done; on `main` (`d6c9e4b`) |
 | 4. Investments | Investments hub (deposits, portfolio, SIPs, EPF), EPF detail | SPENDLY-542 to SPENDLY-544 | Done; on `main` (`d6c9e4b`) |
 | 5. Planning | Goal optimizer, financial calendar, runway, what-if, decisions | SPENDLY-545 to SPENDLY-547 | Done; on `main` (`742060d`) |
-| 6. Vaults, settings and forms | Vaults/splits, settings, add-transaction and other forms, onboarding | SPENDLY-548 to SPENDLY-556 (see Phase 6 plan) | Planned; not started |
+| 6. Vaults, settings and forms | Vaults/splits, settings, add-transaction and other forms, onboarding | SPENDLY-548 to SPENDLY-557 (see Phase 6 plan) | Planned; not started |
 
 ## Stories
 | Story | Title | Branch | State |
@@ -107,7 +107,8 @@ Like Phases 1–5 it is UI only: no transaction, transfer, reconciliation, valua
 
 | Story | Scope | Main work |
 |---|---|---|
-| SPENDLY-548 (6a): Form foundations | Shared `Input`, `SearchBar`, a date field, the form sheet pattern | Theme font for labels; focus ring; date shown in the user's format (picker vs. text field is a decision to make first); multi-app check. **First: 6e–6h depend on it.** |
+| SPENDLY-548 (6a): Form foundations | Shared `Input`, `SearchBar`, the form sheet pattern | Theme font for labels; focus ring; multi-app check. **First: 6e–6h depend on it.** |
+| SPENDLY-557: Date picker | A shared `DateField` + picker for every Expense date field (about 38 files typing `YYYY-MM-DD` today) | Shows the user's date format, stores the same `YYYY-MM-DD`; recommended as an in-house JS picker sheet (no native dependency, works over the air). 6e–6h use it. |
 | SPENDLY-549 (6b): Vaults and Spaces | `vaults.tsx`, `components/vaults/*`, `components/spaces/*` | Foundations, tokens, ghost mode |
 | SPENDLY-550 (6c): Splits, Trips and public pay pages | `components/splits/*`, `trips/*`, `collect/*`, `app/split/[slug]`, `app/payment/[slug]` | Foundations, tokens; ghost mode in-app only (public pages are for the payer) |
 | SPENDLY-551 (6d): Settings | Settings hub, sections, controls, notification settings | Off `accountScreenTheme`; one switch style; outline chips |
@@ -117,7 +118,7 @@ Like Phases 1–5 it is UI only: no transaction, transfer, reconciliation, valua
 | SPENDLY-555 (6h): Planning forms | Reminder, runway settings, what-if, goal plan and decision editors | Form pattern and date field; the optimizer's ISO screen-reader date |
 | SPENDLY-556 (6i): Onboarding, welcome, sign-in, delete account | `welcome`, `onboarding`, `(auth)/login`, `components/auth/*`, `delete-account` | Expense-only visual pass; Nutrition and Ganesh sign-in unchanged |
 
-**Suggested order:** 6a first, then 6d and 6b/6c (screens), then 6e–6h (forms), then 6i.
+**Suggested order:** 6a and SPENDLY-557 (date picker) first, then 6d and 6b/6c (screens), then 6e–6h (forms), then 6i.
 
 ## Decisions
 - **Midnight Emerald is a selectable preset, not a forced default.** It's in Settings → Appearance → Custom Presets. Existing users keep their theme.
