@@ -14,6 +14,7 @@ import {
 import { Text } from "react-native";
 import { sheetBodyPadding } from "./sheetDensity";
 import { useKeyboardHeight } from "@/hooks/useKeyboardHeight";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 
 export interface ModalProps {
   isOpen: boolean;
@@ -63,6 +64,7 @@ export function Modal({
 }: ModalProps) {
   const compact = density === "compact";
   const insets = useSafeAreaInsets();
+  const scopeVars = useSpendlyScopeVars();
   const { height: windowHeight } = useWindowDimensions();
   const keyboardHeight = useKeyboardHeight();
   // Never taller than the space between the status bar and the keyboard.
@@ -84,12 +86,12 @@ export function Modal({
       <ModalBackdrop />
       <ModalContent
         className={`w-full bg-card rounded-t-3xl rounded-b-none border-t border-border overflow-hidden m-0 pb-0${compact ? " p-0" : ""}`}
-        style={{
+        style={[scopeVars, {
           maxHeight: sheetMaxHeight,
           // The keyboard already covers the nav bar inset while it is up.
           paddingBottom: keyboardHeight > 0 ? 12 : Math.max(insets.bottom, 20),
           marginBottom: keyboardHeight,
-        }}
+        }]}
       >
         {title && (
           <ModalHeader

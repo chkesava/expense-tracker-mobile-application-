@@ -4,6 +4,9 @@ import { FlashList } from "@shopify/flash-list";
 import { VirtualPositionWithMetrics } from "@/shared/features/sip/types";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Amount } from "@/components/common/Amount";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
+import { Pill } from "@/components/dashboard/primitives";
+import { formatSignedPercent } from "@/shared/utils/investmentPresentation";
 import { Card } from "@/components/ui/Card";
 import { sampleScrollFps } from "@/lib/perf";
 
@@ -20,8 +23,6 @@ const SipPositionRow = memo(function SipPositionRow({
   currency: string;
 }) {
   const { theme } = useTheme();
-  const isProfit = item.profit >= 0;
-  const profitColor = isProfit ? theme.colors.success : theme.colors.destructive;
 
   return (
     <Card style={styles.card}>
@@ -29,13 +30,7 @@ const SipPositionRow = memo(function SipPositionRow({
         <Text style={[styles.assetName, { color: theme.colors.cardForeground }]}>
           {item.assetName} ({item.symbol})
         </Text>
-        <View
-          style={[styles.typeBadge, { backgroundColor: theme.colors.primary + "20" }]}
-        >
-          <Text style={[styles.typeText, { color: theme.colors.primary }]}>
-            {item.assetType.toUpperCase()}
-          </Text>
-        </View>
+        <Pill label={item.assetType.toUpperCase()} tone="accent" />
       </View>
 
       <View style={styles.grid}>
@@ -52,6 +47,7 @@ const SipPositionRow = memo(function SipPositionRow({
             Avg Buy
           </Text>
           <Amount
+            ghostable
             value={item.averageBuyPrice}
             currency={currency}
             style={styles.value}
@@ -62,6 +58,7 @@ const SipPositionRow = memo(function SipPositionRow({
             CMP
           </Text>
           <Amount
+            ghostable
             value={item.currentPrice}
             currency={currency}
             style={styles.value}
@@ -75,6 +72,7 @@ const SipPositionRow = memo(function SipPositionRow({
             Invested
           </Text>
           <Amount
+            ghostable
             value={item.totalInvested}
             currency={currency}
             style={styles.value}
@@ -85,6 +83,7 @@ const SipPositionRow = memo(function SipPositionRow({
             Current
           </Text>
           <Amount
+            ghostable
             value={item.currentValue}
             currency={currency}
             style={styles.value}
@@ -95,15 +94,18 @@ const SipPositionRow = memo(function SipPositionRow({
             Returns
           </Text>
           <View style={styles.returnsRow}>
-            <Amount
-              value={Math.abs(item.profit)}
+            {/* SPENDLY-542: prefix="+" replaced the currency symbol and
+                ignored ghost mode. */}
+            <FinancialAmount
+              value={item.profit}
               currency={currency}
-              prefix={isProfit ? "+" : "-"}
-              style={[styles.value, { color: profitColor }]}
+              size="xs"
+              sign="auto"
+              tone="auto"
+              weight="semibold"
             />
-            <Text style={[styles.returnsPercent, { color: profitColor }]}>
-              ({isProfit ? "+" : "-"}
-              {Math.abs(item.profitPercent).toFixed(2)}%)
+            <Text style={[styles.returnsPercent, { color: theme.colors.mutedForeground }]}>
+              {formatSignedPercent(item.profitPercent, 2)}
             </Text>
           </View>
         </View>
@@ -173,16 +175,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     flex: 1,
-  },
-  typeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    marginLeft: 8,
-  },
-  typeText: {
-    fontSize: 10,
-    fontWeight: "bold",
   },
   grid: {
     flexDirection: "row",
