@@ -4,9 +4,11 @@ import {
   FIRESTORE_WRITE_BATCH_LIMIT,
   applyTaxonomyWrites,
   countExpenseRemaps,
+  hierarchyStampIsCurrent,
   planDefaultTaxonomyUpsert,
   shouldFlushBatch,
   taxonomyDocsNeedUpsert,
+  taxonomyFingerprint,
   type PlannedCategoryDoc,
 } from "./categoryHierarchyPlan";
 
@@ -107,5 +109,41 @@ describe("planDefaultTaxonomyUpsert", () => {
       { category: "Office Chai Fund", subcategory: "Snacks" },
     ];
     expect(countExpenseRemaps(expenses, mapToV4Category)).toBe(0);
+  });
+});
+
+describe("taxonomyFingerprint (SPENDLY-501)", () => {
+  const base = [
+    { key: "food", name: "Food", icon: "🍽", subcategories: [{ key: "veg", name: "Vegetables" }] },
+  ];
+
+  it("is stable for the same taxonomy", () => {
+    expect(taxonomyFingerprint(base)).toBe(taxonomyFingerprint(structuredClone(base)));
+    expect(taxonomyFingerprint(base)).toMatch(/^[0-9a-f]{8}$/);
+  });
+
+  it("changes when a name, icon, order, visibility or subcategory changes", () => {
+    const fp = taxonomyFingerprint(base);
+    expect(taxonomyFingerprint([{ ...base[0], name: "Food & Groceries" }])).not.toBe(fp);
+    expect(taxonomyFingerprint([{ ...base[0], icon: "🥕" }])).not.toBe(fp);
+    expect(taxonomyFingerprint([{ ...base[0], hidden: true }])).not.toBe(fp);
+    expect(
+      taxonomyFingerprint([{ ...base[0], subcategories: [{ key: "veg", name: "Veg" }] }])
+    ).not.toBe(fp);
+    const two = [...base, { key: "rent", name: "Rent", icon: "🏠", subcategories: [] }];
+    expect(taxonomyFingerprint([two[1], two[0]])).not.toBe(taxonomyFingerprint(two));
+  });
+});
+
+describe("hierarchyStampIsCurrent (SPENDLY-501)", () => {
+  const required = { version: 4, fingerprint: "abcd1234" };
+
+  it("is current only when version and fingerprint both match", () => {
+    expect(hierarchyStampIsCurrent({ version: 4, fingerprint: "abcd1234" }, required)).toBe(true);
+    expect(hierarchyStampIsCurrent({ version: 5, fingerprint: "abcd1234" }, required)).toBe(true);
+    expect(hierarchyStampIsCurrent({ version: 3, fingerprint: "abcd1234" }, required)).toBe(false);
+    expect(hierarchyStampIsCurrent({ version: 4, fingerprint: "other" }, required)).toBe(false);
+    expect(hierarchyStampIsCurrent({ version: 4 }, required)).toBe(false);
+    expect(hierarchyStampIsCurrent({}, required)).toBe(false);
   });
 });

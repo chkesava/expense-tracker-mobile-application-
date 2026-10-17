@@ -7,6 +7,46 @@ import {
 
 export const FIRESTORE_WRITE_BATCH_LIMIT = 400;
 
+/**
+ * Stable fingerprint of the shipped default taxonomy (FNV-1a over its shape).
+ * It changes whenever a parent or subcategory is added, renamed, re-iconed,
+ * re-ordered or hidden in code, so a taxonomy edit re-runs the upsert once
+ * without a manual version bump (SPENDLY-501).
+ */
+export function taxonomyFingerprint(taxonomy: TaxonomyNode[] = CATEGORY_TAXONOMY): string {
+  const shape = JSON.stringify(
+    taxonomy.map((node) => [
+      node.key,
+      node.name,
+      node.icon,
+      !!node.hidden,
+      node.subcategories.map((sub) => [sub.key, sub.name]),
+    ])
+  );
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < shape.length; i++) {
+    hash ^= shape.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+/**
+ * True when `meta/categories` already records the current hierarchy version
+ * and taxonomy fingerprint, so the login check can return without reading the
+ * categories collection (SPENDLY-501).
+ */
+export function hierarchyStampIsCurrent(
+  stamp: { version?: unknown; fingerprint?: unknown },
+  required: { version: number; fingerprint: string }
+): boolean {
+  return (
+    typeof stamp.version === "number" &&
+    stamp.version >= required.version &&
+    stamp.fingerprint === required.fingerprint
+  );
+}
+
 export function shouldFlushBatch(
   ops: number,
   limit = FIRESTORE_WRITE_BATCH_LIMIT

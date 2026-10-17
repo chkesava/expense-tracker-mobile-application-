@@ -17,13 +17,16 @@ import {
 } from "@/shared/data/categoryTaxonomy";
 import {
   FIRESTORE_WRITE_BATCH_LIMIT,
+  hierarchyStampIsCurrent,
   planDefaultTaxonomyUpsert,
   shouldFlushBatch,
   taxonomyDocsNeedUpsert,
+  taxonomyFingerprint,
   type PlannedCategoryDoc,
 } from "@/shared/data/categoryHierarchyPlan";
 
 const HIERARCHY_FLAG = "categoryHierarchyVersion";
+const TAXONOMY_FINGERPRINT_FLAG = "taxonomyFingerprint";
 export const CATEGORY_HIERARCHY_VERSION = 4;
 
 type CategoryDoc = PlannedCategoryDoc;
@@ -39,8 +42,9 @@ function mappedEquals(
 
 /**
  * Seeds Category → Subcategory docs and migrates expenses onto the current taxonomy.
- * Safe to call on every login. Re-runs if stored defaults still drift from the
- * current tree, even when the version stamp is already current.
+ * Safe to call on every login. A current version + taxonomy fingerprint in
+ * `meta/categories` returns after one doc read (SPENDLY-501); otherwise it
+ * re-checks the stored defaults against the current tree.
  */
 export async function ensureCategoryHierarchy(
   db: Firestore,
@@ -61,10 +65,21 @@ async function ensureCategoryHierarchyOnce(
 ): Promise<void> {
   const metaRef = doc(db, "users", uid, "meta", "categories");
   const metaSnap = await getDoc(metaRef);
-  const currentVersion = metaSnap.exists()
-    ? (metaSnap.data()?.[HIERARCHY_FLAG] as number | undefined)
-    : undefined;
+  const meta = metaSnap.exists() ? metaSnap.data() : undefined;
+  const currentVersion = meta?.[HIERARCHY_FLAG] as number | undefined;
   const version = currentVersion ?? 0;
+
+  // SPENDLY-501: an unchanged stamp means the defaults were already upserted
+  // against this exact taxonomy, so skip the full categories read (~287 docs
+  // on every login before this).
+  if (
+    hierarchyStampIsCurrent(
+      { version: currentVersion, fingerprint: meta?.[TAXONOMY_FINGERPRINT_FLAG] },
+      { version: CATEGORY_HIERARCHY_VERSION, fingerprint: taxonomyFingerprint() }
+    )
+  ) {
+    return;
+  }
 
   const categoriesSnap = await getDocs(collection(db, "users", uid, "categories"));
   logDirectRead(
@@ -84,6 +99,9 @@ async function ensureCategoryHierarchyOnce(
   );
 
   if (version >= CATEGORY_HIERARCHY_VERSION && !needsDocs) {
+    // Already correct, but stamped before fingerprints existed: stamp it so
+    // the next login takes the early exit above.
+    await stampVersion(db, uid);
     return;
   }
 
@@ -115,7 +133,11 @@ async function ensureCategoryHierarchyOnce(
 async function stampVersion(db: Firestore, uid: string) {
   await setDoc(
     doc(db, "users", uid, "meta", "categories"),
-    { [HIERARCHY_FLAG]: CATEGORY_HIERARCHY_VERSION, migratedAt: serverTimestamp() },
+    {
+      [HIERARCHY_FLAG]: CATEGORY_HIERARCHY_VERSION,
+      [TAXONOMY_FINGERPRINT_FLAG]: taxonomyFingerprint(),
+      migratedAt: serverTimestamp(),
+    },
     { merge: true }
   );
 }
