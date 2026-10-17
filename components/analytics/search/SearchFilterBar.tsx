@@ -3,12 +3,13 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SlidersHorizontal } from "lucide-react-native";
 
 import {
-  insightAccents,
-  insightSurface,
+  useInsightAccents,
+  useInsightSurface,
 } from "@/components/analytics/insightsTheme";
 import { haptic } from "@/lib/haptics";
 import type { DatePreset } from "@/components/analytics/FilterSheetModal";
 import { useTheme } from "@/theme/ThemeProvider";
+import { withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
@@ -36,8 +37,8 @@ export function SearchFilterBar({
 }: SearchFilterBarProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const surface = insightSurface(isDark);
-  const accents = insightAccents(isDark);
+  const surface = useInsightSurface();
+  const accents = useInsightAccents();
 
   return (
     <View style={styles.row}>
@@ -57,7 +58,7 @@ export function SearchFilterBar({
           styles.filterChip,
           {
             backgroundColor: surface.card,
-            borderColor: activeFilterCount > 0 ? accents.greenDim : surface.border,
+            borderColor: activeFilterCount > 0 ? withAlpha(accents.accent, 0.35) : surface.border,
           },
           pressed && styles.pressed,
         ]}
@@ -71,7 +72,7 @@ export function SearchFilterBar({
           Filters
         </Text>
         {activeFilterCount > 0 ? (
-          <View style={[styles.dot, { backgroundColor: accents.green }]} />
+          <View style={[styles.dot, { backgroundColor: accents.accent }]} />
         ) : null}
       </Pressable>
 
@@ -96,11 +97,9 @@ export function SearchFilterBar({
                 style={({ pressed }) => [
                   styles.chip,
                   {
-                    backgroundColor: isActive ? accents.pinkDim : surface.card,
+                    backgroundColor: isActive ? accents.accentDim : surface.card,
                     borderColor: isActive
-                      ? isDark
-                        ? "rgba(244, 63, 94, 0.45)"
-                        : "rgba(220, 38, 38, 0.28)"
+                      ? withAlpha(accents.accent, isDark ? 0.45 : 0.28)
                       : surface.border,
                   },
                   pressed && styles.pressed,
@@ -110,7 +109,7 @@ export function SearchFilterBar({
                   style={[
                     styles.chipText,
                     {
-                      color: isActive ? accents.pink : theme.colors.mutedForeground,
+                      color: isActive ? accents.accent : theme.colors.mutedForeground,
                       fontWeight: isActive ? "700" : "600",
                     },
                   ]}
