@@ -20,7 +20,7 @@ import { writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { createWhatIfScenario, updateWhatIfScenario } from "@/services/whatIf/whatIfScenarioStore";
 import type { WhatIfScenarioDefinition } from "@/shared/types/whatIf";
-import { formatAmount } from "@/shared/utils/formatCurrency";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { dateLabel } from "@/shared/utils/runwayView";
 import {
   buildWhatIfChange,
@@ -73,7 +73,8 @@ export default function WhatIfEditScreen() {
   const params = useLocalSearchParams<{ id?: string; template?: string }>();
   const { uid, baseline, threshold, today, displayCurrency, hasAccounts, loading: baseLoading, error: baseError, retry: baseRetry } = useWhatIfBaseline();
   const { scenarios, loading: listLoading, error: listError, retry: listRetry } = useWhatIfScenarios();
-  const fmt = (n: number) => formatAmount(n, displayCurrency);
+  // SPENDLY-546: ghost-aware; every amount here used to show in ghost mode.
+  const fmt = useGhostMoney(displayCurrency);
 
   const existing = params.id ? scenarios.find((s) => s.id === params.id) ?? null : null;
   const template = params.template ? WHAT_IF_TEMPLATES.find((t) => t.id === params.template) ?? null : null;
