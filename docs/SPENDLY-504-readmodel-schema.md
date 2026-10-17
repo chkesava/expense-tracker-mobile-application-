@@ -106,6 +106,15 @@ Finally, run the manual test from the ticket: with the project's **publishable**
 | Read policies, the Firebase third-party auth link, cross-user tests | SPENDLY-505 |
 | `supabase db lint` in CI | Not added. It needs the full local Supabase stack (Docker). CI applies the migrations to plain Postgres 17 and runs the assertions instead |
 
+## Production apply (2026-10-17)
+
+- The user ran `supabase link` + `supabase db push --workdir supabase-readmodel` against `spmsgncjbnbkxvsbpqlu`.
+- Verified in the dashboard SQL editor (user screenshots):
+  - 14 public tables;
+  - `rowsecurity = true` on all 14;
+  - **0** grants to `anon`/`authenticated`.
+- With zero grants, a publishable-key `select` is denied by Postgres before RLS is even consulted. A live REST call with the publishable key was not made.
+
 ## Tests run (2026-10-17)
 
 - **Local apply + assertions** on a throwaway Postgres 18 cluster (temporary folder, port 55432, removed afterwards):
