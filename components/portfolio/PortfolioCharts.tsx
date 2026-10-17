@@ -176,7 +176,7 @@ function Sparkline({
     .join(" ");
 
   const isPositive = data[data.length - 1] >= data[0];
-  const lineColor = isPositive ? "#10B981" : "#EF4444";
+  const lineColor = isPositive ? theme.colors.success : theme.colors.destructive;
 
   return (
     <Animated.View entering={FadeIn.duration(300)}>

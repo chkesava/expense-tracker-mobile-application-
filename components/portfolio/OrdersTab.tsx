@@ -34,7 +34,7 @@ export function OrdersTab({ orders, currency, onCancel }: OrdersTabProps) {
           </View>
           <View style={{ alignItems: "flex-end", gap: 4 }}>
             <Amount value={order.targetPrice} currency={currency} ghostable style={{ color: theme.colors.foreground, fontWeight: "800", fontSize: 13 }} />
-            <Text style={{ color: order.status === "pending" ? "#D97706" : theme.colors.mutedForeground, fontSize: 11, fontWeight: "800", textTransform: "uppercase" }}>{order.status}</Text>
+            <Text style={{ color: order.status === "pending" ? theme.colors.warning : theme.colors.mutedForeground, fontSize: 11, fontWeight: "800", textTransform: "uppercase" }}>{order.status}</Text>
           </View>
           {order.status === "pending" ? <Pressable onPress={() => void onCancel(order.id)} hitSlop={10} style={styles.cancel}><X size={16} color={theme.colors.destructive} /></Pressable> : null}
         </View>
