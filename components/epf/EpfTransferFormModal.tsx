@@ -17,9 +17,9 @@ import type {
   EpfTransfer,
 } from "@/shared/features/epf/types";
 import { transferableBalance, validateTransfer } from "@/shared/features/epf/utils/transfers";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 
 type Props = {
   isOpen: boolean;
@@ -75,7 +75,8 @@ export function EpfTransferFormModal({
     setErrors({});
   }, [isOpen, defaultSourceId]);
 
-  const money = (value: number) => formatAmount(value, currency);
+  // SPENDLY-544: ghost-aware; EPF ignored ghost mode almost everywhere.
+  const money = useGhostMoney(currency);
 
   const sourceBalance = useMemo(() => {
     if (!sourceId) return 0;

@@ -22,9 +22,9 @@ import {
   dueDateLabel,
   isAwaitingCredit,
 } from "@/shared/features/epf/utils/monthState";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 
 type Props = {
   isOpen: boolean;
@@ -67,6 +67,8 @@ export function EpfCreditSheet({
   const [reason, setReason] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  // SPENDLY-544: ghost-aware; EPF ignored ghost mode almost everywhere.
+  const money = useGhostMoney(currency);
 
   useEffect(() => {
     if (!isOpen || !row) return;
@@ -84,7 +86,6 @@ export function EpfCreditSheet({
     reconciled: isReconciled(row),
     dueDate: isAwaitingCredit(state) ? dueDateLabel(dueDate) : undefined,
   });
-  const money = (value: number) => formatAmount(value, currency);
 
   // A lower amount lands on `partial`, so both landings must be legal —
   // otherwise the sheet would accept an amount and then reject it on the way

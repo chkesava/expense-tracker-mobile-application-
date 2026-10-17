@@ -12,9 +12,9 @@ import {
   validateReconciliation,
   type EpfReconciliationInput,
 } from "@/shared/features/epf/utils/reconciliation";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 
 type Props = {
   isOpen: boolean;
@@ -58,7 +58,8 @@ export function EpfReconcileSheet({
     setErrors({});
   }, [isOpen]);
 
-  const money = (value: number) => formatAmount(value, currency);
+  // SPENDLY-544: ghost-aware; EPF ignored ghost mode almost everywhere.
+  const money = useGhostMoney(currency);
   const parsed = Number(actualBalance);
   const hasAmount = actualBalance !== "" && Number.isFinite(parsed);
   const variance = useMemo(

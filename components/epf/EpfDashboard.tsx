@@ -5,7 +5,6 @@ import { ChevronDown, ChevronRight, IdCard, Plus } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
-import { SkeletonCard } from "@/components/common/Skeleton";
 import { EpfEstablishmentCard } from "@/components/epf/EpfEstablishmentCard";
 import { EpfEstablishmentFormModal } from "@/components/epf/EpfEstablishmentFormModal";
 import { EpfCurrentMonthCard } from "@/components/epf/EpfCurrentMonthCard";
@@ -20,6 +19,7 @@ import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
 import { useTheme } from "@/theme/ThemeProvider";
 import { combineEpfLoad } from "@/shared/features/epf/utils/loadState";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 
 export function EpfDashboard() {
   const { theme } = useTheme();
@@ -108,8 +108,8 @@ export function EpfDashboard() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <SkeletonCard />
-        <SkeletonCard />
+        <DashboardSkeleton variant="section" rows={3} />
+        <DashboardSkeleton variant="section" rows={2} />
       </View>
     );
   }
