@@ -15,6 +15,7 @@ import { haptic } from "@/lib/haptics";
 import { sampleScrollFps } from "@/lib/perf";
 import {
   Calendar,
+  ArrowDownLeft,
   Edit3,
   FileText,
   LayoutGrid,
@@ -26,6 +27,8 @@ import {
 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
+import { signedCurrencyPrefix } from "@/shared/utils/formatCurrency";
 import { PageListStateScroll } from "@/components/layout/PageListStateScroll";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -386,7 +389,7 @@ export function ExpenseList({
     ) => {
     const isExpense = item.kind === "expense";
     const cashFlow = cashFlowById?.get(item.id);
-    const iconChar = isExpense ? getCategoryIcon(item.data.category) : "💰";
+    const iconChar = isExpense ? getCategoryIcon(item.data.category) : null;
     const acc = item.data.accountId ? accountMap.get(item.data.accountId) : undefined;
     const isRowSelected = Boolean(
       isExpense && item.data.id && selectedExpenseIds.has(item.data.id)
@@ -458,13 +461,25 @@ export function ExpenseList({
               styles.avatar,
               isCompact && styles.avatarCompact,
               {
-                backgroundColor: surfaces.wash(
-                  isExpense ? theme.colors.primary : theme.colors.success
-                ),
+                // SPENDLY-534: neutral tile for spending, a green wash and
+                // arrow for money in — direction reads before the amount.
+                backgroundColor: isExpense
+                  ? surfaces.tile
+                  : surfaces.wash(theme.colors.success),
               },
             ]}
           >
-            <Text style={{ fontSize: isCompact ? 14 : 18 }}>{iconChar}</Text>
+            {iconChar ? (
+              <Text style={{ fontSize: isCompact ? 14 : 18 }} accessible={false}>
+                {iconChar}
+              </Text>
+            ) : (
+              <ArrowDownLeft
+                size={isCompact ? 14 : 18}
+                color={theme.colors.success}
+                strokeWidth={2.4}
+              />
+            )}
           </View>
 
           {/* Details */}
@@ -533,28 +548,28 @@ export function ExpenseList({
 
           {/* Amount & Time */}
           <View style={styles.rowRight}>
-            <Amount
+            {/* SPENDLY-534: a bare "-"/"+" prefix replaced the ₹ symbol, and
+                the cash-flow line ignored hidden amounts; both now go
+                through FinancialAmount. */}
+            <FinancialAmount
               value={item.data.amount}
               currency={displayCurrency}
-              prefix={isExpense ? "-" : "+"}
-              ghostable
-              style={{
-                fontSize: theme.typography.sm,
-                fontWeight: "800",
-                color: isExpense ? theme.colors.foreground : theme.colors.success,
-              }}
+              size="sm"
+              weight="bold"
+              sign={isExpense ? "minus" : "plus"}
+              tone={isExpense ? "default" : "positive"}
+              fit={false}
             />
             {cashFlow !== undefined ? (
-              <Text
-                style={[
-                  styles.cashFlow,
-                  { color: theme.colors.mutedForeground },
-                ]}
-                numberOfLines={1}
-              >
-                {cashFlow < 0 ? "-" : ""}
-                {Math.abs(cashFlow).toLocaleString()}
-              </Text>
+              <FinancialAmount
+                value={cashFlow}
+                currency={displayCurrency}
+                size="xs"
+                weight="medium"
+                tone="muted"
+                fit={false}
+                style={styles.cashFlow}
+              />
             ) : null}
             {isExpense && item.data.tags && item.data.tags.length > 0 ? (
               <View style={styles.tagsPreview}>
@@ -603,22 +618,17 @@ export function ExpenseList({
             >
               {formatHeaderDate(item.title)}
             </Text>
-            <Text
-              style={[
-                styles.daySubtotal,
-                {
-                  color:
-                    item.dayTotal >= 0
-                      ? theme.colors.success
-                      : theme.colors.mutedForeground,
-                  fontSize: theme.typography.xs,
-                },
-              ]}
-            >
-              {item.dayTotal >= 0 ? "+" : "-"}
-              {displayCurrency}
-              {Math.abs(item.dayTotal).toLocaleString()}
-            </Text>
+            {/* The day's net, signed, with ₹ and hidden-amount support. */}
+            <FinancialAmount
+              value={item.dayTotal}
+              currency={displayCurrency}
+              size="xs"
+              weight="semibold"
+              sign="auto"
+              tone={item.dayTotal >= 0 ? "positive" : "muted"}
+              fit={false}
+              style={styles.daySubtotal}
+            />
           </View>
         );
       }
@@ -927,7 +937,10 @@ export function ExpenseList({
               <Amount
                 value={selectedTx.data.amount}
                 currency={displayCurrency}
-                prefix={selectedTx.kind === "expense" ? "-" : "+"}
+                prefix={signedCurrencyPrefix(
+                  selectedTx.kind === "expense" ? "-" : "+",
+                  displayCurrency
+                )}
                 ghostable
                 style={{
                   fontSize: 32,
@@ -1199,7 +1212,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   daySubtotal: {
-    fontWeight: "700",
+    flexShrink: 0,
   },
   row: {
     flexDirection: "row",

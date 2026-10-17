@@ -1,6 +1,5 @@
 import { ScrollView, StyleSheet, View } from "react-native";
 
-import { ACCOUNT_GREEN } from "@/components/accounts/accountScreenTheme";
 import {
   INTEREST_TYPES,
   LENDER_TYPES,
@@ -8,7 +7,6 @@ import {
 } from "@/shared/types/borrowing";
 import { Chip } from "@/components/ui/Chip";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 import type {
   BorrowingDateFilter,
@@ -76,8 +74,7 @@ export function FilterChip({
   active: boolean;
   onPress: () => void;
 }) {
-  const { themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
 
   // The Money hub's green: the brighter account green on dark, success on light.
   return (
@@ -86,7 +83,7 @@ export function FilterChip({
       selected={active}
       onPress={onPress}
       tone="success"
-      accentColor={isDark ? ACCOUNT_GREEN : undefined}
+      accentColor={theme.colors.primary}
     />
   );
 }

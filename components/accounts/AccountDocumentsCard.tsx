@@ -9,7 +9,6 @@ import {
   Trash2,
 } from "lucide-react-native";
 
-import { accountAccent, ACCOUNT_RED } from "@/components/accounts/accountScreenTheme";
 import { Button } from "@/components/ui/Button";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -65,7 +64,7 @@ export function AccountDocumentsCard({
   const { theme, themeName } = useTheme();
   const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
-  const accent = accountAccent(isDark);
+  const accent = theme.colors.primary;
 
   const subtitle = useMemo(() => {
     if (loading) return "Loading…";
@@ -194,13 +193,13 @@ export function AccountDocumentsCard({
                 styles.fileIcon,
                 {
                   backgroundColor: pending
-                    ? "rgba(239,68,68,0.10)"
+                    ? surfaces.wash(theme.colors.destructive)
                     : surfaces.control,
                 },
               ]}
             >
               {pending ? (
-                <AlertTriangle size={16} color={ACCOUNT_RED} />
+                <AlertTriangle size={16} color={theme.colors.destructive} />
               ) : isImage ? (
                 <ImageIcon size={16} color={theme.colors.mutedForeground} />
               ) : (
@@ -248,7 +247,7 @@ export function AccountDocumentsCard({
                 </Text>
               ) : null}
               {pending ? (
-                <Text style={[styles.pending, { color: ACCOUNT_RED }]}>
+                <Text style={[styles.pending, { color: theme.colors.destructive }]}>
                   Upload did not finish — retry or remove it.
                 </Text>
               ) : null}

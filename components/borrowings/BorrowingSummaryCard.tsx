@@ -1,16 +1,20 @@
-import { StyleSheet, Text, View } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { StyleSheet, View } from "react-native";
+import { AlertTriangle, Wallet } from "lucide-react-native";
 
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
 import {
-  ACCOUNT_GREEN,
-  ACCOUNT_GREEN_BORDER,
-  ACCOUNT_RED,
-  CARD_ORANGE,
-} from "@/components/accounts/accountScreenTheme";
-import { Amount } from "@/components/common/Amount";
+  HeroSection,
+  MetaLabel,
+  StatTile,
+  StatusStrip,
+} from "@/components/dashboard/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
+/**
+ * The Borrowings section's summary (SPENDLY-536): what is still owed, then
+ * borrowed / interest / repaid, and an overdue warning in words. Built on the
+ * dashboard's deep hero instead of a fixed green gradient. Same props.
+ */
 export function BorrowingSummaryCard({
   totalBorrowed,
   totalOutstanding,
@@ -26,156 +30,62 @@ export function BorrowingSummaryCard({
   overdueCount: number;
   currency: string;
 }) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const line = isDark ? "rgba(148, 163, 184, 0.16)" : "rgba(15, 23, 42, 0.1)";
+  const { theme } = useTheme();
 
   return (
-    <View
-      style={[
-        styles.card,
-        {
-          backgroundColor: isDark ? "#0E1612" : "#F0FDF4",
-          borderColor: isDark ? ACCOUNT_GREEN_BORDER : "rgba(22, 163, 74, 0.28)",
-        },
-      ]}
+    <HeroSection
+      variant="deep"
+      title="Borrowings"
+      subtitle="Still owed, principal plus interest"
+      icon={<Wallet size={16} color={theme.colors.primary} strokeWidth={2.3} />}
     >
-      <LinearGradient
-        pointerEvents="none"
-        colors={
-          isDark
-            ? ["rgba(74, 222, 128, 0.16)", "rgba(14, 22, 18, 0.4)", "#0B1210"]
-            : ["rgba(22, 163, 74, 0.1)", "#F8FAFC", "#F0FDF4"]
-        }
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <View
-        pointerEvents="none"
-        style={[
-          styles.glow,
-          {
-            backgroundColor: isDark
-              ? "rgba(74, 222, 128, 0.12)"
-              : "rgba(22, 163, 74, 0.08)",
-          },
-        ]}
+      <MetaLabel>Outstanding</MetaLabel>
+      <FinancialAmount
+        value={totalOutstanding}
+        currency={currency}
+        size="hero"
+        weight="bold"
+        tone={overdueCount > 0 ? "negative" : "default"}
       />
 
-      <View style={styles.grid}>
-        <View style={styles.row}>
-          <View style={styles.cell}>
-            <Text style={[styles.label, { color: theme.colors.mutedForeground }]}>
-              TOTAL BORROWED
-            </Text>
-            <Amount
-              value={totalBorrowed}
-              currency={currency}
-              ghostable
-              style={[styles.value, { color: theme.colors.foreground }]}
-            />
-          </View>
-          <View style={[styles.vRule, { backgroundColor: line }]} />
-          <View style={styles.cell}>
-            <Text style={[styles.label, { color: theme.colors.mutedForeground }]}>
-              OUTSTANDING
-            </Text>
-            <Amount
-              value={totalOutstanding}
-              currency={currency}
-              ghostable
-              style={[styles.value, { color: isDark ? ACCOUNT_RED : theme.colors.destructive }]}
-            />
-          </View>
-        </View>
-        <View style={[styles.hRule, { backgroundColor: line }]} />
-        <View style={styles.row}>
-          <View style={styles.cell}>
-            <Text style={[styles.label, { color: theme.colors.mutedForeground }]}>
-              INTEREST
-            </Text>
-            <Amount
-              value={totalInterest}
-              currency={currency}
-              ghostable
-              style={[styles.value, { color: CARD_ORANGE }]}
-            />
-          </View>
-          <View style={[styles.vRule, { backgroundColor: line }]} />
-          <View style={styles.cell}>
-            <Text style={[styles.label, { color: theme.colors.mutedForeground }]}>
-              REPAID
-            </Text>
-            <Amount
-              value={totalRepaid}
-              currency={currency}
-              ghostable
-              style={[styles.value, { color: isDark ? ACCOUNT_GREEN : theme.colors.success }]}
-            />
-          </View>
-        </View>
+      <View style={styles.tiles}>
+        <StatTile label="Borrowed" style={styles.tile}>
+          <FinancialAmount value={totalBorrowed} currency={currency} size="sm" weight="bold" />
+        </StatTile>
+        <StatTile label="Interest" style={styles.tile}>
+          <FinancialAmount value={totalInterest} currency={currency} size="sm" weight="bold" />
+        </StatTile>
+        <StatTile label="Repaid" style={styles.tile}>
+          <FinancialAmount value={totalRepaid} currency={currency} size="sm" weight="bold" tone="positive" />
+        </StatTile>
       </View>
 
       {overdueCount > 0 ? (
-        <Text style={[styles.overdue, { color: isDark ? ACCOUNT_RED : theme.colors.destructive }]}>
-          {overdueCount} borrowing{overdueCount === 1 ? "" : "s"} past the due date
-        </Text>
+        <View style={styles.strip}>
+          <StatusStrip
+            tone="negative"
+            icon={<AlertTriangle size={14} color={theme.colors.destructive} strokeWidth={2.4} />}
+            message={`${overdueCount} borrowing${overdueCount === 1 ? "" : "s"} past the due date`}
+          />
+        </View>
       ) : null}
-    </View>
+    </HeroSection>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 24,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    overflow: "hidden",
-    padding: 16,
-  },
-  glow: {
-    position: "absolute",
-    right: -48,
-    top: -56,
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-  },
-  grid: {
-    gap: 0,
-  },
-  row: {
+  tiles: {
     flexDirection: "row",
-    alignItems: "stretch",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 14,
   },
-  cell: {
-    flex: 1,
-    gap: 4,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
+  tile: {
+    flexGrow: 1,
+    flexBasis: "30%",
+    minWidth: 90,
   },
-  vRule: {
-    width: StyleSheet.hairlineWidth,
-  },
-  hRule: {
-    height: StyleSheet.hairlineWidth,
-    alignSelf: "stretch",
-  },
-  label: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-  },
-  value: {
-    fontSize: 22,
-    fontWeight: "800",
-    letterSpacing: -0.4,
-    fontVariant: ["tabular-nums"],
-  },
-  overdue: {
-    fontSize: 11,
-    fontWeight: "700",
-    marginTop: 8,
+  strip: {
+    marginTop: 12,
   },
 });

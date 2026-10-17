@@ -1,10 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Amount } from "@/components/common/Amount";
-import {
-  accountAccent,
-  ACCOUNT_RED,
-} from "@/components/accounts/accountScreenTheme";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
@@ -46,7 +42,7 @@ export function SpendingInsightsCard({
   const { theme, themeName } = useTheme();
   const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
-  const accent = accountAccent(isDark);
+  const accent = theme.colors.primary;
 
   const hasSpend = insights.totalSpend > 0;
 
@@ -146,7 +142,7 @@ export function SpendingInsightsCard({
                       styles.fill,
                       {
                         width: `${Math.max(2, Math.round(entry.share * 100))}%`,
-                        backgroundColor: selected ? accent : ACCOUNT_RED,
+                        backgroundColor: selected ? accent : theme.colors.destructive,
                       },
                     ]}
                   />

@@ -8,10 +8,6 @@ import {
 import { FlashList } from "@shopify/flash-list";
 import { Plus, SlidersHorizontal } from "lucide-react-native";
 
-import {
-  ACCOUNT_GREEN,
-  ACCOUNT_GREEN_BORDER,
-} from "@/components/accounts/accountScreenTheme";
 import { BorrowingCard } from "@/components/borrowings/BorrowingCard";
 import { BorrowingDetailModal } from "@/components/borrowings/BorrowingDetailModal";
 import { useOpenFromRouteParam } from "@/hooks/useOpenFromRouteParam";
@@ -37,6 +33,7 @@ import {
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { withAlpha } from "@/theme/surfaces";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
@@ -272,7 +269,7 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
           onChangeText={setSearchQuery}
           placeholder="Search lender or note..."
           accessibilityLabel="Search lender or note"
-          accentColor={ACCOUNT_GREEN_BORDER}
+          accentColor={withAlpha(theme.colors.primary, 0.45)}
           containerStyle={styles.searchBar}
         />
         <Pressable
@@ -283,12 +280,10 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
           style={({ pressed }) => [
             styles.filterBtn,
             {
-              backgroundColor: isDark ? "#10141C" : theme.colors.card,
+              backgroundColor: theme.colors.card,
               borderColor: activeFilterCount > 0
-                ? ACCOUNT_GREEN_BORDER
-                : isDark
-                  ? "rgba(148,163,184,0.14)"
-                  : theme.colors.border,
+                ? withAlpha(theme.colors.primary, 0.45)
+                : theme.colors.outlineVariant,
             },
             pressed && styles.pressed,
           ]}
@@ -302,10 +297,10 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
           <SlidersHorizontal
             size={18}
             color={
-              activeFilterCount > 0 ? ACCOUNT_GREEN : theme.colors.mutedForeground
+              activeFilterCount > 0 ? theme.colors.primary : theme.colors.mutedForeground
             }
           />
-          {activeFilterCount > 0 ? <View style={styles.filterDot} /> : null}
+          {activeFilterCount > 0 ? <View style={[styles.filterDot, { backgroundColor: theme.colors.primary }]} /> : null}
         </Pressable>
       </View>
 
@@ -321,15 +316,15 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
         style={({ pressed }) => [
           styles.recordBtn,
           {
-            borderColor: isDark ? ACCOUNT_GREEN_BORDER : "rgba(22,163,74,0.35)",
-            backgroundColor: isDark ? "rgba(14, 22, 18, 0.7)" : "rgba(240,253,244,0.9)",
+            borderColor: withAlpha(theme.colors.primary, 0.35),
+            backgroundColor: withAlpha(theme.colors.primary, 0.08),
           },
           pressed && styles.pressed,
         ]}
         accessibilityRole="button"
         accessibilityLabel="Record borrowing"
       >
-        <Plus size={16} color={isDark ? ACCOUNT_GREEN : theme.colors.success} strokeWidth={2.4} />
+        <Plus size={16} color={theme.colors.primary} strokeWidth={2.4} />
         <Text style={[styles.recordLabel, { color: theme.colors.foreground }]}>
           Record Borrowing
         </Text>
@@ -355,7 +350,7 @@ export function BorrowingsList({ listHeader }: { listHeader?: ReactNode }) {
       }
       primaryAction={{
         label: "Record Borrowing",
-        icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+        icon: <Plus size={16} color={theme.colors.primaryForeground} strokeWidth={2.4} />,
         onPress: openCreate,
       }}
       secondaryAction={
@@ -478,7 +473,6 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: ACCOUNT_GREEN,
   },
   recordBtn: {
     minHeight: 48,

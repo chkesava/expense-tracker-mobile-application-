@@ -11,12 +11,11 @@ import {
 } from "@/components/layout/chrome";
 import { SideDrawer } from "@/components/SideDrawer";
 import {
-  accountAccent,
-  CARD_PURPLE,
   shadeCardAccent,
 } from "@/components/accounts/accountScreenTheme";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export function AccountHeader({
@@ -38,12 +37,14 @@ export function AccountHeader({
 }) {
   const insets = useSafeAreaInsets();
   const { theme, themeName } = useTheme();
+  const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const accent = accountAccent(isDark);
-  const ripple = isDark ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.08)";
+  // SPENDLY-537: theme tokens; a card with no colour takes the theme accent.
+  const accent = theme.colors.primary;
+  const ripple = surfaces.track;
   const isCredit = variant === "credit";
-  const cardAccent = accentColor || CARD_PURPLE;
+  const cardAccent = accentColor || theme.colors.primary;
 
   return (
     <>
@@ -78,9 +79,7 @@ export function AccountHeader({
               style={[
                 styles.creditIcon,
                 {
-                  boxShadow: isDark
-                    ? "0 0 16px rgba(109, 90, 230, 0.45)"
-                    : "0 4px 10px rgba(67, 56, 202, 0.28)",
+                  boxShadow: `0 4px 12px ${withAlpha(cardAccent, isDark ? 0.4 : 0.28)}`,
                 },
               ]}
             >
@@ -90,7 +89,7 @@ export function AccountHeader({
             <View
               style={[
                 styles.logoIcon,
-                { backgroundColor: isDark ? "#111827" : "#1E293B" },
+                { backgroundColor: surfaces.wash(accent) },
               ]}
             >
               <Activity size={15} color={accent} strokeWidth={2.6} />

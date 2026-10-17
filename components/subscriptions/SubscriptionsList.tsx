@@ -17,6 +17,8 @@ import {
 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
+import { HeroSection, MetaLabel, StatTile } from "@/components/dashboard/primitives";
 import { EmptyState } from "@/components/common/EmptyState";
 import { SkeletonHero, SkeletonList } from "@/components/common/Skeleton";
 import { EditSubscriptionModal } from "@/components/subscriptions/EditSubscriptionModal";
@@ -26,6 +28,8 @@ import { useAccounts } from "@/hooks/useAccounts";
 import { useRecurringSuggestions } from "@/hooks/useRecurringSuggestions";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
 import { useAuth } from "@/providers/AuthProvider";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { toast } from "@/lib/toast";
 import { patternToSubscription } from "@/services/recurring/recurringDetector";
 import type { Subscription } from "@/shared/types/subscription";
@@ -45,7 +49,6 @@ import {
 } from "@/shared/utils/spendlyBudget";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
@@ -57,10 +60,10 @@ const RECURRING_TABS: { id: RecurringTabId; label: string }[] = [
 ];
 
 export function SubscriptionsList() {
-  const { theme, themeName } = useTheme();
+  const { theme } = useTheme();
   const surfaces = useSurfaces();
-  const isDark = themeUsesDarkPalette(themeName);
   const { user } = useAuth();
+  const { settings } = useSettings();
   const displayCurrency = useDisplayCurrency();
   const { accounts } = useAccounts();
   const { subscriptions, loading, toggleActive } = useSubscriptions();
@@ -148,160 +151,50 @@ export function SubscriptionsList() {
 
   return (
     <View style={styles.container}>
-      {/* Commitment Hero Banner */}
-      <View
-        style={[
-          styles.heroCard,
-          {
-            backgroundColor: theme.colors.card,
-            borderColor: theme.colors.border,
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 6 },
-            shadowOpacity: isDark ? 0.35 : 0.08,
-            shadowRadius: 16,
-            elevation: 6,
-          },
-        ]}
-      >
-        <View style={styles.heroHeader}>
-          <Text
-            style={[styles.heroSubtitle, { color: theme.colors.mutedForeground }]}
-          >
-            MONTHLY RECURRING OUTFLOW
-          </Text>
-          <Button
-            variant="primary"
-            size="sm"
-            onPress={handleOpenAdd}
-            style={styles.addBtn}
-          >
+      {/* Commitment hero (SPENDLY-536): the dashboard's deep hero, same figures. */}
+      <HeroSection
+        variant="deep"
+        title="Monthly recurring outflow"
+        subtitle="Subscriptions, EMIs and auto-transfers"
+        icon={<Repeat size={16} color={theme.colors.primary} strokeWidth={2.3} />}
+        action={
+          <Button variant="primary" size="sm" onPress={handleOpenAdd} style={styles.addBtn} accessibilityLabel="Add recurring">
             <Plus size={14} color={theme.colors.primaryForeground} strokeWidth={2.5} />
-            <Text
-              style={[
-                styles.addBtnText,
-                { color: theme.colors.primaryForeground },
-              ]}
-            >
-              Add New
-            </Text>
+            <Text style={[styles.addBtnText, { color: theme.colors.primaryForeground }]}>Add</Text>
           </Button>
-        </View>
+        }
+      >
+        <FinancialAmount value={commitments.totalMonthly} currency={displayCurrency} size="hero" weight="bold" />
 
-        <Amount
-          value={commitments.totalMonthly}
-          currency={displayCurrency}
-          ghostable
-          style={{ fontSize: 28, fontWeight: "900", marginBottom: 16 }}
-        />
-
-        {/* Commitment Breakdown */}
-        <View
-          style={[
-            styles.breakdownRow,
-            { borderTopColor: theme.colors.border },
-          ]}
-        >
-          <View style={styles.breakdownItem}>
-            <Text
-              style={[styles.breakdownLabel, { color: theme.colors.mutedForeground }]}
-            >
-              Subscriptions
-            </Text>
-            <Amount
-              value={commitments.subscriptionsTotal}
-              currency={displayCurrency}
-              ghostable
-              style={{
-                fontSize: theme.typography.sm,
-                fontWeight: "700",
-                color: theme.colors.foreground,
-              }}
-            />
-          </View>
-
-          <View
-            style={[
-              styles.breakdownDivider,
-              { backgroundColor: theme.colors.border },
-            ]}
-          />
-
-          <View style={styles.breakdownItem}>
-            <Text
-              style={[styles.breakdownLabel, { color: theme.colors.mutedForeground }]}
-            >
-              EMIs & Loans
-            </Text>
-            <Amount
-              value={commitments.emisTotal}
-              currency={displayCurrency}
-              ghostable
-              style={{
-                fontSize: theme.typography.sm,
-                fontWeight: "700",
-                color: theme.colors.foreground,
-              }}
-            />
-          </View>
-
-          <View
-            style={[
-              styles.breakdownDivider,
-              { backgroundColor: theme.colors.border },
-            ]}
-          />
-
-          <View style={styles.breakdownItem}>
-            <Text
-              style={[styles.breakdownLabel, { color: theme.colors.mutedForeground }]}
-            >
-              Auto-Transfers
-            </Text>
-            <Amount
-              value={commitments.transfersTotal}
-              currency={displayCurrency}
-              ghostable
-              style={{
-                fontSize: theme.typography.sm,
-                fontWeight: "700",
-                color: theme.colors.foreground,
-              }}
-            />
-          </View>
+        <View style={styles.heroTiles}>
+          <StatTile label="Subscriptions" style={styles.heroTile}>
+            <FinancialAmount value={commitments.subscriptionsTotal} currency={displayCurrency} size="sm" weight="bold" />
+          </StatTile>
+          <StatTile label="EMIs & loans" style={styles.heroTile}>
+            <FinancialAmount value={commitments.emisTotal} currency={displayCurrency} size="sm" weight="bold" />
+          </StatTile>
+          <StatTile label="Auto-transfers" style={styles.heroTile}>
+            <FinancialAmount value={commitments.transfersTotal} currency={displayCurrency} size="sm" weight="bold" />
+          </StatTile>
         </View>
 
         {dueInSeven > 0 || nextDue ? (
-          <View
-            style={[styles.dueStrip, { borderTopColor: theme.colors.border }]}
-          >
+          <View style={[styles.dueStrip, { borderTopColor: surfaces.divider }]}>
             <View style={styles.dueBlock}>
-              <Text
-                style={[styles.breakdownLabel, { color: theme.colors.mutedForeground }]}
-              >
-                Due in next 7 days
-              </Text>
-              <Amount
-                value={dueInSeven}
-                currency={displayCurrency}
-                ghostable
-                style={{
-                  fontSize: theme.typography.md,
-                  fontWeight: "800",
-                  color: theme.colors.foreground,
-                }}
-              />
+              <MetaLabel>Due in next 7 days</MetaLabel>
+              <FinancialAmount value={dueInSeven} currency={displayCurrency} size="md" weight="bold" />
             </View>
             {nextDue ? (
               <Text
                 style={[styles.nextDue, { color: theme.colors.mutedForeground }]}
                 numberOfLines={1}
               >
-                Next: {nextDue.name} · {nextDue.dueDate}
+                Next: {nextDue.name} · {formatDisplayDate(nextDue.dueDate, settings.dateFormat)}
               </Text>
             ) : null}
           </View>
         ) : null}
-      </View>
+      </HeroSection>
 
       {reviewItems.length > 0 ? (
         <View style={{ gap: 10 }}>
@@ -384,7 +277,7 @@ export function SubscriptionsList() {
             description="Track recurring subscriptions, software licenses, utilities, and memberships with automated renewal alerts."
             primaryAction={{
               label: "Add Subscription",
-              icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+              icon: <Plus size={16} color={theme.colors.primaryForeground} strokeWidth={2.4} />,
               onPress: handleOpenAdd,
             }}
             tip="Receive advance renewal reminders so you never get surprised by automatic debits."
@@ -402,31 +295,38 @@ export function SubscriptionsList() {
               : null;
 
             return (
-              <Pressable
+              // SPENDLY-536: a plain card. The info and schedule areas open the
+              // edit form; Pause/Resume sits beside them instead of inside a
+              // pressable (a button inside a button on web).
+              <View
                 key={sub.id}
-                onPress={() => handleOpenEdit(sub)}
-                style={({ pressed }) => [
+                style={[
                   styles.subCard,
                   {
                     backgroundColor: theme.colors.card,
-                    borderColor: theme.colors.border,
+                    borderColor: theme.colors.outlineVariant,
                   },
-                  pressed && { opacity: 0.8 },
                 ]}
               >
                 <View style={styles.subTopRow}>
-                  <View style={{ flex: 1, gap: 4 }}>
+                  <Pressable
+                    onPress={() => handleOpenEdit(sub)}
+                    style={({ pressed }) => [{ flex: 1, gap: 4 }, pressed && { opacity: 0.8 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit ${sub.name}`}
+                  >
                     <View style={styles.typeBadgeRow}>
                       <View
                         style={[
                           styles.typeBadge,
                           {
-                            backgroundColor:
+                            backgroundColor: surfaces.wash(
                               sub.type === "emi"
-                                ? "rgba(236, 72, 153, 0.15)"
+                                ? theme.colors.warning
                                 : sub.type === "transfer"
-                                  ? "rgba(59, 130, 246, 0.15)"
-                                  : "rgba(107, 99, 255, 0.15)",
+                                  ? theme.colors.info
+                                  : theme.colors.primary
+                            ),
                           },
                         ]}
                       >
@@ -436,9 +336,9 @@ export function SubscriptionsList() {
                             {
                               color:
                                 sub.type === "emi"
-                                  ? "#EC4899"
+                                  ? theme.colors.warning
                                   : sub.type === "transfer"
-                                    ? "#3B82F6"
+                                    ? theme.colors.info
                                     : theme.colors.primary,
                             },
                           ]}
@@ -455,11 +355,11 @@ export function SubscriptionsList() {
                         <View
                           style={[
                             styles.pausedBadge,
-                            { backgroundColor: "rgba(239, 68, 68, 0.15)" },
+                            { backgroundColor: surfaces.wash(theme.colors.destructive) },
                           ]}
                         >
                           <Text
-                            style={[styles.pausedBadgeText, { color: "#EF4444" }]}
+                            style={[styles.pausedBadgeText, { color: theme.colors.destructive }]}
                           >
                             OVERDUE
                           </Text>
@@ -488,13 +388,13 @@ export function SubscriptionsList() {
                         <View
                           style={[
                             styles.pausedBadge,
-                            { backgroundColor: "rgba(16, 185, 129, 0.15)" },
+                            { backgroundColor: surfaces.wash(theme.colors.success) },
                           ]}
                         >
                           <Text
                             style={[
                               styles.pausedBadgeText,
-                              { color: "#059669" },
+                              { color: theme.colors.success },
                             ]}
                           >
                             DETECTED
@@ -530,13 +430,13 @@ export function SubscriptionsList() {
                       instruction rather than needing its own button.
                     */}
                     {subscriptionNeedsAccount(sub) && !sub.isCompleted ? (
-                      <Text style={[styles.subMeta, { color: "#EF4444" }]}>
+                      <Text style={[styles.subMeta, { color: theme.colors.destructive }]}>
                         {sub.type === "transfer"
                           ? "Needs both accounts before it can post"
                           : "Needs an account before it can post"}
                       </Text>
                     ) : null}
-                  </View>
+                  </Pressable>
 
                   <View style={{ alignItems: "flex-end", gap: 6 }}>
                     <Amount
@@ -555,12 +455,12 @@ export function SubscriptionsList() {
                         variant="outline"
                         size="sm"
                         haptic={false}
-                        onPress={(e) => {
-                          e.stopPropagation();
+                        onPress={() => {
                           haptic.selection().catch(() => undefined);
                           toggleActive(sub.id!, sub.isActive);
                         }}
                         style={styles.pauseBtn}
+                        accessibilityLabel={`${sub.isActive ? "Pause" : "Resume"} ${sub.name}`}
                       >
                         {sub.isActive ? (
                           <Pause
@@ -588,11 +488,15 @@ export function SubscriptionsList() {
                 </View>
 
                 {/* Sub Bottom Timeline / Renewal Row */}
-                <View
-                  style={[
+                <Pressable
+                  onPress={() => handleOpenEdit(sub)}
+                  style={({ pressed }) => [
                     styles.subBottomRow,
-                    { borderTopColor: theme.colors.border },
+                    { borderTopColor: theme.colors.outlineVariant },
+                    pressed && { opacity: 0.8 },
                   ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit ${sub.name} schedule`}
                 >
                   <View style={styles.renewalRow}>
                     <Calendar
@@ -607,7 +511,10 @@ export function SubscriptionsList() {
                     >
                       {sub.isCompleted
                         ? "Term Completed"
-                        : formatSubscriptionSchedule(sub, renewal.dateStr)}
+                        : formatSubscriptionSchedule(
+                            sub,
+                            formatDisplayDate(renewal.dateStr, settings.dateFormat)
+                          )}
                     </Text>
                   </View>
 
@@ -621,8 +528,8 @@ export function SubscriptionsList() {
                       Ends {sub.endMonth}/{sub.endYear}
                     </Text>
                   ) : null}
-                </View>
-              </Pressable>
+                </Pressable>
+              </View>
             );
           })}
         </View>
@@ -644,6 +551,17 @@ export function SubscriptionsList() {
 }
 
 const styles = StyleSheet.create({
+  heroTiles: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 14,
+  },
+  heroTile: {
+    flexGrow: 1,
+    flexBasis: "30%",
+    minWidth: 90,
+  },
   dueStrip: {
     marginTop: 14,
     paddingTop: 12,
@@ -667,17 +585,6 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
     alignItems: "center",
   },
-  heroCard: {
-    borderRadius: 24,
-    borderWidth: 1,
-    padding: 20,
-  },
-  heroHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
   heroSubtitle: {
     fontSize: 11,
     fontWeight: "800",
@@ -694,25 +601,6 @@ const styles = StyleSheet.create({
   addBtnText: {
     fontSize: 12,
     fontWeight: "700",
-  },
-  breakdownRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 16,
-  },
-  breakdownItem: {
-    flex: 1,
-    gap: 2,
-  },
-  breakdownLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  breakdownDivider: {
-    width: 1,
-    height: 28,
-    marginHorizontal: 12,
   },
   filterRow: {
     flexDirection: "row",

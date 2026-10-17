@@ -1,31 +1,20 @@
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { UserRound } from "lucide-react-native";
 
-import { ACCOUNT_GREEN } from "@/components/accounts/accountScreenTheme";
-import { Amount } from "@/components/common/Amount";
-import { haptic } from "@/lib/haptics";
+import { DebtCard } from "@/components/common/DebtCard";
 import { useSettings } from "@/providers/SettingsProvider";
-import type { Receivable, ReceivableStatus } from "@/shared/types/receivable";
+import type { Receivable } from "@/shared/types/receivable";
 import {
   PERSON_TYPE_LABELS,
   RECEIVABLE_STATUS_LABELS,
 } from "@/shared/types/receivable";
 import { formatDisplayDate } from "@/shared/utils/dateDisplay";
+import { debtStatusTone, settledPercent } from "@/shared/utils/debtPresentation";
 import {
   describeInterest,
   type ReceivableSummary,
 } from "@/shared/utils/receivableMath";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces, withAlpha } from "@/theme/surfaces";
-import { themeUsesDarkPalette } from "@/theme/tokens";
-
-const STATUS_COLORS: Record<ReceivableStatus, string> = {
-  ACTIVE: "#3B82F6",
-  PARTIALLY_SETTLED: "#F59E0B",
-  FULLY_SETTLED: "#10B981",
-  OVERDUE: "#EF4444",
-  CANCELLED: "#6B7280",
-};
 
 export interface ReceivableCardProps {
   receivable: Receivable;
@@ -35,6 +24,12 @@ export interface ReceivableCardProps {
   onRecordRepayment: () => void;
 }
 
+/**
+ * One money-lent entry (SPENDLY-536), drawn by the shared `DebtCard`. Same
+ * props and figures as before. Amounts now respect hidden-amounts mode (the old
+ * card's `Amount`s were not ghostable), and the repayment action is a sibling
+ * of the card body rather than a pressable nested inside it.
+ */
 export function ReceivableCard({
   receivable,
   summary,
@@ -42,234 +37,59 @@ export function ReceivableCard({
   onPress,
   onRecordRepayment,
 }: ReceivableCardProps) {
-  const { theme, themeName } = useTheme();
-  const surfaces = useSurfaces();
+  const { theme } = useTheme();
   const { settings } = useSettings();
-  const isDark = themeUsesDarkPalette(themeName);
-
-  const statusColor = STATUS_COLORS[summary.status];
   // Measured against principal plus accrued interest, or the bar would read
   // 100% while interest was still owed (SPENDLY-160).
   const collectable = summary.originalAmount + summary.interestAccrued;
-  const receivedRatio =
-    collectable > 0 ? Math.min(1, summary.totalReceived / collectable) : 0;
+  const receivedPct = settledPercent(summary.totalReceived, collectable);
   // Nothing left to collect on a settled or cancelled receivable.
   const closed =
     summary.status === "FULLY_SETTLED" || summary.status === "CANCELLED";
 
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.card,
+    <DebtCard
+      icon={<UserRound size={17} color={theme.colors.info} strokeWidth={2.2} />}
+      tint={theme.colors.info}
+      title={receivable.personName}
+      meta={
+        PERSON_TYPE_LABELS[receivable.personType] +
+        (summary.interestAccrued > 0 ? ` · ${describeInterest(receivable)}` : "")
+      }
+      status={{
+        word: RECEIVABLE_STATUS_LABELS[summary.status],
+        tone: debtStatusTone(summary.status),
+      }}
+      progress={{ pct: receivedPct, label: `${Math.round(receivedPct)}% received back` }}
+      figures={[
         {
-          backgroundColor: theme.colors.card,
-          borderColor: theme.colors.border,
-          opacity: pressed ? 0.85 : 1,
+          label: "Outstanding",
+          value: summary.outstandingAmount,
+          tone: summary.status === "OVERDUE" ? "negative" : "default",
         },
+        { label: "Original", value: summary.originalAmount, tone: "muted" },
+        { label: "Received", value: summary.totalReceived, tone: "positive" },
       ]}
-      accessibilityRole="button"
+      due={
+        receivable.dueDate
+          ? {
+              text: `${summary.isOverdue ? "Was due" : "Due"} ${formatDisplayDate(receivable.dueDate, settings.dateFormat)}`,
+              overdue: summary.isOverdue,
+            }
+          : null
+      }
+      currency={currency}
+      onPress={onPress}
       accessibilityLabel={`Money lent to ${receivable.personName}`}
-    >
-      <View style={styles.topRow}>
-        <View style={styles.identity}>
-          <Text
-            style={[styles.personName, { color: theme.colors.foreground }]}
-            numberOfLines={1}
-          >
-            {receivable.personName}
-          </Text>
-          <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
-            {PERSON_TYPE_LABELS[receivable.personType]}
-            {summary.interestAccrued > 0 ? ` · ${describeInterest(receivable)}` : ""}
-            {receivable.purpose ? ` · ${receivable.purpose}` : ""}
-          </Text>
-        </View>
-
-        <View
-          style={[styles.statusPill, { backgroundColor: withAlpha(statusColor, 0.13) }]}
-        >
-          <Text style={[styles.statusText, { color: statusColor }]}>
-            {RECEIVABLE_STATUS_LABELS[summary.status]}
-          </Text>
-        </View>
-      </View>
-
-      <View
-        style={[
-          styles.track,
-          {
-            backgroundColor: surfaces.track,
-          },
-        ]}
-      >
-        <View
-          style={[
-            styles.fill,
-            {
-              width: `${receivedRatio * 100}%`,
-              backgroundColor: statusColor,
-            },
-          ]}
-        />
-      </View>
-
-      <View style={styles.footerRow}>
-        <View>
-          <Text style={[styles.label, { color: theme.colors.mutedForeground }]}>
-            OUTSTANDING
-          </Text>
-          <Amount
-            value={summary.outstandingAmount}
-            currency={currency}
-            style={{
-              fontSize: 15,
-              fontWeight: "800",
-              color: theme.colors.foreground,
-            }}
-          />
-        </View>
-
-        <View style={{ alignItems: "center" }}>
-          <Text style={[styles.label, { color: theme.colors.mutedForeground }]}>
-            ORIGINAL
-          </Text>
-          <Amount
-            value={summary.originalAmount}
-            currency={currency}
-            style={{
-              fontSize: 15,
-              fontWeight: "800",
-              color: theme.colors.mutedForeground,
-            }}
-          />
-        </View>
-
-        <View style={{ alignItems: "flex-end" }}>
-          <Text style={[styles.label, { color: theme.colors.mutedForeground }]}>
-            RECEIVED
-          </Text>
-          <Amount
-            value={summary.totalReceived}
-            currency={currency}
-            style={{
-              fontSize: 15,
-              fontWeight: "800",
-              color: "#10B981",
-            }}
-          />
-        </View>
-      </View>
-
-      {receivable.dueDate ? (
-        <Text style={[styles.dueDate, { color: theme.colors.mutedForeground }]}>
-          {summary.isOverdue ? "Was due " : "Due "}
-          {formatDisplayDate(receivable.dueDate, settings.dateFormat)}
-        </Text>
-      ) : null}
-
-      {closed ? null : (
-        <Pressable
-          onPress={(event) => {
-            // The card itself opens the detail view; don't do both.
-            event.stopPropagation();
-            void haptic.selection();
-            onRecordRepayment();
-          }}
-          style={({ pressed }) => [
-            styles.repayBtn,
-            {
-              borderColor: isDark ? ACCOUNT_GREEN : theme.colors.success,
-              opacity: pressed ? 0.75 : 1,
-            },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel={`Record repayment from ${receivable.personName}`}
-        >
-          <Text
-            style={[
-              styles.repayLabel,
-              { color: isDark ? ACCOUNT_GREEN : theme.colors.success },
-            ]}
-          >
-            Record Repayment
-          </Text>
-        </Pressable>
-      )}
-    </Pressable>
+      action={
+        closed
+          ? null
+          : {
+              label: "Record repayment",
+              accessibilityLabel: `Record repayment from ${receivable.personName}`,
+              onPress: onRecordRepayment,
+            }
+      }
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    borderWidth: 1,
-    borderRadius: 18,
-    borderCurve: "continuous",
-    padding: 16,
-    gap: 12,
-  },
-  dueDate: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  repayBtn: {
-    minHeight: 40,
-    borderRadius: 12,
-    borderCurve: "continuous",
-    borderWidth: 1.5,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  repayLabel: {
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  topRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  identity: {
-    flex: 1,
-    gap: 2,
-  },
-  personName: {
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  meta: {
-    fontSize: 11,
-  },
-  statusPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderCurve: "continuous",
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.3,
-  },
-  track: {
-    height: 6,
-    borderRadius: 3,
-    borderCurve: "continuous",
-    overflow: "hidden",
-  },
-  fill: {
-    height: "100%",
-    borderRadius: 3,
-  },
-  footerRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-  },
-  label: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-});
