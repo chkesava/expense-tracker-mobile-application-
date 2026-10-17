@@ -121,11 +121,14 @@ export function useUnifiedNetWorth(
   const { investments, loading: investmentsLoading } = useInvestments({
     enabled: secondaryReady,
   });
+  // SPENDLY-501: deferred with the other secondary sources (counted in
+  // `secondaryLoading` via !secondaryReady). The cash ledger stays unbounded:
+  // the authoritative cash balance folds every entry (KAN-77).
   const {
     holdings,
     cashBalance: investmentCashBalance,
     loading: portfolioLoading,
-  } = usePortfolio({ includeSecondary: false });
+  } = usePortfolio({ enabled: secondaryReady, includeSecondary: false });
   // Profile-gated: a user with no EPF profile pays for one small doc listener
   // and nothing else, so the dashboard is unchanged for them.
   const {
