@@ -19,6 +19,28 @@ function createdMillis(value: unknown): number {
   return 0;
 }
 
+/** Newest first: date, then created time. */
+function newestFirst(
+  a: { date: string; createdMs: number },
+  b: { date: string; createdMs: number }
+): number {
+  return a.date === b.date ? b.createdMs - a.createdMs : a.date < b.date ? 1 : -1;
+}
+
+/**
+ * SPENDLY-501 — the newest `limit` live expenses, in the same order the old
+ * dedicated `orderBy(date desc, createdAt desc) limit(N)` listener returned.
+ * Takes rows FinanceDataProvider already holds, so the dashboard needs no
+ * second `expenses` listener.
+ */
+export function newestLiveExpenses(expenses: readonly Expense[], limit: number): Expense[] {
+  return activeLedgerRows(expenses)
+    .map((row) => ({ row, date: row.date ?? "", createdMs: createdMillis(row.createdAt) }))
+    .sort(newestFirst)
+    .slice(0, Math.max(0, limit))
+    .map(({ row }) => row);
+}
+
 /**
  * SPENDLY-533 — the Dashboard's "Recent activity": the newest live expenses
  * and incomes together, newest first (date, then created time — the same order
@@ -49,6 +71,6 @@ export function mergeRecentActivity(
     })),
   ];
 
-  items.sort((a, b) => (a.date === b.date ? b.createdMs - a.createdMs : a.date < b.date ? 1 : -1));
+  items.sort(newestFirst);
   return items.slice(0, Math.max(0, limit));
 }

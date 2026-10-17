@@ -29,8 +29,8 @@ import { sampleScrollFps, perfEvent, perfMark } from "@/lib/perf";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useDashboardCashFlow } from "@/hooks/useDashboardCashFlow";
+import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
-import { useRecentExpenses } from "@/hooks/useRecentExpenses";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGlobalMonth, useModalActions } from "@/providers/ModalProvider";
@@ -47,8 +47,7 @@ import {
   type DashboardWidgetId,
 } from "@/shared/utils/dashboardWidgets";
 import { currentMonthKey, formatDateKey } from "@/shared/utils/dates";
-import { activeLedgerRows } from "@/shared/utils/ledgerRow";
-import { mergeRecentActivity } from "@/shared/utils/recentActivity";
+import { mergeRecentActivity, newestLiveExpenses } from "@/shared/utils/recentActivity";
 import {
   computeSpendlyBudget,
   remainingCommittedThisMonth,
@@ -120,12 +119,12 @@ export default function DashboardScreen() {
     () => cashFlowSummaries.find((s) => s.period === previousMonth) ?? null,
     [cashFlowSummaries, previousMonth]
   );
-  const { expenses: recentFeed, loading: recentLoading } = useRecentExpenses(5);
-  // Incomes are already loaded app-wide by FinanceDataProvider — no new read.
+  // SPENDLY-501: expenses and incomes are already loaded app-wide by
+  // FinanceDataProvider, so the recent feed is derived from them instead of a
+  // second `expenses` listener. Soft-deleted rows never show (SPENDLY-533).
+  const { expenses: ledgerExpenses, loading: recentLoading } = useExpenses();
   const { incomes } = useIncomes();
-  // SPENDLY-533: soft-deleted rows keep their docs (`deletedAt`), so the
-  // limit-N feed can include them; nothing on the dashboard may count them.
-  const recentExpenses = useMemo(() => activeLedgerRows(recentFeed), [recentFeed]);
+  const recentExpenses = useMemo(() => newestLiveExpenses(ledgerExpenses, 5), [ledgerExpenses]);
   const recentActivity = useMemo(
     () => mergeRecentActivity(recentExpenses, incomes, 5),
     [recentExpenses, incomes]

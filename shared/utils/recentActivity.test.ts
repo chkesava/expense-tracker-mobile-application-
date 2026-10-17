@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Expense, Income } from "../types/expense";
-import { mergeRecentActivity } from "./recentActivity";
+import { mergeRecentActivity, newestLiveExpenses } from "./recentActivity";
 
 const expense = (id: string, date: string, createdAt: unknown, extra: Partial<Expense> = {}): Expense =>
   ({ id, amount: 100, category: "Food & Groceries", date, month: date.slice(0, 7), createdAt, ...extra }) as Expense;
@@ -50,5 +50,23 @@ describe("mergeRecentActivity", () => {
 
   it("handles empty input", () => {
     expect(mergeRecentActivity([], [], 5)).toEqual([]);
+  });
+});
+
+describe("newestLiveExpenses (SPENDLY-501)", () => {
+  it("returns the newest live rows by date, then created time", () => {
+    const rows = [
+      expense("old", "2026-10-01", 1),
+      expense("deleted", "2026-10-20", 9, { deletedAt: "2026-10-20T00:00:00Z" } as Partial<Expense>),
+      expense("sameDayEarly", "2026-10-15", 100),
+      expense("sameDayLate", "2026-10-15", 200),
+      expense("newest", "2026-10-16", 50),
+    ];
+    expect(newestLiveExpenses(rows, 3).map((r) => r.id)).toEqual(["newest", "sameDayLate", "sameDayEarly"]);
+  });
+
+  it("handles an empty list and a non-positive limit", () => {
+    expect(newestLiveExpenses([], 5)).toEqual([]);
+    expect(newestLiveExpenses([expense("a", "2026-10-01", 1)], 0)).toEqual([]);
   });
 });
