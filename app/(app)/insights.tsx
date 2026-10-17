@@ -10,7 +10,7 @@ import {
   TrendingUp,
 } from "lucide-react-native";
 
-import { insightAccents } from "@/components/analytics/insightsTheme";
+import { useInsightAccents } from "@/components/analytics/insightsTheme";
 import { PageHeader, type PageHeaderTab } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { MonthlyAnalyticsView } from "@/components/analytics/MonthlyAnalyticsView";
@@ -24,16 +24,15 @@ import { haptic } from "@/lib/haptics";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { withAlpha } from "@/theme/surfaces";
 
 export type InsightsTab = "analytics" | "yearly" | "search" | "advisor";
 
 const INSIGHTS_TABS: InsightsTab[] = ["analytics", "yearly", "search", "advisor"];
 
 export default function InsightsScreen() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const accents = insightAccents(isDark);
+  const { theme } = useTheme();
+  const accents = useInsightAccents();
   const { settings: system } = useSystemSettings();
   const params = useLocalSearchParams<{ tab?: string; q?: string }>();
 
@@ -52,7 +51,7 @@ export default function InsightsScreen() {
   }, [params.tab]);
 
   const tabIconColor = (tab: InsightsTab) =>
-    activeTab === tab ? theme.colors.success : theme.colors.mutedForeground;
+    activeTab === tab ? theme.colors.primary : theme.colors.mutedForeground;
 
   const tabs: PageHeaderTab[] = [
     {
@@ -81,11 +80,9 @@ export default function InsightsScreen() {
     <PageHeader
       title="Insights Hub"
       subtitle="Analytics, Reports & Discoveries"
-      icon={<BarChart3 size={22} color={accents.pink} strokeWidth={2.4} />}
-      iconBackgroundColor={accents.pinkDim}
-      iconBorderColor={
-        isDark ? "rgba(244, 63, 94, 0.34)" : "rgba(220, 38, 38, 0.2)"
-      }
+      icon={<BarChart3 size={22} color={accents.accent} strokeWidth={2.4} />}
+      iconBackgroundColor={accents.accentDim}
+      iconBorderColor={withAlpha(accents.accent, 0.3)}
       activeTab={activeTab}
       onTabChange={(tab) => setActiveTab(tab as InsightsTab)}
       tabs={tabs}
@@ -102,15 +99,13 @@ export default function InsightsScreen() {
             style={({ pressed }) => [
               styles.exportBtn,
               {
-                backgroundColor: accents.greenDim,
-                borderColor: isDark
-                  ? "rgba(74, 222, 128, 0.34)"
-                  : "rgba(22, 163, 74, 0.24)",
+                backgroundColor: accents.positiveDim,
+                borderColor: withAlpha(accents.positive, 0.3),
                 opacity: pressed ? 0.7 : 1,
               },
             ]}
           >
-            <Download size={18} color={accents.green} strokeWidth={2.4} />
+            <Download size={18} color={accents.positive} strokeWidth={2.4} />
           </Pressable>
         ) : undefined
       }

@@ -4,12 +4,11 @@ import { ShoppingBag } from "lucide-react-native";
 
 import { AnalyticsCard } from "@/components/analytics/shared/AnalyticsCard";
 import {
-  insightAccents,
-  insightSurface,
+  useInsightAccents,
+  useInsightSurface,
 } from "@/components/analytics/insightsTheme";
 import { Amount } from "@/components/common/Amount";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export interface RecurringMerchantRow {
   note: string;
@@ -30,15 +29,14 @@ export function RecurringMerchantsCard({
   merchants,
   currency,
 }: RecurringMerchantsCardProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const surface = insightSurface(isDark);
-  const accents = insightAccents(isDark);
+  const { theme } = useTheme();
+  const surface = useInsightSurface();
+  const accents = useInsightAccents();
 
   return (
     <AnalyticsCard
       title="Top Recurring Merchants & Notes"
-      icon={<ShoppingBag size={16} color={accents.green} strokeWidth={2.4} />}
+      icon={<ShoppingBag size={16} color={accents.positive} strokeWidth={2.4} />}
       gap={6}
     >
       {merchants.length === 0 ? (

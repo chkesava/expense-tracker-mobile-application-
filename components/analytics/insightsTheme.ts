@@ -5,10 +5,14 @@
  * (see `components/accounts/accountScreenTheme.ts`) so the Insights dashboard
  * reads as the same Vault product rather than a second design language.
  */
+import { useMemo } from "react";
+
 import {
   ACCOUNT_GREEN,
   CARD_ORANGE,
 } from "@/components/accounts/accountScreenTheme";
+import { useTheme } from "@/theme/ThemeProvider";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 
 /** Emerald — primary/positive accent. */
 export const INSIGHT_GREEN = ACCOUNT_GREEN;
@@ -80,4 +84,71 @@ export function insightAccents(isDark: boolean): InsightAccents {
     greenDim: isDark ? "rgba(74, 222, 128, 0.14)" : "rgba(22, 163, 74, 0.1)",
     pinkDim: isDark ? "rgba(244, 63, 94, 0.16)" : "rgba(220, 38, 38, 0.08)",
   };
+}
+
+// ---------------------------------------------------------------------------
+// SPENDLY-538 — theme-driven Insights tokens.
+//
+// The functions above hardcode the old emerald/rose palette regardless of the
+// active theme, and use rose for plain spending. These hooks derive the same
+// roles from the theme instead, with semantic names: spending is `spend` (the
+// info colour, as on the dashboard), and red is reserved for `negative`.
+// Analytics files move onto them story by story (SPENDLY-538..540); the
+// functions above go once nothing imports them.
+// ---------------------------------------------------------------------------
+
+export type InsightThemeAccents = {
+  /** Money in, savings, good pace. */
+  positive: string;
+  /** Plain spending — neutral, never "bad" by colour alone. */
+  spend: string;
+  /** Overspend, losses, alerts. */
+  negative: string;
+  /** Secondary highlight (weekend split, budgets). */
+  highlight: string;
+  /** Interactive / brand accent (links, selected state). */
+  accent: string;
+  positiveDim: string;
+  spendDim: string;
+  negativeDim: string;
+  accentDim: string;
+};
+
+export function useInsightAccents(): InsightThemeAccents {
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
+  return useMemo(
+    () => ({
+      positive: theme.colors.success,
+      spend: theme.colors.info,
+      negative: theme.colors.destructive,
+      highlight: theme.colors.warning,
+      accent: theme.colors.primary,
+      positiveDim: surfaces.wash(theme.colors.success),
+      spendDim: surfaces.wash(theme.colors.info),
+      negativeDim: surfaces.wash(theme.colors.destructive),
+      accentDim: surfaces.wash(theme.colors.primary),
+    }),
+    [theme, surfaces]
+  );
+}
+
+export function useInsightSurface(): InsightSurface {
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
+  return useMemo(
+    () => ({
+      card: theme.colors.card,
+      border: theme.colors.outlineVariant,
+      wash: [
+        withAlpha(theme.colors.primary, surfaces.isDark ? 0.06 : 0.035),
+        withAlpha(theme.colors.primary, 0),
+        theme.colors.card,
+      ] as const,
+      inset: surfaces.tile,
+      insetBorder: theme.colors.outlineVariant,
+      hairline: surfaces.divider,
+    }),
+    [theme, surfaces]
+  );
 }

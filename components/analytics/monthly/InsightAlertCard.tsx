@@ -9,9 +9,10 @@ import {
   Target,
 } from "lucide-react-native";
 
-import { insightSurface } from "@/components/analytics/insightsTheme";
+import { useInsightSurface } from "@/components/analytics/insightsTheme";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
+import { withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export type InsightAlertType = "success" | "warning" | "danger" | "neutral";
@@ -38,29 +39,17 @@ export function InsightAlertCard({
 }: InsightAlertCardProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const surface = insightSurface(isDark);
+  const surface = useInsightSurface();
 
+  // SPENDLY-538: tones from the theme instead of fixed hexes.
   const accent =
     type === "danger"
-      ? isDark
-        ? "#FB7185"
-        : "#DC2626"
+      ? theme.colors.destructive
       : type === "warning"
-        ? "#FBBF24"
+        ? theme.colors.warning
         : type === "success"
-          ? isDark
-            ? "#4ADE80"
-            : "#16A34A"
+          ? theme.colors.success
           : theme.colors.mutedForeground;
-
-  const tintRgb =
-    type === "danger"
-      ? "244, 63, 94"
-      : type === "warning"
-        ? "251, 191, 36"
-        : type === "success"
-          ? "74, 222, 128"
-          : "148, 163, 184";
 
   const Icon =
     type === "danger"
@@ -76,8 +65,8 @@ export function InsightAlertCard({
       <LinearGradient
         pointerEvents="none"
         colors={[
-          `rgba(${tintRgb}, ${isDark ? 0.16 : 0.09})`,
-          `rgba(${tintRgb}, ${isDark ? 0.05 : 0.03})`,
+          withAlpha(accent, isDark ? 0.16 : 0.09),
+          withAlpha(accent, isDark ? 0.05 : 0.03),
         ]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -88,8 +77,8 @@ export function InsightAlertCard({
         style={[
           styles.iconBox,
           {
-            backgroundColor: `rgba(${tintRgb}, ${isDark ? 0.16 : 0.1})`,
-            borderColor: `rgba(${tintRgb}, ${isDark ? 0.34 : 0.2})`,
+            backgroundColor: withAlpha(accent, isDark ? 0.16 : 0.1),
+            borderColor: withAlpha(accent, isDark ? 0.34 : 0.2),
           },
         ]}
       >
@@ -122,7 +111,7 @@ export function InsightAlertCard({
     styles.card,
     {
       backgroundColor: surface.card,
-      borderColor: `rgba(${tintRgb}, ${isDark ? 0.38 : 0.24})`,
+      borderColor: withAlpha(accent, isDark ? 0.38 : 0.24),
     },
   ];
 

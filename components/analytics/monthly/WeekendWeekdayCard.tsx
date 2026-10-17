@@ -3,11 +3,10 @@ import { StyleSheet, Text, View } from "react-native";
 import { CalendarRange } from "lucide-react-native";
 
 import { AnalyticsCard } from "@/components/analytics/shared/AnalyticsCard";
-import { insightAccents } from "@/components/analytics/insightsTheme";
+import { useInsightAccents } from "@/components/analytics/insightsTheme";
 import { Amount } from "@/components/common/Amount";
 import { DistributionBar } from "@/components/charts/DistributionBar";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export interface WeekendWeekdayCardProps {
   weekday: number;
@@ -20,19 +19,19 @@ export function WeekendWeekdayCard({
   weekend,
   currency,
 }: WeekendWeekdayCardProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const accents = insightAccents(isDark);
+  const { theme } = useTheme();
+  const accents = useInsightAccents();
 
   const total = weekday + weekend;
   const weekdayPercent = total > 0 ? Math.round((weekday / total) * 100) : 0;
   const weekendPercent = total > 0 ? 100 - weekdayPercent : 0;
-  const weekdayColor = isDark ? "#F43F5E" : "#DC2626";
+  // SPENDLY-538: spending is the neutral spend colour, not "bad" red.
+  const weekdayColor = accents.spend;
 
   return (
     <AnalyticsCard
       title="Weekend vs Weekday"
-      icon={<CalendarRange size={16} color={accents.amber} strokeWidth={2.4} />}
+      icon={<CalendarRange size={16} color={accents.highlight} strokeWidth={2.4} />}
       gap={12}
     >
       {total > 0 ? (
@@ -40,7 +39,7 @@ export function WeekendWeekdayCard({
           <DistributionBar
             segments={[
               { label: "Weekday", value: weekday, color: weekdayColor },
-              { label: "Weekend", value: weekend, color: accents.amber },
+              { label: "Weekend", value: weekend, color: accents.highlight },
             ]}
             height={10}
             showLegend={false}
@@ -57,7 +56,7 @@ export function WeekendWeekdayCard({
               </Text>
             </View>
             <View style={[styles.legendItem, styles.legendItemEnd]}>
-              <View style={[styles.dot, { backgroundColor: accents.amber }]} />
+              <View style={[styles.dot, { backgroundColor: accents.highlight }]} />
               <Text
                 style={[styles.legendLabel, { color: theme.colors.mutedForeground }]}
                 numberOfLines={1}
