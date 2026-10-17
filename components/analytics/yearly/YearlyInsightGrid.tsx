@@ -2,18 +2,19 @@ import React, { useMemo, type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import {
-  insightAccents,
-  insightSurface,
+  useInsightAccents,
+  useInsightSurface,
 } from "@/components/analytics/insightsTheme";
 import { useTheme } from "@/theme/ThemeProvider";
+import { withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export interface YearlyInsightTile {
   id: string;
   label: string;
   icon: ReactNode;
-  /** Accent used for the icon chip. */
-  tintRgb: string;
+  /** Accent colour used for the icon chip. */
+  tint: string;
   /** Headline — an already-formatted value or an `Amount` element. */
   value: ReactNode;
   /** Optional supporting line, e.g. an amount under a month name. */
@@ -27,7 +28,7 @@ export interface YearlyInsightTile {
 export function YearlyInsightGrid({ tiles }: { tiles: YearlyInsightTile[] }) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const surface = insightSurface(isDark);
+  const surface = useInsightSurface();
 
   if (tiles.length === 0) return null;
 
@@ -53,8 +54,8 @@ export function YearlyInsightGrid({ tiles }: { tiles: YearlyInsightTile[] }) {
               style={[
                 styles.iconBox,
                 {
-                  backgroundColor: `rgba(${tile.tintRgb}, ${isDark ? 0.15 : 0.09})`,
-                  borderColor: `rgba(${tile.tintRgb}, ${isDark ? 0.3 : 0.18})`,
+                  backgroundColor: withAlpha(tile.tint, isDark ? 0.15 : 0.09),
+                  borderColor: withAlpha(tile.tint, isDark ? 0.3 : 0.18),
                 },
               ]}
             >
@@ -77,18 +78,17 @@ export function YearlyInsightGrid({ tiles }: { tiles: YearlyInsightTile[] }) {
 
 /** Shared text style for a tile headline rendered as plain text. */
 export function useYearlyTileTextStyles() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const accents = insightAccents(isDark);
+  const { theme } = useTheme();
+  const accents = useInsightAccents();
   // Stable identity so callers can memoise tile lists against it.
   return useMemo(
     () => ({
       value: { ...styles.value, color: theme.colors.foreground },
       sub: { ...styles.sub, color: theme.colors.mutedForeground },
-      positive: { ...styles.value, color: accents.green },
-      negative: { ...styles.value, color: accents.pink },
+      positive: { ...styles.value, color: accents.positive },
+      negative: { ...styles.value, color: accents.negative },
     }),
-    [accents.green, accents.pink, theme.colors.foreground, theme.colors.mutedForeground]
+    [accents.positive, accents.negative, theme.colors.foreground, theme.colors.mutedForeground]
   );
 }
 

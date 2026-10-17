@@ -5,11 +5,9 @@ import { ArrowDownLeft, ArrowUpRight, Plus } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
-import { SkeletonCard } from "@/components/common/Skeleton";
 import { EpfTransferDetailModal } from "@/components/epf/EpfTransferDetailModal";
 import { EpfTransferFormModal } from "@/components/epf/EpfTransferFormModal";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { useSpendlyBottomClearance } from "@/components/layout/useSpendlyBottomClearance";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
@@ -22,10 +20,14 @@ import {
   transferStatusMeta,
   transfersForEstablishment,
 } from "@/shared/features/epf/utils/transfers";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 import { statusToneKey } from "@/shared/features/epf/utils/present";
 import { combineEpfLoad } from "@/shared/features/epf/utils/loadState";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { Section } from "@/components/dashboard/primitives";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 
 /**
  * Transfers touching one establishment — KAN-69.
@@ -77,7 +79,10 @@ export function EpfTransfersList({
   const [formOpen, setFormOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
 
-  const money = useCallback((value: number) => formatAmount(value, currency), [currency]);
+  // SPENDLY-544: ghost-aware; EPF ignored ghost mode almost everywhere.
+  const money = useGhostMoney(currency);
+  const { settings: displaySettings } = useSettings();
+  const date = (value: string) => formatDisplayDate(value, displaySettings?.dateFormat);
 
   const rows = useMemo(
     () => transfersForEstablishment(transfers, establishment.id),
@@ -112,8 +117,8 @@ export function EpfTransfersList({
   if (load.loading) {
     return (
       <View style={styles.container}>
-        <SkeletonCard />
-        <SkeletonCard />
+        <DashboardSkeleton variant="section" rows={3} />
+        <DashboardSkeleton variant="section" rows={2} />
       </View>
     );
   }
@@ -130,7 +135,7 @@ export function EpfTransfersList({
 
   const header = (
     <View style={styles.header}>
-      <Card>
+      <Section>
         <Text style={[styles.balanceLabel, { color: theme.colors.mutedForeground }]}>
           Balance at {establishment.employerName}
         </Text>
@@ -141,7 +146,7 @@ export function EpfTransfersList({
           {money(summary.transferredIn)} in · {money(summary.transferredOut)} out
           {summary.pending > 0 ? ` · ${summary.pending} pending` : ""}
         </Text>
-      </Card>
+      </Section>
 
       <Button variant="secondary" size="sm" onPress={() => setFormOpen(true)}>
         <View style={styles.addLabel}>
@@ -238,7 +243,7 @@ export function EpfTransfersList({
                     : `From ${nameFor(item.sourceEstablishmentId)}`}
                 </Text>
                 <Text style={[styles.rowMeta, { color: theme.colors.mutedForeground }]}>
-                  {item.date} · {meta.label}
+                  {date(item.date)} · {meta.label}
                 </Text>
               </View>
 

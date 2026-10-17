@@ -26,10 +26,12 @@ import { useNetwork } from "@/providers/NetworkProvider";
 import type { FeeRecord } from "@/shared/types/fee";
 import { buildFeeDetail, feeDetailHref, feeProvenanceText, maskedAccountLabel } from "@/shared/utils/feeDetail";
 import { describeHistoryEntry, feeRecordTitle, feeRoleLabel } from "@/shared/utils/feeReviewForm";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { transactionHref } from "@/shared/utils/transactionRef";
 import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 
 /**
  * Fee detail (SPENDLY-317): why a fee appears, what it is made of, which
@@ -60,7 +62,9 @@ export default function FeeDetailScreen() {
   const recordSignals = useMemo(() => (key ? signalsForRecord(signals.active, key) : []), [key, signals.active]);
   const openSignal = openSignalId ? recordSignals.find((s) => s.id === openSignalId) ?? null : null;
   const accountNames = useMemo(() => new Map(accounts.map((a) => [a.id, a.displayName || a.name] as const)), [accounts]);
-  const money = (v: number) => formatAmount(v, currency);
+  const money = useGhostMoney(currency);
+  const { settings } = useSettings();
+  const date = (value: string) => formatDisplayDate(value, settings?.dateFormat);
   const goBack = () => (router.canGoBack() ? router.back() : router.replace("/fees" as Href));
 
   const header = (
@@ -149,7 +153,7 @@ export default function FeeDetailScreen() {
         {/* Context */}
         <Section title="Where it came from">
           <View style={{ gap: theme.space.sm }}>
-            <InfoRow label="Date" value={record.source.date} />
+            <InfoRow label="Date" value={date(record.source.date)} />
             {accountLabel ? <InfoRow label="Account or card" value={accountLabel} /> : null}
             {record.source.institution ? <InfoRow label="Bank or provider" value={record.source.institution} /> : null}
             {record.source.merchant ? <InfoRow label="Description" value={record.source.merchant} /> : null}
@@ -279,13 +283,16 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 function LinkedRow({ record, currency, onPress }: { record: FeeRecord; currency: string; onPress: () => void }) {
   const { theme } = useTheme();
+  const money = useGhostMoney(currency);
+  const { settings } = useSettings();
+  const date = (value: string) => formatDisplayDate(value, settings?.dateFormat);
   const surfaces = useSurfaces();
   const credit = record.source.direction === "credit";
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${feeRoleLabel(record.role)} on ${record.source.date}, ${formatAmount(record.source.amount, currency)}`}
+      accessibilityLabel={`${feeRoleLabel(record.role)} on ${date(record.source.date)}, ${money(record.source.amount)}`}
       style={({ pressed }) => [styles.linked, { gap: theme.space.md, backgroundColor: pressed ? surfaces.tile : "transparent", borderRadius: theme.radius.md }]}
     >
       <ArrowUpRight size={16} color={theme.colors.primary} />
@@ -293,7 +300,7 @@ function LinkedRow({ record, currency, onPress }: { record: FeeRecord; currency:
         <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.medium, fontSize: theme.typography.sm }}>{feeRoleLabel(record.role)}</Text>
         <View style={[styles.row, { gap: theme.space.sm }]}>
           <FeeStatusBadge status={record.status} />
-          <Text style={{ color: theme.colors.mutedForeground, fontSize: theme.typography.xs, fontFamily: theme.fontFamily.regular }}>{record.source.date}</Text>
+          <Text style={{ color: theme.colors.mutedForeground, fontSize: theme.typography.xs, fontFamily: theme.fontFamily.regular }}>{date(record.source.date)}</Text>
         </View>
       </View>
       <Amount value={credit ? record.source.amount : -record.source.amount} currency={currency} ghostable style={{ color: credit ? theme.colors.success : theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm }} />

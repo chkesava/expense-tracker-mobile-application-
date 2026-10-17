@@ -3,10 +3,8 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { AlertTriangle, BadgeCheck, Percent } from "lucide-react-native";
 
 import { ErrorState } from "@/components/common/ErrorState";
-import { SkeletonCard } from "@/components/common/Skeleton";
 import { EpfReconcileSheet } from "@/components/epf/EpfReconcileSheet";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { useSpendlyBottomClearance } from "@/components/layout/useSpendlyBottomClearance";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
@@ -21,9 +19,13 @@ import {
 import { reconciliationHistory } from "@/shared/features/epf/utils/reconciliation";
 import { establishmentBalanceBreakdown } from "@/shared/features/epf/utils/transfers";
 import { financialYearLabel, financialYearOfMonth } from "@/shared/utils/financialYear";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 import { combineEpfLoad } from "@/shared/features/epf/utils/loadState";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { Section } from "@/components/dashboard/primitives";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 
 /**
  * Balance, interest and reconciliation for one establishment — KAN-70.
@@ -51,7 +53,10 @@ export function EpfBalanceTab({ establishment }: { establishment: EpfEstablishme
   } = useEpfInterest();
 
   const [reconcileOpen, setReconcileOpen] = useState(false);
-  const money = useCallback((value: number) => formatAmount(value, currency), [currency]);
+  // SPENDLY-544: ghost-aware; EPF ignored ghost mode almost everywhere.
+  const money = useGhostMoney(currency);
+  const { settings: displaySettings } = useSettings();
+  const date = (value: string) => formatDisplayDate(value, displaySettings?.dateFormat);
 
   // Every source, not a subset. Transfers were previously omitted from the
   // error channel, so a failed transfers listener rendered a balance silently
@@ -109,8 +114,8 @@ export function EpfBalanceTab({ establishment }: { establishment: EpfEstablishme
   if (loading) {
     return (
       <View style={styles.container}>
-        <SkeletonCard />
-        <SkeletonCard />
+        <DashboardSkeleton variant="section" rows={3} />
+        <DashboardSkeleton variant="section" rows={2} />
       </View>
     );
   }
@@ -139,7 +144,7 @@ export function EpfBalanceTab({ establishment }: { establishment: EpfEstablishme
 
   return (
     <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomClearance }]}>
-      <Card>
+      <Section>
         <Text style={[styles.totalLabel, { color: theme.colors.mutedForeground }]}>
           Balance at {establishment.employerName}
         </Text>
@@ -156,9 +161,9 @@ export function EpfBalanceTab({ establishment }: { establishment: EpfEstablishme
             : null}
           {breakdown.adjustments !== 0 ? row("Adjustments", breakdown.adjustments) : null}
         </View>
-      </Card>
+      </Section>
 
-      <Card>
+      <Section>
         <View style={styles.sectionHeader}>
           <Percent size={theme.iconSize.sm} color={theme.colors.primary} />
           <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>
@@ -209,9 +214,9 @@ export function EpfBalanceTab({ establishment }: { establishment: EpfEstablishme
             </Text>
           </View>
         ) : null}
-      </Card>
+      </Section>
 
-      <Card>
+      <Section>
         <View style={styles.sectionHeader}>
           <BadgeCheck size={theme.iconSize.sm} color={theme.colors.primary} />
           <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>
@@ -222,7 +227,7 @@ export function EpfBalanceTab({ establishment }: { establishment: EpfEstablishme
         <Text style={[styles.hint, { color: theme.colors.mutedForeground }]}>
           {history.length === 0
             ? "Everything above is simulated from what you have recorded. Check it against your passbook and record the real figure."
-            : `Last reconciled ${history[0].date}${
+            : `Last reconciled ${date(history[0].date)}${
                 history[0].adjustmentAmount === 0
                   ? " — they agreed."
                   : ` — adjusted by ${money(history[0].adjustmentAmount)}.`
@@ -244,7 +249,7 @@ export function EpfBalanceTab({ establishment }: { establishment: EpfEstablishme
               <View key={item.id} style={styles.historyRow}>
                 <View style={styles.yearText}>
                   <Text style={[styles.yearLabel, { color: theme.colors.foreground }]}>
-                    {item.date}
+                    {date(item.date)}
                   </Text>
                   <Text style={[styles.yearMeta, { color: theme.colors.mutedForeground }]}>
                     EPFO {money(item.actualBalance)} · Spendly{" "}
@@ -272,7 +277,7 @@ export function EpfBalanceTab({ establishment }: { establishment: EpfEstablishme
             ))}
           </View>
         ) : null}
-      </Card>
+      </Section>
 
       <EpfReconcileSheet
         isOpen={reconcileOpen}

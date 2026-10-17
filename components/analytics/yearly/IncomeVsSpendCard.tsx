@@ -3,10 +3,11 @@ import { StyleSheet, Text, View } from "react-native";
 import { BarChart3, TrendingDown, TrendingUp } from "lucide-react-native";
 
 import { AnalyticsCard } from "@/components/analytics/shared/AnalyticsCard";
-import { insightAccents } from "@/components/analytics/insightsTheme";
+import { useInsightAccents } from "@/components/analytics/insightsTheme";
 import { Amount } from "@/components/common/Amount";
 import { BarChart, type BarChartItem } from "@/components/charts/BarChart";
 import { useTheme } from "@/theme/ThemeProvider";
+import { withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 /** A single named month plus its amount, e.g. { label: "Aug", value: 94206 }. */
@@ -27,24 +28,23 @@ export function IncomeVsSpendCard({
 }: IncomeVsSpendCardProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const accents = insightAccents(isDark);
+  const accents = useInsightAccents();
 
-  const spendColor = isDark ? "#F43F5E" : "#DC2626";
-  const incomeColor = accents.green;
+  const spendColor = accents.spend;
+  const incomeColor = accents.positive;
 
   const highlight = (
     caption: string,
     highlightData: NonNullable<MonthHighlight>,
     color: string,
-    tintRgb: string,
     direction: "up" | "down"
   ) => (
     <View
       style={[
         styles.highlight,
         {
-          backgroundColor: `rgba(${tintRgb}, ${isDark ? 0.1 : 0.05})`,
-          borderColor: `rgba(${tintRgb}, ${isDark ? 0.26 : 0.18})`,
+          backgroundColor: withAlpha(color, isDark ? 0.1 : 0.05),
+          borderColor: withAlpha(color, isDark ? 0.26 : 0.18),
         },
       ]}
     >
@@ -79,7 +79,7 @@ export function IncomeVsSpendCard({
   return (
     <AnalyticsCard
       title="12-Month Income vs Spend"
-      icon={<BarChart3 size={16} color={accents.pink} strokeWidth={2.4} />}
+      icon={<BarChart3 size={16} color={accents.spend} strokeWidth={2.4} />}
       gap={10}
     >
       <BarChart
@@ -97,14 +97,13 @@ export function IncomeVsSpendCard({
       {peakSpend || lowestIncome ? (
         <View style={styles.highlightRow}>
           {peakSpend
-            ? highlight("Peak Spend", peakSpend, spendColor, "244, 63, 94", "up")
+            ? highlight("Peak Spend", peakSpend, spendColor, "up")
             : null}
           {lowestIncome
             ? highlight(
                 "Lowest Income",
                 lowestIncome,
                 incomeColor,
-                "74, 222, 128",
                 "down"
               )
             : null}

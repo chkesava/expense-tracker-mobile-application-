@@ -2,7 +2,6 @@ import { useCallback, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AlertTriangle, ChevronRight, CalendarClock } from "lucide-react-native";
 
-import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
@@ -17,10 +16,11 @@ import {
   isAwaitingCredit,
 } from "@/shared/features/epf/utils/monthState";
 import { wageForProjection } from "@/shared/features/epf/utils/schedule";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 import { withAlpha } from "@/theme/surfaces";
 import { monthLabel } from "@/shared/utils/monthLabel";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { Section } from "@/components/dashboard/primitives";
 
 /**
  * "This month" on the EPF tab — KAN-68.
@@ -42,7 +42,8 @@ export function EpfCurrentMonthCard({
     enabled: Boolean(establishment),
   });
 
-  const money = useCallback((value: number) => formatAmount(value, currency), [currency]);
+  // SPENDLY-544: ghost-aware; EPF ignored ghost mode almost everywhere.
+  const money = useGhostMoney(currency);
   const month = epfCurrentMonth();
 
   const latestWage = useMemo(() => wageForProjection(contributions), [contributions]);
@@ -60,7 +61,7 @@ export function EpfCurrentMonthCard({
 
   if (blocker) {
     return (
-      <Card>
+      <Section>
         <View style={styles.warningRow}>
           <AlertTriangle size={theme.iconSize.md} color={theme.colors.destructive} />
           <View style={styles.warningText}>
@@ -85,7 +86,7 @@ export function EpfCurrentMonthCard({
           </Text>
           <ChevronRight size={theme.iconSize.sm} color={theme.colors.primary} />
         </Button>
-      </Card>
+      </Section>
     );
   }
 
@@ -99,7 +100,7 @@ export function EpfCurrentMonthCard({
       : null;
 
   return (
-    <Card>
+    <Section>
       <Pressable onPress={() => onOpen(establishment)} accessibilityRole="button">
         <View style={styles.header}>
           <View style={[styles.iconBadge, { backgroundColor: withAlpha(theme.colors.primary, 0.1) }]}>
@@ -134,7 +135,7 @@ export function EpfCurrentMonthCard({
           </Text>
         )}
       </Pressable>
-    </Card>
+    </Section>
   );
 }
 

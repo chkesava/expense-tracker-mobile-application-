@@ -2,45 +2,20 @@ import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MoreVertical } from "lucide-react-native";
 
-import {
-  ACCOUNT_GREEN,
-  ACCOUNT_RED,
-} from "@/components/accounts/accountScreenTheme";
 import { Amount } from "@/components/common/Amount";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
+import { usePortfolioColors } from "@/components/portfolio/portfolioColors";
 import { haptic } from "@/lib/haptics";
 import { useSettings } from "@/providers/SettingsProvider";
-import { currencySymbol, formatAmount } from "@/shared/utils/formatCurrency";
-import type { HoldingWithMetrics, InstrumentType } from "@/shared/features/portfolio/types";
+import { formatAmount } from "@/shared/utils/formatCurrency";
+import { formatSignedPercent } from "@/shared/utils/investmentPresentation";
+import type { HoldingWithMetrics } from "@/shared/features/portfolio/types";
 import { holdingA11yLabel } from "@/shared/features/portfolio/utils/portfolioMetrics";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
-
-const INSTRUMENT_COLORS: Record<InstrumentType | string, string> = {
-  stock: "#3B82F6",
-  etf: "#14B8A6",
-  mutual_fund: "#8B5CF6",
-  crypto: "#F59E0B",
-  gold: "#EAB308",
-};
 
 /** Column flex for the wide (tablet / web) table row and its header. */
 const COLUMNS = { holding: 2.2, qty: 1.4, invested: 1.3, current: 1.3, pnl: 1.4, day: 1.3 } as const;
 const MENU_WIDTH = 32;
-
-function pnlColor(value: number, isDark: boolean, muted: string) {
-  if (value > 0) return isDark ? ACCOUNT_GREEN : "#16A34A";
-  if (value < 0) return isDark ? ACCOUNT_RED : "#DC2626";
-  return muted;
-}
-
-function signedPercent(value: number) {
-  const sign = value > 0 ? "+" : "";
-  return `${sign}${value.toFixed(2)}%`;
-}
-
-function signedPrefix(value: number, symbol: string) {
-  return value > 0 ? `+${symbol}` : value < 0 ? `-${symbol}` : symbol;
-}
 
 /** Column titles above the wide holdings table (SPENDLY-388). */
 export function HoldingTableHeader() {
@@ -82,16 +57,15 @@ export const HoldingCard = memo(function HoldingCard({
   onMenu: (id: string) => void;
   wide?: boolean;
 }) {
-  const { theme, themeName } = useTheme();
+  const { theme } = useTheme();
   const { settings } = useSettings();
-  const isDark = themeUsesDarkPalette(themeName);
+  const colors = usePortfolioColors();
   const muted = theme.colors.mutedForeground;
   const foreground = theme.colors.foreground;
-  const symbol = currencySymbol(currency);
-  const pnlTone = pnlColor(holding.profit, isDark, muted);
-  const dayTone = pnlColor(holding.dayChange, isDark, muted);
-  const instrumentColor = INSTRUMENT_COLORS[holding.instrumentType] || "#94A3B8";
-  const liveColor = holding.hasLiveQuote ? (isDark ? ACCOUNT_GREEN : "#16A34A") : "#9CA3AF";
+  const pnlTone = colors.pnl(holding.profit);
+  const dayTone = colors.pnl(holding.dayChange);
+  const instrumentColor = colors.instrument(holding.instrumentType);
+  const liveColor = holding.hasLiveQuote ? colors.live : colors.stale;
   const a11yLabel = holdingA11yLabel(holding, (n) => formatAmount(n, currency), !!settings?.ghostMode);
 
   const identity = (
@@ -102,7 +76,7 @@ export const HoldingCard = memo(function HoldingCard({
           {holding.symbol}
         </Text>
         {holding.exchange ? (
-          <View style={[styles.exchange, { backgroundColor: isDark ? "rgba(148, 163, 184, 0.12)" : theme.colors.muted }]}>
+          <View style={[styles.exchange, { backgroundColor: colors.inset }]}>
             <Text style={[styles.exchangeText, { color: muted }]}>{holding.exchange}</Text>
           </View>
         ) : null}
@@ -128,9 +102,10 @@ export const HoldingCard = memo(function HoldingCard({
   );
   const signed = (value: number, percent: number, color: string) => (
     <View style={styles.signed}>
-      <Amount value={Math.abs(value)} currency={currency} prefix={signedPrefix(value, symbol)} style={[styles.value, { color }]} ghostable numberOfLines={1} />
+      {/* SPENDLY-543: prefix-based signs vanished in ghost mode. */}
+      <FinancialAmount value={value} currency={currency} size="sm" sign="auto" tone="auto" weight="semibold" />
       <Text style={[styles.percent, { color }]} numberOfLines={1}>
-        {signedPercent(percent)}
+        {formatSignedPercent(percent, 2)}
       </Text>
     </View>
   );
@@ -154,8 +129,8 @@ export const HoldingCard = memo(function HoldingCard({
     styles.card,
     wide ? styles.cardWide : null,
     {
-      backgroundColor: isDark ? "#10141C" : theme.colors.card,
-      borderColor: isDark ? "rgba(148, 163, 184, 0.12)" : theme.colors.border,
+      backgroundColor: colors.card,
+      borderColor: colors.border,
       opacity: pressed ? 0.94 : 1,
     },
   ];
@@ -166,51 +141,59 @@ export const HoldingCard = memo(function HoldingCard({
 
   if (wide) {
     return (
-      <Pressable onPress={open} style={cardStyle} accessibilityRole="button" accessibilityLabel={a11yLabel}>
-        <View style={{ flex: COLUMNS.holding, minWidth: 0 }}>{identity}</View>
-        <View style={[styles.cellEnd, { flex: COLUMNS.qty }]}>{qtyAvg}</View>
-        <View style={[styles.cellEnd, { flex: COLUMNS.invested }]}>{money(holding.investedValue, foreground)}</View>
-        <View style={[styles.cellEnd, { flex: COLUMNS.current }]}>
-          {money(holding.currentValue, foreground, true)}
-          {!holding.hasLiveQuote ? <Text style={[styles.hint, { color: muted }]} numberOfLines={1}>last price</Text> : null}
-        </View>
-        <View style={[styles.cellEnd, { flex: COLUMNS.pnl }]}>{signed(holding.profit, holding.profitPercent, pnlTone)}</View>
-        <View style={[styles.cellEnd, { flex: COLUMNS.day }]}>{signed(holding.dayChange, holding.dayChangePercent, dayTone)}</View>
-        {menu}
-      </Pressable>
+      // SPENDLY-543: the menu is a sibling, not a child, of the card
+      // button (a <button> inside a <button> is invalid HTML on web).
+      <View style={styles.wrap}>
+        <Pressable onPress={open} style={cardStyle} accessibilityRole="button" accessibilityLabel={a11yLabel}>
+          <View style={{ flex: COLUMNS.holding, minWidth: 0 }}>{identity}</View>
+          <View style={[styles.cellEnd, { flex: COLUMNS.qty }]}>{qtyAvg}</View>
+          <View style={[styles.cellEnd, { flex: COLUMNS.invested }]}>{money(holding.investedValue, foreground)}</View>
+          <View style={[styles.cellEnd, { flex: COLUMNS.current }]}>
+            {money(holding.currentValue, foreground, true)}
+            {!holding.hasLiveQuote ? <Text style={[styles.hint, { color: muted }]} numberOfLines={1}>last price</Text> : null}
+          </View>
+          <View style={[styles.cellEnd, { flex: COLUMNS.pnl }]}>{signed(holding.profit, holding.profitPercent, pnlTone)}</View>
+          <View style={[styles.cellEnd, { flex: COLUMNS.day }]}>{signed(holding.dayChange, holding.dayChangePercent, dayTone)}</View>
+          <View style={styles.menuSpace} />
+        </Pressable>
+        <View style={[styles.menuSlot, styles.menuSlotWide]}>{menu}</View>
+      </View>
     );
   }
 
   return (
-    <Pressable onPress={open} style={cardStyle} accessibilityRole="button" accessibilityLabel={a11yLabel}>
-      <View style={styles.topRow}>
-        <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-          {identity}
-          {qtyAvg}
+    <View style={styles.wrap}>
+      <Pressable onPress={open} style={cardStyle} accessibilityRole="button" accessibilityLabel={a11yLabel}>
+        <View style={styles.topRow}>
+          <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+            {identity}
+            {qtyAvg}
+          </View>
+          <View style={styles.menuSpace} />
         </View>
-        {menu}
-      </View>
-      <View style={[styles.metricsRow, { borderTopColor: isDark ? "rgba(148, 163, 184, 0.12)" : theme.colors.border }]}>
-        <View style={styles.metric}>
-          <Text style={[styles.metricLabel, { color: muted }]} numberOfLines={1}>Invested</Text>
-          {money(holding.investedValue, foreground)}
+        <View style={[styles.metricsRow, { borderTopColor: colors.hairline }]}>
+          <View style={styles.metric}>
+            <Text style={[styles.metricLabel, { color: muted }]} numberOfLines={1}>Invested</Text>
+            {money(holding.investedValue, foreground)}
+          </View>
+          <View style={styles.metric}>
+            <Text style={[styles.metricLabel, { color: muted }]} numberOfLines={1}>Current</Text>
+            {money(holding.currentValue, foreground, true)}
+            {!holding.hasLiveQuote ? <Text style={[styles.hint, { color: muted }]} numberOfLines={1}>last price</Text> : null}
+          </View>
+          <View style={[styles.metric, styles.metricEnd]}>
+            <Text style={[styles.metricLabel, { color: muted }]} numberOfLines={1}>P&L</Text>
+            {signed(holding.profit, holding.profitPercent, pnlTone)}
+          </View>
         </View>
-        <View style={styles.metric}>
-          <Text style={[styles.metricLabel, { color: muted }]} numberOfLines={1}>Current</Text>
-          {money(holding.currentValue, foreground, true)}
-          {!holding.hasLiveQuote ? <Text style={[styles.hint, { color: muted }]} numberOfLines={1}>last price</Text> : null}
+        <View style={styles.dayRow}>
+          <Text style={[styles.metricLabel, { color: muted }]}>Today</Text>
+          <FinancialAmount value={holding.dayChange} currency={currency} size="xs" sign="auto" tone="auto" weight="semibold" />
+          <Text style={[styles.percent, { color: dayTone }]}>({formatSignedPercent(holding.dayChangePercent, 2)})</Text>
         </View>
-        <View style={[styles.metric, styles.metricEnd]}>
-          <Text style={[styles.metricLabel, { color: muted }]} numberOfLines={1}>P&L</Text>
-          {signed(holding.profit, holding.profitPercent, pnlTone)}
-        </View>
-      </View>
-      <View style={styles.dayRow}>
-        <Text style={[styles.metricLabel, { color: muted }]}>Today</Text>
-        <Amount value={Math.abs(holding.dayChange)} currency={currency} prefix={signedPrefix(holding.dayChange, symbol)} style={[styles.percent, { color: dayTone }]} ghostable />
-        <Text style={[styles.percent, { color: dayTone }]}>({signedPercent(holding.dayChangePercent)})</Text>
-      </View>
-    </Pressable>
+      </Pressable>
+      <View style={styles.menuSlot}>{menu}</View>
+    </View>
   );
 });
 
@@ -357,6 +340,23 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 16,
     marginRight: -4,
+  },
+  wrap: {
+    position: "relative",
+  },
+  menuSpace: {
+    width: MENU_WIDTH,
+  },
+  // Sits over the card's top-right spacer.
+  menuSlot: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+  },
+  menuSlotWide: {
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
   },
   menuPressed: {
     opacity: 0.7,

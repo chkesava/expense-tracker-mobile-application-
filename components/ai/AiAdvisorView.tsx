@@ -21,8 +21,6 @@ import {
   User,
 } from "lucide-react-native";
 
-import { Amount } from "@/components/common/Amount";
-import { Card } from "@/components/ui/Card";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useAuth } from "@/providers/AuthProvider";
@@ -33,9 +31,10 @@ import {
   type ChatMessage,
 } from "@/services/aiAdvisorService";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
+import { maskAdvisorAmounts, parseAdvisorText } from "@/shared/utils/advisorText";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
@@ -53,6 +52,10 @@ export function AiAdvisorView() {
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
   const { settings } = useSettings();
+  // SPENDLY-540: chat text is masked at render time in ghost mode; stored
+  // messages are left as they are.
+  const ghost = Boolean(settings?.ghostMode);
+  const showText = (text: string) => (ghost ? maskAdvisorAmounts(text) : text);
   const { user, isDuress } = useAuth();
 
   const { expenses } = useExpenses();
@@ -181,15 +184,18 @@ export function AiAdvisorView() {
   return (
     <View style={styles.container}>
       {/* Financial Health Summary Banner */}
-      <Card style={styles.summaryBar}>
+      <View
+        style={[
+          styles.summaryBar,
+          { backgroundColor: theme.colors.card, borderColor: theme.colors.outlineVariant },
+        ]}
+      >
         <View style={styles.summaryLeft}>
           <View
             style={[
               styles.botIconCircle,
               {
-                backgroundColor: isDark
-                  ? "rgba(99,102,241,0.2)"
-                  : "rgba(99,102,241,0.1)",
+                backgroundColor: withAlpha(theme.colors.primary, isDark ? 0.2 : 0.1),
               },
             ]}
           >
@@ -197,24 +203,27 @@ export function AiAdvisorView() {
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[styles.summaryTitle, { color: theme.colors.foreground }]}>
-              {context.smartInsight.title}
+              {showText(context.smartInsight.title)}
             </Text>
             <Text
               style={[styles.summaryDesc, { color: theme.colors.mutedForeground }]}
               numberOfLines={1}
             >
-              {context.smartInsight.description}
+              {showText(context.smartInsight.description)}
             </Text>
           </View>
         </View>
 
         <Pressable
           onPress={handleClearHistory}
+          accessibilityRole="button"
+          accessibilityLabel="Clear chat history"
+          hitSlop={8}
           style={({ pressed }) => [styles.resetBtn, pressed && { opacity: 0.6 }]}
         >
           <RotateCcw size={16} color={theme.colors.mutedForeground} />
         </Pressable>
-      </Card>
+      </View>
 
       {/* Messages Stream */}
       <View style={styles.messagesWrapper}>
@@ -226,6 +235,10 @@ export function AiAdvisorView() {
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           renderItem={({ item }) => {
             const isUser = item.role === "user";
+            const highlightColor =
+              item.highlightCard?.type === "positive"
+                ? theme.colors.success
+                : theme.colors.warning;
             return (
               <View
                 style={[
@@ -247,10 +260,22 @@ export function AiAdvisorView() {
                   <Text
                     style={[
                       styles.messageText,
-                      { color: isUser ? "#FFFFFF" : theme.colors.foreground },
+                      {
+                        color: isUser
+                          ? theme.colors.primaryForeground
+                          : theme.colors.foreground,
+                      },
                     ]}
                   >
-                    {item.content}
+                    {parseAdvisorText(item.content, { ghost }).map((segment, index) =>
+                      segment.bold ? (
+                        <Text key={index} style={styles.bold}>
+                          {segment.text}
+                        </Text>
+                      ) : (
+                        segment.text
+                      )
+                    )}
                   </Text>
 
                   {/* Highlight metric card */}
@@ -259,18 +284,8 @@ export function AiAdvisorView() {
                       style={[
                         styles.highlightBox,
                         {
-                          backgroundColor:
-                            item.highlightCard.type === "positive"
-                              ? isDark
-                                ? "rgba(34,197,94,0.15)"
-                                : "rgba(34,197,94,0.1)"
-                              : isDark
-                              ? "rgba(245,158,11,0.15)"
-                              : "rgba(245,158,11,0.1)",
-                          borderColor:
-                            item.highlightCard.type === "positive"
-                              ? "rgba(34,197,94,0.3)"
-                              : "rgba(245,158,11,0.3)",
+                          backgroundColor: withAlpha(highlightColor, isDark ? 0.15 : 0.1),
+                          borderColor: withAlpha(highlightColor, 0.3),
                         },
                       ]}
                     >
@@ -279,10 +294,7 @@ export function AiAdvisorView() {
                           fontSize: 10,
                           fontWeight: "800",
                           textTransform: "uppercase",
-                          color:
-                            item.highlightCard.type === "positive"
-                              ? "#22C55E"
-                              : "#F59E0B",
+                          color: highlightColor,
                         }}
                       >
                         {item.highlightCard.title}
@@ -294,7 +306,7 @@ export function AiAdvisorView() {
                           color: theme.colors.foreground,
                         }}
                       >
-                        {item.highlightCard.value}
+                        {showText(item.highlightCard.value)}
                       </Text>
                     </View>
                   )}
@@ -401,6 +413,8 @@ export function AiAdvisorView() {
 
         <Pressable
           onPress={() => handleSendMessage()}
+          accessibilityRole="button"
+          accessibilityLabel="Send message"
           disabled={!inputText.trim() || isTyping}
           style={({ pressed }) => [
             styles.sendBtn,
@@ -414,7 +428,11 @@ export function AiAdvisorView() {
         >
           <Send
             size={16}
-            color={inputText.trim() ? "#FFFFFF" : theme.colors.mutedForeground}
+            color={
+              inputText.trim()
+                ? theme.colors.primaryForeground
+                : theme.colors.mutedForeground
+            }
           />
         </Pressable>
       </View>
@@ -423,6 +441,9 @@ export function AiAdvisorView() {
 }
 
 const styles = StyleSheet.create({
+  bold: {
+    fontWeight: "800",
+  },
   container: {
     flex: 1,
     gap: 12,
@@ -433,6 +454,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 12,
     borderRadius: 16,
+    borderCurve: "continuous",
+    borderWidth: 1,
   },
   summaryLeft: {
     flexDirection: "row",

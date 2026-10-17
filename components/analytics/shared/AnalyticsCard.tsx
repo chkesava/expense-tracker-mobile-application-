@@ -2,9 +2,9 @@ import React, { type ReactNode } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
-import { insightSurface } from "@/components/analytics/insightsTheme";
+import { useInsightAccents, useInsightSurface } from "@/components/analytics/insightsTheme";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { withAlpha } from "@/theme/surfaces";
 
 export type AnalyticsCardTone = "default" | "danger";
 
@@ -39,9 +39,9 @@ export function AnalyticsCard({
   children,
   style,
 }: AnalyticsCardProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const surface = insightSurface(isDark);
+  const { theme } = useTheme();
+  const surface = useInsightSurface();
+  const accents = useInsightAccents();
   const isDanger = tone === "danger";
 
   return (
@@ -50,11 +50,7 @@ export function AnalyticsCard({
         styles.card,
         {
           backgroundColor: surface.card,
-          borderColor: isDanger
-            ? isDark
-              ? "rgba(244, 63, 94, 0.32)"
-              : "rgba(220, 38, 38, 0.22)"
-            : surface.border,
+          borderColor: isDanger ? withAlpha(accents.negative, 0.3) : surface.border,
         },
         style,
       ]}
@@ -63,9 +59,7 @@ export function AnalyticsCard({
         pointerEvents="none"
         colors={
           isDanger
-            ? isDark
-              ? ["rgba(244, 63, 94, 0.12)", "rgba(12, 17, 29, 0)", "#0A0D17"]
-              : ["rgba(220, 38, 38, 0.06)", "rgba(255, 255, 255, 0)", "#FFF7F7"]
+            ? [accents.negativeDim, withAlpha(accents.negative, 0), surface.card]
             : surface.wash
         }
         start={{ x: 0, y: 0 }}

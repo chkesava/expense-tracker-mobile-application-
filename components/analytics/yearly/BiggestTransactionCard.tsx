@@ -3,11 +3,16 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Award, ChevronRight } from "lucide-react-native";
 
-import { CARD_ORANGE } from "@/components/accounts/accountScreenTheme";
-import { insightSurface } from "@/components/analytics/insightsTheme";
+import {
+  useInsightAccents,
+  useInsightSurface,
+} from "@/components/analytics/insightsTheme";
 import { Amount } from "@/components/common/Amount";
 import { haptic } from "@/lib/haptics";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { useTheme } from "@/theme/ThemeProvider";
+import { withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export interface BiggestTransactionCardProps {
@@ -36,18 +41,20 @@ export function BiggestTransactionCard({
 }: BiggestTransactionCardProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const surface = insightSurface(isDark);
-  const gold = isDark ? CARD_ORANGE : "#B45309";
+  const surface = useInsightSurface();
+  const { settings } = useSettings();
+  // SPENDLY-539: the gold highlight comes from the theme's warning token.
+  const gold = useInsightAccents().highlight;
 
   const body = (
     <>
       <LinearGradient
         pointerEvents="none"
-        colors={
-          isDark
-            ? ["rgba(251, 191, 36, 0.14)", "rgba(12, 17, 29, 0)", "#0A0D17"]
-            : ["rgba(180, 83, 9, 0.08)", "rgba(255, 255, 255, 0)", "#FFFBEB"]
-        }
+        colors={[
+          withAlpha(gold, isDark ? 0.14 : 0.08),
+          withAlpha(gold, 0),
+          surface.card,
+        ]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
@@ -60,12 +67,8 @@ export function BiggestTransactionCard({
           style={[
             styles.iconBox,
             {
-              backgroundColor: isDark
-                ? "rgba(251, 191, 36, 0.14)"
-                : "rgba(180, 83, 9, 0.1)",
-              borderColor: isDark
-                ? "rgba(251, 191, 36, 0.34)"
-                : "rgba(180, 83, 9, 0.2)",
+              backgroundColor: withAlpha(gold, isDark ? 0.14 : 0.1),
+              borderColor: withAlpha(gold, isDark ? 0.34 : 0.2),
             },
           ]}
         >
@@ -89,7 +92,7 @@ export function BiggestTransactionCard({
             style={[styles.meta, { color: theme.colors.mutedForeground }]}
             numberOfLines={1}
           >
-            {date} · {category}
+            {formatDisplayDate(date, settings?.dateFormat)} · {category}
           </Text>
         </View>
 
@@ -117,9 +120,7 @@ export function BiggestTransactionCard({
     styles.card,
     {
       backgroundColor: surface.card,
-      borderColor: isDark
-        ? "rgba(251, 191, 36, 0.34)"
-        : "rgba(180, 83, 9, 0.22)",
+      borderColor: withAlpha(gold, isDark ? 0.34 : 0.22),
     },
   ];
 

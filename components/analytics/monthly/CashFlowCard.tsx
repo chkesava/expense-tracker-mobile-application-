@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { ArrowDownRight, ArrowUpRight, Wallet } from "lucide-react-native";
 
 import {
@@ -7,14 +7,11 @@ import {
   AnalyticsCardMeta,
 } from "@/components/analytics/shared/AnalyticsCard";
 import {
-  insightAccents,
-  insightSurface,
+  useInsightAccents,
+  useInsightSurface,
 } from "@/components/analytics/insightsTheme";
 import { Amount } from "@/components/common/Amount";
-import { useSettings } from "@/providers/SettingsProvider";
-import { formatAmountNumber } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export interface CashFlowCardProps {
   income: number;
@@ -37,19 +34,20 @@ export function CashFlowCard({
   monthlyBudget,
   currency,
 }: CashFlowCardProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const surface = insightSurface(isDark);
-  const accents = insightAccents(isDark);
-  const { settings } = useSettings();
+  const { theme } = useTheme();
+  const surface = useInsightSurface();
+  const accents = useInsightAccents();
+  // adjustsFontSizeToFit is native-only, so web would truncate "₹98,000" to
+  // "₹98,…" on 320 dp screens; step the figures down on narrow windows instead.
+  const compact = useWindowDimensions().width < 360;
 
   const netPositive = netSaved >= 0;
   const roundedPacing = Math.round(pacingPercentage);
   const pacingColor =
     pacingPercentage > 15
-      ? accents.pink
+      ? accents.negative
       : pacingPercentage < -5
-        ? accents.green
+        ? accents.positive
         : theme.colors.foreground;
 
   const column = (
@@ -75,7 +73,7 @@ export function CashFlowCard({
           numberOfLines={1}
           adjustsFontSizeToFit
           minimumFontScale={0.72}
-          style={[styles.columnValue, { color }]}
+          style={[styles.columnValue, compact && styles.columnValueCompact, { color }]}
         />
         {trend === "up" ? (
           <ArrowUpRight size={13} color={color} strokeWidth={2.6} />
@@ -89,25 +87,28 @@ export function CashFlowCard({
   return (
     <AnalyticsCard
       title="Monthly Cash Flow"
-      icon={<Wallet size={16} color={accents.green} strokeWidth={2.4} />}
+      icon={<Wallet size={16} color={accents.positive} strokeWidth={2.4} />}
       right={
         monthlyBudget > 0 ? (
           <AnalyticsCardMeta>
-            Budget: {currency}{" "}
-            {formatAmountNumber(monthlyBudget, currency, {
-              numberFormatStyle: settings?.numberFormat || "auto",
-            })}
+            Budget:{" "}
+            <Amount
+              value={monthlyBudget}
+              currency={currency}
+              ghostable
+              style={styles.budget}
+            />
           </AnalyticsCardMeta>
         ) : undefined
       }
     >
       <View style={styles.row}>
-        {column("Income", income, accents.green, income > 0 ? "up" : null, "flex-start")}
+        {column("Income", income, accents.positive, income > 0 ? "up" : null, "flex-start")}
         <View style={[styles.vRule, { backgroundColor: surface.hairline }]} />
         {column(
           "Expenses",
           expenses,
-          accents.pink,
+          accents.spend,
           expenses > 0 ? "up" : null,
           "center"
         )}
@@ -115,7 +116,7 @@ export function CashFlowCard({
         {column(
           "Net Saved",
           netSaved,
-          netPositive ? accents.green : accents.pink,
+          netPositive ? accents.positive : accents.negative,
           netPositive ? "up" : "down",
           "flex-end"
         )}
@@ -137,12 +138,13 @@ export function CashFlowCard({
           <Text
             style={[
               styles.stripValue,
+              compact && styles.stripValueCompact,
               {
                 color:
                   savingsRate < 0
-                    ? accents.pink
+                    ? accents.negative
                     : savingsRate >= 20
-                      ? accents.green
+                      ? accents.positive
                       : theme.colors.foreground,
               },
             ]}
@@ -169,7 +171,7 @@ export function CashFlowCard({
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.75}
-            style={[styles.stripValue, { color: theme.colors.foreground }]}
+            style={[styles.stripValue, compact && styles.stripValueCompact, { color: theme.colors.foreground }]}
           />
         </View>
 
@@ -183,7 +185,7 @@ export function CashFlowCard({
             MTD Pacing
           </Text>
           <Text
-            style={[styles.stripValue, { color: pacingColor }]}
+            style={[styles.stripValue, compact && styles.stripValueCompact, { color: pacingColor }]}
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.75}
@@ -198,6 +200,10 @@ export function CashFlowCard({
 }
 
 const styles = StyleSheet.create({
+  budget: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
   row: {
     flexDirection: "row",
     alignItems: "stretch",
@@ -222,6 +228,10 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: -0.4,
     flexShrink: 1,
+  },
+  columnValueCompact: {
+    fontSize: 14,
+    letterSpacing: -0.3,
   },
   vRule: {
     width: StyleSheet.hairlineWidth,
@@ -251,6 +261,9 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: "800",
     fontVariant: ["tabular-nums"],
+  },
+  stripValueCompact: {
+    fontSize: 11,
   },
   stripRule: {
     width: StyleSheet.hairlineWidth,

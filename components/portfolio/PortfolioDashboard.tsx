@@ -8,8 +8,9 @@ import {
   TrendingUp,
 } from "lucide-react-native";
 
-import { CARD_ORANGE } from "@/components/accounts/accountScreenTheme";
-import { Skeleton, SkeletonList } from "@/components/common/Skeleton";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { usePortfolioColors } from "@/components/portfolio/portfolioColors";
+import { Chip } from "@/components/ui/Chip";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { OnboardingFlow } from "@/components/portfolio/OnboardingFlow";
 import { PortfolioCharts } from "@/components/portfolio/PortfolioCharts";
@@ -20,7 +21,6 @@ import { HoldingsList } from "@/components/portfolio/HoldingsList";
 import { WatchlistTab } from "@/components/portfolio/WatchlistTab";
 import { AlertsTab } from "@/components/portfolio/AlertsTab";
 import { OrdersTab } from "@/components/portfolio/OrdersTab";
-import { haptic } from "@/lib/haptics";
 import { useMarketQuotes } from "@/hooks/useMarketQuotes";
 import { PortfolioDataProvider, usePortfolio } from "@/hooks/usePortfolio";
 import {
@@ -34,51 +34,17 @@ import type {
   PortfolioSummary,
 } from "@/shared/features/portfolio/types";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces, withAlpha } from "@/theme/surfaces";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { withAlpha } from "@/theme/surfaces";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 type PortfolioSubTab = "holdings" | "watchlist" | "orders" | "alerts" | "charts";
 
-const INSTRUMENT_COLORS: Record<string, string> = {
-  stock: "#3B82F6",
-  etf: "#14B8A6",
-  mutual_fund: "#8B5CF6",
-  crypto: "#F59E0B",
-  gold: "#EAB308",
-};
-
-const ACTIVE_ACTION_FG = "#111827";
-
-function PortfolioDashboardSkeleton({ isDark }: { isDark: boolean }) {
+function PortfolioDashboardSkeleton() {
   return (
     <View style={styles.skeletonWrap}>
-      <View
-        style={[
-          styles.skeletonHero,
-          {
-            backgroundColor: isDark ? "#0B100E" : "#F4FBF6",
-            borderColor: isDark ? "rgba(74, 222, 128, 0.28)" : "rgba(22, 163, 74, 0.2)",
-          },
-        ]}
-      >
-        <Skeleton width={160} height={12} borderRadius={4} />
-        <Skeleton width={200} height={34} borderRadius={8} />
-        <Skeleton width={180} height={16} borderRadius={6} />
-        <View style={styles.skeletonMetrics}>
-          <Skeleton width="30%" height={48} borderRadius={10} />
-          <Skeleton width="30%" height={48} borderRadius={10} />
-          <Skeleton width="30%" height={48} borderRadius={10} />
-        </View>
-      </View>
-      <View style={styles.skeletonActions}>
-        <Skeleton width={96} height={36} borderRadius={18} />
-        <Skeleton width={96} height={36} borderRadius={18} />
-        <Skeleton width={96} height={36} borderRadius={18} />
-      </View>
-      <Skeleton width="100%" height={48} borderRadius={16} />
-      <SkeletonList count={3} />
+      <DashboardSkeleton variant="hero" />
+      <DashboardSkeleton variant="section" rows={3} />
     </View>
   );
 }
@@ -92,10 +58,9 @@ export function PortfolioDashboard({ listHeader }: { listHeader?: ReactNode }) {
 }
 
 function PortfolioDashboardInner({ listHeader }: { listHeader?: ReactNode }) {
-  const { theme, themeName } = useTheme();
-  const surfaces = useSurfaces();
+  const { theme } = useTheme();
+  const portfolioColors = usePortfolioColors();
   const listBottomPadding = usePageListBottomPadding();
-  const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
 
   const {
@@ -171,10 +136,10 @@ function PortfolioDashboardInner({ listHeader }: { listHeader?: ReactNode }) {
       .map(([type, value]) => ({
         label: labels[type] || type,
         value,
-        color: INSTRUMENT_COLORS[type] || "#6B7280",
+        color: portfolioColors.instrument(type),
       }))
       .sort((a, b) => b.value - a.value);
-  }, [holdingsWithMetrics]);
+  }, [holdingsWithMetrics, portfolioColors]);
 
   useEffect(() => {
     if (loading || !portfolioSettings?.onboardingComplete) return;
@@ -213,7 +178,7 @@ function PortfolioDashboardInner({ listHeader }: { listHeader?: ReactNode }) {
     return (
       <View style={styles.fill}>
         {listHeader}
-        <PortfolioDashboardSkeleton isDark={isDark} />
+        <PortfolioDashboardSkeleton />
         {cashModal}
       </View>
     );
@@ -304,52 +269,20 @@ function PortfolioDashboardInner({ listHeader }: { listHeader?: ReactNode }) {
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.subTabRow}
+          accessibilityRole="tablist"
         >
-          {subTabs.map((tab) => {
-            const active = subTab === tab.id;
-            const iconColor = active
-              ? ACTIVE_ACTION_FG
-              : isDark
-                ? "#F8FAFC"
-                : theme.colors.foreground;
-            return (
-              <Pressable
-                key={tab.id}
-                onPress={() => {
-                  void haptic.selection();
-                  setSubTab(tab.id);
-                }}
-                style={({ pressed }) => [
-                  styles.subTabPill,
-                  {
-                    backgroundColor: active
-                      ? CARD_ORANGE
-                      : surfaces.control,
-                    borderColor: active
-                      ? CARD_ORANGE
-                      : isDark
-                        ? "rgba(148,163,184,0.16)"
-                        : theme.colors.border,
-                  },
-                  pressed && styles.pressed,
-                ]}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: active }}
-                accessibilityLabel={tab.label}
-              >
-                {tab.icon(iconColor)}
-                <Text
-                  style={{
-                    fontSize: 13,
-                    fontWeight: active ? "800" : "600",
-                    color: active ? ACTIVE_ACTION_FG : theme.colors.foreground,
-                  }}
-                >
-                  {tab.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+          {subTabs.map((tab) => (
+            <Chip
+              key={tab.id}
+              label={tab.label}
+              selected={subTab === tab.id}
+              appearance="outline"
+              accessibilityRole="tab"
+              haptic={subTab !== tab.id}
+              icon={tab.icon}
+              onPress={() => setSubTab(tab.id)}
+            />
+          ))}
         </ScrollView>
       </HorizontalSwipeBoundary>
     </View>
@@ -442,41 +375,12 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingRight: 8,
   },
-  subTabPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 999,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    gap: 6,
-    flexShrink: 0,
-  },
   scrollContent: {
     gap: 12,
   },
   skeletonWrap: {
     gap: 14,
     paddingTop: 4,
-  },
-  skeletonHero: {
-    borderRadius: 24,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    padding: 18,
-    gap: 12,
-    alignItems: "center",
-  },
-  skeletonMetrics: {
-    width: "100%",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
-  },
-  skeletonActions: {
-    flexDirection: "row",
-    gap: 8,
   },
   pressed: {
     opacity: 0.84,

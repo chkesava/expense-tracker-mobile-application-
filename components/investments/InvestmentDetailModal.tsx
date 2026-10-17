@@ -3,15 +3,21 @@ import React, { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
   Archive,
-  Banknote,
   Calendar,
-  Landmark,
   Percent,
   Trash2,
-  TrendingUp,
 } from "lucide-react-native";
 
-import { Amount } from "@/components/common/Amount";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
+import { MetaLabel, Pill } from "@/components/dashboard/primitives";
+import { useInvestmentKindStyle } from "@/components/investments/investmentKind";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
+import {
+  formatSignedPercent,
+  investmentReturnPercent,
+  investmentStatusDisplay,
+} from "@/shared/utils/investmentPresentation";
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -39,6 +45,11 @@ export function InvestmentDetailModal({
   onDeleteInvestment,
 }: InvestmentDetailModalProps) {
   const { theme } = useTheme();
+  const { settings } = useSettings();
+  // Hooks run before the early return below; the kind is a placeholder
+  // while no investment is selected.
+  const kind = useInvestmentKindStyle(investment?.kind ?? "fixed_deposit");
+  const date = (value: string) => formatDisplayDate(value, settings?.dateFormat);
 
   const today = todayDateKey();
   const valuation = useMemo(() => {
@@ -50,24 +61,9 @@ export function InvestmentDetailModal({
 
   const isClosed = investment.status === "closed";
   const profit = valuation.totalValue - investment.principal;
-  const returnRate =
-    investment.principal > 0
-      ? ((profit / investment.principal) * 100).toFixed(1)
-      : "0.0";
-
-  const kindLabel =
-    investment.kind === "fixed_deposit"
-      ? "Fixed Deposit"
-      : investment.kind === "interest_savings"
-      ? "Interest Savings"
-      : "Mutual Fund";
-
-  const kindColor =
-    investment.kind === "fixed_deposit"
-      ? "#3B82F6"
-      : investment.kind === "interest_savings"
-      ? "#10B981"
-      : "#8B5CF6";
+  const returnPct = investmentReturnPercent(profit, investment.principal);
+  const kindLabel = kind.label;
+  const kindColor = kind.color;
 
   const handleDelete = () => {
     appDialog.alert(
@@ -115,19 +111,13 @@ export function InvestmentDetailModal({
               { backgroundColor: withAlpha(kindColor, 0.13) },
             ]}
           >
-            {investment.kind === "fixed_deposit" ? (
-              <Landmark size={20} color={kindColor} />
-            ) : investment.kind === "interest_savings" ? (
-              <Banknote size={20} color={kindColor} />
-            ) : (
-              <TrendingUp size={20} color={kindColor} />
-            )}
+            <kind.Icon size={20} color={kindColor} />
           </View>
           <Text
             style={[styles.subtitle, { color: theme.colors.mutedForeground, flex: 1 }]}
             numberOfLines={2}
           >
-            {kindLabel} • Started {investment.startDate}
+            {kindLabel} · Started {date(investment.startDate)}
           </Text>
         </View>
 
@@ -143,18 +133,8 @@ export function InvestmentDetailModal({
 
       {/* Big Valuation Card */}
       <Card style={styles.valuationCard}>
-        <Text style={[styles.statLabel, { color: theme.colors.mutedForeground }]}>
-          TOTAL VALUATION (AS OF TODAY)
-        </Text>
-        <Amount
-          value={valuation.totalValue}
-          currency={currency}
-          style={{
-            fontSize: 28,
-            fontWeight: "900",
-            color: theme.colors.foreground,
-          }}
-        />
+        <MetaLabel>Current value · as of today</MetaLabel>
+        <FinancialAmount value={valuation.totalValue} currency={currency} size="xl" weight="bold" fit />
 
         <View
           style={[
@@ -166,26 +146,27 @@ export function InvestmentDetailModal({
             <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
               Principal Invested
             </Text>
-            <Amount
-              value={investment.principal}
-              currency={currency}
-              style={{ fontSize: 15, fontWeight: "700", color: theme.colors.foreground }}
-            />
+            <FinancialAmount value={investment.principal} currency={currency} size="sm" weight="semibold" />
           </View>
 
           <View style={[styles.subMetric, { alignItems: "flex-end" }]}>
             <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
               Accrued Gain / Interest
             </Text>
-            <Text
-              style={{
-                fontSize: 15,
-                fontWeight: "800",
-                color: profit >= 0 ? theme.colors.success : theme.colors.destructive,
-              }}
-            >
-              +{currency} {Math.round(profit).toLocaleString()} ({returnRate}%)
-            </Text>
+            {/* SPENDLY-542: this always printed "+", so a loss read "+INR -500". */}
+            <FinancialAmount
+              value={Math.round(profit)}
+              currency={currency}
+              size="sm"
+              sign="auto"
+              tone="auto"
+              weight="semibold"
+            />
+            {returnPct !== null ? (
+              <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
+                {formatSignedPercent(returnPct)} on principal
+              </Text>
+            ) : null}
           </View>
         </View>
       </Card>
@@ -196,54 +177,47 @@ export function InvestmentDetailModal({
           INVESTMENT SPECIFICATIONS
         </Text>
 
-        <Card style={{ padding: 14, gap: 12 }}>
-          <View style={styles.specRow}>
-            <Text style={{ fontSize: 13, color: theme.colors.mutedForeground }}>
-              Interest Rate
-            </Text>
-            <Text style={{ fontSize: 13, fontWeight: "700", color: theme.colors.foreground }}>
-              {investment.annualInterestRate !== undefined
-                ? `${investment.annualInterestRate}% p.a.`
-                : "Market Linked"}
-            </Text>
-          </View>
-
-          {investment.interestMethod && (
+        <Card style={{ padding: 14 }}>
+          <View style={styles.specs}>
             <View style={styles.specRow}>
               <Text style={{ fontSize: 13, color: theme.colors.mutedForeground }}>
-                Calculation Method
-              </Text>
-              <Text style={{ fontSize: 13, fontWeight: "700", color: theme.colors.foreground, textTransform: "capitalize" }}>
-                {investment.interestMethod} ({investment.creditFrequency || "Quarterly"})
-              </Text>
-            </View>
-          )}
-
-          {investment.maturityDate && (
-            <View style={styles.specRow}>
-              <Text style={{ fontSize: 13, color: theme.colors.mutedForeground }}>
-                Maturity Date
+                Interest Rate
               </Text>
               <Text style={{ fontSize: 13, fontWeight: "700", color: theme.colors.foreground }}>
-                {investment.maturityDate}
+                {investment.annualInterestRate !== undefined
+                  ? `${investment.annualInterestRate}% p.a.`
+                  : "Market Linked"}
               </Text>
             </View>
-          )}
 
-          <View style={styles.specRow}>
-            <Text style={{ fontSize: 13, color: theme.colors.mutedForeground }}>
-              Status
-            </Text>
-            <Text
-              style={{
-                fontSize: 13,
-                fontWeight: "800",
-                color: isClosed ? theme.colors.mutedForeground : theme.colors.success,
-                textTransform: "uppercase",
-              }}
-            >
-              {investment.status}
-            </Text>
+            {investment.interestMethod && (
+              <View style={styles.specRow}>
+                <Text style={{ fontSize: 13, color: theme.colors.mutedForeground }}>
+                  Calculation Method
+                </Text>
+                <Text style={{ fontSize: 13, fontWeight: "700", color: theme.colors.foreground, textTransform: "capitalize" }}>
+                  {investment.interestMethod} ({investment.creditFrequency || "Quarterly"})
+                </Text>
+              </View>
+            )}
+
+            {investment.maturityDate && (
+              <View style={styles.specRow}>
+                <Text style={{ fontSize: 13, color: theme.colors.mutedForeground }}>
+                  Maturity Date
+                </Text>
+                <Text style={{ fontSize: 13, fontWeight: "700", color: theme.colors.foreground }}>
+                  {date(investment.maturityDate)}
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.specRow}>
+              <Text style={{ fontSize: 13, color: theme.colors.mutedForeground }}>
+                Status
+              </Text>
+              <Pill label={investmentStatusDisplay(investment.status).label} tone={investmentStatusDisplay(investment.status).tone} />
+            </View>
           </View>
         </Card>
       </View>
@@ -315,6 +289,9 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 0.5,
+  },
+  specs: {
+    gap: 12,
   },
   specRow: {
     flexDirection: "row",

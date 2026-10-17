@@ -3,10 +3,9 @@ import { StyleSheet, Text } from "react-native";
 import { BarChart3 } from "lucide-react-native";
 
 import { AnalyticsCard } from "@/components/analytics/shared/AnalyticsCard";
-import { insightAccents } from "@/components/analytics/insightsTheme";
+import { useInsightAccents } from "@/components/analytics/insightsTheme";
 import { BarChart, type BarChartItem } from "@/components/charts/BarChart";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export interface DayOfWeekCardProps {
   data: BarChartItem[];
@@ -16,16 +15,15 @@ export interface DayOfWeekCardProps {
 }
 
 export function DayOfWeekCard({ data, peakDay, currency }: DayOfWeekCardProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const accents = insightAccents(isDark);
+  const { theme } = useTheme();
+  const accents = useInsightAccents();
 
   const hasSpend = data.some((item) => item.value > 0);
 
   return (
     <AnalyticsCard
       title="Spend by Day of Week"
-      icon={<BarChart3 size={16} color={accents.green} strokeWidth={2.4} />}
+      icon={<BarChart3 size={16} color={accents.positive} strokeWidth={2.4} />}
       subtitle={
         peakDay ? `${peakDay} is your heaviest spending day` : undefined
       }
@@ -37,7 +35,7 @@ export function DayOfWeekCard({ data, peakDay, currency }: DayOfWeekCardProps) {
           height={150}
           currency={currency}
           primaryLabel="Spent"
-          primaryColor={isDark ? "#F43F5E" : "#DC2626"}
+          primaryColor={accents.spend}
           showLegend={false}
         />
       ) : (

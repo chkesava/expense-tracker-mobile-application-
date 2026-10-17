@@ -14,8 +14,10 @@ import {
   isTransferReconciled,
   transferStatusMeta,
 } from "@/shared/features/epf/utils/transfers";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 
 type Props = {
   isOpen: boolean;
@@ -52,11 +54,14 @@ export function EpfTransferDetailModal({
   const { theme } = useTheme();
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
+  // SPENDLY-544: ghost-aware; EPF ignored ghost mode almost everywhere.
+  const money = useGhostMoney(currency);
+  const { settings: displaySettings } = useSettings();
+  const date = (value: string) => formatDisplayDate(value, displaySettings?.dateFormat);
 
   if (!transfer) return null;
 
   const meta = transferStatusMeta(transfer);
-  const money = (value: number) => formatAmount(value, currency);
   // The shared predicate, not a literal: every sibling check on this screen
   // already delegates, and this one gates the primary action (KAN-73).
   const canSettle = canCompleteTransfer(transfer);
@@ -123,7 +128,7 @@ export function EpfTransferDetailModal({
             {money(transfer.amount)}
           </Text>
           <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
-            {transfer.date} · {meta.label}
+            {date(transfer.date)} · {meta.label}
             {transfer.reference ? ` · ${transfer.reference}` : ""}
           </Text>
         </View>

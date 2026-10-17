@@ -4,6 +4,9 @@ import { FlashList } from "@shopify/flash-list";
 import { SipTransaction } from "@/shared/features/sip/types";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Amount } from "@/components/common/Amount";
+import { Pill, type Tone } from "@/components/dashboard/primitives";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { sampleScrollFps } from "@/lib/perf";
 
 export type SipHistoryListProps = {
@@ -20,14 +23,15 @@ const SipHistoryRow = memo(function SipHistoryRow({
 }) {
   const { theme } = useTheme();
 
-  const statusColor =
+  const { settings } = useSettings();
+  const statusTone: Tone =
     item.status === "executed"
-      ? theme.colors.success
+      ? "positive"
       : item.status === "skipped"
-        ? theme.colors.warning
+        ? "warning"
         : item.status === "failed"
-          ? theme.colors.destructive
-          : theme.colors.mutedForeground;
+          ? "negative"
+          : "muted";
 
   return (
     <View
@@ -35,7 +39,7 @@ const SipHistoryRow = memo(function SipHistoryRow({
         styles.itemContainer,
         {
           backgroundColor: theme.colors.card,
-          borderColor: theme.colors.border,
+          borderColor: theme.colors.outlineVariant,
         },
       ]}
     >
@@ -43,16 +47,7 @@ const SipHistoryRow = memo(function SipHistoryRow({
         <Text style={[styles.assetName, { color: theme.colors.cardForeground }]}>
           {item.assetName} ({item.symbol})
         </Text>
-        <View
-          style={[
-            styles.badge,
-            { backgroundColor: statusColor + "20", borderColor: statusColor },
-          ]}
-        >
-          <Text style={[styles.badgeText, { color: statusColor }]}>
-            {item.status.toUpperCase()}
-          </Text>
-        </View>
+        <Pill label={item.status.toUpperCase()} tone={statusTone} />
       </View>
 
       <View style={styles.detailsRow}>
@@ -61,7 +56,7 @@ const SipHistoryRow = memo(function SipHistoryRow({
             Date
           </Text>
           <Text style={[styles.value, { color: theme.colors.foreground }]}>
-            {item.date}
+            {formatDisplayDate(item.date, settings?.dateFormat)}
           </Text>
         </View>
         <View style={styles.detailCol}>
@@ -69,6 +64,7 @@ const SipHistoryRow = memo(function SipHistoryRow({
             Amount
           </Text>
           <Amount
+            ghostable
             value={item.investmentAmount}
             currency={currency}
             style={styles.value}
@@ -87,6 +83,7 @@ const SipHistoryRow = memo(function SipHistoryRow({
             Price
           </Text>
           <Amount
+            ghostable
             value={item.marketPrice}
             currency={currency}
             style={styles.value}
@@ -162,16 +159,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     flex: 1,
     marginRight: 8,
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: "bold",
   },
   detailsRow: {
     flexDirection: "row",

@@ -14,7 +14,7 @@ import {
   type TradeChargePeriod,
 } from "@/shared/features/portfolio/utils/tradeCharges";
 import { todayDateKey } from "@/shared/utils/dates";
-import { formatAmount } from "@/shared/utils/formatCurrency";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { useTheme } from "@/theme/ThemeProvider";
 
 interface TradingChargesCardProps {
@@ -47,8 +47,10 @@ export function TradingChargesCard({ transactions, currency }: TradingChargesCar
     return summarizeTradeCharges(transactions, tradeChargeRange(period, today, custom));
   }, [transactions, period, customFrom, customTo, today]);
   const tradeCount = summary ? summary.buyCount + summary.sellCount : 0;
+  // SPENDLY-543: the label read the amounts aloud in ghost mode.
+  const money = useGhostMoney(currency);
   const a11ySummary = summary
-    ? `Trading charges ${formatAmount(summary.total, currency)}. Buy ${formatAmount(summary.buy, currency)}, sell ${formatAmount(summary.sell, currency)}.`
+    ? `Trading charges ${money(summary.total)}. Buy ${money(summary.buy)}, sell ${money(summary.sell)}.`
     : "Trading charges. Enter a valid date range.";
 
   return (
