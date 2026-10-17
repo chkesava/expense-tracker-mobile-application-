@@ -25,16 +25,8 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { ManageStockCashModal } from "@/components/portfolio/ManageStockCashModal";
 import { RunwayEntryRow } from "@/components/runway/RunwayEntryRow";
 import { Button } from "@/components/ui/Button";
-import { useAccountEntries } from "@/hooks/useAccountEntries";
-import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccounts } from "@/hooks/useAccounts";
-import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
-import { useBorrowings } from "@/hooks/useBorrowings";
-import { useReceivables } from "@/hooks/useReceivables";
-import { useCreditCardBills } from "@/hooks/useCreditCardBills";
-import { useExpenses } from "@/hooks/useExpenses";
-import { useIncomes } from "@/hooks/useIncomes";
 import { useUnifiedNetWorth } from "@/hooks/useUnifiedNetWorth";
 import { useSettings } from "@/providers/SettingsProvider";
 import type { Account } from "@/shared/types/expense";
@@ -128,15 +120,10 @@ export function AccountsList() {
 
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
-  const { expenses } = useExpenses();
-  const { incomes } = useIncomes();
-  const { entries } = useAccountEntries();
-  const { payments } = useAccountPayments();
-  const { transfers } = useAccountTransfers();
-  const { borrowings, repayments: borrowingRepayments } = useBorrowings();
-  const { receivables, repayments: receivableRepayments } = useReceivables();
-  const { bills } = useCreditCardBills();
 
+  // SPENDLY-501: balances come from the materialized account fields, so this
+  // list no longer subscribes to the ledger sources itself. Net worth still
+  // mounts what its liabilities and investments totals need.
   const netWorth = useUnifiedNetWorth();
 
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
