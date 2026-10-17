@@ -25,6 +25,7 @@ import {
 import { newItemId, reviewDateChoices } from "@/shared/utils/decisionForm";
 import { withAlpha } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useDecisionFormat } from "@/components/decisions/useDecisionFormat";
 
 export function DueBadge({ state }: { state: CommitmentState | ReviewState }) {
   const { theme } = useTheme();
@@ -58,6 +59,8 @@ export function DecisionCommitmentsSection({
   const [text, setText] = useState("");
   const [owner, setOwner] = useState("");
   const [date, setDate] = useState("");
+  // SPENDLY-547: review, target and done dates in the user's date format.
+  const { date: showDate } = useDecisionFormat();
   const [showIssues, setShowIssues] = useState(false);
   const progress = commitmentProgress(decision.commitments, today);
   const review = reviewState(decision, today);
@@ -84,7 +87,7 @@ export function DecisionCommitmentsSection({
         <View style={{ gap: theme.space.xs }}>
           <View style={[styles.row, { gap: theme.space.sm }]}>
             <CalendarClock size={16} color={theme.colors.primary} />
-            <Text style={[body, { flex: 1 }]}>{decision.reviewDate ? `Review on ${decision.reviewDate}` : "No review date"}</Text>
+            <Text style={[body, { flex: 1 }]}>{decision.reviewDate ? `Review on ${showDate(decision.reviewDate)}` : "No review date"}</Text>
             <DueBadge state={review} />
           </View>
           {!readOnly ? (
@@ -116,14 +119,16 @@ export function DecisionCommitmentsSection({
                   <DueBadge state={state} />
                 </View>
                 <Text style={muted}>
-                  {[c.owner ? `By ${c.owner}` : null, c.targetDate ? `Target ${c.targetDate}` : null, c.completedAtMs ? `Done ${new Date(c.completedAtMs).toISOString().slice(0, 10)}` : null].filter(Boolean).join(" · ") || "No target date"}
+                  {[c.owner ? `By ${c.owner}` : null, c.targetDate ? `Target ${showDate(c.targetDate)}` : null, c.completedAtMs ? `Done ${showDate(c.completedAtMs)}` : null].filter(Boolean).join(" · ") || "No target date"}
                 </Text>
                 {!readOnly ? (
-                  <View style={[styles.row, { gap: theme.space.xs }]} accessibilityRole="radiogroup">
-                    {(["open", "done", "dropped"] as const).map((s) => (
-                      <Chip key={s} label={s === "open" ? "To do" : s === "done" ? "Done" : "Dropped"} size="sm" selected={c.status === s} disabled={busy} onPress={() => onSave(setCommitmentStatus(decision, c.id, s, Date.now()), s === "done" ? "Marked done" : s === "dropped" ? "Marked dropped" : "Reopened")} accessibilityRole="radio" />
-                    ))}
-                    <View style={{ flex: 1 }} />
+                  <View style={[styles.row, { gap: theme.space.xs }]}>
+                    {/* SPENDLY-547: the chips wrap, so the delete button stays inside the card at 320 dp. */}
+                    <View style={[styles.wrap, { flex: 1, gap: theme.space.xs }]} accessibilityRole="radiogroup">
+                      {(["open", "done", "dropped"] as const).map((s) => (
+                        <Chip key={s} label={s === "open" ? "To do" : s === "done" ? "Done" : "Dropped"} size="sm" selected={c.status === s} disabled={busy} onPress={() => onSave(setCommitmentStatus(decision, c.id, s, Date.now()), s === "done" ? "Marked done" : s === "dropped" ? "Marked dropped" : "Reopened")} accessibilityRole="radio" />
+                      ))}
+                    </View>
                     <Button variant="ghost" size="icon" disabled={busy} onPress={() => onSave(removeCommitment(decision, c.id), "Commitment removed")} accessibilityLabel={`Remove commitment: ${c.text}`}>
                       <Trash2 size={16} color={theme.colors.destructive} />
                     </Button>

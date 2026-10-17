@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
-import { ChevronRight, Hourglass, Info, SlidersHorizontal } from "lucide-react-native";
+import { ChevronRight, Hourglass, Info, SlidersHorizontal, TrendingDown } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
-import { LoadingState } from "@/components/common/LoadingState";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { DataRow, HeroSection, MetaLabel, Pill, Section, SectionAction, type Tone } from "@/components/dashboard/primitives";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
@@ -13,6 +14,7 @@ import { RunwaySettingsSheet } from "@/components/runway/RunwaySettingsSheet";
 import { RunwayTimeline } from "@/components/runway/RunwayTimeline";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { WhatIfEntryRow } from "@/components/whatIf/WhatIfEntryRow";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { useRunway } from "@/hooks/useRunway";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { writeSavedMessage } from "@/lib/firestoreWrite";
@@ -20,10 +22,8 @@ import { toast } from "@/lib/toast";
 import { saveRunwaySettings } from "@/services/runway/runwaySettingsStore";
 import { RUNWAY_MODE_INFO } from "@/shared/data/runwayRules";
 import type { RunwayMode } from "@/shared/types/runway";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import type { RunwaySettings } from "@/shared/utils/runwaySettings";
 import { CONFIDENCE_LABELS, dateLabel, methodologyLines, runwayHeadline, timelineRows } from "@/shared/utils/runwayView";
-import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
 
 /**
@@ -33,14 +33,15 @@ import { useTheme } from "@/theme/ThemeProvider";
  */
 export default function RunwayScreen() {
   const { theme } = useTheme();
-  const surfaces = useSurfaces();
   const router = useRouter();
   const bottomPadding = usePageListBottomPadding();
   const { uid, model, sources, settings, displayCurrency, loading, error, retry } = useRunway();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showMethod, setShowMethod] = useState(false);
-  const fmt = (n: number) => formatAmount(n, displayCurrency);
+  // SPENDLY-545: ghost-aware. Every runway figure, the reserve in the
+  // headline and the timeline labels used to show in ghost mode.
+  const fmt = useGhostMoney(displayCurrency);
 
   const persist = async (next: RunwaySettings, message: string) => {
     if (!uid) return;
@@ -61,13 +62,17 @@ export default function RunwayScreen() {
   const reserveText =
     out.result.floor > 0 ? (settings.thresholdKind === "essential_months" ? `${settings.thresholdMonths}-month (${fmt(out.result.floor)})` : fmt(out.result.floor)) : "";
   const headline = runwayHeadline(out, settings.projectionMonths, reserveText);
-  const rows = useMemo(() => timelineRows(model.baseline, out, fmt), [model.baseline, out, displayCurrency]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rows = useMemo(() => timelineRows(model.baseline, out, fmt), [model.baseline, out, fmt]);
   const method = useMemo(() => methodologyLines(settings.mode, model.baseline, model.assumptions), [settings.mode, model.baseline, model.assumptions]);
 
   const text = { color: theme.colors.foreground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.sm };
   const muted = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
-  const h2 = { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.md };
-  const card = { backgroundColor: theme.colors.card, borderColor: theme.colors.border, borderRadius: theme.radius.md, padding: theme.space.md, gap: theme.space.sm };
+  const figure = (value: string) => (
+    <Text numberOfLines={1} style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm, fontVariant: ["tabular-nums"] }}>
+      {value}
+    </Text>
+  );
+  const badgeTone: Tone = headline.tone === "warning" ? "negative" : headline.tone === "muted" ? "muted" : "accent";
 
   const header = (
     <PageHeader
@@ -93,7 +98,12 @@ export default function RunwayScreen() {
   if (error) {
     body = <ErrorState title="Couldn't load your runway" description={error.message} onRetry={error.retryable ? retry : undefined} />;
   } else if (loading) {
-    body = <LoadingState variant="list" count={5} />;
+    body = (
+      <View style={{ padding: theme.space.lg, gap: theme.space.md }}>
+        <DashboardSkeleton variant="hero" />
+        <DashboardSkeleton variant="section" rows={4} />
+      </View>
+    );
   } else if (sources.resources.length === 0) {
     body = (
       <EmptyState
@@ -117,27 +127,31 @@ export default function RunwayScreen() {
           onChange={(mode) => void persist({ ...settings, mode }, `Showing ${RUNWAY_MODE_INFO[mode].label.toLowerCase()}`)}
         />
 
-        <View
-          style={[card, { borderWidth: StyleSheet.hairlineWidth, backgroundColor: surfaces.tile }]}
-          accessible
-          accessibilityLabel={`${headline.badge}. ${headline.title}. ${headline.detail}. ${RUNWAY_MODE_INFO[settings.mode].label}. ${CONFIDENCE_LABELS[model.confidence]}.`}
+        <HeroSection
+          variant="deep"
+          title="Runway"
+          subtitle={CONFIDENCE_LABELS[model.confidence]}
+          icon={<Hourglass size={16} color={theme.colors.primary} />}
+          action={<Pill label={headline.badge} tone={badgeTone} />}
         >
-          <View style={styles.rowBetween}>
-            <Text style={[muted, { fontFamily: theme.fontFamily.semibold }]}>{headline.badge.toUpperCase()}</Text>
-            <Text style={muted}>{CONFIDENCE_LABELS[model.confidence]}</Text>
-          </View>
-          <Text
-            style={{
-              color: headline.tone === "warning" ? theme.colors.destructive : theme.colors.foreground,
-              fontFamily: theme.fontFamily.bold,
-              fontSize: theme.typography.xxl,
-            }}
+          <View
+            style={{ gap: 6 }}
+            accessible
+            accessibilityLabel={`${headline.badge}. ${headline.title}. ${headline.detail}. ${RUNWAY_MODE_INFO[settings.mode].label}. ${CONFIDENCE_LABELS[model.confidence]}.`}
           >
-            {headline.title}
-          </Text>
-          <Text style={text}>{headline.detail}</Text>
-          <Text style={muted}>{RUNWAY_MODE_INFO[settings.mode].label}</Text>
-        </View>
+            <Text
+              style={{
+                color: headline.tone === "warning" ? theme.colors.destructive : theme.colors.foreground,
+                fontFamily: theme.fontFamily.bold,
+                fontSize: theme.typography.xxl,
+              }}
+            >
+              {headline.title}
+            </Text>
+            <Text style={[text, { color: theme.colors.mutedForeground }]}>{headline.detail}</Text>
+            <MetaLabel numberOfLines={2}>{RUNWAY_MODE_INFO[settings.mode].label}</MetaLabel>
+          </View>
+        </HeroSection>
 
         {r.state === "insufficient_data" ? (
           <EmptyState
@@ -147,93 +161,73 @@ export default function RunwayScreen() {
           />
         ) : (
           <>
-            <View style={[card, { borderWidth: StyleSheet.hairlineWidth }]}>
-              <Pressable
+            <Section title="What it's based on">
+              <DataRow
+                divider
+                title="Counted money today"
+                meta="Actual · opens runway sources"
+                value={figure(fmt(out.liquid))}
+                valueMeta={<ChevronRight size={14} color={theme.colors.mutedForeground} />}
                 onPress={() => router.push("/runway/sources" as Href)}
-                accessibilityRole="button"
                 accessibilityLabel={`Counted money ${fmt(out.liquid)}. Opens runway sources.`}
-                style={styles.rowBetween}
-              >
-                <View>
-                  <Text style={muted}>Counted money today</Text>
-                  <Text style={[text, { fontFamily: theme.fontFamily.semibold }]}>{fmt(out.liquid)}</Text>
-                </View>
-                <ChevronRight size={16} color={theme.colors.mutedForeground} />
-              </Pressable>
+              />
               <Figure label="Monthly burn" value={r.monthlyBurn === null ? "—" : fmt(r.monthlyBurn)} />
-              {settings.mode !== "gross_burn" ? <Figure label={`Expected money in (${settings.projectionMonths} months)`} value={fmt(out.expectedInflow)} /> : null}
-              <Figure label={`Expected money out (${settings.projectionMonths} months)`} value={fmt(out.expectedOutflow)} />
-              {out.minimumBalance ? (
-                <Figure label="Lowest projected balance" value={`${fmt(out.minimumBalance.amount)} on ${dateLabel(out.minimumBalance.date)}`} />
-              ) : null}
-              <Figure label="Reserve" value={r.floor > 0 ? fmt(r.floor) : "None set"} />
-            </View>
+              {settings.mode !== "gross_burn" ? <Figure label="Expected money in" meta={`Next ${settings.projectionMonths} months`} value={fmt(out.expectedInflow)} /> : null}
+              <Figure label="Expected money out" meta={`Next ${settings.projectionMonths} months`} value={fmt(out.expectedOutflow)} />
+              {out.minimumBalance ? <Figure label="Lowest projected balance" value={fmt(out.minimumBalance.amount)} meta={`On ${dateLabel(out.minimumBalance.date)}`} /> : null}
+              <Figure label="Reserve" value={r.floor > 0 ? fmt(r.floor) : "None set"} last />
+            </Section>
 
-            <View style={{ gap: theme.space.sm }}>
-              <Text style={h2} accessibilityRole="header">
-                Month by month
-              </Text>
-              <Text style={muted}>Actual months come from your records. Projected months are estimates.</Text>
+            <Section title="Month by month" subtitle="Actual months come from your records. Projected months are estimates.">
               <RunwayTimeline rows={rows} format={fmt} />
-            </View>
+            </Section>
 
             {out.drivers.length ? (
-              <View style={{ gap: theme.space.sm }}>
-                <Text style={h2} accessibilityRole="header">
-                  Biggest drivers
-                </Text>
-                {out.drivers.map((d) => (
-                  <View key={d.id} style={styles.rowBetween} accessible accessibilityLabel={`${d.label}, money ${d.direction === "in" ? "in" : "out"}, ${fmt(d.amount)}`}>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={text} numberOfLines={1}>
-                        {d.label}
-                      </Text>
-                      <Text style={muted}>
-                        Money {d.direction === "in" ? "in" : "out"} · {Math.round(d.share * 100)}%
-                      </Text>
-                    </View>
-                    <Text style={[text, { fontFamily: theme.fontFamily.semibold }]}>{fmt(d.amount)}</Text>
-                  </View>
+              <Section title="Biggest drivers" icon={<TrendingDown size={16} color={theme.colors.mutedForeground} />}>
+                {out.drivers.map((d, i) => (
+                  <DataRow
+                    key={d.id}
+                    divider={i < out.drivers.length - 1}
+                    title={d.label}
+                    meta={`Money ${d.direction === "in" ? "in" : "out"} · ${Math.round(d.share * 100)}%`}
+                    value={figure(fmt(d.amount))}
+                    accessibilityLabel={`${d.label}, money ${d.direction === "in" ? "in" : "out"}, ${fmt(d.amount)}`}
+                  />
                 ))}
-              </View>
+              </Section>
             ) : null}
           </>
         )}
 
         {model.baseline.unusual.length ? (
-          <View style={{ gap: theme.space.sm }}>
-            <Text style={h2} accessibilityRole="header">
-              Unusual one-offs
-            </Text>
-            <Text style={muted}>{settings.includeUnusual ? "Included in typical spending." : "Left out of typical spending. Change this in settings."}</Text>
-            {model.baseline.unusual.slice(0, 5).map((u) => (
-              <View key={u.id || u.date + u.amount} style={styles.rowBetween}>
-                <Text style={[text, { flex: 1 }]} numberOfLines={1}>
-                  {u.label} · {dateLabel(u.date)}
-                </Text>
-                <Text style={text}>{fmt(u.amount)}</Text>
-              </View>
+          <Section title="Unusual one-offs" subtitle={settings.includeUnusual ? "Included in typical spending." : "Left out of typical spending. Change this in settings."}>
+            {model.baseline.unusual.slice(0, 5).map((u, i, list) => (
+              <DataRow key={u.id || u.date + u.amount} divider={i < list.length - 1} title={u.label} meta={dateLabel(u.date)} value={figure(fmt(u.amount))} />
             ))}
-          </View>
+          </Section>
         ) : null}
 
         <WhatIfEntryRow subtitle="See how a raise, a purchase or a new EMI would change your runway" />
 
-        <View style={[card, { borderWidth: StyleSheet.hairlineWidth }]}>
-          <Pressable
-            onPress={() => setShowMethod((v) => !v)}
-            accessibilityRole="button"
-            accessibilityState={{ expanded: showMethod }}
-            style={[styles.rowBetween, { minHeight: 44 }]}
-          >
-            <View style={[styles.row, { gap: theme.space.sm }]}>
-              <Info size={16} color={theme.colors.primary} />
-              <Text style={[text, { fontFamily: theme.fontFamily.semibold }]}>How this is worked out</Text>
+        <Section
+          title="How this is worked out"
+          icon={<Info size={16} color={theme.colors.primary} />}
+          action={
+            <SectionAction
+              label={showMethod ? "Hide" : "Show"}
+              onPress={() => setShowMethod((v) => !v)}
+              accessibilityLabel={`${showMethod ? "Hide" : "Show"} how this is worked out`}
+            />
+          }
+        >
+          {showMethod ? (
+            <View style={{ gap: 4 }}>
+              {method.map((line, i) => (
+                <Text key={i} style={muted}>{`• ${line}`}</Text>
+              ))}
             </View>
-            <Text style={muted}>{showMethod ? "Hide" : "Show"}</Text>
-          </Pressable>
-          {showMethod ? method.map((line, i) => <Text key={i} style={muted}>{`• ${line}`}</Text>) : null}
-        </View>
+          ) : null}
+        </Section>
       </ScrollView>
     );
   }
@@ -253,17 +247,20 @@ export default function RunwayScreen() {
   );
 }
 
-function Figure({ label, value }: { label: string; value: string }) {
+function Figure({ label, value, meta, last = false }: { label: string; value: string; meta?: string; last?: boolean }) {
   const { theme } = useTheme();
   return (
-    <View style={styles.rowBetween} accessible accessibilityLabel={`${label}: ${value}`}>
-      <Text style={{ color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs, flex: 1 }}>{label}</Text>
-      <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm }}>{value}</Text>
+    <View accessible accessibilityLabel={`${label}: ${value}${meta ? `, ${meta.toLowerCase()}` : ""}`}>
+      <DataRow
+        divider={!last}
+        title={label}
+        meta={meta}
+        value={
+          <Text numberOfLines={1} style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm, fontVariant: ["tabular-nums"] }}>
+            {value}
+          </Text>
+        }
+      />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center" },
-  rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-});

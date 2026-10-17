@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
-import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react-native";
+import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react-native";
 
 import { CalendarEventRow } from "@/components/calendar/CalendarEventRow";
 import { CalendarCashSummaryCard } from "@/components/calendar/CalendarCashSummaryCard";
@@ -21,7 +21,9 @@ import { monthGridRange, queryCalendar } from "@/shared/utils/calendarQuery";
 import { summarizeCalendarCash, summaryRange, type SummaryWindow } from "@/shared/utils/calendarSummary";
 import { CalendarLegend, CalendarMonthGrid } from "@/components/calendar/CalendarMonthGrid";
 import { ErrorState } from "@/components/common/ErrorState";
-import { LoadingState } from "@/components/common/LoadingState";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { Pill, Section, SectionAction } from "@/components/dashboard/primitives";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -32,7 +34,6 @@ import type { CalendarEvent } from "@/shared/types/calendar";
 import { agendaRange, agendaTitle, buildAgendaRows, shiftAgenda, type AgendaRow, type AgendaSpan } from "@/shared/utils/calendarAgenda";
 import { CALENDAR_SOURCE_LABELS, buildMonthGrid, dayTotals, longDateLabel, monthTitle, nextMonth, previousMonth } from "@/shared/utils/calendarMonth";
 import { todayDateKey } from "@/shared/utils/dates";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -62,7 +63,9 @@ export default function FinancialCalendarScreen() {
     [view, month, firstDay, span, anchor]
   );
   const cal = useFinancialCalendar(range);
-  const fmt = useCallback((n: number) => formatAmount(n, cal.currency), [cal.currency]);
+  // SPENDLY-545: ghost-aware. Every calendar amount (rows, day totals, the
+  // summary, the sheets and their labels) used to show in ghost mode.
+  const fmt = useGhostMoney(cal.currency);
   const grid = useMemo(() => buildMonthGrid(month, firstDay, cal.byDate, today, selected), [month, firstDay, cal.byDate, today, selected]);
   const dayEvents = cal.byDate.get(selected) ?? [];
   const totals = dayTotals(dayEvents);
@@ -151,7 +154,6 @@ export default function FinancialCalendarScreen() {
   const text = { color: theme.colors.foreground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.sm };
   const muted = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
   const h2 = { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.md };
-  const card = { borderWidth: StyleSheet.hairlineWidth, borderColor: theme.colors.border, borderRadius: theme.radius.md, padding: theme.space.md, backgroundColor: theme.colors.card };
 
   const header = (
     <PageHeader
@@ -263,7 +265,7 @@ export default function FinancialCalendarScreen() {
                 {cal.failedSources.length ? `Some items couldn't load: ${cal.failedSources.map((src) => CALENDAR_SOURCE_LABELS[src]).join(", ")}.` : "Still loading some of your records…"}
               </Text>
             ) : null}
-            {cal.loadState === "loading" && cal.events.length === 0 ? <LoadingState variant="list" count={3} /> : null}
+            {cal.loadState === "loading" && cal.events.length === 0 ? <DashboardSkeleton variant="section" rows={3} /> : null}
           </View>
         }
       />
@@ -281,30 +283,31 @@ export default function FinancialCalendarScreen() {
           onOpenRunway={() => router.push("/runway" as Href)}
           onOpenSources={() => router.push("/runway/sources" as Href)}
         />
-        <View style={styles.navRow}>
-          <Pressable onPress={() => go(previousMonth(month))} accessibilityRole="button" accessibilityLabel={`Previous month, ${monthTitle(previousMonth(month))}`} hitSlop={8} style={styles.navBtn}>
-            <ChevronLeft size={22} color={theme.colors.foreground} />
-          </Pressable>
-          <Text style={[h2, { flex: 1, textAlign: "center" }]} accessibilityRole="header">
-            {monthTitle(month)}
-          </Text>
-          <Pressable onPress={() => go(nextMonth(month))} accessibilityRole="button" accessibilityLabel={`Next month, ${monthTitle(nextMonth(month))}`} hitSlop={8} style={styles.navBtn}>
-            <ChevronRight size={22} color={theme.colors.foreground} />
-          </Pressable>
-          <Pressable
-            onPress={() => go(today.slice(0, 7))}
-            accessibilityRole="button"
-            accessibilityLabel="Go to today"
-            style={[styles.todayBtn, { borderColor: theme.colors.border, borderRadius: theme.radius.md }]}
-          >
-            <Text style={[text, { fontFamily: theme.fontFamily.semibold }]}>Today</Text>
-          </Pressable>
-        </View>
+        {cal.loadState === "loading" && cal.events.length === 0 ? <DashboardSkeleton variant="section" rows={3} /> : null}
+        <Section contentStyle={{ gap: theme.space.sm }}>
+          <View style={styles.navRow}>
+            <Pressable onPress={() => go(previousMonth(month))} accessibilityRole="button" accessibilityLabel={`Previous month, ${monthTitle(previousMonth(month))}`} hitSlop={8} style={styles.navBtn}>
+              <ChevronLeft size={22} color={theme.colors.foreground} />
+            </Pressable>
+            <Text style={[h2, { flex: 1, textAlign: "center" }]} accessibilityRole="header">
+              {monthTitle(month)}
+            </Text>
+            <Pressable onPress={() => go(nextMonth(month))} accessibilityRole="button" accessibilityLabel={`Next month, ${monthTitle(nextMonth(month))}`} hitSlop={8} style={styles.navBtn}>
+              <ChevronRight size={22} color={theme.colors.foreground} />
+            </Pressable>
+            <Pressable
+              onPress={() => go(today.slice(0, 7))}
+              accessibilityRole="button"
+              accessibilityLabel="Go to today"
+              style={[styles.todayBtn, { borderColor: theme.colors.border, borderRadius: theme.radius.md }]}
+            >
+              <Text style={[text, { fontFamily: theme.fontFamily.semibold }]}>Today</Text>
+            </Pressable>
+          </View>
 
-        {cal.loadState === "loading" && cal.events.length === 0 ? <LoadingState variant="list" count={3} /> : null}
-
-        <CalendarMonthGrid weekdays={grid.weekdays} weeks={grid.weeks} onSelect={setSelected} />
-        <CalendarLegend />
+          <CalendarMonthGrid weekdays={grid.weekdays} weeks={grid.weeks} onSelect={setSelected} />
+          <CalendarLegend />
+        </Section>
 
         {cal.loadState === "partial" ? (
           <Text style={muted} accessibilityLiveRegion="polite">
@@ -315,27 +318,34 @@ export default function FinancialCalendarScreen() {
         ) : null}
 
         {cal.earlierOverdue.length ? (
-          <View style={[card, { backgroundColor: surfaces.tile }]}>
-            <Pressable onPress={() => setShowEarlier((v) => !v)} accessibilityRole="button" accessibilityState={{ expanded: showEarlier }} style={styles.navRow}>
-              <Text style={[text, { flex: 1, color: theme.colors.destructive, fontFamily: theme.fontFamily.semibold }]}>
-                ! {cal.earlierOverdue.length} overdue from earlier
-              </Text>
-              <Text style={muted}>{showEarlier ? "Hide" : "Show"}</Text>
-            </Pressable>
+          <Section
+            title={`${cal.earlierOverdue.length} overdue from earlier`}
+            subtitle="Still open from before this view"
+            icon={<AlertTriangle size={16} color={theme.colors.destructive} />}
+            iconTint={surfaces.wash(theme.colors.destructive)}
+            action={
+              <SectionAction
+                label={showEarlier ? "Hide" : "Show"}
+                tone="negative"
+                onPress={() => setShowEarlier((v) => !v)}
+                accessibilityLabel={`${showEarlier ? "Hide" : "Show"} ${cal.earlierOverdue.length} overdue from earlier`}
+              />
+            }
+          >
             {showEarlier ? cal.earlierOverdue.map((e) => <CalendarEventRow key={e.id} event={e} format={fmt} onPress={open} />) : null}
-          </View>
+          </Section>
         ) : null}
 
-        <View style={card}>
-          <Text style={[text, { fontFamily: theme.fontFamily.semibold }]} accessibilityRole="header">
-            {longDateLabel(selected)}
-            {selected === today ? " · Today" : ""}
-          </Text>
-          {dayEvents.length ? (
-            <Text style={muted}>
-              {[totals.out ? `${fmt(totals.out)} out` : "", totals.in ? `${fmt(totals.in)} in` : "", totals.overdue ? `${totals.overdue} overdue` : ""].filter(Boolean).join(" · ") || `${dayEvents.length} event${dayEvents.length === 1 ? "" : "s"}`}
-            </Text>
-          ) : null}
+        <Section
+          title={longDateLabel(selected)}
+          subtitle={
+            dayEvents.length
+              ? [totals.out ? `${fmt(totals.out)} out` : "", totals.in ? `${fmt(totals.in)} in` : "", totals.overdue ? `${totals.overdue} overdue` : ""].filter(Boolean).join(" · ") ||
+                `${dayEvents.length} event${dayEvents.length === 1 ? "" : "s"}`
+              : undefined
+          }
+          badge={selected === today ? <Pill label="Today" tone="accent" /> : undefined}
+        >
           {dayEvents.length ? (
             dayEvents.map((e) => <CalendarEventRow key={e.id} event={e} format={fmt} onPress={open} />)
           ) : (
@@ -343,7 +353,7 @@ export default function FinancialCalendarScreen() {
               {cal.loadState === "loading" ? "Loading…" : "Nothing financial on this day. Days with a mark have bills, income or other events."}
             </Text>
           )}
-        </View>
+        </Section>
       </ScrollView>
     );
   }

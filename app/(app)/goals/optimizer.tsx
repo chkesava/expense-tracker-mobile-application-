@@ -1,23 +1,26 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
-import { ChevronRight, FolderOpen, Target } from "lucide-react-native";
+import { ChevronRight, FolderOpen, Scale, Target, Wallet } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
-import { LoadingState } from "@/components/common/LoadingState";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { DataRow, HeroSection, Pill, Section, type Tone } from "@/components/dashboard/primitives";
+import { Chip } from "@/components/ui/Chip";
 import { Modal } from "@/components/common/Modal";
 import { GoalFundingPlansSheet } from "@/components/goals/GoalFundingPlansSheet";
 import { GoalPlanInputsSheet } from "@/components/goals/GoalPlanInputsSheet";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
-import { ChipRow, RowSwitch } from "@/components/settings/SettingsControls";
+import { RowSwitch } from "@/components/settings/SettingsControls";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { WhatIfEntryRow } from "@/components/whatIf/WhatIfEntryRow";
 import { WhatIfScenarioPickerSheet } from "@/components/whatIf/WhatIfScenarioPickerSheet";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { useGoalFunding } from "@/hooks/useGoalFunding";
 import { useGoalFundingPlans } from "@/hooks/useGoalFundingPlans";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
@@ -31,7 +34,6 @@ import {
   setGoalFundingPlanArchived,
 } from "@/services/goals/goalFundingPlanStore";
 import { GOAL_FUNDING_MODES, type GoalFundingMode, type GoalPlanInput } from "@/shared/types/goalFunding";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { inputsForGoals } from "@/shared/utils/goalFundingModel";
 import { runGoalFundingScenario } from "@/shared/utils/goalFundingOptimizer";
 import { GOAL_CHANGE_LABELS, goalFundingPlanDoc, goalsChangedSince, validatePlanName, type GoalFundingPlan } from "@/shared/utils/goalFundingPlans";
@@ -46,6 +48,8 @@ import {
   tradeOffLines,
   whyLines,
 } from "@/shared/utils/goalFundingView";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -59,7 +63,9 @@ export default function GoalFundingScreen() {
   const surfaces = useSurfaces();
   const router = useRouter();
   const currency = useDisplayCurrency();
-  const fmt = useCallback((n: number) => formatAmount(n, currency), [currency]);
+  // SPENDLY-546: ghost-aware; every optimizer amount used to show in ghost mode.
+  const fmt = useGhostMoney(currency);
+  const { settings } = useSettings();
   const bottomPadding = usePageListBottomPadding();
 
   const [mode, setMode] = useState<GoalFundingMode>("balanced");
@@ -132,8 +138,13 @@ export default function GoalFundingScreen() {
 
   const text = { color: theme.colors.foreground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.sm };
   const muted = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
-  const h2 = { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.md };
-  const card = { borderWidth: StyleSheet.hairlineWidth, borderColor: theme.colors.border, borderRadius: theme.radius.md, padding: theme.space.md, gap: theme.space.sm, backgroundColor: theme.colors.card };
+  const figure = (value: string) => (
+    <Text numberOfLines={1} style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm, fontVariant: ["tabular-nums"] }}>
+      {value}
+    </Text>
+  );
+  const statusTone = (status: string): Tone =>
+    status === "behind" || status === "not_fundable" || status === "target_date_passed" ? "negative" : status === "on_track" || status === "ahead" || status === "funded" ? "positive" : "muted";
 
   const header = (
     <PageHeader
@@ -153,7 +164,12 @@ export default function GoalFundingScreen() {
   if (error) {
     body = <ErrorState title="Couldn't load your goals" description={error.message} onRetry={undefined} />;
   } else if (loading) {
-    body = <LoadingState variant="list" count={4} />;
+    body = (
+      <View style={{ padding: theme.space.lg, gap: theme.space.md }}>
+        <DashboardSkeleton variant="hero" />
+        <DashboardSkeleton variant="section" rows={3} />
+      </View>
+    );
   } else if (!goals.length) {
     body = (
       <EmptyState
@@ -168,9 +184,12 @@ export default function GoalFundingScreen() {
     const whyGoal = result.goals.find((g) => g.goalId === why) ?? null;
     body = (
       <ScrollView contentContainerStyle={{ padding: theme.space.lg, paddingBottom: bottomPadding, gap: theme.space.lg }}>
-        <View style={[card, { backgroundColor: surfaces.tile }]}>
-          <Text style={[text, { fontFamily: theme.fontFamily.semibold }]}>{openPlan ? `Plan: ${openPlan.name}` : "Unsaved plan"}</Text>
-          {openPlan ? <Text style={muted}>Results are recalculated from your goals as they are today.</Text> : null}
+        <Section
+          title={openPlan ? openPlan.name : "Unsaved plan"}
+          subtitle={openPlan ? "Results are recalculated from your goals as they are today." : "Save it to come back to it later."}
+          badge={<Pill label={openPlan ? "Saved plan" : "Not saved"} tone={openPlan ? "accent" : "muted"} />}
+          contentStyle={{ gap: theme.space.sm }}
+        >
           {changes.length ? (
             <View accessibilityLiveRegion="polite">
               <Text style={[muted, { fontFamily: theme.fontFamily.semibold }]}>Goals changed since this plan was saved:</Text>
@@ -201,32 +220,55 @@ export default function GoalFundingScreen() {
               {openPlan ? "Save as new" : "Save plan"}
             </Button>
           </View>
-        </View>
-        <View style={card}>
-          <View style={styles.rowBetween}>
-            <Text style={muted}>Available each month for goals</Text>
-            <Text style={[muted, { fontFamily: theme.fontFamily.semibold }]}>{capacitySourceLabel(capacity).toUpperCase()}</Text>
+        </Section>
+        <HeroSection variant="deep" title="Available for goals" subtitle={`Each month · ${capacitySourceLabel(capacity)}`} icon={<Wallet size={16} color={theme.colors.primary} />}>
+          <View style={{ gap: theme.space.sm }}>
+            <Text
+              style={{
+                color: capacity.status === "negative" ? theme.colors.destructive : theme.colors.foreground,
+                fontFamily: theme.fontFamily.bold,
+                fontSize: theme.typography.xxl,
+                fontVariant: ["tabular-nums"],
+              }}
+            >
+              {capacity.monthly === null ? "Not known yet" : fmt(capacity.monthly)}
+            </Text>
+            {capacity.parts.length ? (
+              <View>
+                {capacity.parts.map((p, i) => (
+                  <View
+                    key={p.key}
+                    accessible
+                    accessibilityLabel={`${p.label}: ${fmt(p.monthly)}`}
+                    style={[styles.part, i < capacity.parts.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: surfaces.divider }]}
+                  >
+                    <Text style={[text, { flex: 1 }]}>{p.label}</Text>
+                    {figure(fmt(p.monthly))}
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            {capacity.alreadyToSavingsMonthly ? <Text style={muted}>{fmt(capacity.alreadyToSavingsMonthly)} a month already goes to savings — it's part of this amount, not extra.</Text> : null}
+            {capacity.commitmentsWithoutAmount.length ? <Text style={muted}>{capacity.commitmentsWithoutAmount.length} upcoming commitment(s) have no amount and aren't included.</Text> : null}
+            {historyMonths < 3 && !capacity.usesPlannedOverride ? <Text style={muted}>Based on {historyMonths} month(s) of records, so this may move a lot.</Text> : null}
+            <Input label="Use my own monthly amount (optional)" value={plannedText} onChangeText={setPlannedText} keyboardType="numeric" helperText="Replaces the figure above for this plan only." />
           </View>
-          <Text style={{ color: capacity.status === "negative" ? theme.colors.destructive : theme.colors.foreground, fontFamily: theme.fontFamily.bold, fontSize: theme.typography.xl }}>
-            {capacity.monthly === null ? "Not known yet" : fmt(capacity.monthly)}
-          </Text>
-          {capacity.parts.map((p) => (
-            <View key={p.key} style={styles.rowBetween} accessible accessibilityLabel={`${p.label}: ${fmt(p.monthly)}`}>
-              <Text style={[muted, { flex: 1 }]}>{p.label}</Text>
-              <Text style={text}>{fmt(p.monthly)}</Text>
-            </View>
-          ))}
-          {capacity.alreadyToSavingsMonthly ? <Text style={muted}>{fmt(capacity.alreadyToSavingsMonthly)} a month already goes to savings — it's part of this amount, not extra.</Text> : null}
-          {capacity.commitmentsWithoutAmount.length ? <Text style={muted}>{capacity.commitmentsWithoutAmount.length} upcoming commitment(s) have no amount and aren't included.</Text> : null}
-          {historyMonths < 3 && !capacity.usesPlannedOverride ? <Text style={muted}>Based on {historyMonths} month(s) of records, so this may move a lot.</Text> : null}
-          <Input label="Use my own monthly amount (optional)" value={plannedText} onChangeText={setPlannedText} keyboardType="numeric" helperText="Replaces the figure above for this plan only." />
-        </View>
+        </HeroSection>
 
-        <View style={{ gap: theme.space.xs }}>
-          <Text style={h2} accessibilityRole="header">
-            How to share it
-          </Text>
-          <ChipRow<GoalFundingMode> options={GOAL_FUNDING_MODES.map((m) => ({ value: m, label: GOAL_FUNDING_MODE_INFO[m].label }))} selected={mode} onSelect={setMode} />
+        <Section title="How to share it" icon={<Scale size={16} color={theme.colors.primary} />} iconTint={surfaces.wash(theme.colors.primary)} contentStyle={{ gap: theme.space.sm }}>
+          <View style={styles.chips}>
+            {GOAL_FUNDING_MODES.map((m) => (
+              <Chip
+                key={m}
+                label={GOAL_FUNDING_MODE_INFO[m].label}
+                selected={mode === m}
+                appearance="outline"
+                accessibilityRole="tab"
+                haptic={mode !== m}
+                onPress={() => setMode(m)}
+              />
+            ))}
+          </View>
           <Text style={muted}>{GOAL_FUNDING_MODE_INFO[mode].explanation}</Text>
           <RowSwitch
             label="Allow planning beyond what's available"
@@ -234,65 +276,58 @@ export default function GoalFundingScreen() {
             value={allowOver}
             onValueChange={setAllowOver}
           />
-        </View>
+        </Section>
 
-        <View style={[card, { backgroundColor: surfaces.tile }]} accessible accessibilityLabel={`Goals need ${fmt(result.totalRequired)} a month. Scenario allocates ${fmt(result.totalAllocated)}. ${result.unallocated === null ? "" : `Unallocated ${fmt(result.unallocated)}.`}`}>
-          <View style={styles.rowBetween}>
-            <Text style={muted}>Goals need each month</Text>
-            <Text style={text}>{fmt(result.totalRequired)}</Text>
+        <Section title="This scenario">
+          <View accessible accessibilityLabel={`Goals need ${fmt(result.totalRequired)} a month. Scenario allocates ${fmt(result.totalAllocated)}. ${result.unallocated === null ? "" : `Unallocated ${fmt(result.unallocated)}.`}`}>
+            <DataRow divider title="Goals need each month" value={figure(fmt(result.totalRequired))} />
+            <DataRow divider={result.unallocated !== null} title="Scenario allocates" value={figure(fmt(result.totalAllocated))} />
+            {result.unallocated !== null ? (
+              <DataRow
+                title={result.unallocated < 0 ? "Over what's available (what-if)" : "Not allocated"}
+                value={
+                  <Text style={{ color: result.unallocated < 0 ? theme.colors.destructive : theme.colors.foreground, fontFamily: theme.fontFamily.bold, fontSize: theme.typography.sm, fontVariant: ["tabular-nums"] }}>
+                    {fmt(Math.abs(result.unallocated))}
+                  </Text>
+                }
+              />
+            ) : null}
           </View>
-          <View style={styles.rowBetween}>
-            <Text style={muted}>Scenario allocates</Text>
-            <Text style={text}>{fmt(result.totalAllocated)}</Text>
-          </View>
-          {result.unallocated !== null ? (
-            <View style={styles.rowBetween}>
-              <Text style={muted}>{result.unallocated < 0 ? "Over what's available (what-if)" : "Not allocated"}</Text>
-              <Text style={[text, { fontFamily: theme.fontFamily.semibold }]}>{fmt(Math.abs(result.unallocated))}</Text>
-            </View>
-          ) : null}
-        </View>
+        </Section>
 
-        <View style={{ gap: theme.space.sm }}>
-          <Text style={h2} accessibilityRole="header">
-            Your goals
-          </Text>
-          <Text style={muted}>Each row shows your current plan and this scenario side by side. Tap a goal to see why.</Text>
-          {result.goals.map((r) => (
-            <View key={r.goalId} style={card}>
+        <Section title="Your goals" subtitle="Your current plan and this scenario side by side. Tap a goal to see why.">
+          {result.goals.map((r, i) => (
+            <View key={r.goalId} style={[styles.goal, i < result.goals.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: surfaces.divider }]}>
               <Pressable onPress={() => setWhy(r.goalId)} accessibilityRole="button" accessibilityLabel={goalRowAccessibilityLabel(r, fmt)} accessibilityHint="Shows why" style={{ gap: 4 }}>
                 <View style={styles.rowBetween}>
-                  <Text style={[text, { fontFamily: theme.fontFamily.semibold, flex: 1 }]}>{r.name}</Text>
-                  <Text style={[muted, { fontFamily: theme.fontFamily.semibold, color: r.status === "behind" || r.status === "not_fundable" ? theme.colors.destructive : theme.colors.mutedForeground }]}>
-                    {GOAL_FUNDING_STATUS_LABELS[r.status]}
+                  <Text style={[text, { fontFamily: theme.fontFamily.semibold, flex: 1 }]} numberOfLines={1}>
+                    {r.name}
                   </Text>
+                  <Pill label={GOAL_FUNDING_STATUS_LABELS[r.status]} tone={statusTone(r.status)} />
                   <ChevronRight size={14} color={theme.colors.mutedForeground} />
                 </View>
                 <Text style={muted}>{comparisonText(r, fmt)}</Text>
                 {r.requiredMonthly !== null ? <Text style={muted}>Needs {fmt(r.requiredMonthly)} a month to finish on time</Text> : null}
                 {r.projectedCompletion ? (
                   <Text style={muted}>
-                    Finishes {r.projectedCompletion}
+                    Finishes {formatDisplayDate(r.projectedCompletion, settings.dateFormat)}
                     {r.monthsAheadOfTarget !== null ? ` · ${monthsPhrase(r.monthsAheadOfTarget)}` : ""}
                   </Text>
                 ) : null}
               </Pressable>
-              <Pressable onPress={() => setEditing(r.goalId)} accessibilityRole="button" accessibilityLabel={`Plan settings for ${r.name}`} style={{ minHeight: 36, justifyContent: "center" }}>
+              <Pressable onPress={() => setEditing(r.goalId)} accessibilityRole="button" accessibilityLabel={`Plan settings for ${r.name}`} style={{ minHeight: 36, justifyContent: "center", alignSelf: "flex-start" }}>
                 <Text style={[muted, { color: theme.colors.primary, fontFamily: theme.fontFamily.semibold }]}>Plan settings</Text>
               </Pressable>
             </View>
           ))}
-        </View>
+        </Section>
 
         {result.tradeOffs.length ? (
-          <View style={{ gap: theme.space.xs }}>
-            <Text style={h2} accessibilityRole="header">
-              Trade-offs
-            </Text>
+          <Section title="Trade-offs" contentStyle={{ gap: 4 }}>
             {tradeOffLines(result, fmt).map((l) => (
               <Text key={l} style={muted}>{`• ${l}`}</Text>
             ))}
-          </View>
+          </Section>
         ) : null}
 
         <View style={{ gap: theme.space.md }}>
@@ -302,14 +337,11 @@ export default function GoalFundingScreen() {
           </Button>
         </View>
 
-        <View style={{ gap: theme.space.xs }}>
-          <Text style={h2} accessibilityRole="header">
-            Assumptions
-          </Text>
+        <Section title="Assumptions" contentStyle={{ gap: 4 }}>
           {assumptionLines(result).map((l) => (
             <Text key={l} style={muted}>{`• ${l}`}</Text>
           ))}
-        </View>
+        </Section>
 
         <WhatIfScenarioPickerSheet
           isOpen={whatIfPickerOpen}
@@ -393,4 +425,7 @@ export default function GoalFundingScreen() {
 
 const styles = StyleSheet.create({
   rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  goal: { paddingVertical: 10, gap: 2 },
+  part: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 44, paddingVertical: 8 },
 });

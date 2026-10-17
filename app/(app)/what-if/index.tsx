@@ -3,9 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
 import {
   Banknote,
-  ChevronDown,
   ChevronRight,
-  ChevronUp,
   FlaskConical,
   Gift,
   HandCoins,
@@ -17,7 +15,8 @@ import {
 } from "lucide-react-native";
 
 import { ErrorState } from "@/components/common/ErrorState";
-import { LoadingState } from "@/components/common/LoadingState";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { HeroSection, RowGlyph, Section, SectionAction } from "@/components/dashboard/primitives";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
@@ -55,13 +54,7 @@ export default function WhatIfHomeScreen() {
 
   const text = { color: theme.colors.foreground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.sm };
   const muted = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
-  const h2 = { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.md };
-  const card = {
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.border,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: theme.radius.md,
-  };
+  const tile = { backgroundColor: surfaces.tile, borderRadius: theme.radius.md };
 
   const open = (s: WhatIfScenario) => router.push(`/what-if/${encodeURIComponent(s.id)}` as Href);
 
@@ -76,15 +69,15 @@ export default function WhatIfHomeScreen() {
         accessibilityLabel={`${s.name}. ${summary}.${s.archived ? " Archived." : ""} Open scenario.`}
         style={({ pressed }) => [
           styles.row,
-          { padding: theme.space.md, opacity: pressed ? 0.7 : 1 },
-          !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.border },
+          { paddingVertical: theme.space.sm, opacity: pressed ? 0.7 : 1 },
+          !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: surfaces.divider },
         ]}
       >
-        <View style={[styles.iconBubble, { backgroundColor: surfaces.tile }]}>
+        <RowGlyph tint={s.archived ? undefined : surfaces.wash(theme.colors.primary)}>
           <FlaskConical size={18} color={s.archived ? theme.colors.mutedForeground : theme.colors.primary} />
-        </View>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={[text, { fontFamily: theme.fontFamily.semibold }]} numberOfLines={1}>{s.name}</Text>
+        </RowGlyph>
+        <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
+          <Text style={[text, { fontFamily: theme.fontFamily.medium }]} numberOfLines={1}>{s.name}</Text>
           <Text style={muted} numberOfLines={1}>{summary}</Text>
         </View>
         <ChevronRight size={18} color={theme.colors.mutedForeground} />
@@ -93,8 +86,7 @@ export default function WhatIfHomeScreen() {
   };
 
   const templates = (
-    <View style={{ gap: theme.space.sm }}>
-      <Text style={h2} accessibilityRole="header">Start from an idea</Text>
+    <Section title="Start from an idea" subtitle="A starting point you can change before you save">
       <View style={styles.grid}>
         {WHAT_IF_TEMPLATES.map((t) => {
           const Icon = TEMPLATE_ICONS[t.id] ?? HandCoins;
@@ -104,7 +96,7 @@ export default function WhatIfHomeScreen() {
               onPress={() => router.push(`/what-if/edit?template=${t.id}` as Href)}
               accessibilityRole="button"
               accessibilityLabel={`${t.title}. ${t.description}`}
-              style={({ pressed }) => [card, styles.tile, { padding: theme.space.md, opacity: pressed ? 0.7 : 1 }]}
+              style={({ pressed }) => [tile, styles.tile, { padding: theme.space.md, opacity: pressed ? 0.7 : 1 }]}
             >
               <Icon size={20} color={theme.colors.primary} />
               <Text style={[text, { fontFamily: theme.fontFamily.semibold }]}>{t.title}</Text>
@@ -113,58 +105,61 @@ export default function WhatIfHomeScreen() {
           );
         })}
       </View>
-    </View>
+    </Section>
   );
 
   let body;
   if (error) {
     body = <ErrorState title="Couldn't load your scenarios" description={error.message} onRetry={error.retryable ? retry : undefined} />;
   } else if (loading) {
-    body = <LoadingState variant="list" count={4} />;
+    body = (
+      <View style={{ padding: theme.space.lg, gap: theme.space.md }}>
+        <DashboardSkeleton variant="hero" />
+        <DashboardSkeleton variant="section" rows={3} />
+      </View>
+    );
   } else {
     body = (
       <ScrollView contentContainerStyle={{ padding: theme.space.lg, paddingBottom: bottomPadding, gap: theme.space.lg }}>
-        <View style={[card, { padding: theme.space.md, gap: theme.space.sm, backgroundColor: surfaces.tile }]}>
-          <Text style={h2}>Try a money decision before you make it</Text>
-          <Text style={text}>
-            See how a raise, a purchase, a new EMI or a saving habit would change your balance and runway over the coming months.
-          </Text>
-          <Text style={muted}>Your real transactions, accounts and goals are never changed.</Text>
-          <Button onPress={() => router.push("/what-if/edit" as Href)} accessibilityLabel="New scenario">
-            <View style={styles.rowStart}>
-              <Plus size={18} color={theme.colors.primaryForeground} />
-              <Text style={{ color: theme.colors.primaryForeground, fontFamily: theme.fontFamily.semibold }}>New scenario</Text>
-            </View>
-          </Button>
-        </View>
+        <HeroSection variant="deep" title="Try a money decision before you make it" icon={<FlaskConical size={16} color={theme.colors.primary} />}>
+          <View style={{ gap: theme.space.sm }}>
+            <Text style={[text, { color: theme.colors.mutedForeground }]}>
+              See how a raise, a purchase, a new EMI or a saving habit would change your balance and runway over the coming months.
+            </Text>
+            <Text style={muted}>Your real transactions, accounts and goals are never changed.</Text>
+            <Button onPress={() => router.push("/what-if/edit" as Href)} accessibilityLabel="New scenario">
+              <View style={styles.rowStart}>
+                <Plus size={18} color={theme.colors.primaryForeground} />
+                <Text style={{ color: theme.colors.primaryForeground, fontFamily: theme.fontFamily.semibold }}>New scenario</Text>
+              </View>
+            </Button>
+          </View>
+        </HeroSection>
 
         {active.length ? (
-          <View style={{ gap: theme.space.sm }}>
-            <Text style={h2} accessibilityRole="header">Your scenarios</Text>
-            <View style={card}>{active.map((s, i) => scenarioRow(s, i === active.length - 1))}</View>
-          </View>
+          <Section title="Your scenarios" subtitle={`${active.length} saved`}>
+            {active.map((s, i) => scenarioRow(s, i === active.length - 1))}
+          </Section>
         ) : (
-          <View style={[card, { padding: theme.space.md, gap: theme.space.xs }]}>
-            <Text style={[text, { fontFamily: theme.fontFamily.semibold }]}>No saved scenarios yet</Text>
-            <Text style={muted}>Pick an idea below, or start a new scenario. Save the ones you want to come back to.</Text>
-          </View>
+          <Section title="No saved scenarios yet" subtitle="Pick an idea below, or start a new scenario. Save the ones you want to come back to." />
         )}
 
         {templates}
 
         {archived.length ? (
-          <View style={{ gap: theme.space.sm }}>
-            <Pressable
-              onPress={() => setShowArchived((v) => !v)}
-              accessibilityRole="button"
-              accessibilityLabel={`${showArchived ? "Hide" : "Show"} ${archived.length} archived ${archived.length === 1 ? "scenario" : "scenarios"}`}
-              style={[styles.rowStart, { minHeight: 44 }]}
-            >
-              {showArchived ? <ChevronUp size={18} color={theme.colors.mutedForeground} /> : <ChevronDown size={18} color={theme.colors.mutedForeground} />}
-              <Text style={[text, { color: theme.colors.mutedForeground }]}>{`Archived (${archived.length})`}</Text>
-            </Pressable>
-            {showArchived ? <View style={card}>{archived.map((s, i) => scenarioRow(s, i === archived.length - 1))}</View> : null}
-          </View>
+          <Section
+            title={`Archived (${archived.length})`}
+            action={
+              <SectionAction
+                label={showArchived ? "Hide" : "Show"}
+                tone="muted"
+                onPress={() => setShowArchived((v) => !v)}
+                accessibilityLabel={`${showArchived ? "Hide" : "Show"} ${archived.length} archived ${archived.length === 1 ? "scenario" : "scenarios"}`}
+              />
+            }
+          >
+            {showArchived ? archived.map((s, i) => scenarioRow(s, i === archived.length - 1)) : null}
+          </Section>
         ) : null}
       </ScrollView>
     );
@@ -186,7 +181,6 @@ export default function WhatIfHomeScreen() {
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 56 },
   rowStart: { flexDirection: "row", alignItems: "center", gap: 6 },
-  iconBubble: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   tile: { flexBasis: "47%", flexGrow: 1, gap: 6, minHeight: 112 },
 });

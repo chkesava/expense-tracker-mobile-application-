@@ -2,13 +2,17 @@ import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CircleDot, ChevronRight } from "lucide-react-native";
 
+import { RowGlyph } from "@/components/dashboard/primitives";
 import type { CalendarEvent } from "@/shared/types/calendar";
 import { CALENDAR_SOURCE_LABELS, CALENDAR_STATE_LABELS, eventAccessibilityLabel } from "@/shared/utils/calendarMonth";
+import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
 
 /**
  * One calendar event (SPENDLY-179/180): title, source, state in words, and the
  * amount with a direction icon. Used by the selected-day list and the agenda.
+ * SPENDLY-545: the shared row glyph and signed amount; `format` is the
+ * ghost-aware formatter, so the amount and its label mask in ghost mode.
  */
 export const CalendarEventRow = memo(function CalendarEventRow({
   event,
@@ -20,10 +24,11 @@ export const CalendarEventRow = memo(function CalendarEventRow({
   onPress: (event: CalendarEvent) => void;
 }) {
   const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const overdue = event.state === "overdue";
   const done = event.state === "completed" || event.state === "cancelled";
   const Icon = overdue ? AlertTriangle : event.direction === "in" ? ArrowDownLeft : event.direction === "out" ? ArrowUpRight : CircleDot;
-  const iconColor = overdue ? theme.colors.destructive : event.direction === "in" ? theme.colors.primary : theme.colors.mutedForeground;
+  const iconColor = overdue ? theme.colors.destructive : event.direction === "in" ? theme.colors.success : theme.colors.mutedForeground;
   const muted = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
 
   return (
@@ -34,9 +39,11 @@ export const CalendarEventRow = memo(function CalendarEventRow({
       accessibilityHint="Shows details and actions"
       style={({ pressed }) => [styles.row, { gap: theme.space.md, paddingVertical: theme.space.sm, opacity: pressed ? 0.7 : done ? 0.75 : 1 }]}
     >
-      <Icon size={18} color={iconColor} />
+      <RowGlyph tint={overdue || event.direction === "in" ? surfaces.wash(iconColor) : undefined} size={34}>
+        <Icon size={16} color={iconColor} />
+      </RowGlyph>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text numberOfLines={1} style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm }}>
+        <Text numberOfLines={1} style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.medium, fontSize: theme.typography.sm }}>
           {event.title}
         </Text>
         <Text numberOfLines={1} style={[muted, overdue ? { color: theme.colors.destructive, fontFamily: theme.fontFamily.semibold } : null]}>
@@ -45,7 +52,15 @@ export const CalendarEventRow = memo(function CalendarEventRow({
         </Text>
       </View>
       {event.amount !== null ? (
-        <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm }}>
+        <Text
+          numberOfLines={1}
+          style={{
+            color: event.direction === "in" ? theme.colors.success : theme.colors.foreground,
+            fontFamily: theme.fontFamily.semibold,
+            fontSize: theme.typography.sm,
+            fontVariant: ["tabular-nums"],
+          }}
+        >
           {event.direction === "in" ? "+" : event.direction === "out" ? "−" : ""}
           {format(event.amount)}
         </Text>

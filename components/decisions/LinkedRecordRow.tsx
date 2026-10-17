@@ -4,9 +4,10 @@ import { AlertCircle, ChevronRight, Link2, X } from "lucide-react-native";
 import { Button } from "@/components/ui/Button";
 import type { ResolvedDecisionLink } from "@/shared/utils/decisionLinks";
 import { LINK_NATURE_LABELS } from "@/shared/utils/decisionLinks";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useDecisionFormat } from "@/components/decisions/useDecisionFormat";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 
 /**
  * One linked record on a decision (SPENDLY-366): what it is now, read-only,
@@ -26,8 +27,11 @@ export function LinkedRecordRow({
 }) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
+  // SPENDLY-547: ghost-aware amounts and the user's date format.
+  const { date } = useDecisionFormat();
+  const money = useGhostMoney(currency);
   const { link, state, title, stateText, nature, currentAmount, changedSinceLinked, href } = resolved;
-  const linkedOn = new Date(link.capturedAtMs).toISOString().slice(0, 10);
+  const linkedOn = date(link.capturedAtMs);
   const muted = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
   const canOpen = state === "ok" && href && onOpen;
 
@@ -46,8 +50,8 @@ export function LinkedRecordRow({
           {nature ? <Text style={muted}>{LINK_NATURE_LABELS[nature]}</Text> : null}
           {currentAmount !== undefined ? (
             <Text style={muted}>
-              {formatAmount(currentAmount, currency)} now, for reference — not counted in this decision
-              {changedSinceLinked && link.capturedAmount !== undefined ? ` (was ${formatAmount(link.capturedAmount, currency)} when linked)` : ""}
+              {money(currentAmount)} now, for reference — not counted in this decision
+              {changedSinceLinked && link.capturedAmount !== undefined ? ` (was ${money(link.capturedAmount)} when linked)` : ""}
             </Text>
           ) : null}
           {stateText ? <Text style={[muted, { color: state === "loading" ? theme.colors.mutedForeground : theme.colors.warning }]}>{stateText}</Text> : null}
