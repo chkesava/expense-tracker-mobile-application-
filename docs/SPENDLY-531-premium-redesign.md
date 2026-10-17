@@ -9,7 +9,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 |---|---|---|---|
 | 1. Dashboard | Dashboard | SPENDLY-532, SPENDLY-533 | Done; on `main` (`85a83c0`) |
 | 2. Money | Ledger hub and its sections, account / transaction / card-bill detail | SPENDLY-534 to SPENDLY-537 | Done; on `main` (`b0dc4de`) |
-| 3. Analytics | Insights (monthly, yearly, search & lab, AI advisor), merchants, fees | SPENDLY-538 to SPENDLY-541 | In progress |
+| 3. Analytics | Insights (monthly, yearly, search & lab, AI advisor), merchants, fees | SPENDLY-538 to SPENDLY-541 | Done on the epic, not on main |
 | 4. Investments | Investments hub (deposits, portfolio, SIPs, EPF), EPF detail | not yet created | Planned |
 | 5. Planning | Goals, financial calendar, runway, what-if, decisions | not yet created | Planned |
 | 6. Vaults, settings and forms | Vaults/splits, settings, add-transaction and other forms, onboarding | not yet created | Planned |
@@ -26,7 +26,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | SPENDLY-538 | Phase 3a: Insights shell and Monthly analytics | `feature/SPENDLY-538-insights-monthly` | Merged into the epic ([doc](SPENDLY-538-insights-monthly.md)) |
 | SPENDLY-539 | Phase 3b: Yearly analytics | `feature/SPENDLY-539-insights-yearly` | Merged into the epic ([doc](SPENDLY-539-insights-yearly.md)) |
 | SPENDLY-540 | Phase 3c: Search & Lab and AI Advisor | `feature/SPENDLY-540-insights-search-advisor` | Merged into the epic ([doc](SPENDLY-540-insights-search-advisor.md)) |
-| SPENDLY-541 | Phase 3d: Merchants and Fees | `feature/SPENDLY-541-merchants-fees` | Built, awaiting merge into the epic ([doc](SPENDLY-541-merchants-fees.md)) |
+| SPENDLY-541 | Phase 3d: Merchants and Fees | `feature/SPENDLY-541-merchants-fees` | Merged into the epic ([doc](SPENDLY-541-merchants-fees.md)) |
 
 ## Decisions
 - **Midnight Emerald is a selectable preset, not a forced default.** It's in Settings → Appearance → Custom Presets. Existing users keep their theme.
