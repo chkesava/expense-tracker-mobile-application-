@@ -61,7 +61,7 @@ export function LedgerAuditList() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
-  const { events, loading, error, retry } = useLedgerEvents();
+  const { events, loading, error, retry, hasMore, loadingMore, loadMore } = useLedgerEvents();
   const listBottomPadding = usePageListBottomPadding();
   const { user } = useAuth();
   const { settings } = useSettings();
@@ -297,6 +297,24 @@ export function LedgerAuditList() {
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingBottom: listBottomPadding }}
       extraData={isDark}
+      // SPENDLY-501: older events page in by cursor instead of one unbounded read.
+      onEndReached={hasMore ? () => void loadMore() : undefined}
+      onEndReachedThreshold={0.3}
+      ListFooterComponent={
+        hasMore ? (
+          <View style={styles.footer}>
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={loadingMore}
+              disabled={loadingMore}
+              onPress={() => void loadMore()}
+            >
+              Load older entries
+            </Button>
+          </View>
+        ) : null
+      }
     />
   );
 }
@@ -304,6 +322,10 @@ export function LedgerAuditList() {
 const styles = StyleSheet.create({
   list: {
     flex: 1,
+  },
+  footer: {
+    alignItems: "center",
+    paddingVertical: 12,
   },
   row: {
     padding: 14,
