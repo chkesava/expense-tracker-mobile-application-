@@ -1,9 +1,7 @@
 import React from "react";
 
 import { SearchBar } from "@/components/common/SearchBar";
-import { insightAccents } from "@/components/analytics/insightsTheme";
-import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useInsightAccents } from "@/components/analytics/insightsTheme";
 
 export interface SearchFieldProps {
   value: string;
@@ -17,10 +15,9 @@ export function SearchField({
   onChangeText,
   placeholder = "Search by note, category, tag, account or amount...",
 }: SearchFieldProps) {
-  const { themeName } = useTheme();
-  const accents = insightAccents(themeUsesDarkPalette(themeName));
+  const accents = useInsightAccents();
 
-  // SPENDLY-154: the shared SearchBar, keeping the Insights pink focus ring.
+  // SPENDLY-154: the shared SearchBar, with the theme accent as its focus ring.
   return (
     <SearchBar
       value={value}
@@ -29,7 +26,7 @@ export function SearchField({
       returnKeyType="search"
       autoCorrect={false}
       accessibilityLabel="Search transactions"
-      accentColor={accents.pink}
+      accentColor={accents.accent}
     />
   );
 }

@@ -3,12 +3,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Sparkles, X } from "lucide-react-native";
 
 import {
-  insightAccents,
-  insightSurface,
+  useInsightAccents,
+  useInsightSurface,
 } from "@/components/analytics/insightsTheme";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
 export interface PopularSearchesProps {
@@ -23,10 +22,9 @@ export function PopularSearches({
   onSelect,
   onDismiss,
 }: PopularSearchesProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const surface = insightSurface(isDark);
-  const accents = insightAccents(isDark);
+  const { theme } = useTheme();
+  const surface = useInsightSurface();
+  const accents = useInsightAccents();
 
   if (suggestions.length === 0) return null;
 
@@ -38,7 +36,7 @@ export function PopularSearches({
       ]}
     >
       <View style={styles.head}>
-        <Sparkles size={14} color={accents.violet} strokeWidth={2.4} />
+        <Sparkles size={14} color={accents.accent} strokeWidth={2.4} />
         <Text
           style={[styles.title, { color: theme.colors.foreground }]}
           numberOfLines={1}
