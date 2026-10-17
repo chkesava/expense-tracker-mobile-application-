@@ -10,7 +10,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | 1. Dashboard | Dashboard | SPENDLY-532, SPENDLY-533 | Done; on `main` (`85a83c0`) |
 | 2. Money | Ledger hub and its sections, account / transaction / card-bill detail | SPENDLY-534 to SPENDLY-537 | Done; on `main` (`b0dc4de`) |
 | 3. Analytics | Insights (monthly, yearly, search & lab, AI advisor), merchants, fees | SPENDLY-538 to SPENDLY-541 | Done on the epic, not on main |
-| 4. Investments | Investments hub (deposits, portfolio, SIPs, EPF), EPF detail | not yet created | Planned |
+| 4. Investments | Investments hub (deposits, portfolio, SIPs, EPF), EPF detail | 3 stories proposed (see Phase 4 plan) | Planning |
 | 5. Planning | Goals, financial calendar, runway, what-if, decisions | not yet created | Planned |
 | 6. Vaults, settings and forms | Vaults/splits, settings, add-transaction and other forms, onboarding | not yet created | Planned |
 
@@ -27,6 +27,31 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | SPENDLY-539 | Phase 3b: Yearly analytics | `feature/SPENDLY-539-insights-yearly` | Merged into the epic ([doc](SPENDLY-539-insights-yearly.md)) |
 | SPENDLY-540 | Phase 3c: Search & Lab and AI Advisor | `feature/SPENDLY-540-insights-search-advisor` | Merged into the epic ([doc](SPENDLY-540-insights-search-advisor.md)) |
 | SPENDLY-541 | Phase 3d: Merchants and Fees | `feature/SPENDLY-541-merchants-fees` | Merged into the epic ([doc](SPENDLY-541-merchants-fees.md)) |
+
+## Phase 4 plan: Investments (proposed, 2026-10-17)
+The Investments hub is `app/(app)/investments.tsx`, with four tabs: Investments (deposits), Stocks, Virtual SIPs and EPF. There is also the EPF establishment screen `app/(app)/epf/[establishmentId].tsx`. Together that is about 13.5k lines.
+
+Phase 4 is UI only, like Phases 1–3:
+- no calculation, valuation, XIRR, interest, EPF-ledger or write-path changes;
+- add/edit/trade/transfer forms stay for Phase 6;
+- forms that leak amounts in ghost mode still get that bug fixed here, as was done for the fee review sheet.
+
+**What the survey found:**
+- **Fixed colours:** the Stocks components (`HoldingCard`, `HoldingDetailModal`, `PortfolioSummaryCard`, `PortfolioDashboard`, `HoldingsList`) and `InvestmentCard` have most of the fixed hex/rgba colours. Five Stocks files still import `accountScreenTheme`.
+- **Ghost-mode leaks:**
+  - EPF formats every amount as a string with local `formatAmount` helpers (11 sites), so almost all of EPF ignores ghost mode. Only `EpfPortfolioCard` is ghostable.
+  - Virtual SIPs (`SipSummaryCard`, `SipVirtualPositions`, `SipHistoryList`: 11 `Amount`s) and deposits (`InvestmentCard`, `InvestmentsList`, `InvestmentDetailModal`) render `Amount` without `ghostable`.
+- **Hub:** the tab icons use `success` instead of the theme accent.
+
+| Story | Scope | Main fixes |
+|---|---|---|
+| 4a: Hub, Deposits and Virtual SIPs | Hub header and tabs; `InvestmentsList`, `InvestmentCard`, `InvestmentDetailModal`; `SipDashboard`, `SipSummaryCard`, `SipVirtualPositions`, `SipHistoryList` | Theme accent on the tabs; deposits and SIP summaries on `Section`/`DataRow`/`FinancialAmount`; ghost leaks; hex removed; maturity and SIP dates formatted |
+| 4b: Stocks portfolio | `PortfolioDashboard`, `PortfolioSummaryCard` (hero), `PortfolioCharts`, `HoldingsList`, `HoldingCard`, `HoldingDetailModal`, `TradingChargesCard`, Watchlist/Alerts/Orders tabs | Off `accountScreenTheme`; gain/loss as signed amounts with words, not colour alone; red only for losses; the remaining ghost leaks |
+| 4c: EPF | `EpfDashboard`, profile/portfolio/establishment/current-month cards, `EpfBalanceTab`, contribution history and rows, transfers list and detail, `epf/[establishmentId]` | `useGhostMoney` for every EPF amount string (and the privacy fix in the EPF sheets); dates; foundations for the cards and rows |
+
+Out of scope for Phase 4 (left for Phase 6): `CreateInvestmentModal`, `AddHoldingModal`, `HoldingAdjustmentModal`, `ManageStockCashModal`, `MockTradeModal`, `CsvImportModal`, `PortfolioRecalibrationModal`, `OnboardingFlow`, `SipPlanFormModal`, `SipNotificationsModal` and the EPF form modals/sheets.
+
+The stories are not yet in Jira.
 
 ## Decisions
 - **Midnight Emerald is a selectable preset, not a forced default.** It's in Settings → Appearance → Custom Presets. Existing users keep their theme.
