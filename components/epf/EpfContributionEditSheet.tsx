@@ -11,6 +11,7 @@ import type { EpfBackfillRow } from "@/shared/features/epf/types";
 import { computeEpfContribution } from "@/shared/features/epf/utils/contributions";
 import { useTheme } from "@/theme/ThemeProvider";
 import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
+import { DateField } from "@/components/common/DateField";
 
 type Props = {
   isOpen: boolean;
@@ -197,14 +198,7 @@ export function EpfContributionEditSheet({
           error={errors.employerEpfShare}
         />
 
-        <Input
-          label="Credit date (YYYY-MM-DD)"
-          value={creditDate}
-          onChangeText={setCreditDate}
-          placeholder="YYYY-MM-DD"
-          autoCapitalize="none"
-          error={errors.creditDate}
-        />
+        <DateField label="Credit date" value={creditDate} onChange={setCreditDate} clearable placeholder="Not credited yet" error={errors.creditDate} />
         <Input
           label="Reference"
           value={reference}

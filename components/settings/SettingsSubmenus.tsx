@@ -53,6 +53,7 @@ import { Amount } from "@/components/common/Amount";
 import type { Account } from "@/shared/types/expense";
 import { getAccountLast4 } from "@/shared/utils/accountIdentity";
 import { haptic } from "@/lib/haptics";
+import { DateField } from "@/components/common/DateField";
 
 // -------------------------------------------------------------
 // Helper Component: Material 3 Collapsible Section
@@ -649,12 +650,7 @@ export function FinancialGoalsManager() {
           keyboardType="numeric"
         />
 
-        <Input
-          label="Deadline (optional)"
-          placeholder="YYYY-MM-DD"
-          value={deadline}
-          onChangeText={setDeadline}
-        />
+        <DateField label="Deadline (optional)" value={deadline} onChange={setDeadline} clearable placeholder="No deadline" />
 
         <Button
           onPress={handleAdd}

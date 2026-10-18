@@ -36,6 +36,7 @@ import {
 } from "@/shared/utils/borrowingMath";
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
+import { DateField } from "@/components/common/DateField";
 
 export interface BorrowingDetailModalProps {
   visible: boolean;
@@ -156,7 +157,7 @@ export function BorrowingDetailModal({
     if (!borrowing.id) return;
 
     if (!isValidDateKey(date)) {
-      toast.error("Repayment date must be YYYY-MM-DD");
+      toast.error("Pick a valid repayment date");
       return;
     }
 
@@ -215,7 +216,7 @@ export function BorrowingDetailModal({
     }
 
     if (editDueDate.trim() && !isValidDateKey(editDueDate.trim())) {
-      toast.error("Due date must be YYYY-MM-DD");
+      toast.error("Pick a valid due date");
       return;
     }
 
@@ -437,11 +438,7 @@ export function BorrowingDetailModal({
               <Text style={[styles.label, { color: theme.colors.foreground }]}>
                 Due Date (optional)
               </Text>
-              <Input
-                value={editDueDate}
-                onChangeText={setEditDueDate}
-                placeholder="YYYY-MM-DD"
-              />
+              <DateField value={editDueDate} onChange={setEditDueDate} accessibilityLabel="Due date" clearable placeholder="No due date" />
             </View>
 
             <View style={styles.group}>
@@ -533,7 +530,7 @@ export function BorrowingDetailModal({
               <Text style={[styles.label, { color: theme.colors.foreground }]}>
                 Date
               </Text>
-              <Input value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" />
+              <DateField value={date} onChange={setDate} accessibilityLabel="Repayment date" />
             </View>
 
             <View style={styles.group}>

@@ -47,6 +47,7 @@ import { removeLink, addLink, linkFromRouteParams } from "@/shared/utils/decisio
 import { decisionCategoryLabel, newDecisionDraft, transitionDecision } from "@/shared/utils/decisionModel";
 import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
+import { DateField } from "@/components/common/DateField";
 
 /**
  * Capture / edit a Money Decision (SPENDLY-363). Five short steps; only the
@@ -401,9 +402,9 @@ export default function DecisionEditScreen() {
         {step.id === "expected" ? (
           <>
             <Input label="What do you expect to happen? (optional)" value={form.expectedSummary} onChangeText={(expectedSummary) => set({ expectedSummary })} multiline maxLength={DECISION_LIMITS.text} placeholder={template.prompts.expected} />
-            <View style={[styles.row, { gap: theme.space.sm }]}>
-              <Input label="Expected amount, ₹ (optional)" value={form.expectedAmount} onChangeText={(expectedAmount) => set({ expectedAmount })} keyboardType="decimal-pad" placeholder="0" error={fieldError("expectedAmount")} containerStyle={{ flex: 1 }} helperText="Your estimate" />
-              <Input label="By (optional)" value={form.expectedByDate} onChangeText={(expectedByDate) => set({ expectedByDate })} placeholder="YYYY-MM-DD" error={fieldError("expectedByDate")} containerStyle={{ flex: 1 }} />
+            <View style={[styles.row, { gap: theme.space.sm, flexWrap: "wrap", alignItems: "flex-start" }]}>
+              <Input label="Expected amount, ₹ (optional)" value={form.expectedAmount} onChangeText={(expectedAmount) => set({ expectedAmount })} keyboardType="decimal-pad" placeholder="0" error={fieldError("expectedAmount")} containerStyle={{ flexGrow: 1, flexBasis: 140 }} helperText="Your estimate" />
+              <DateField label="By (optional)" value={form.expectedByDate} onChange={(expectedByDate) => set({ expectedByDate })} clearable placeholder="Not set" error={fieldError("expectedByDate")} containerStyle={{ flexGrow: 1, flexBasis: 220 }} />
             </View>
             {sectionTitle("When should you look back at this? (optional)")}
             <View style={[styles.wrap, { gap: theme.space.sm }]}>
@@ -411,7 +412,7 @@ export default function DecisionEditScreen() {
                 <Chip key={c.label} label={c.label} size="sm" selected={form.reviewDate === c.date} onPress={() => set({ reviewDate: form.reviewDate === c.date ? "" : c.date })} />
               ))}
             </View>
-            <Input label="Review date" value={form.reviewDate} onChangeText={(reviewDate) => set({ reviewDate })} placeholder="YYYY-MM-DD" error={fieldError("reviewDate")} />
+            <DateField label="Review date" value={form.reviewDate} onChange={(reviewDate) => set({ reviewDate })} clearable placeholder="No review date" error={fieldError("reviewDate")} />
 
             {sectionTitle("Linked Spendly records (optional)")}
             <Text style={muted}>References only — the records themselves are never copied or changed.</Text>

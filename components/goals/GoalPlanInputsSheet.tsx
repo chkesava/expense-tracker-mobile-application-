@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/Input";
 import type { GoalPlanInput, GoalSnapshot } from "@/shared/types/goalFunding";
 import { validateGoalPlanInput } from "@/shared/utils/goalFundingModel";
 import { useTheme } from "@/theme/ThemeProvider";
+import { DateField } from "@/components/common/DateField";
 
 const num = (s: string): number | undefined => {
   const t = s.replace(/,/g, "").trim();
@@ -98,7 +99,7 @@ export function GoalPlanInputsSheet({
         <Input label="What you put in each month now (optional)" value={current} onChangeText={setCurrent} keyboardType="numeric" helperText="Leave blank if you don't know — it won't be treated as zero." />
         <Input label="Minimum each month (optional)" value={min} onChangeText={setMin} keyboardType="numeric" />
         <Input label="One-time top-up amount (optional)" value={oneTimeAmount} onChangeText={setOneTimeAmount} keyboardType="numeric" />
-        {oneTimeAmount.trim() ? <Input label="Top-up date (YYYY-MM-DD)" value={oneTimeDate} onChangeText={setOneTimeDate} autoCapitalize="none" /> : null}
+        {oneTimeAmount.trim() ? <DateField label="Top-up date" value={oneTimeDate} onChange={setOneTimeDate} /> : null}
         <Input
           label="Yearly growth % (optional, investment-linked goals)"
           value={growth}

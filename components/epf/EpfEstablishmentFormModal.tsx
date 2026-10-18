@@ -12,6 +12,7 @@ import type { EpfEstablishment } from "@/shared/features/epf/types";
 import { validateEstablishmentAgainstExisting } from "@/shared/features/epf/utils";
 import { useTheme } from "@/theme/ThemeProvider";
 import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
+import { DateField } from "@/components/common/DateField";
 
 type Props = {
   isOpen: boolean;
@@ -182,14 +183,7 @@ export function EpfEstablishmentFormModal({
           autoCapitalize="characters"
         />
 
-        <Input
-          label="Date joined (YYYY-MM-DD) *"
-          value={dateJoined}
-          onChangeText={setDateJoined}
-          placeholder="YYYY-MM-DD"
-          error={errors.dateJoined}
-          autoCapitalize="none"
-        />
+        <DateField label="Date joined *" value={dateJoined} onChange={setDateJoined} maxDate={(!stillWorking && dateLeft) || undefined} error={errors.dateJoined} />
 
         <View style={styles.switchRow}>
           <Text style={[styles.switchLabel, { color: theme.colors.foreground }]}>
@@ -218,14 +212,7 @@ export function EpfEstablishmentFormModal({
         </View>
 
         {stillWorking ? null : (
-          <Input
-            label="Date left (YYYY-MM-DD) *"
-            value={dateLeft}
-            onChangeText={setDateLeft}
-            placeholder="YYYY-MM-DD"
-            error={errors.dateLeft}
-            autoCapitalize="none"
-          />
+          <DateField label="Date left *" value={dateLeft} onChange={setDateLeft} minDate={dateJoined || undefined} error={errors.dateLeft} />
         )}
 
         <Input

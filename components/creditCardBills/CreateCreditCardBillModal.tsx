@@ -19,6 +19,7 @@ import { previewClosedCycleCreditCardBill } from "@/shared/utils/autoCreditCardB
 import { validateCreditCardBillInput } from "@/shared/utils/creditCardBillInput";
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
+import { DateField } from "@/components/common/DateField";
 
 export type CreateCreditCardBillModalProps = {
   isOpen: boolean;
@@ -245,33 +246,25 @@ export function CreateCreditCardBillModal({
           keyboardType="decimal-pad"
           placeholder="850"
         />
-        <Input
-          label="Statement Date * (YYYY-MM-DD)"
-          value={statementDate}
-          onChangeText={setStatementDate}
-          placeholder="2026-08-21"
-          autoCapitalize="none"
-        />
-        <Input
-          label="Due Date * (YYYY-MM-DD)"
-          value={dueDate}
-          onChangeText={setDueDate}
-          placeholder="2026-08-26"
-          autoCapitalize="none"
-        />
-        <Input
+        {/* SPENDLY-557: the picker limits mirror validateCreditCardBillInput. */}
+        <DateField label="Statement Date *" value={statementDate} onChange={setStatementDate} maxDate={todayDateKey(settings.timezone)} />
+        <DateField label="Due Date *" value={dueDate} onChange={setDueDate} minDate={statementDate || undefined} />
+        <DateField
           label="Billing Period Start (optional)"
           value={periodStart}
-          onChangeText={setPeriodStart}
-          placeholder="2026-07-21"
-          autoCapitalize="none"
+          onChange={setPeriodStart}
+          maxDate={periodEnd || statementDate || undefined}
+          clearable
+          placeholder="Not set"
         />
-        <Input
+        <DateField
           label="Billing Period End (optional)"
           value={periodEnd}
-          onChangeText={setPeriodEnd}
-          placeholder="2026-08-21"
-          autoCapitalize="none"
+          onChange={setPeriodEnd}
+          minDate={periodStart || undefined}
+          maxDate={statementDate || undefined}
+          clearable
+          placeholder="Not set"
         />
         {cyclePreview ? (
           <Text style={{ color: theme.colors.mutedForeground, fontSize: theme.typography.sm }}>

@@ -31,6 +31,7 @@ import { formatDateKey, todayDateKey } from "@/shared/utils/dates";
 import { roundMoney } from "@/shared/utils/money";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces, withAlpha } from "@/theme/surfaces";
+import { DateField } from "@/components/common/DateField";
 
 /** How many recent card purchases to offer as link targets. */
 const LINKABLE_PURCHASE_LIMIT = 25;
@@ -396,13 +397,7 @@ export function RecordCashbackModal({
           placeholder="0.00"
         />
 
-        <Input
-          label="Cashback Date * (YYYY-MM-DD)"
-          value={date}
-          onChangeText={setDate}
-          autoCapitalize="none"
-          placeholder="2026-01-31"
-        />
+        <DateField label="Cashback Date *" value={date} onChange={setDate} />
 
         {/* Kind */}
         <View style={{ gap: 6 }}>

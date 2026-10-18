@@ -13,6 +13,7 @@ import { toast } from "@/lib/toast";
 import type { Account } from "@/shared/types/expense";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
+import { DateField } from "@/components/common/DateField";
 
 export interface AddAccountEntryModalProps {
   isOpen: boolean;
@@ -169,13 +170,9 @@ export function AddAccountEntryModal({
               { color: theme.colors.foreground, fontSize: theme.typography.sm },
             ]}
           >
-            Date (YYYY-MM-DD) *
+            Date *
           </Text>
-          <Input
-            value={date}
-            onChangeText={setDate}
-            placeholder="YYYY-MM-DD"
-          />
+          <DateField value={date} onChange={setDate} accessibilityLabel="Date" />
         </View>
 
         {/* Note */}
