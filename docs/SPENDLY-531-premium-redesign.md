@@ -33,6 +33,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | SPENDLY-545 | Phase 5a: Calendar and Runway | `feature/SPENDLY-545-calendar-runway` | Done. On `main` via `742060d` (2026-10-17) ([doc](SPENDLY-545-calendar-runway.md)) |
 | SPENDLY-546 | Phase 5b: What-If and Goal optimizer | `feature/SPENDLY-546-what-if-optimizer` | Done. On `main` via `742060d` (2026-10-17) ([doc](SPENDLY-546-what-if-optimizer.md)) |
 | SPENDLY-547 | Phase 5c: Money Decisions | `feature/SPENDLY-547-money-decisions` | Done. On `main` via `742060d` (2026-10-17) ([doc](SPENDLY-547-money-decisions.md)) |
+| SPENDLY-558 | Historical stock charts (line + candlestick) with multi-range caching | `feature/SPENDLY-558-stock-history-charts` | Built on the story branch 2026-10-18; awaiting merge approval. Needs a web deploy for `/api/stock-history`, then device QA ([doc](SPENDLY-558-stock-history-charts.md)) |
 
 ## Phase 4 plan: Investments (2026-10-17)
 The Investments hub is `app/(app)/investments.tsx`, with four tabs: Investments (deposits), Stocks, Virtual SIPs and EPF. There is also the EPF establishment screen `app/(app)/epf/[establishmentId].tsx`. Together that is about 13.5k lines.
@@ -132,3 +133,4 @@ Like Phases 1–5 it is UI only: no transaction, transfer, reconciliation, valua
 - **The entrance avoids Reanimated `entering` layout animations**, which overlapped cards on web; it uses plain shared values instead.
 - **The nav lens is theme-aware**, but only Midnight Emerald differs; the SPENDLY-172 lens is unchanged elsewhere.
 - **Later phases reuse these foundations**: the theme preset, `HeroSection` `deep`, `Section`, the dashboard tokens, and `signedCurrencyPrefix`.
+- **Stock history is cached on Netlify's durable CDN, not in a new service** (SPENDLY-558). `/api/stock-history` keys on `symbol|range` only, and there's a per-instance LRU for stale-if-error. Market history never touches Firestore. The chart is hand-drawn `react-native-svg`, with no chart library.

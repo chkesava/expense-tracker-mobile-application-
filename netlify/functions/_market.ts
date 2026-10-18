@@ -6,6 +6,8 @@
 export type NetlifyEvent = {
   httpMethod?: string;
   queryStringParameters?: Record<string, string | undefined> | null;
+  /** Request headers; Netlify lower-cases the names. */
+  headers?: Record<string, string | undefined> | null;
 };
 
 export type NetlifyResult = {
@@ -27,6 +29,19 @@ export function json(statusCode: number, payload: unknown): NetlifyResult {
   return { statusCode, headers: JSON_HEADERS, body: JSON.stringify(payload) };
 }
 
+/** Like `json`, with the caller's own headers (stock-history sets its own cache policy). */
+export function jsonWithHeaders(
+  statusCode: number,
+  payload: unknown,
+  headers: Record<string, string>
+): NetlifyResult {
+  return {
+    statusCode,
+    headers: { "Content-Type": "application/json", ...headers },
+    body: payload === undefined ? "" : JSON.stringify(payload),
+  };
+}
+
 export function fail(statusCode: number, message: string): NetlifyResult {
   return json(statusCode, { success: false, message });
 }
@@ -43,13 +58,21 @@ export function isTimeout(error: unknown): boolean {
 
 /** GET with a timeout and one retry on a transport failure (not on an HTTP error). */
 export async function upstreamGet(url: string, attempt = 1): Promise<Response> {
+  return upstreamGetWithTimeout(url, FETCH_TIMEOUT_MS, attempt);
+}
+
+/**
+ * `upstreamGet` with a caller-chosen timeout. stock-history uses a short one so
+ * both attempts fit inside Netlify's 10 s function limit.
+ */
+export async function upstreamGetWithTimeout(url: string, timeoutMs: number, attempt = 1): Promise<Response> {
   try {
     return await fetch(url, {
       headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0 (Spendly)" },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
-    if (attempt < 2) return upstreamGet(url, attempt + 1);
+    if (attempt < 2) return upstreamGetWithTimeout(url, timeoutMs, attempt + 1);
     throw error;
   }
 }

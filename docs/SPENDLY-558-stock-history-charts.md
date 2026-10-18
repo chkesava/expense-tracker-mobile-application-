@@ -2,7 +2,7 @@
 
 - **Epic:** SPENDLY-531 (Premium redesign, Midnight Emerald)
 - **Branch:** `feature/SPENDLY-558-stock-history-charts`, cut from `feature/SPENDLY-531-premium-redesign` at `2fc27ad`
-- **State:** Plan written 2026-10-18; implementation not started.
+- **State:** Built on the story branch 2026-10-18; awaiting approval to merge into the epic. Needs a web deploy (for `/api/stock-history`) and device QA. See "As built" at the end.
 
 ## Where it fits
 SPENDLY-558 is not in the Phase 6 plan (548–557). It is a new feature story under the epic, and it touches only the market-data path and the holding detail screen. It does not depend on 548 (form foundations) or 557 (date picker), and none of the Phase 6 stories depend on it.
@@ -171,3 +171,44 @@ Android: run a `npx expo export --platform android` bundle check. Device QA uses
 4. **Deployment:** the new function only works after a web deploy. Native builds already in the field call `/api/stock-history` on `EXPO_PUBLIC_SHARE_URL`. Until that deploy, the chart shows its error state, and nothing else breaks.
 5. **Reference screenshots** are not available. The UI follows Midnight Emerald tokens until they are supplied.
 6. **Gesture conflicts** from the scrub crosshair in the full-screen modal on Android: the crosshair is optional and is cut if it can't be made conflict-free.
+
+## As built (2026-10-18)
+The shared cache follows the approved choice: Netlify durable CDN plus a per-instance LRU. Differences from the plan:
+
+- **Files:**
+  - The chart maths lives in `shared/utils/stockChartGeometry.ts`, so it is tested without a renderer.
+  - One `StockChartPlot.tsx` draws both modes; there are no separate `LineChart`/`CandleChart`/`chartScales` files.
+  - Test fixtures live in `shared/utils/stockHistory.fixtures.ts`.
+- **Scrub:** the crosshair uses React Native's touch responder, not gesture-handler `Pan`. An RN `Modal` on Android would need its own `GestureHandlerRootView`. The responder hands vertical drags back to the ScrollView (`onResponderTerminationRequest`).
+- **Range switching:** chip taps are debounced by 200 ms before a request goes out. The previous chart for the same stock stays on screen, dimmed, while the next range loads (`placeholderData`).
+- **Timeouts:** the upstream timeout is 4 s, with one retry (`upstreamGetWithTimeout`), so both attempts fit in Netlify's 10 s limit. `/api/stock` keeps its 15 s timeout.
+- **Currency:** chart prices are formatted in the series currency (`dto.currency`), not the display currency. They are market prices.
+- **UI tests:** vitest runs in Node with no React Native renderer, so the UI states are covered through `chartViewState`, `historyErrorCopy` and the geometry tests.
+
+### Provider coverage (checked live on 2026-10-18, a Sunday)
+| Range | Bars (KPITTECH.NS) | Interval returned |
+|---|---|---|
+| 1D | 74 | 5m |
+| 1W | 125 | 15m |
+| 1M | 22 | 1d |
+| 3M | 65 | 1d |
+| 6M | 127 | 1d |
+| 1Y | 248 | 1d |
+| 5Y | 262 | 1wk |
+| ALL | 392 | 1wk |
+
+For `range=max`, Yahoo chooses the bar size itself. It returns 1wk for KPITTECH (listed 2019), 1mo for RELIANCE.NS (371 bars back to 1995), and 3mo for AAPL (169 bars back to 1984). The response reports the interval it actually returned. Every bar in these samples had full OHLC. Yahoo answers an unknown ticker with HTTP 404, which maps to `NOT_FOUND`.
+
+### Validation run
+- **Focused tests:** `npx vitest run shared/utils/stockHistory.test.ts shared/utils/stockChartGeometry.test.ts lib/stockHistory netlify/functions services/marketDataService.test.ts` → 7 files, 88 tests passed.
+- **Full suite:** `npm test` → 374 files, 5,622 tests passed.
+- **Typechecks:** `npm run typecheck:shared` → exit 0. `npx tsc -p tsconfig.json --noEmit` → exit 0.
+- **Bundle:** `node scripts/bundle-netlify-fns.js`, then `require('./netlify/functions-dist/stock-history.js')` → loaded (15.8 kB).
+- **Android bundle:** `npx expo export --platform android` → exit 0 (Hermes bundle, 16 MB). This checks the JS bundle only; no native build was needed, since no dependency was added.
+- **Live handler:** the bundled handler, called against Yahoo for all eight ranges, returned the bar counts in the table above. A repeat request was an instance-cache hit (1 ms). An unknown ticker gave 404 `NOT_FOUND`.
+
+### Left open
+- **Deploy:** `/api/stock-history` only exists after the next web deploy (`web-deploy.yml`). Until then the chart shows its error state, and nothing else is affected.
+- **CDN check:** after that deploy, confirm the durable cache is working: a second request should show `Cache-Status: "Netlify Durable"; hit`.
+- **Device QA:** run it on Spendly Test. Check scrolling and scrubbing in the full-screen modal on Android, and small phones.
+- **Reference screenshots:** still not supplied, so the visual matches the Midnight Emerald tokens.

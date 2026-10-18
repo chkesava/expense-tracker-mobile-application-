@@ -184,6 +184,8 @@ function writeRedirectsAndHeaders() {
     '/api/stock         /.netlify/functions/stock         200',
     '/api/mutual-funds  /.netlify/functions/mutual-funds  200',
     '/api/crypto        /.netlify/functions/crypto        200',
+    // SPENDLY-558: stock chart history (cached on Netlify's durable CDN).
+    '/api/stock-history /.netlify/functions/stock-history 200',
     '/*                 /index.html             200',
     '',
   ].join('\n');
