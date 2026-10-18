@@ -20,6 +20,7 @@ import { transferableBalance, validateTransfer } from "@/shared/features/epf/uti
 import { useTheme } from "@/theme/ThemeProvider";
 import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
 import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { DateField } from "@/components/common/DateField";
 
 type Props = {
   isOpen: boolean;
@@ -225,14 +226,7 @@ export function EpfTransferFormModal({
           error={errors.amount}
         />
 
-        <Input
-          label="Transfer date (YYYY-MM-DD)"
-          value={date}
-          onChangeText={setDate}
-          placeholder="YYYY-MM-DD"
-          autoCapitalize="none"
-          error={errors.date}
-        />
+        <DateField label="Transfer date" value={date} onChange={setDate} maxDate={epfTodayKey()} error={errors.date} />
 
         <Input
           label="Reference"

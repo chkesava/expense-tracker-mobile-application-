@@ -32,6 +32,7 @@ import {
 } from "@/shared/utils/receivableMath";
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
+import { DateField } from "@/components/common/DateField";
 
 export interface ReceivableDetailModalProps {
   visible: boolean;
@@ -180,7 +181,7 @@ export function ReceivableDetailModal({
     if (!receivable.id) return;
 
     if (!isValidDateKey(repaymentDate)) {
-      toast.error("Repayment date must be YYYY-MM-DD");
+      toast.error("Pick a valid repayment date");
       return;
     }
 
@@ -229,7 +230,7 @@ export function ReceivableDetailModal({
     }
 
     if (editDueDate.trim() && !isValidDateKey(editDueDate.trim())) {
-      toast.error("Due date must be YYYY-MM-DD");
+      toast.error("Pick a valid due date");
       return;
     }
 
@@ -502,11 +503,7 @@ export function ReceivableDetailModal({
               <Text style={[styles.label, { color: theme.colors.foreground }]}>
                 Due Date (optional)
               </Text>
-              <Input
-                value={editDueDate}
-                onChangeText={setEditDueDate}
-                placeholder="YYYY-MM-DD"
-              />
+              <DateField value={editDueDate} onChange={setEditDueDate} accessibilityLabel="Due date" clearable placeholder="No due date" />
             </View>
 
             <View style={styles.group}>
@@ -631,11 +628,7 @@ export function ReceivableDetailModal({
               <Text style={[styles.label, { color: theme.colors.foreground }]}>
                 Date
               </Text>
-              <Input
-                value={repaymentDate}
-                onChangeText={setRepaymentDate}
-                placeholder="YYYY-MM-DD"
-              />
+              <DateField value={repaymentDate} onChange={setRepaymentDate} accessibilityLabel="Repayment date" />
             </View>
 
             <View style={styles.group}>

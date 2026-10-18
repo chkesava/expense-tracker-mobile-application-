@@ -140,3 +140,62 @@ describe("marketDataService base URL", () => {
     expect(await requestedUrl({ app: LEGACY })).toBe(`${LEGACY}/api/stock?symbol=KPITTECH.NS`);
   });
 });
+
+describe("fetchStockHistory (SPENDLY-558)", () => {
+  let fetchStockHistory: typeof import("./marketDataService").fetchStockHistory;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    process.env.EXPO_PUBLIC_MARKET_API_URL = BASE;
+    ({ fetchStockHistory } = await import("./marketDataService"));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.EXPO_PUBLIC_MARKET_API_URL;
+  });
+
+  const series = { success: true, symbol: "KPITTECH.NS", range: "1W", candles: [{ t: 1, o: 1, h: 2, l: 1, c: 2, v: 5 }] };
+
+  it("asks for the symbol and range only, with no chart type", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(series));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchStockHistory("M&M.NS", "1W")).resolves.toMatchObject({ symbol: "KPITTECH.NS" });
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toBe(`${BASE}/api/stock-history?symbol=M%26M.NS&range=1W`);
+  });
+
+  it("returns null when there is no data for the period", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ success: false, code: "NO_DATA", message: "x" }, 404)));
+    await expect(fetchStockHistory("KPITTECH.NS", "1D")).resolves.toBeNull();
+  });
+
+  it("carries the server's typed code on failure", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ success: false, code: "THROTTLED", message: "x" }, 429)));
+    await expect(fetchStockHistory("KPITTECH.NS", "1D")).rejects.toMatchObject({
+      name: "MarketDataError",
+      code: "THROTTLED",
+      status: 429,
+      message: expect.stringMatching(/busy/i),
+    });
+  });
+
+  it("treats a success body without candles as malformed", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ success: true })));
+    await expect(fetchStockHistory("KPITTECH.NS", "1D")).rejects.toMatchObject({ code: "MALFORMED" });
+  });
+
+  it("reports its own timeout as TIMEOUT but passes a caller's cancellation through", async () => {
+    const abort = Object.assign(new Error("aborted"), { name: "AbortError" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw abort;
+      })
+    );
+    await expect(fetchStockHistory("KPITTECH.NS", "1D")).rejects.toMatchObject({ code: "TIMEOUT" });
+
+    const controller = new AbortController();
+    controller.abort();
+    await expect(fetchStockHistory("KPITTECH.NS", "1D", { signal: controller.signal })).rejects.toBe(abort);
+  });
+});

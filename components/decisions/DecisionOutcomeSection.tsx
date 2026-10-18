@@ -26,6 +26,7 @@ import { currencySymbol } from "@/shared/utils/formatCurrency";
 import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useDecisionFormat } from "@/components/decisions/useDecisionFormat";
+import { DateField } from "@/components/common/DateField";
 
 /**
  * Expected vs actual for one decision (SPENDLY-369). Expected and actual are
@@ -164,9 +165,9 @@ function OutcomeSheet({
     <Modal isOpen={isOpen} onClose={onClose} title="What happened?" density="compact">
       <View style={{ gap: theme.space.md }}>
         <Input label="In your words" value={draft.summary} onChangeText={(summary) => setDraft({ ...draft, summary })} multiline maxLength={DECISION_LIMITS.text} placeholder="e.g. Closed the loan 10 months early" error={showIssues && issues.includes("summary_required") ? "A sentence is enough." : undefined} />
-        <View style={[styles.row, { gap: theme.space.sm }]}>
-          <Input label={`Amount, ${currencySymbol(currency)} (optional)`} value={draft.amount} onChangeText={(amount) => setDraft({ ...draft, amount })} keyboardType="numbers-and-punctuation" placeholder="0" containerStyle={{ flex: 1 }} helperText="What actually happened" error={showIssues && issues.includes("invalid_amount") ? "Enter a number like 11000" : undefined} />
-          <Input label="As of (optional)" value={draft.outcomeDate} onChangeText={(outcomeDate) => setDraft({ ...draft, outcomeDate })} placeholder="YYYY-MM-DD" containerStyle={{ flex: 1 }} error={showIssues && issues.includes("invalid_date") ? "Use a date like 2027-03-31" : undefined} />
+        <View style={[styles.row, { gap: theme.space.sm, flexWrap: "wrap", alignItems: "flex-start" }]}>
+          <Input label={`Amount, ${currencySymbol(currency)} (optional)`} value={draft.amount} onChangeText={(amount) => setDraft({ ...draft, amount })} keyboardType="numbers-and-punctuation" placeholder="0" containerStyle={{ flexGrow: 1, flexBasis: 140 }} helperText="What actually happened" error={showIssues && issues.includes("invalid_amount") ? "Enter a number like 11000" : undefined} />
+          <DateField label="As of (optional)" value={draft.outcomeDate} onChange={(outcomeDate) => setDraft({ ...draft, outcomeDate })} clearable placeholder="Not set" containerStyle={{ flexGrow: 1, flexBasis: 220 }} error={showIssues && issues.includes("invalid_date") ? "Pick a valid date." : undefined} />
         </View>
         <Chip label="Today" size="sm" appearance="outline" selected={draft.outcomeDate === todayDateKey()} onPress={() => setDraft({ ...draft, outcomeDate: todayDateKey() })} />
         <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm }}>How did it turn out for you? (optional)</Text>

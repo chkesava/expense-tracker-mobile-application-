@@ -16,6 +16,7 @@ import {
   type WhatIfChangeType,
 } from "@/shared/utils/whatIfDraft";
 import { useTheme } from "@/theme/ThemeProvider";
+import { DateField } from "@/components/common/DateField";
 
 const MONTHLY_TYPES: WhatIfChangeType[] = ["income_change", "expense_change", "savings"];
 
@@ -115,7 +116,7 @@ export function WhatIfChangeSheet({
         <Input label={info.amountLabel} value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="0" />
 
         <View style={{ gap: theme.space.xs }}>
-          <Input label={`${info.dateLabel} (YYYY-MM-DD)`} value={startDate} onChangeText={setStartDate} autoCapitalize="none" />
+          <DateField label={info.dateLabel} value={startDate} onChange={setStartDate} minDate={today} />
           <ChipRow<string>
             options={[
               { value: today, label: "Today" },
@@ -129,7 +130,7 @@ export function WhatIfChangeSheet({
         </View>
 
         {monthly ? (
-          <Input label="Until (optional, YYYY-MM-DD)" value={untilDate} onChangeText={setUntilDate} autoCapitalize="none" helperText="Leave empty to keep it going." />
+          <DateField label="Until (optional)" value={untilDate} onChange={setUntilDate} minDate={startDate || today} clearable placeholder="Keeps going" helperText="Leave empty to keep it going." />
         ) : null}
 
         {type === "loan" ? (

@@ -29,6 +29,7 @@ import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { SheetBottomInset } from "@/components/common/SheetBottomInset";
+import { DateField } from "@/components/common/DateField";
 
 export interface CreateInvestmentModalProps {
   visible: boolean;
@@ -223,13 +224,9 @@ export function CreateInvestmentModal({
             {/* Start Date */}
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: theme.colors.foreground }]}>
-                Start Date (YYYY-MM-DD)
+                Start Date
               </Text>
-              <Input
-                value={startDate}
-                onChangeText={setStartDate}
-                placeholder="YYYY-MM-DD"
-              />
+              <DateField value={startDate} onChange={setStartDate} accessibilityLabel="Start date" />
             </View>
 
             {/* FD & Savings Specific Fields */}
@@ -251,11 +248,7 @@ export function CreateInvestmentModal({
                   <Text style={[styles.label, { color: theme.colors.foreground }]}>
                     Maturity Date (Optional)
                   </Text>
-                  <Input
-                    value={maturityDate}
-                    onChangeText={setMaturityDate}
-                    placeholder="YYYY-MM-DD (e.g. 2027-08-01)"
-                  />
+                  <DateField value={maturityDate} onChange={setMaturityDate} clearable placeholder="No maturity date" accessibilityLabel="Maturity date" />
                 </View>
               </>
             )}

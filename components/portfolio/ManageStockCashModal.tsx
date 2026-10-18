@@ -42,6 +42,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
+import { DateField } from "@/components/common/DateField";
 
 interface ManageStockCashModalProps {
   visible: boolean;
@@ -692,11 +693,7 @@ export function ManageStockCashModal({
                 >
                   Date *
                 </Text>
-                <Input
-                  placeholder="YYYY-MM-DD"
-                  value={date}
-                  onChangeText={setDate}
-                />
+                <DateField value={date} onChange={setDate} accessibilityLabel="Date" />
               </View>
 
               {mode === "adjust" ? (

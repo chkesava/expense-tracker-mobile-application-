@@ -23,6 +23,7 @@ import {
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { DateField } from "@/components/common/DateField";
 
 export interface CreateReceivableModalProps {
   visible: boolean;
@@ -97,12 +98,12 @@ export function CreateReceivableModal({
     }
 
     if (!isValidDateKey(lentDate)) {
-      toast.error("Lent date must be YYYY-MM-DD");
+      toast.error("Pick a valid lent date");
       return;
     }
 
     if (dueDate.trim() && !isValidDateKey(dueDate.trim())) {
-      toast.error("Due date must be YYYY-MM-DD");
+      toast.error("Pick a valid due date");
       return;
     }
 
@@ -219,22 +220,14 @@ export function CreateReceivableModal({
           <Text style={[styles.label, { color: theme.colors.foreground }]}>
             Lent Date
           </Text>
-          <Input
-            value={lentDate}
-            onChangeText={setLentDate}
-            placeholder="YYYY-MM-DD"
-          />
+          <DateField value={lentDate} onChange={setLentDate} accessibilityLabel="Lent date" />
         </View>
 
         <View style={styles.group}>
           <Text style={[styles.label, { color: theme.colors.foreground }]}>
             Due Date (optional)
           </Text>
-          <Input
-            value={dueDate}
-            onChangeText={setDueDate}
-            placeholder="YYYY-MM-DD"
-          />
+          <DateField value={dueDate} onChange={setDueDate} accessibilityLabel="Due date" clearable placeholder="No due date" />
         </View>
 
         <View style={styles.group}>

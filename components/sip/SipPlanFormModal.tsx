@@ -11,6 +11,7 @@ import { todayDateKey } from "@/shared/utils/dates";
 
 import { Chip } from "@/components/ui/Chip";
 import { SheetBottomInset } from "@/components/common/SheetBottomInset";
+import { DateField } from "@/components/common/DateField";
 export type SipPlanFormModalProps = {
   visible: boolean;
   onClose: () => void;
@@ -183,13 +184,7 @@ export function SipPlanFormModal({ visible, onClose, onSubmit }: SipPlanFormModa
           </View>
 
           <View style={styles.inputGroup}>
-            <Input
-              label="Start Date (YYYY-MM-DD)"
-              value={startDate}
-              onChangeText={setStartDate}
-              placeholder="YYYY-MM-DD"
-              error={errors.startDate}
-            />
+            <DateField label="Start Date" value={startDate} onChange={setStartDate} error={errors.startDate} />
           </View>
         </ScrollView>
 

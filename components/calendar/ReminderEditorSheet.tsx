@@ -16,6 +16,7 @@ import {
 import { REMINDER_CATEGORY_LABELS, REMINDER_RECURRENCE_LABELS, validateReminderDraft, type ReminderDraft } from "@/shared/utils/calendarReminders";
 import { shiftDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
+import { DateField } from "@/components/common/DateField";
 
 const LEAD_LABELS: Record<ReminderLeadDays, string> = { 0: "On the day", 1: "1 day before", 3: "3 days before", 7: "1 week before" };
 
@@ -89,7 +90,7 @@ export function ReminderEditorSheet({
       <View style={{ gap: theme.space.md }}>
         <Text style={hint}>A reminder is a note on your calendar. It never records an expense or income.</Text>
         <Input label="What to remember" value={title} onChangeText={setTitle} placeholder="e.g. Renew car insurance" maxLength={120} />
-        <Input label="Date (YYYY-MM-DD)" value={startDate} onChangeText={setStartDate} autoCapitalize="none" />
+        <DateField label="Date" value={startDate} onChange={setStartDate} />
         <ChipRow<string>
           options={[
             { value: today, label: "Today" },
@@ -111,7 +112,7 @@ export function ReminderEditorSheet({
           <Text style={label}>Repeat</Text>
           <ChipRow<ReminderRecurrence> options={REMINDER_RECURRENCES.map((r) => ({ value: r, label: REMINDER_RECURRENCE_LABELS[r] }))} selected={recurrence} onSelect={setRecurrence} />
           {recurrence === "every_n_days" ? <Input label="Every how many days" value={interval} onChangeText={setInterval} keyboardType="numeric" /> : null}
-          {recurrence !== "none" ? <Input label="Until (optional, YYYY-MM-DD)" value={untilDate} onChangeText={setUntilDate} autoCapitalize="none" /> : null}
+          {recurrence !== "none" ? <DateField label="Until (optional)" value={untilDate} onChange={setUntilDate} minDate={startDate || undefined} clearable placeholder="Keeps repeating" /> : null}
         </View>
 
         <View style={{ gap: theme.space.xs }}>

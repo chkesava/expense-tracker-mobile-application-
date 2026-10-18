@@ -27,6 +27,7 @@ import type { HoldingWithMetrics } from "@/shared/features/portfolio/types";
 import { todayDateKey } from "@/shared/utils/dates";
 import { roundMoney } from "@/shared/utils/money";
 import { executeMissingAcquisitionAdjustment, executeCostBasisAdjustment } from "@/services/portfolio/holdingAdjustments";
+import { DateField } from "@/components/common/DateField";
 
 type AdjustmentType = "add_missing_acquisition" | "correct_cost_basis";
 
@@ -240,13 +241,7 @@ export function HoldingAdjustmentModal({
                 />
                 
                 <Text style={[styles.label, { color: theme.colors.mutedForeground, marginTop: 12 }]}>Purchase Date</Text>
-                <TextInput
-                  style={[styles.input, { color: theme.colors.foreground, borderColor: theme.colors.border }]}
-                  value={dateStr}
-                  onChangeText={setDateStr}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={theme.colors.mutedForeground}
-                />
+                <DateField value={dateStr} onChange={setDateStr} accessibilityLabel="Purchase date" />
                 
                 <Text style={[styles.label, { color: theme.colors.mutedForeground, marginTop: 12 }]}>Funding Source</Text>
                 <View style={styles.typeButtons}>

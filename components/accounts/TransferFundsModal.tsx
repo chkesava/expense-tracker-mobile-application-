@@ -15,6 +15,7 @@ import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
+import { DateField } from "@/components/common/DateField";
 
 export const DEMAT_ACCOUNT_ID = "stocks_demat";
 
@@ -377,13 +378,9 @@ export function TransferFundsModal({
               { color: theme.colors.foreground, fontSize: theme.typography.sm },
             ]}
           >
-            Date (YYYY-MM-DD) *
+            Date *
           </Text>
-          <Input
-            value={date}
-            onChangeText={setDate}
-            placeholder="YYYY-MM-DD"
-          />
+          <DateField value={date} onChange={setDate} accessibilityLabel="Date" />
         </View>
 
         {/* Note */}
