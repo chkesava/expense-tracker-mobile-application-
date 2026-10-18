@@ -16,6 +16,7 @@ import {
 import { todayDateKey } from "@/shared/utils/dates";
 import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { useTheme } from "@/theme/ThemeProvider";
+import { DateField } from "@/components/common/DateField";
 
 interface TradingChargesCardProps {
   /** The already-loaded `portfolioTransactions` (no extra Firestore read). */
@@ -77,22 +78,14 @@ export function TradingChargesCard({ transactions, currency }: TradingChargesCar
 
       {period === "custom" ? (
         <View style={styles.rangeRow}>
-          <Input
-            label="From"
-            placeholder="YYYY-MM-DD"
-            value={customFrom}
-            onChangeText={setCustomFrom}
-            containerStyle={styles.rangeInput}
-            autoCapitalize="none"
-          />
-          <Input
+          <DateField label="From" value={customFrom} onChange={setCustomFrom} maxDate={customTo || undefined} containerStyle={styles.rangeInput} />
+          <DateField
             label="To"
-            placeholder="YYYY-MM-DD"
             value={customTo}
-            onChangeText={setCustomTo}
+            onChange={setCustomTo}
+            minDate={customFrom || undefined}
             containerStyle={styles.rangeInput}
-            autoCapitalize="none"
-            error={customValid ? undefined : "Use YYYY-MM-DD, From before To"}
+            error={customValid ? undefined : "Pick both dates, From on or before To"}
           />
         </View>
       ) : null}
@@ -175,12 +168,15 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
   },
+  // SPENDLY-557: wraps so each date field (and its inline picker) gets the full width on phones.
   rangeRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
   },
   rangeInput: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 220,
   },
   total: {
     fontSize: 24,

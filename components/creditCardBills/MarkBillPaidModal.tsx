@@ -12,6 +12,7 @@ import { useSettings } from "@/providers/SettingsProvider";
 import type { CreditCardBill } from "@/shared/types/creditCardBill";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
+import { DateField } from "@/components/common/DateField";
 
 export type MarkBillPaidModalProps = {
   isOpen: boolean;
@@ -125,12 +126,7 @@ export function MarkBillPaidModal({
           onChangeText={setAmount}
           keyboardType="decimal-pad"
         />
-        <Input
-          label="Payment Date * (YYYY-MM-DD)"
-          value={paymentDate}
-          onChangeText={setPaymentDate}
-          autoCapitalize="none"
-        />
+        <DateField label="Payment Date *" value={paymentDate} onChange={setPaymentDate} />
         <Button
           variant={recordExternal ? "primary" : "outline"}
           onPress={() => setRecordExternal((v) => !v)}

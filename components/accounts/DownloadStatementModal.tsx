@@ -31,6 +31,7 @@ import {
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
+import { DateField } from "@/components/common/DateField";
 
 const PRESET_LABELS: Record<StatementPreset, string> = {
   "this-month": "This month",
@@ -243,12 +244,7 @@ export function DownloadStatementModal({
                     >
                       From
                     </Text>
-                    <Input
-                      value={customFrom}
-                      onChangeText={setCustomFrom}
-                      placeholder="YYYY-MM-DD"
-                      autoCapitalize="none"
-                    />
+                    <DateField value={customFrom} onChange={setCustomFrom} maxDate={customTo || undefined} accessibilityLabel="From" />
                   </View>
                   <View style={styles.inputColumn}>
                     <Text
@@ -259,17 +255,12 @@ export function DownloadStatementModal({
                     >
                       To
                     </Text>
-                    <Input
-                      value={customTo}
-                      onChangeText={setCustomTo}
-                      placeholder="YYYY-MM-DD"
-                      autoCapitalize="none"
-                    />
+                    <DateField value={customTo} onChange={setCustomTo} minDate={customFrom || undefined} accessibilityLabel="To" />
                   </View>
                 </View>
                 {customValid ? null : (
                   <Text style={[styles.error, { color: theme.colors.destructive }]}>
-                    Enter both dates as YYYY-MM-DD, with From on or before To.
+                    Pick both dates, with From on or before To.
                   </Text>
                 )}
               </View>
@@ -489,12 +480,15 @@ const styles = StyleSheet.create({
   chipText: {
     fontSize: 13,
   },
+  // SPENDLY-557: wraps so each date field (and its inline picker) gets the full width on phones.
   inputRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 12,
   },
   inputColumn: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 220,
     gap: 6,
   },
   inputLabel: {

@@ -31,6 +31,7 @@ import { themeUsesDarkPalette } from "@/theme/tokens";
 import { Input } from "@/components/ui/Input";
 import { Chip } from "@/components/ui/Chip";
 import { Button } from "@/components/ui/Button";
+import { DateField } from "@/components/common/DateField";
 interface AccountActivityFilterModalProps {
   visible: boolean;
   filters: AccountActivityFilters;
@@ -239,13 +240,29 @@ export function AccountActivityFilterModal({
 
             <View style={styles.section}>
               {renderSectionTitle("DATE RANGE")}
-              <View style={styles.inputRow}>
-                {renderInput("From", draft.fromDate, "YYYY-MM-DD", (fromDate) =>
-                  setDraft((previous) => ({ ...previous, fromDate }))
-                )}
-                {renderInput("To", draft.toDate, "YYYY-MM-DD", (toDate) =>
-                  setDraft((previous) => ({ ...previous, toDate }))
-                )}
+              <View style={[styles.inputRow, styles.dateRow]}>
+                <View style={[styles.inputColumn, styles.dateColumn]}>
+                  <Text style={[styles.inputLabel, { color: theme.colors.mutedForeground }]}>From</Text>
+                  <DateField
+                    value={draft.fromDate}
+                    onChange={(fromDate) => setDraft((previous) => ({ ...previous, fromDate }))}
+                    maxDate={draft.toDate || undefined}
+                    clearable
+                    placeholder="Any"
+                    accessibilityLabel="From"
+                  />
+                </View>
+                <View style={[styles.inputColumn, styles.dateColumn]}>
+                  <Text style={[styles.inputLabel, { color: theme.colors.mutedForeground }]}>To</Text>
+                  <DateField
+                    value={draft.toDate}
+                    onChange={(toDate) => setDraft((previous) => ({ ...previous, toDate }))}
+                    minDate={draft.fromDate || undefined}
+                    clearable
+                    placeholder="Any"
+                    accessibilityLabel="To"
+                  />
+                </View>
               </View>
             </View>
 
@@ -506,6 +523,9 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 5,
   },
+  // SPENDLY-557: wraps so each date field (and its inline picker) gets the full width on phones.
+  dateRow: { flexWrap: "wrap" },
+  dateColumn: { flex: 0, flexGrow: 1, flexBasis: 220 },
   inputLabel: {
     fontSize: 11,
     fontWeight: "600",

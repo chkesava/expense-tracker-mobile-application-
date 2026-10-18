@@ -38,6 +38,7 @@ import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
+import { DateField } from "@/components/common/DateField";
 
 const ACCOUNT_COLORS = [
   "#4F46E5",
@@ -435,11 +436,14 @@ export function EditAccountModal({
               { color: theme.colors.foreground, fontSize: theme.typography.sm },
             ]}
           >
-            Balance As Of Date (YYYY-MM-DD)
+            Balance As Of Date
           </Text>
-          <Input
+          <DateField
             value={balanceAsOfDate}
-            onChangeText={setBalanceAsOfDate}
+            onChange={setBalanceAsOfDate}
+            clearable
+            placeholder="Not set"
+            accessibilityLabel="Balance as of date"
             helperText="Leave blank to keep every past transaction. Only set this if the opening balance is a bank snapshot from that date."
           />
         </View>

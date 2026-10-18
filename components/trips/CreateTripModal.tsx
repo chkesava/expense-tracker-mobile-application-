@@ -26,6 +26,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { DateField } from "@/components/common/DateField";
 
 export interface CreateTripModalProps {
   visible: boolean;
@@ -75,7 +76,7 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
         return;
       }
       if (!startDate || !endDate) {
-        toast.error("Please enter both start and end dates (YYYY-MM-DD).");
+        toast.error("Please pick both start and end dates.");
         return;
       }
       if (startDate > endDate) {
@@ -242,8 +243,9 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
                   />
                 </View>
 
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  <View style={{ flex: 1, gap: 6 }}>
+                {/* SPENDLY-557: wraps so each date picker gets the full width on phones. */}
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+                  <View style={{ flexGrow: 1, flexBasis: 220, gap: 6 }}>
                     <Text
                       style={[
                         styles.fieldLabel,
@@ -252,13 +254,9 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
                     >
                       START DATE *
                     </Text>
-                    <Input
-                      value={startDate}
-                      onChangeText={setStartDate}
-                      placeholder="YYYY-MM-DD"
-                    />
+                    <DateField value={startDate} onChange={setStartDate} maxDate={endDate || undefined} accessibilityLabel="Start date" />
                   </View>
-                  <View style={{ flex: 1, gap: 6 }}>
+                  <View style={{ flexGrow: 1, flexBasis: 220, gap: 6 }}>
                     <Text
                       style={[
                         styles.fieldLabel,
@@ -267,11 +265,7 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
                     >
                       END DATE *
                     </Text>
-                    <Input
-                      value={endDate}
-                      onChangeText={setEndDate}
-                      placeholder="YYYY-MM-DD"
-                    />
+                    <DateField value={endDate} onChange={setEndDate} minDate={startDate || undefined} accessibilityLabel="End date" />
                   </View>
                 </View>
               </>

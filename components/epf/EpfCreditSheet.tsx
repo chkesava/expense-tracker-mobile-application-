@@ -25,6 +25,7 @@ import {
 import { useTheme } from "@/theme/ThemeProvider";
 import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
 import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { DateField } from "@/components/common/DateField";
 
 type Props = {
   isOpen: boolean;
@@ -184,12 +185,11 @@ export function EpfCreditSheet({
               helperText="Less than expected marks the month partial."
             />
 
-            <Input
-              label="Credit date (YYYY-MM-DD)"
+            <DateField
+              label="Credit date"
               value={date}
-              onChangeText={setDate}
-              placeholder="YYYY-MM-DD"
-              autoCapitalize="none"
+              onChange={setDate}
+              minDate={row ? `${row.month}-01` : undefined}
               error={errors.date}
               helperText={`The day it reached your account. Earlier than ${dueDateLabel(dueDate)} is fine — employers often remit early.`}
             />

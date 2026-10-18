@@ -12,6 +12,7 @@ import { isValidDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { DateField } from "@/components/common/DateField";
 
 export interface SpaceFormModalProps {
   visible: boolean;
@@ -74,7 +75,7 @@ export function SpaceFormModal({
       [endDate.trim(), "End date"],
     ] as const) {
       if (value && !isValidDateKey(value)) {
-        toast.error(`${label} must be YYYY-MM-DD`);
+        toast.error(`Pick a valid ${label.toLowerCase()}`);
         return;
       }
     }
@@ -181,22 +182,14 @@ export function SpaceFormModal({
           <Text style={[styles.label, { color: theme.colors.foreground }]}>
             Start Date (optional)
           </Text>
-          <Input
-            value={startDate}
-            onChangeText={setStartDate}
-            placeholder="YYYY-MM-DD"
-          />
+          <DateField value={startDate} onChange={setStartDate} maxDate={endDate || undefined} clearable placeholder="Not set" accessibilityLabel="Start date" />
         </View>
 
         <View style={styles.group}>
           <Text style={[styles.label, { color: theme.colors.foreground }]}>
             End Date (optional)
           </Text>
-          <Input
-            value={endDate}
-            onChangeText={setEndDate}
-            placeholder="YYYY-MM-DD"
-          />
+          <DateField value={endDate} onChange={setEndDate} minDate={startDate || undefined} clearable placeholder="Not set" accessibilityLabel="End date" />
         </View>
 
         <Button

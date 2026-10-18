@@ -26,6 +26,7 @@ import { newItemId, reviewDateChoices } from "@/shared/utils/decisionForm";
 import { withAlpha } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useDecisionFormat } from "@/components/decisions/useDecisionFormat";
+import { DateField } from "@/components/common/DateField";
 
 export function DueBadge({ state }: { state: CommitmentState | ReviewState }) {
   const { theme } = useTheme();
@@ -141,9 +142,9 @@ export function DecisionCommitmentsSection({
           {!readOnly && decision.commitments.length < DECISION_LIMITS.commitments ? (
             <View style={{ gap: theme.space.sm }}>
               <Input value={text} onChangeText={setText} placeholder="e.g. Ask the bank for a prepayment quote" maxLength={DECISION_LIMITS.text} accessibilityLabel="New commitment" error={showIssues && issues.includes("text_required") ? "Say what you'll do." : undefined} />
-              <View style={[styles.row, { gap: theme.space.sm }]}>
-                <Input value={owner} onChangeText={setOwner} placeholder="Who (optional)" maxLength={60} containerStyle={{ flex: 1 }} accessibilityLabel="Who will do it" />
-                <Input value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" containerStyle={{ flex: 1 }} accessibilityLabel="Target date" error={showIssues && issues.includes("invalid_date") ? "Use a date like 2026-10-15." : undefined} />
+              <View style={[styles.row, { gap: theme.space.sm, flexWrap: "wrap", alignItems: "flex-start" }]}>
+                <Input value={owner} onChangeText={setOwner} placeholder="Who (optional)" maxLength={60} containerStyle={{ flexGrow: 1, flexBasis: 140 }} accessibilityLabel="Who will do it" />
+                <DateField value={date} onChange={setDate} clearable placeholder="Target date" containerStyle={{ flexGrow: 1, flexBasis: 220 }} accessibilityLabel="Target date" error={showIssues && issues.includes("invalid_date") ? "Pick a valid date." : undefined} />
               </View>
               <Button variant="tonal" onPress={add} disabled={busy}>
                 + Add commitment

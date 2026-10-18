@@ -27,6 +27,7 @@ import { roundMoney } from "@/shared/utils/money";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { DateField } from "@/components/common/DateField";
 
 export interface PayCreditBillModalProps {
   isOpen: boolean;
@@ -564,13 +565,9 @@ export function PayCreditBillModal({
               { color: theme.colors.foreground, fontSize: theme.typography.sm },
             ]}
           >
-            Date (YYYY-MM-DD) *
+            Date *
           </Text>
-          <Input
-            value={date}
-            onChangeText={setDate}
-            placeholder="YYYY-MM-DD"
-          />
+          <DateField value={date} onChange={setDate} accessibilityLabel="Date" />
         </View>
 
         {/* Note */}

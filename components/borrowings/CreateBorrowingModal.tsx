@@ -22,6 +22,7 @@ import {
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { DateField } from "@/components/common/DateField";
 
 export interface CreateBorrowingModalProps {
   visible: boolean;
@@ -81,12 +82,12 @@ export function CreateBorrowingModal({
     }
 
     if (!isValidDateKey(borrowedDate)) {
-      toast.error("Borrowed date must be YYYY-MM-DD");
+      toast.error("Pick a valid borrowed date");
       return;
     }
 
     if (dueDate.trim() && !isValidDateKey(dueDate.trim())) {
-      toast.error("Due date must be YYYY-MM-DD");
+      toast.error("Pick a valid due date");
       return;
     }
 
@@ -229,11 +230,7 @@ export function CreateBorrowingModal({
           <Text style={[styles.label, { color: theme.colors.foreground }]}>
             Borrowed Date
           </Text>
-          <Input
-            value={borrowedDate}
-            onChangeText={setBorrowedDate}
-            placeholder="YYYY-MM-DD"
-          />
+          <DateField value={borrowedDate} onChange={setBorrowedDate} accessibilityLabel="Borrowed date" />
         </View>
 
         <View style={styles.group}>
@@ -279,11 +276,7 @@ export function CreateBorrowingModal({
           <Text style={[styles.label, { color: theme.colors.foreground }]}>
             Due Date (optional)
           </Text>
-          <Input
-            value={dueDate}
-            onChangeText={setDueDate}
-            placeholder="YYYY-MM-DD"
-          />
+          <DateField value={dueDate} onChange={setDueDate} accessibilityLabel="Due date" clearable placeholder="No due date" />
         </View>
 
         <View style={styles.group}>
