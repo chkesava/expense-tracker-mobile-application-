@@ -25,10 +25,13 @@ import { todayDateKey } from "@/shared/utils/dates";
 import { formatSignedPercent } from "@/shared/utils/investmentPresentation";
 import { computeHoldingXirr } from "@/shared/utils/portfolioXirr";
 import { tradeCashEffect } from "@/shared/features/portfolio/utils/tradeCharges";
+import { quoteKeyFor } from "@/shared/features/portfolio/utils/portfolioMetrics";
+import { normalizeHistorySymbol } from "@/shared/utils/stockHistory";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 import { withAlpha } from "@/theme/surfaces";
 import { HoldingAdjustmentModal } from "./HoldingAdjustmentModal";
+import { StockChartCard } from "./stockChart/StockChartCard";
 import { useState } from "react";
 
 function formatQuantity(value: number) {
@@ -87,6 +90,12 @@ export function HoldingDetailModal({
 
   if (!holding) return null;
 
+  // SPENDLY-558: price history is Yahoo equity data, so stocks and ETFs only.
+  // Mounted only while the modal is open, so nothing is fetched in the background.
+  const chartSymbol =
+    visible && (holding.instrumentType === "stock" || holding.instrumentType === "etf")
+      ? normalizeHistorySymbol(quoteKeyFor(holding))
+      : null;
   const instrumentColor = colors.instrument(holding.instrumentType);
   const letter = (holding.name || holding.symbol).trim().charAt(0).toUpperCase();
   const shareDayChange =
@@ -184,6 +193,8 @@ export function HoldingDetailModal({
               </View>
             </View>
           </View>
+
+          {chartSymbol ? <StockChartCard symbol={chartSymbol} /> : null}
 
           <View
             style={[

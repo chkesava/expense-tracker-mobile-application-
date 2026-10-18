@@ -97,3 +97,66 @@ export function parseCryptoCoinId(quoteKeyOrSymbol: string): string | null {
   if (trimmed && !trimmed.includes(":") && !trimmed.includes(".")) return trimmed.toLowerCase();
   return null;
 }
+
+// --- SPENDLY-558: historical stock series --------------------------------
+
+/** The eight chart ranges the stock detail screen offers. */
+export type StockHistoryRange = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y" | "5Y" | "ALL";
+
+/**
+ * One OHLCV bar. `t` is the bar's start in epoch milliseconds. Any price or
+ * volume may be `null`: the provider leaves holes for halted or illiquid bars,
+ * and they are kept as holes rather than invented.
+ */
+export interface StockCandle {
+  t: number;
+  o: number | null;
+  h: number | null;
+  l: number | null;
+  c: number | null;
+  v: number | null;
+}
+
+/** `GET /api/stock-history` success body. One payload serves both chart types. */
+export interface StockHistoryDTO {
+  success: true;
+  schemaVersion: 1;
+  provider: "yahoo";
+  symbol: string;
+  name: string;
+  range: StockHistoryRange;
+  /** The bar size the provider actually returned (it may differ from the one asked for). */
+  interval: string;
+  currency: string;
+  /** IANA zone of the exchange, e.g. `Asia/Kolkata`. */
+  exchangeTimezone: string;
+  /** Exchange offset from UTC in seconds, used to label axes in exchange-local time. */
+  gmtOffsetSec: number;
+  /** The close before the first bar (the 1D baseline), when the provider gives one. */
+  previousClose: number | null;
+  /** Latest regular-market price the provider reported, if newer than the last bar. */
+  lastPrice: number | null;
+  /** When the provider says the market data is as of (ISO). */
+  asOf: string;
+  /** When the server fetched it from the provider (ISO). */
+  fetchedAt: string;
+  /** True when the server served its last good copy because the provider failed. */
+  stale: boolean;
+  candles: StockCandle[];
+}
+
+export type StockHistoryErrorCode =
+  | "BAD_REQUEST"
+  | "NOT_FOUND"
+  | "NO_DATA"
+  | "THROTTLED"
+  | "TIMEOUT"
+  | "UPSTREAM"
+  | "MALFORMED";
+
+/** `GET /api/stock-history` failure body. */
+export interface StockHistoryErrorDTO {
+  success: false;
+  code: StockHistoryErrorCode;
+  message: string;
+}

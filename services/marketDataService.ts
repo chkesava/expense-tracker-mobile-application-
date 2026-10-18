@@ -3,7 +3,11 @@ import { fetchWithTimeout, isAbortError } from '@/lib/fetchWithTimeout';
 import {
   StockQuoteDTO,
   MutualFundQuoteDTO,
-  CryptoQuoteDTO
+  CryptoQuoteDTO,
+  type StockHistoryDTO,
+  type StockHistoryErrorCode,
+  type StockHistoryErrorDTO,
+  type StockHistoryRange,
 } from '@/shared/types/market';
 import {
   MarketQuote,
@@ -36,12 +40,18 @@ const getBaseUrl = (): string => {
  *  refetches (and unmounted screens) stop their in-flight requests. */
 export type QuoteRequestOptions = { signal?: AbortSignal | null };
 
-class MarketDataError extends Error {
+export class MarketDataError extends Error {
   readonly status?: number;
-  constructor(message: string, options?: { status?: number; cause?: unknown }) {
+  /** Typed reason from /api/stock-history (THROTTLED, TIMEOUT, ...), when known. */
+  readonly code?: StockHistoryErrorCode;
+  constructor(
+    message: string,
+    options?: { status?: number; code?: StockHistoryErrorCode; cause?: unknown }
+  ) {
     super(message);
     this.name = "MarketDataError";
     this.status = options?.status;
+    this.code = options?.code;
     if (options?.cause !== undefined) this.cause = options.cause;
   }
 }
@@ -93,6 +103,68 @@ export const fetchStockQuote = async (
     `${baseUrl}/api/stock?symbol=${encodeURIComponent(symbol)}`,
     'stock quote',
     options
+  );
+};
+
+const HISTORY_MESSAGES: Partial<Record<StockHistoryErrorCode, string>> = {
+  THROTTLED: 'Market data is busy right now. Please try again shortly.',
+  TIMEOUT: 'Market data took too long to load. Please try again.',
+};
+
+/**
+ * Historical OHLCV series for the stock chart (SPENDLY-558). Served by
+ * /api/stock-history from Netlify's shared cache — never from Firestore.
+ *
+ * `null` means the provider has no bars for this symbol and range (unknown
+ * ticker, or a period with no trading). Failures throw a `MarketDataError`
+ * carrying the server's typed `code`, so the chart can say "busy" or
+ * "timed out" instead of a generic error.
+ */
+export const fetchStockHistory = async (
+  symbol: string,
+  range: StockHistoryRange,
+  options: QuoteRequestOptions = {}
+): Promise<StockHistoryDTO | null> => {
+  const baseUrl = getBaseUrl();
+  if (!baseUrl) return null;
+  const url = `${baseUrl}/api/stock-history?symbol=${encodeURIComponent(symbol)}&range=${range}`;
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(url, { signal: options.signal, timeoutMs: 12_000 });
+  } catch (error) {
+    if (isAbortError(error) && options.signal?.aborted) throw error;
+    throw new MarketDataError(
+      isAbortError(error) ? HISTORY_MESSAGES.TIMEOUT! : 'stock history request failed',
+      { code: isAbortError(error) ? 'TIMEOUT' : undefined, cause: error }
+    );
+  }
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch (error) {
+    if (res.ok) {
+      throw new MarketDataError('stock history returned a malformed response', {
+        status: res.status,
+        code: 'MALFORMED',
+        cause: error,
+      });
+    }
+  }
+  if (res.ok) {
+    const dto = body as StockHistoryDTO | null;
+    if (!dto?.success || !Array.isArray(dto.candles)) {
+      throw new MarketDataError('stock history returned a malformed response', {
+        status: res.status,
+        code: 'MALFORMED',
+      });
+    }
+    return dto;
+  }
+  const code = (body as Partial<StockHistoryErrorDTO> | null)?.code;
+  if (res.status === 404) return null;
+  throw new MarketDataError(
+    (code && HISTORY_MESSAGES[code]) || `stock history responded with ${res.status}`,
+    { status: res.status, code }
   );
 };
 
