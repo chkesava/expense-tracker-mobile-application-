@@ -12,7 +12,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | 3. Analytics | Insights (monthly, yearly, search & lab, AI advisor), merchants, fees | SPENDLY-538 to SPENDLY-541 | Done; on `main` (`d6c9e4b`) |
 | 4. Investments | Investments hub (deposits, portfolio, SIPs, EPF), EPF detail | SPENDLY-542 to SPENDLY-544 | Done; on `main` (`d6c9e4b`) |
 | 5. Planning | Goal optimizer, financial calendar, runway, what-if, decisions | SPENDLY-545 to SPENDLY-547 | Done; on `main` (`742060d`) |
-| 6. Vaults, settings and forms | Vaults/splits, settings, add-transaction and other forms, onboarding | SPENDLY-548 to SPENDLY-557 (see Phase 6 plan) | Planned; not started |
+| 6. Vaults, settings and forms | Vaults/splits, settings, add-transaction and other forms, onboarding | SPENDLY-548 to SPENDLY-557 (see Phase 6 plan) | In progress: 557 (date picker) done on `main` |
 
 ## Stories
 | Story | Title | Branch | State |
@@ -33,6 +33,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | SPENDLY-545 | Phase 5a: Calendar and Runway | `feature/SPENDLY-545-calendar-runway` | Done. On `main` via `742060d` (2026-10-17) ([doc](SPENDLY-545-calendar-runway.md)) |
 | SPENDLY-546 | Phase 5b: What-If and Goal optimizer | `feature/SPENDLY-546-what-if-optimizer` | Done. On `main` via `742060d` (2026-10-17) ([doc](SPENDLY-546-what-if-optimizer.md)) |
 | SPENDLY-547 | Phase 5c: Money Decisions | `feature/SPENDLY-547-money-decisions` | Done. On `main` via `742060d` (2026-10-17) ([doc](SPENDLY-547-money-decisions.md)) |
+| SPENDLY-557 | Phase 6: Date picker for every date field | `feature/SPENDLY-557-date-picker` (from `main`) | Done. Merged straight to `main` via `922f119` (2026-10-18, at the user's request) ([doc](SPENDLY-557-date-picker.md)) |
 | SPENDLY-558 | Historical stock charts (line + candlestick) with multi-range caching | `feature/SPENDLY-558-stock-history-charts` | Built on the story branch 2026-10-18; awaiting merge approval. Needs a web deploy for `/api/stock-history`, then device QA ([doc](SPENDLY-558-stock-history-charts.md)) |
 
 ## Phase 4 plan: Investments (2026-10-17)
@@ -119,7 +120,7 @@ Like Phases 1–5 it is UI only: no transaction, transfer, reconciliation, valua
 | SPENDLY-555 (6h): Planning forms | Reminder, runway settings, what-if, goal plan and decision editors | Form pattern and date field; the optimizer's ISO screen-reader date |
 | SPENDLY-556 (6i): Onboarding, welcome, sign-in, delete account | `welcome`, `onboarding`, `(auth)/login`, `components/auth/*`, `delete-account` | Expense-only visual pass; Nutrition and Ganesh sign-in unchanged |
 
-**Suggested order:** 6a and SPENDLY-557 (date picker) first, then 6d and 6b/6c (screens), then 6e–6h (forms), then 6i.
+**Suggested order:** SPENDLY-557 (date picker) is done; 6a next, then 6d and 6b/6c (screens), then 6e–6h (forms), then 6i.
 
 ## Decisions
 - **Midnight Emerald is a selectable preset, not a forced default.** It's in Settings → Appearance → Custom Presets. Existing users keep their theme.
