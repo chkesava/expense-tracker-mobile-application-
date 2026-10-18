@@ -34,7 +34,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | SPENDLY-546 | Phase 5b: What-If and Goal optimizer | `feature/SPENDLY-546-what-if-optimizer` | Done. On `main` via `742060d` (2026-10-17) ([doc](SPENDLY-546-what-if-optimizer.md)) |
 | SPENDLY-547 | Phase 5c: Money Decisions | `feature/SPENDLY-547-money-decisions` | Done. On `main` via `742060d` (2026-10-17) ([doc](SPENDLY-547-money-decisions.md)) |
 | SPENDLY-557 | Phase 6: Date picker for every date field | `feature/SPENDLY-557-date-picker` (from `main`) | Done. Merged straight to `main` via `922f119` (2026-10-18, at the user's request) ([doc](SPENDLY-557-date-picker.md)) |
-| SPENDLY-558 | Historical stock charts (line + candlestick) with multi-range caching | `feature/SPENDLY-558-stock-history-charts` | Built on the story branch 2026-10-18; awaiting merge approval. Needs a web deploy for `/api/stock-history`, then device QA ([doc](SPENDLY-558-stock-history-charts.md)) |
+| SPENDLY-558 | Historical stock charts (line + candlestick) with multi-range caching | `feature/SPENDLY-558-stock-history-charts` | Done. Merged straight to `main` via `57553e0` (2026-10-19), at the user's request, so it skipped the epic branch. Still needed: a manual web deploy for `/api/stock-history`, a CDN `Cache-Status` check and device QA ([doc](SPENDLY-558-stock-history-charts.md)) |
 
 ## Phase 4 plan: Investments (2026-10-17)
 The Investments hub is `app/(app)/investments.tsx`, with four tabs: Investments (deposits), Stocks, Virtual SIPs and EPF. There is also the EPF establishment screen `app/(app)/epf/[establishmentId].tsx`. Together that is about 13.5k lines.
