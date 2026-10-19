@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -8,9 +8,8 @@ import {
   View,
   type LayoutChangeEvent,
 } from "react-native";
-import { ChartCandlestick, ChartLine, Clock, CloudOff, RefreshCw } from "lucide-react-native";
+import { ChartCandlestick, ChartLine, Clock, CloudOff, RefreshCw, X } from "lucide-react-native";
 
-import { Amount } from "@/components/common/Amount";
 import { SkeletonChart } from "@/components/common/Skeleton";
 import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
 import { usePortfolioColors } from "@/components/portfolio/portfolioColors";
@@ -19,6 +18,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { useStockHistory, useStockHistoryCacheReady } from "@/hooks/useStockHistory";
 import { haptic } from "@/lib/haptics";
+import { useSettings } from "@/providers/SettingsProvider";
 import { MarketDataError } from "@/services/marketDataService";
 import type { StockHistoryRange } from "@/shared/types/market";
 import {
@@ -27,18 +27,33 @@ import {
   type ChartMode,
 } from "@/shared/utils/stockChartGeometry";
 import {
+  NO_SELECTION,
+  activeIndexFor,
+  aggregationBucketSize,
+  chartSelectionReducer,
+  chartSeriesKey,
+  formatInspectedTime,
+  formatQuotePrice,
+  formatVolume,
+  inspectPoint,
+  inspectedMarkerPrice,
+  inspectedPointLabel,
+  stepInspectableIndex,
+  type InspectedPoint,
+  type SelectionSource,
+} from "@/shared/utils/stockChartInspect";
+import {
   RANGE_LABEL,
   RANGE_SPOKEN,
   STOCK_HISTORY_RANGES,
   formatAsOf,
-  formatBarTime,
   historyErrorCopy,
   seriesChange,
 } from "@/shared/utils/stockHistory";
 import { formatSignedPercent } from "@/shared/utils/investmentPresentation";
 import { useTheme } from "@/theme/ThemeProvider";
 
-import { StockChartPlot } from "./StockChartPlot";
+import { StockChartPlot, type ChartKeyAction } from "./StockChartPlot";
 
 const PLOT_HEIGHT = 220;
 /** Rapid chip taps settle before a request goes out. */
@@ -77,8 +92,10 @@ function StockChartBody({ symbol }: { symbol: string }) {
   const [range, setRange] = useState<StockHistoryRange>("1D");
   const [mode, setMode] = useState<ChartMode>("line");
   const [width, setWidth] = useState(0);
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [selection, dispatch] = useReducer(chartSelectionReducer, NO_SELECTION);
   const queryRange = useDebounced(range, RANGE_DEBOUNCE_MS);
+  const { settings } = useSettings();
+  const ghost = Boolean(settings?.ghostMode);
 
   const query = useStockHistory(symbol, queryRange);
   const dto = query.data ?? null;
@@ -94,12 +111,22 @@ function StockChartBody({ symbol }: { symbol: string }) {
   });
   const switching = range !== queryRange || query.isPlaceholderData;
 
+  // About one bar per 4 px for candles, one point per pixel for the line.
+  const maxBars = Math.floor(Math.max(1, width - 60) / (mode === "candle" ? 4 : 1));
   const candles = useMemo(() => {
     if (!dto || width <= 0) return [];
-    // About one bar per 4 px for candles, one point per pixel for the line.
-    const plotWidth = Math.max(1, width - 60);
-    return aggregateCandles(dto.candles, mode === "candle" ? Math.floor(plotWidth / 4) : Math.floor(plotWidth));
-  }, [dto, mode, width]);
+    return aggregateCandles(dto.candles, maxBars);
+  }, [dto, maxBars, width]);
+  const bucketSize = dto ? aggregationBucketSize(dto.candles.length, maxBars) : 1;
+
+  // SPENDLY-560: a selection belongs to the series it was made on, so a new
+  // range, chart type, width or refresh can never show stale values.
+  const seriesKey = chartSeriesKey({ symbol, range: dto?.range ?? range, mode, drawn: candles, asOf: dto?.asOf });
+  const activeIndex = activeIndexFor(selection, seriesKey);
+  const point = useMemo(
+    () => (dto ? inspectPoint(dto.candles, candles, bucketSize, mode, activeIndex) : null),
+    [activeIndex, bucketSize, candles, dto, mode]
+  );
 
   const change = useMemo(() => (dto ? seriesChange(dto) : null), [dto]);
   const lineColor = change ? colors.pnl(change.change) : muted;
@@ -109,15 +136,32 @@ function StockChartBody({ symbol }: { symbol: string }) {
   }, []);
 
   const scrubbing = useRef(false);
-  const onScrub = useCallback((index: number | null) => {
-    // One tick when the finger lands, not one per bar crossed.
-    if (index != null && !scrubbing.current) void haptic.selection();
-    scrubbing.current = index != null;
-    setActiveIndex(index);
+  const onPress = useCallback(
+    (index: number | null, pointer: "touch" | "mouse") => {
+      // One tick when the finger lands, not one per bar crossed.
+      if (pointer === "touch" && index != null && !scrubbing.current) void haptic.selection();
+      scrubbing.current = index != null;
+      dispatch({ type: "press", index, seriesKey, pointer });
+    },
+    [seriesKey]
+  );
+  const onRelease = useCallback(() => {
+    scrubbing.current = false;
+    dispatch({ type: "release" });
   }, []);
+  const onHover = useCallback((index: number | null) => dispatch({ type: "hover", index, seriesKey }), [seriesKey]);
+  const onLeave = useCallback(() => dispatch({ type: "leave" }), []);
+  const onKey = useCallback(
+    (action: ChartKeyAction) => {
+      if (action === "dismiss") dispatch({ type: "dismiss" });
+      else dispatch({ type: "key", index: stepInspectableIndex(candles, mode, activeIndex, action), seriesKey });
+    },
+    [activeIndex, candles, mode, seriesKey]
+  );
+  const dismiss = useCallback(() => dispatch({ type: "dismiss" }), []);
 
   const selectRange = (next: StockHistoryRange) => {
-    setActiveIndex(null);
+    dispatch({ type: "dismiss" });
     setRange(next);
   };
 
@@ -129,38 +173,22 @@ function StockChartBody({ symbol }: { symbol: string }) {
       grid: colors.hairline,
       label: muted,
       crosshair: theme.colors.foreground,
+      markerRing: colors.card,
     }),
-    [colors.hairline, lineColor, muted, theme.colors.destructive, theme.colors.foreground, theme.colors.success]
+    [colors.card, colors.hairline, lineColor, muted, theme.colors.destructive, theme.colors.foreground, theme.colors.success]
   );
 
   const summary = dto && change
     ? `${dto.symbol} price chart, ${RANGE_SPOKEN[dto.range]}: from ${formatPrice(change.from)} to ${formatPrice(change.to)}, ${change.change >= 0 ? "up" : "down"} ${Math.abs(change.changePercent).toFixed(1)} percent.`
     : `${symbol} price chart`;
 
-  const active = activeIndex != null ? candles[activeIndex] : undefined;
   const errorCode = query.error instanceof MarketDataError ? query.error.code : undefined;
 
   return (
     <View style={styles.body}>
       <View style={styles.headerRow}>
         <View style={styles.readout}>
-          {active && dto ? (
-            <>
-              <View style={styles.readoutLine}>
-                {active.c != null ? (
-                  <Amount value={active.c} currency={currency} style={[styles.readoutPrice, { color: theme.colors.foreground }]} ghostable />
-                ) : (
-                  <Text style={[styles.readoutPrice, { color: muted }]}>No trade</Text>
-                )}
-              </View>
-              <Text style={[styles.meta, { color: muted }]} numberOfLines={1}>
-                {mode === "candle" && active.o != null && active.h != null && active.l != null
-                  ? `O ${formatPrice(active.o)} · H ${formatPrice(active.h)} · L ${formatPrice(active.l)} · `
-                  : ""}
-                {formatBarTime(active.t, dto.range, dto.gmtOffsetSec)}
-              </Text>
-            </>
-          ) : change && dto ? (
+          {change && dto ? (
             <>
               <View style={styles.readoutLine}>
                 <FinancialAmount value={change.change} currency={currency} size="md" sign="auto" tone="auto" weight="bold" />
@@ -215,8 +243,24 @@ function StockChartBody({ symbol }: { symbol: string }) {
             height={PLOT_HEIGHT}
             palette={palette}
             formatPrice={formatPrice}
-            activeIndex={activeIndex}
-            onScrub={onScrub}
+            activeIndex={point ? point.index : null}
+            markerPrice={point ? inspectedMarkerPrice(point) : null}
+            onPress={onPress}
+            onRelease={onRelease}
+            onHover={onHover}
+            onLeave={onLeave}
+            onKey={onKey}
+            tooltip={
+              point ? (
+                <ChartTooltip
+                  point={point}
+                  time={formatInspectedTime(point, dto.range, dto.gmtOffsetSec)}
+                  formatQuote={(value) => formatQuotePrice(value, currency, ghost)}
+                  source={selection.source}
+                  onDismiss={dismiss}
+                />
+              ) : null
+            }
             accessibilityLabel={summary}
           />
         ) : null}
@@ -260,7 +304,7 @@ function StockChartBody({ symbol }: { symbol: string }) {
       <SegmentedControl<ChartMode>
         value={mode}
         onChange={(next) => {
-          setActiveIndex(null);
+          dispatch({ type: "dismiss" });
           setMode(next);
         }}
         options={[
@@ -273,6 +317,90 @@ function StockChartBody({ symbol }: { symbol: string }) {
           },
         ]}
       />
+    </View>
+  );
+}
+
+/**
+ * The selected point's exact values (SPENDLY-560). A line shows the close;
+ * a candle shows its genuine OHLC and, when the feed has it, volume. A touch
+ * selection persists, so it gets a close button; a keyboard selection is
+ * announced politely, hover is not (it would flood a screen reader).
+ */
+function ChartTooltip({
+  point,
+  time,
+  formatQuote,
+  source,
+  onDismiss,
+}: {
+  point: InspectedPoint;
+  time: string;
+  formatQuote: (value: number) => string;
+  source: SelectionSource | null;
+  onDismiss: () => void;
+}) {
+  const { theme } = useTheme();
+  const colors = usePortfolioColors();
+  const muted = theme.colors.mutedForeground;
+  const fg = theme.colors.foreground;
+  const volume = point.kind === "candle" && point.v != null ? formatVolume(point.v) : null;
+  const label = inspectedPointLabel(point, time, formatQuote, volume);
+  const bullish = point.kind === "candle" && point.c >= point.o;
+
+  return (
+    <View
+      style={[styles.tooltip, { backgroundColor: colors.card, borderColor: colors.border }]}
+      accessible
+      accessibilityLabel={label}
+      accessibilityLiveRegion={source === "keyboard" ? "polite" : "none"}
+    >
+      <View style={styles.tooltipHeader}>
+        <Text style={[styles.tooltipTime, { color: muted }]} numberOfLines={2}>
+          {time}
+        </Text>
+        {source === "touch" ? (
+          <Pressable
+            onPress={onDismiss}
+            hitSlop={8}
+            style={({ pressed }) => [styles.tooltipClose, pressed && { opacity: 0.6 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Close price details"
+          >
+            <X size={14} color={muted} />
+          </Pressable>
+        ) : null}
+      </View>
+      {point.kind === "line" ? (
+        <Text style={[styles.tooltipPrice, { color: fg }]}>{formatQuote(point.price)}</Text>
+      ) : (
+        <View style={styles.ohlc}>
+          {([
+            ["O", point.o],
+            ["H", point.h],
+            ["L", point.l],
+            ["C", point.c],
+          ] as const).map(([key, value]) => (
+            <View key={key} style={styles.ohlcRow}>
+              <Text style={[styles.ohlcKey, { color: muted }]}>{key}</Text>
+              <Text
+                style={[
+                  styles.ohlcValue,
+                  { color: key === "C" ? (bullish ? theme.colors.success : theme.colors.destructive) : fg },
+                ]}
+              >
+                {formatQuote(value)}
+              </Text>
+            </View>
+          ))}
+          {volume ? (
+            <View style={styles.ohlcRow}>
+              <Text style={[styles.ohlcKey, { color: muted }]}>Vol</Text>
+              <Text style={[styles.ohlcValue, { color: fg }]}>{volume}</Text>
+            </View>
+          ) : null}
+        </View>
+      )}
     </View>
   );
 }
@@ -342,8 +470,53 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 6,
   },
-  readoutPrice: {
-    fontSize: 16,
+  tooltip: {
+    minWidth: 128,
+    borderWidth: 1,
+    borderRadius: 12,
+    borderCurve: "continuous",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 4,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  tooltipHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  tooltipTime: {
+    flexShrink: 1,
+    fontSize: 11,
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
+  },
+  tooltipClose: {
+    marginLeft: "auto",
+  },
+  tooltipPrice: {
+    fontSize: 15,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+  },
+  ohlc: {
+    gap: 2,
+  },
+  ohlcRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  ohlcKey: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  ohlcValue: {
+    fontSize: 12,
     fontWeight: "700",
     fontVariant: ["tabular-nums"],
   },
