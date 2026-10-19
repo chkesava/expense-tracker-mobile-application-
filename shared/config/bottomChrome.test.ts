@@ -51,6 +51,11 @@ describe("bottom chrome geometry", () => {
     );
   });
 
+  it("leaves only the system inset under the desktop sidebar (SPENDLY-559)", () => {
+    expect(bottomChromeTopEdge(0, { navStyle: "sidebar" })).toBe(0);
+    expect(bottomChromeClearance(0, { navStyle: "sidebar" })).toBe(BOTTOM_NAV_CONTENT_CLEARANCE);
+  });
+
   it.each(STYLES)("does not shrink %s chrome when the FAB is hidden", (navStyle) => {
     // The bottom nav always renders its floating FAB and the dock's FAB is the
     // chrome, so hiding the FAB never lowers the top edge.
