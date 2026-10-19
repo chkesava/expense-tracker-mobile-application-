@@ -27,6 +27,7 @@ import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { SheetBottomInset } from "@/components/common/SheetBottomInset";
+import { useSheetWidthStyle } from "@/hooks/useResponsiveLayout";
 
 interface InvestmentCashHistoryModalProps {
   visible: boolean;
@@ -66,6 +67,8 @@ export function InvestmentCashHistoryModal({
   currency,
 }: InvestmentCashHistoryModalProps) {
   const { theme, themeName } = useTheme();
+  // SPENDLY-559: centred at dialog width on tablet/desktop web.
+  const sheetWidthStyle = useSheetWidthStyle();
   const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings, cashEntries, cashBalance } = usePortfolio();
@@ -92,6 +95,7 @@ export function InvestmentCashHistoryModal({
           style={[
             styles.contentCard,
             { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+            sheetWidthStyle,
           ]}
         >
           <View style={styles.headerRow}>
