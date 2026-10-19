@@ -3,7 +3,6 @@ import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Settings as SettingsIcon } from "lucide-react-native";
 
-import { CARD_ORANGE } from "@/components/accounts/accountScreenTheme";
 import { EmptyState } from "@/components/common/EmptyState";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
@@ -66,7 +65,6 @@ export default function SettingsHubScreen() {
         onChangeText={setQuery}
         placeholder="Search settings..."
         accessibilityLabel="Search settings"
-        accentColor={CARD_ORANGE}
       />
 
       {grouped.length === 0 ? (

@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { StyleSheet, Switch, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { Bell } from "lucide-react-native";
+
+import { ThemedSwitch } from "@/components/settings/SettingsControls";
 
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
@@ -49,7 +51,7 @@ export function CreditCardBillReminderSettings() {
           >
             Credit Card Bills
           </Text>
-          <Switch
+          <ThemedSwitch
             value={prefs.enabled}
             onValueChange={async (enabled) => {
               setCreditCardBillReminders({ enabled });
@@ -62,7 +64,6 @@ export function CreditCardBillReminderSettings() {
                 );
               }
             }}
-            trackColor={{ true: theme.colors.primary }}
           />
         </View>
 
@@ -88,6 +89,7 @@ export function CreditCardBillReminderSettings() {
                 key={day}
                 label={`${day}d before`}
                 selected={selected}
+                appearance="outline"
                 onPress={() => toggleDay(day)}
                 disabled={!prefs.enabled}
               />
@@ -103,13 +105,12 @@ export function CreditCardBillReminderSettings() {
           }}
         >
           <Text style={{ color: theme.colors.foreground }}>On due date</Text>
-          <Switch
+          <ThemedSwitch
             value={prefs.onDueDate}
             disabled={!prefs.enabled}
             onValueChange={(onDueDate) =>
               setCreditCardBillReminders({ onDueDate })
             }
-            trackColor={{ true: theme.colors.primary }}
           />
         </View>
 
@@ -124,6 +125,7 @@ export function CreditCardBillReminderSettings() {
                 key={n}
                 label={`Every ${n}d`}
                 selected={selected}
+                appearance="outline"
                 onPress={() => {
                   setCreditCardBillReminders({
                     overdueEveryDays: n as 1 | 2 | 3,
@@ -195,6 +197,8 @@ function TimePill({
     <Chip
       label={label}
       selected={selected}
+      // SPENDLY-551: the outline chip, like every other Settings choice.
+      appearance="outline"
       onPress={onPress}
       disabled={disabled}
     />
