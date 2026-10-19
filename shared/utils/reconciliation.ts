@@ -5,6 +5,7 @@ import type { Account, Expense, Income, AccountPayment, AccountTransfer, Account
 import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
 import type { Receivable, ReceivableRepayment } from "../types/receivable";
 import { composeNetWorth } from "./netWorth";
+import { addCategoryDeltas, summaryMonthOf } from "./dashboardSummaryKeys";
 import { epfPortfolioSummary } from "../features/epf/utils/portfolio";
 import type { EpfEstablishment, EpfContribution, EpfTransfer, EpfInterestEntry, EpfReconciliation } from "../features/epf/types";
 
@@ -81,8 +82,6 @@ export function calculateDashboardSummaries(
 ): Map<string, Partial<DashboardPeriodSummary>> {
   const periods = new Map<string, Partial<DashboardPeriodSummary>>();
 
-  const getPeriod = (dateStr: string) => dateStr.substring(0, 7);
-
   const initPeriod = (p: string) => {
     if (!periods.has(p)) {
       periods.set(p, {
@@ -96,26 +95,94 @@ export function calculateDashboardSummaries(
     return periods.get(p)!;
   };
 
+  // SPENDLY-495: the same month rule (`month`, else the date prefix) and the
+  // same parent + "parent::sub" keys the incremental writes use, so a rebuild
+  // and the live increments land on identical documents.
   for (const e of expenses) {
     if (e.deletedAt) continue;
-    const p = getPeriod(e.date);
+    const p = summaryMonthOf(e);
+    if (!p) continue;
     const m = initPeriod(p);
     m.totalExpenses! += e.amount;
     m.transactionCount! += 1;
-    if (e.category) {
-      m.categoryTotals![e.category] = (m.categoryTotals![e.category] || 0) + e.amount;
-    }
+    addCategoryDeltas(m.categoryTotals!, e, e.amount);
   }
 
   for (const i of incomes) {
     if (i.deletedAt) continue;
-    const p = getPeriod(i.date);
+    const p = summaryMonthOf(i);
+    if (!p) continue;
     const m = initPeriod(p);
     m.totalIncome! += i.amount;
     m.transactionCount! += 1;
   }
 
   return periods;
+}
+
+/** Literal top-level fields like `"categoryTotals.Food"` left by the pre-495 writes. */
+export function strayDottedCategoryFields(doc: Record<string, unknown>): string[] {
+  return Object.keys(doc).filter((key) => key.startsWith("categoryTotals."));
+}
+
+const roundPaise = (n: number) => Math.round(n * 100) / 100;
+
+export type DashboardRepairPlan = {
+  period: string;
+  /** Human-readable differences between the stored doc and the rebuild. */
+  variances: string[];
+  /** Literal dotted fields to delete. */
+  strayFields: string[];
+  /** The values the rebuild would write (all zero for a month with no rows). */
+  next: Required<Pick<DashboardPeriodSummary, "period" | "totalExpenses" | "totalIncome" | "transactionCount" | "categoryTotals">>;
+};
+
+/**
+ * SPENDLY-495 — compares stored `dashboard_{YYYY-MM}` docs with a rebuild and
+ * lists what an apply would change. Pure; the rebuild script prints it in dry
+ * run and writes `next` (replacing `categoryTotals` wholesale) on apply. A
+ * stored month with no rows left is planned back to zero, not left stale.
+ */
+export function planDashboardSummaryRepair(
+  existing: { id: string; data: Record<string, unknown> }[],
+  recalculated: Map<string, Partial<DashboardPeriodSummary>>
+): DashboardRepairPlan[] {
+  const stored = new Map<string, Record<string, unknown>>();
+  for (const { id, data } of existing) {
+    if (id.startsWith("dashboard_")) stored.set(id.slice("dashboard_".length), data);
+  }
+  const periods = [...new Set([...stored.keys(), ...recalculated.keys()])].sort();
+
+  return periods.map((period) => {
+    const calc = recalculated.get(period);
+    const next = {
+      period,
+      totalExpenses: roundPaise(calc?.totalExpenses ?? 0),
+      totalIncome: roundPaise(calc?.totalIncome ?? 0),
+      transactionCount: calc?.transactionCount ?? 0,
+      categoryTotals: Object.fromEntries(
+        Object.entries(calc?.categoryTotals ?? {}).map(([k, v]) => [k, roundPaise(v)])
+      ),
+    };
+    const doc = stored.get(period) ?? {};
+    const variances: string[] = [];
+    if (!stored.has(period)) variances.push("missing summary doc");
+    for (const field of ["totalExpenses", "totalIncome", "transactionCount"] as const) {
+      const was = typeof doc[field] === "number" ? (doc[field] as number) : 0;
+      if (roundPaise(was) !== next[field]) variances.push(`${field}: ${was} → ${next[field]}`);
+    }
+    const storedTotals =
+      doc.categoryTotals && typeof doc.categoryTotals === "object"
+        ? (doc.categoryTotals as Record<string, unknown>)
+        : {};
+    const keys = new Set([...Object.keys(storedTotals), ...Object.keys(next.categoryTotals)]);
+    for (const key of [...keys].sort()) {
+      const was = typeof storedTotals[key] === "number" ? (storedTotals[key] as number) : 0;
+      const now = next.categoryTotals[key] ?? 0;
+      if (roundPaise(was) !== now) variances.push(`categoryTotals[${key}]: ${was} → ${now}`);
+    }
+    return { period, variances, strayFields: strayDottedCategoryFields(doc), next };
+  });
 }
 
 export function calculateNetWorthSummary(inputs: Parameters<typeof composeNetWorth>[0]): Partial<NetWorthSummary> {
