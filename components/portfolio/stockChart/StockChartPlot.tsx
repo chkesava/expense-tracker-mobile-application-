@@ -1,5 +1,11 @@
-import { memo, useMemo } from "react";
-import { View, type GestureResponderEvent } from "react-native";
+import { memo, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Platform,
+  View,
+  type GestureResponderEvent,
+  type LayoutChangeEvent,
+  type PointerEvent,
+} from "react-native";
 import Svg, { Circle, Defs, G, Line, LinearGradient, Path, Rect, Stop, Text as SvgText } from "react-native-svg";
 
 import type { StockCandle, StockHistoryRange } from "@/shared/types/market";
@@ -16,6 +22,7 @@ import {
   type ChartBox,
   type ChartMode,
 } from "@/shared/utils/stockChartGeometry";
+import { nearestInspectableIndex, tooltipPosition } from "@/shared/utils/stockChartInspect";
 import { formatAxisTick } from "@/shared/utils/stockHistory";
 
 const VOLUME_HEIGHT = 34;
@@ -28,13 +35,35 @@ export type StockChartPalette = {
   grid: string;
   label: string;
   crosshair: string;
+  /** Ring around the selected-point marker, so it reads on any line colour. */
+  markerRing: string;
+};
+
+const IS_WEB = Platform.OS === "web";
+
+export type ChartKeyAction = "prev" | "next" | "first" | "last" | "dismiss";
+
+const KEY_ACTIONS: Record<string, ChartKeyAction> = {
+  ArrowLeft: "prev",
+  ArrowRight: "next",
+  Home: "first",
+  End: "last",
+  Escape: "dismiss",
 };
 
 /**
  * The SVG for one stock series (SPENDLY-558). Pure drawing: every number comes
- * from `shared/utils/stockChartGeometry`. Touch-and-drag reports the bar under
- * the finger through `onScrub`; a vertical drag is handed back to the parent
- * ScrollView so the screen still scrolls.
+ * from `shared/utils/stockChartGeometry`.
+ *
+ * Point inspection (SPENDLY-560), always resolved to the nearest bar that has
+ * a value (`stockChartInspect`):
+ * - touch / press-and-drag reports through `onPress`; lifting the finger
+ *   calls `onRelease`, and the parent keeps the selection. A vertical drag is
+ *   handed back to the parent ScrollView so the screen still scrolls;
+ * - a mouse or pen hovering (web) reports through `onHover`, and leaving the
+ *   plot through `onLeave`;
+ * - on web the plot is focusable: arrows, Home/End and Escape go to `onKey`.
+ * The parent renders the `tooltip`; this places it beside the marker.
  */
 export const StockChartPlot = memo(function StockChartPlot({
   candles,
@@ -47,7 +76,13 @@ export const StockChartPlot = memo(function StockChartPlot({
   palette,
   formatPrice,
   activeIndex,
-  onScrub,
+  markerPrice,
+  onPress,
+  onRelease,
+  onHover,
+  onLeave,
+  onKey,
+  tooltip,
   accessibilityLabel,
 }: {
   candles: StockCandle[];
@@ -61,9 +96,22 @@ export const StockChartPlot = memo(function StockChartPlot({
   palette: StockChartPalette;
   formatPrice: (value: number) => string;
   activeIndex: number | null;
-  onScrub: (index: number | null) => void;
+  /** Price the marker sits on; null hides the dot but keeps the guide. */
+  markerPrice: number | null;
+  /** `pointer` says whether a mouse or a finger pressed (see the selection reducer). */
+  onPress: (index: number | null, pointer: "touch" | "mouse") => void;
+  onRelease: () => void;
+  onHover: (index: number | null) => void;
+  onLeave: () => void;
+  onKey: (action: ChartKeyAction) => void;
+  tooltip: ReactNode | null;
   accessibilityLabel: string;
 }) {
+  const hostRef = useRef<View>(null);
+  // Set from pointerdown, which fires before the responder grant. Native
+  // without pointer events (and anything unknown) counts as touch.
+  const pressPointer = useRef<"touch" | "mouse">("touch");
+  const [tipSize, setTipSize] = useState<{ width: number; height: number } | null>(null);
   const box: ChartBox = useMemo(
     () => ({ width, height, padTop: 10, padBottom: 22, padLeft: 2, padRight: 58 }),
     [width, height]
@@ -90,30 +138,86 @@ export const StockChartPlot = memo(function StockChartPlot({
   const xFor = (index: number) =>
     mode === "line" ? xForLineIndex(index, candles.length, priceBox) : xForSlot(index, candles.length, priceBox);
 
-  const scrubTo = (event: GestureResponderEvent) => {
-    if (candles.length === 0) return;
-    onScrub(indexAtX(event.nativeEvent.locationX, candles.length, priceBox, mode));
+  /** Nearest bar with a value under plot-local x, or null. */
+  const barAt = (x: number) =>
+    candles.length === 0 ? null : nearestInspectableIndex(candles, mode, indexAtX(x, candles.length, priceBox, mode));
+
+  /**
+   * Plot-local x. Native responder events carry it as `locationX`. On web that
+   * is measured from whichever SVG node was hit, so measure from the host's
+   * own box instead.
+   */
+  const localX = (native: { locationX?: number; clientX?: number; pageX?: number }) => {
+    if (IS_WEB) {
+      const node = hostRef.current as unknown as HTMLElement | null;
+      const clientX = native.clientX ?? (native.pageX != null ? native.pageX - window.scrollX : undefined);
+      if (node?.getBoundingClientRect && clientX != null) return clientX - node.getBoundingClientRect().left;
+    }
+    return native.locationX ?? 0;
   };
+
+  const pressAt = (event: GestureResponderEvent) => onPress(barAt(localX(event.nativeEvent)), pressPointer.current);
+
+  const isMouse = (event: PointerEvent) => {
+    const type = event.nativeEvent.pointerType;
+    return type === "mouse" || type === "pen";
+  };
+
+  const webProps = IS_WEB
+    ? ({
+        focusable: true,
+        onKeyDown: (event: { key: string; preventDefault: () => void }) => {
+          const action = KEY_ACTIONS[event.key];
+          if (!action) return;
+          event.preventDefault();
+          onKey(action);
+        },
+      } as object)
+    : null;
 
   if (!drawing) return <View style={{ width, height }} />;
   const { domain } = drawing;
   const right = width - box.padRight;
-  const active = activeIndex != null ? candles[activeIndex] : undefined;
-  const activePrice = active?.c ?? null;
+  const markerX = activeIndex != null ? xFor(activeIndex) : null;
+  const markerY = markerPrice != null ? yForPrice(markerPrice, domain, priceBox) : null;
+  const placement =
+    tooltip && markerX != null && tipSize
+      ? tooltipPosition({
+          pointX: markerX,
+          pointY: markerY ?? height / 2,
+          tipWidth: tipSize.width,
+          tipHeight: tipSize.height,
+          areaWidth: width,
+          areaHeight: height,
+        })
+      : null;
 
   return (
     <View
+      ref={hostRef}
       style={{ width, height }}
       accessible
       accessibilityRole="image"
       accessibilityLabel={accessibilityLabel}
+      accessibilityHint={IS_WEB ? "Use the arrow keys to read prices, Escape to clear." : undefined}
+      {...webProps}
       onStartShouldSetResponder={() => true}
       onMoveShouldSetResponder={() => true}
-      onResponderGrant={scrubTo}
-      onResponderMove={scrubTo}
-      onResponderRelease={() => onScrub(null)}
-      onResponderTerminate={() => onScrub(null)}
+      onResponderGrant={pressAt}
+      onResponderMove={pressAt}
+      // The selection stays after release, so the tooltip can be read.
+      onResponderRelease={onRelease}
+      onResponderTerminate={onRelease}
       onResponderTerminationRequest={() => true}
+      onPointerDown={(event) => {
+        pressPointer.current = isMouse(event) ? "mouse" : "touch";
+      }}
+      onPointerMove={(event) => {
+        if (isMouse(event)) onHover(barAt(localX(event.nativeEvent)));
+      }}
+      onPointerLeave={(event) => {
+        if (isMouse(event)) onLeave();
+      }}
     >
       <Svg width={width} height={height}>
         <Defs>
@@ -194,27 +298,53 @@ export const StockChartPlot = memo(function StockChartPlot({
           );
         })}
 
-        {activeIndex != null ? (
+        {markerX != null ? (
           <G>
             <Line
-              x1={xFor(activeIndex)}
-              x2={xFor(activeIndex)}
+              x1={markerX}
+              x2={markerX}
               y1={box.padTop}
               y2={height - box.padBottom}
               stroke={palette.crosshair}
               strokeWidth={1}
+              strokeDasharray="3 3"
+              opacity={0.7}
             />
-            {activePrice != null ? (
+            {markerY != null ? (
               <Circle
-                cx={xFor(activeIndex)}
-                cy={yForPrice(activePrice, domain, priceBox)}
-                r={4}
+                cx={markerX}
+                cy={markerY}
+                r={4.5}
                 fill={mode === "line" ? palette.line : palette.crosshair}
+                stroke={palette.markerRing}
+                strokeWidth={2}
               />
             ) : null}
           </G>
         ) : null}
       </Svg>
+
+      {tooltip && markerX != null ? (
+        <View
+          pointerEvents="box-none"
+          onLayout={(event: LayoutChangeEvent) => {
+            const { width: w, height: h } = event.nativeEvent.layout;
+            if (!tipSize || Math.abs(tipSize.width - w) > 0.5 || Math.abs(tipSize.height - h) > 0.5) {
+              setTipSize({ width: w, height: h });
+            }
+          }}
+          style={{
+            position: "absolute",
+            left: placement?.left ?? 0,
+            top: placement?.top ?? 0,
+            // Hidden for the one frame before it is measured, so it never jumps.
+            opacity: placement ? 1 : 0,
+            maxWidth: Math.max(140, width - 8),
+          }}
+        >
+          {tooltip}
+        </View>
+      ) : null}
     </View>
   );
 });
