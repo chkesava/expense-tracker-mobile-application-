@@ -28,8 +28,11 @@ import { roundMoney } from "@/shared/utils/money";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
+import { useContentWidthStyle } from "@/hooks/useResponsiveLayout";
 
 export default function CreditCardBillDetailScreen() {
+  // SPENDLY-559: centred and capped on tablet/desktop web; unchanged on phones.
+  const contentWidthStyle = useContentWidthStyle("readable");
   const { id, editPayment } = useLocalSearchParams<{
     id: string;
     /** SPENDLY-385: open this payment's editor on arrival. */
@@ -201,7 +204,7 @@ export default function CreditCardBillDetailScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+    <View style={[{ flex: 1, backgroundColor: theme.colors.background }, contentWidthStyle]}>
       <View
         style={{
           paddingTop: insets.top + 8,

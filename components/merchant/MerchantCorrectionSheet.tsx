@@ -14,6 +14,7 @@ import { foldKey } from "@/shared/utils/merchantModel";
 import { deleteMerchantOverride, saveMerchantOverride } from "@/services/merchant/merchantOverrideStore";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
+import { useSheetWidthStyle } from "@/hooks/useResponsiveLayout";
 
 export interface MerchantCorrectionSheetProps {
   visible: boolean;
@@ -39,6 +40,8 @@ export function MerchantCorrectionSheet({
   onOpenProfile,
 }: MerchantCorrectionSheetProps) {
   const { theme } = useTheme();
+  // SPENDLY-559: centred at dialog width on tablet/desktop web.
+  const sheetWidthStyle = useSheetWidthStyle();
   const surfaces = useSurfaces();
   const { user } = useAuth();
   const [name, setName] = useState("");
@@ -88,7 +91,7 @@ export function MerchantCorrectionSheet({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <View style={[styles.sheet, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+        <View style={[styles.sheet, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }, sheetWidthStyle]}>
           <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.title, { color: theme.colors.foreground }]}>Merchant correction</Text>

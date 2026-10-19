@@ -10,6 +10,7 @@ import type { ReconciliationFinding } from "@/shared/features/portfolio/utils/po
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
+import { useSheetWidthStyle } from "@/hooks/useResponsiveLayout";
 
 interface PortfolioRecalibrationModalProps {
   visible: boolean;
@@ -42,6 +43,8 @@ export function PortfolioRecalibrationModal({
   onClose,
 }: PortfolioRecalibrationModalProps) {
   const { theme } = useTheme();
+  // SPENDLY-559: centred at dialog width on tablet/desktop web.
+  const sheetWidthStyle = useSheetWidthStyle();
   const surfaces = useSurfaces();
   const { stage, report, scan, repair, reset } = usePortfolioReconciliation();
 
@@ -104,6 +107,7 @@ export function PortfolioRecalibrationModal({
           style={[
             styles.contentCard,
             { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+            sheetWidthStyle,
           ]}
         >
           <View style={styles.headerRow}>

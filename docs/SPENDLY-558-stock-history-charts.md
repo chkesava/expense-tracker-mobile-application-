@@ -2,7 +2,7 @@
 
 - **Epic:** SPENDLY-531 (Premium redesign, Midnight Emerald)
 - **Branch:** `feature/SPENDLY-558-stock-history-charts`, cut from `feature/SPENDLY-531-premium-redesign` at `2fc27ad`
-- **State:** Built on the story branch 2026-10-18; awaiting approval to merge into the epic. Needs a web deploy (for `/api/stock-history`) and device QA. See "As built" at the end.
+- **State:** Done. Merged straight to `main` via `57553e0` on 2026-10-19, at the user's request, skipping the epic branch. On merged `main`, `npm test` passed (375 files, 5,633 tests), and `typecheck:shared` and `tsc` both exited 0. Still needed: a manual **web-deploy** run for `/api/stock-history`, a CDN `Cache-Status` check, and device QA. See "As built" at the end.
 
 ## Where it fits
 SPENDLY-558 is not in the Phase 6 plan (548–557). It is a new feature story under the epic, and it touches only the market-data path and the holding detail screen. It does not depend on 548 (form foundations) or 557 (date picker), and none of the Phase 6 stories depend on it.

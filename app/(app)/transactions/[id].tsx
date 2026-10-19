@@ -66,6 +66,7 @@ import { listMerchantOverrides } from "@/services/merchant/merchantOverrideStore
 import { expenseSourceText, incomeSourceText } from "@/shared/utils/merchantModel";
 import { resolveMerchant } from "@/shared/utils/merchantResolve";
 import { merchantProfileId } from "@/shared/utils/merchantGrouping";
+import { useContentWidthStyle } from "@/hooks/useResponsiveLayout";
 
 function timestampLabel(value: unknown): string | null {
   if (!value) return null;
@@ -86,6 +87,8 @@ function timestampLabel(value: unknown): string | null {
 }
 
 export default function TransactionDetailsScreen() {
+  // SPENDLY-559: centred and capped on tablet/desktop web; unchanged on phones.
+  const contentWidthStyle = useContentWidthStyle("readable");
   const params = useLocalSearchParams<{ id: string; kind?: string; accountId?: string }>();
   const parsed = useMemo(() => parseTransactionRouteParams(params), [params]);
   const ref = parsed?.ref ?? null;
@@ -333,7 +336,7 @@ export default function TransactionDetailsScreen() {
   const amountColor = isCredit ? theme.colors.success : theme.colors.foreground;
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+    <View style={[{ flex: 1, backgroundColor: theme.colors.background }, contentWidthStyle]}>
       <View
         style={{
           paddingTop: insets.top + 8,

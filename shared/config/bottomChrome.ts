@@ -14,8 +14,12 @@
  * the FAB's offset and the list's padding is provable in a unit test.
  */
 
-/** Which bottom chrome the app shell is rendering (`settings.navigationStyle`). */
-export type BottomNavStyle = "bottom" | "dock";
+/**
+ * Which bottom chrome the app shell is rendering (`settings.navigationStyle`).
+ * `sidebar` is the desktop web layout (SPENDLY-559): navigation and the add
+ * action live in a left sidebar, so nothing floats over the bottom of a page.
+ */
+export type BottomNavStyle = "bottom" | "dock" | "sidebar";
 
 export const BOTTOM_NAV_BAR_HEIGHT = 64;
 /** BottomNav never sits flush: it floors the system inset at this. */
@@ -92,6 +96,7 @@ export function bottomChromeTopEdge(
   bottomInset: number,
   { navStyle = "bottom" }: BottomChromeOptions = {}
 ): number {
+  if (navStyle === "sidebar") return bottomInset;
   if (navStyle === "dock") {
     return actionDockOffset(bottomInset) + ACTION_DOCK_FAB_SIZE;
   }
