@@ -38,6 +38,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | SPENDLY-559 | Responsive Expense screens: sidebar at ≥1024, capped page content, dashboard grid, dialog sheets on wide web | `feature/SPENDLY-559-responsive-web` | Done. Merged straight to `main` via `61ceb04` (2026-10-19, at the user's request). Native device QA open ([doc](SPENDLY-559-responsive-web.md)) |
 | SPENDLY-560 | Bug: exact price tooltip on stock chart points (hover, tap, keyboard; line and candle) | `feature/SPENDLY-560-stock-chart-tooltip` | Done. Merged straight to `main` via `c2b9347` (2026-10-19, at the user's request). Native device QA open ([doc](SPENDLY-560-stock-chart-tooltip.md)) |
 | SPENDLY-548 | Phase 6a: Form foundations (Input theme font, SearchBar focus ring, form sheet pattern) | `feature/SPENDLY-548-form-foundations` | Merged into the epic; not on `main` yet ([doc](SPENDLY-548-form-foundations.md)) |
+| SPENDLY-551 | Phase 6d: Settings (theme tokens, one themed switch, outline chips, ghost mode) | `feature/SPENDLY-551-settings` | Built; awaiting epic merge ([doc](SPENDLY-551-settings.md)) |
 
 ## Phase 4 plan: Investments (2026-10-17)
 The Investments hub is `app/(app)/investments.tsx`, with four tabs: Investments (deposits), Stocks, Virtual SIPs and EPF. There is also the EPF establishment screen `app/(app)/epf/[establishmentId].tsx`. Together that is about 13.5k lines.

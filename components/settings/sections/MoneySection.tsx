@@ -19,11 +19,18 @@ import {
   parseMonthlyBudgetInput,
 } from "@/shared/types/settings";
 import { formatAmount } from "@/shared/utils/formatCurrency";
+import { GHOST_AMOUNT } from "@/shared/utils/ghostMoney";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export function MoneySection() {
   const { theme } = useTheme();
   const { settings, updateSettings } = useSettings();
+  // SPENDLY-551: the budget in this section's text is masked in ghost mode,
+  // like every other amount on screen.
+  const budgetMoney = (value: number) =>
+    settings.ghostMode
+      ? GHOST_AMOUNT
+      : formatAmount(value, settings.currency, { numberFormatStyle: settings.numberFormat });
   const { celebrateMilestone } = useCelebration();
   const [budgetText, setBudgetText] = useState(() =>
     formatMonthlyBudgetInput(settings.monthlyBudget)
@@ -58,9 +65,7 @@ export function MoneySection() {
       if (options?.notify) {
         toast.success(
           amount > 0
-            ? `Monthly budget saved · ${formatAmount(amount, settings.currency, {
-                numberFormatStyle: settings.numberFormat,
-              })}`
+            ? `Monthly budget saved · ${budgetMoney(amount)}`
             : "Monthly budget cleared"
         );
       }
@@ -114,9 +119,7 @@ export function MoneySection() {
 
   const savedLabel =
     settings.monthlyBudget > 0
-      ? `Saved in your account: ${formatAmount(settings.monthlyBudget, settings.currency, {
-          numberFormatStyle: settings.numberFormat,
-        })}`
+      ? `Saved in your account: ${budgetMoney(settings.monthlyBudget)}`
       : "No monthly budget saved in your account yet";
 
   return (
