@@ -11,8 +11,8 @@ import {
   ModalCloseButton,
   ModalBody
 } from "@/components/ui/modal";
-import { Text } from "react-native";
-import { sheetBodyPadding } from "./sheetDensity";
+import { Text, View } from "react-native";
+import { sheetBodyPadding, sheetFooterPadding } from "./sheetDensity";
 import { useKeyboardHeight } from "@/hooks/useKeyboardHeight";
 import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
@@ -36,6 +36,12 @@ export interface ModalProps {
    * gutter. The default is unchanged for every other sheet (Ganesh included).
    */
   density?: "default" | "compact";
+  /**
+   * SPENDLY-548: pinned below the scrolling body, so a form's primary action
+   * is always reachable. Pass a `SheetActions` row. Without it the sheet is
+   * exactly as before.
+   */
+  footer?: ReactNode;
 }
 
 
@@ -66,6 +72,7 @@ export function Modal({
   children,
   maxHeight = "88%",
   density = "default",
+  footer,
 }: ModalProps) {
   const compact = density === "compact";
   const insets = useSafeAreaInsets();
@@ -131,7 +138,7 @@ export function Modal({
           className={compact ? "p-0 m-0" : "p-0"}
           scrollEnabled
           style={{ flexGrow: 0, flexShrink: 1 }}
-          contentContainerStyle={sheetBodyPadding(density)}
+          contentContainerStyle={sheetBodyPadding(density, { withFooter: footer != null })}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="always"
           bounces
@@ -139,6 +146,11 @@ export function Modal({
         >
           {children}
         </ModalBody>
+        {footer != null ? (
+          <View className="border-t border-border" style={sheetFooterPadding(density)}>
+            {footer}
+          </View>
+        ) : null}
       </ModalContent>
     </GluestackModal>
   );
