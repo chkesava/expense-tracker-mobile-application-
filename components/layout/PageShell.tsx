@@ -16,6 +16,8 @@ import { APP_BAR_CONTENT_HEIGHT } from "./chrome";
 import { PageShellBottomClearanceContext } from "./usePageListBottomPadding";
 import { useSpendlyBottomClearance } from "./useSpendlyBottomClearance";
 import { haptic } from "@/lib/haptics";
+import { useContentWidthStyle } from "@/hooks/useResponsiveLayout";
+import type { ContentWidthVariant } from "@/shared/utils/responsiveLayout";
 
 export interface PageShellProps {
   children: ReactNode;
@@ -34,6 +36,12 @@ export interface PageShellProps {
    */
   listOwnsBottomInset?: boolean;
   withAura?: boolean;
+  /**
+   * SPENDLY-559: how wide the content may grow on tablet/desktop web.
+   * `wide` (default) for hubs and lists, `readable` for forms and settings.
+   * Phones and native are never capped.
+   */
+  layout?: ContentWidthVariant;
 }
 
 export function PageShell({
@@ -48,8 +56,10 @@ export function PageShell({
   hideBottomOffset = false,
   listOwnsBottomInset = false,
   withAura = true,
+  layout = "wide",
 }: PageShellProps) {
   const { theme } = useTheme();
+  const contentWidthStyle = useContentWidthStyle(layout);
   const insets = useSafeAreaInsets();
   const bottomClearance = useSpendlyBottomClearance({ withFab: true });
 
@@ -99,6 +109,8 @@ export function PageShell({
       paddingTop: effectivePaddingTop,
       paddingBottom: effectivePaddingBottom,
     },
+    // Centred and capped above compact; absent on phones, so they are unchanged.
+    contentWidthStyle,
   ];
 
   return (
