@@ -12,7 +12,7 @@ export default function AddScreen() {
   const { theme } = useTheme();
 
   return (
-    <PageShell scrollable={false}>
+    <PageShell scrollable={false} layout="readable">
       {/* Header */}
       <View style={styles.header}>
         <Button

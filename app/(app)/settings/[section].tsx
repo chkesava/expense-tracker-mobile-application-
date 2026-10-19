@@ -40,7 +40,7 @@ export default function SettingsSectionScreen() {
   const Icon = SETTINGS_SECTION_ICONS[sectionId];
 
   return (
-    <PageShell contentContainerStyle={{ gap: 16, paddingBottom: 40 }}>
+    <PageShell layout="readable" contentContainerStyle={{ gap: 16, paddingBottom: 40 }}>
       <PageHeader
         title={meta.title}
         subtitle={meta.subtitle}

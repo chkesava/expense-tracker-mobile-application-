@@ -6,8 +6,11 @@ import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useTheme } from "@/theme/ThemeProvider";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { isCreditAccount } from "@/shared/utils/accountKind";
+import { useContentWidthStyle } from "@/hooks/useResponsiveLayout";
 
 export default function DiscrepanciesScreen() {
+  // SPENDLY-559: centred and capped on tablet/desktop web; unchanged on phones.
+  const contentWidthStyle = useContentWidthStyle("wide");
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
   const { theme } = useTheme();
@@ -19,7 +22,7 @@ export default function DiscrepanciesScreen() {
   });
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+    <View style={[{ flex: 1, backgroundColor: theme.colors.background }, contentWidthStyle]}>
       <PageHeader
         title="Discrepancy Report"
         subtitle="Settled Statement Discrepancies"
