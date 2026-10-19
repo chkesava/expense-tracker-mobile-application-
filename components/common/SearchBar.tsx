@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  Platform,
   Pressable,
   StyleSheet,
   TextInput,
@@ -10,7 +11,10 @@ import {
 } from "react-native";
 import { Search, X } from "lucide-react-native";
 
+import { withAlpha } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
+
+const IS_WEB = Platform.OS === "web";
 
 export type SearchBarProps = Omit<TextInputProps, "style"> & {
   value: string;
@@ -20,7 +24,14 @@ export type SearchBarProps = Omit<TextInputProps, "style"> & {
   containerStyle?: StyleProp<ViewStyle>;
 };
 
-/** MD3 search field — pill shape, leading icon, clear button, elevates on focus. */
+/**
+ * MD3 search field — pill shape, leading icon, clear button, elevates on focus.
+ *
+ * SPENDLY-548: on web the browser drew its own square focus outline on the
+ * inner input. That outline is off; focus is the accent border plus a soft
+ * ring drawn as a box-shadow on the pill itself, so it follows the radius and
+ * keyboard focus stays clearly visible. Native is unchanged.
+ */
 export function SearchBar({
   value,
   onChangeText,
@@ -33,6 +44,7 @@ export function SearchBar({
 }: SearchBarProps) {
   const { theme } = useTheme();
   const [focused, setFocused] = useState(false);
+  const ring = accentColor ?? theme.colors.primary;
 
   return (
     <View
@@ -42,8 +54,9 @@ export function SearchBar({
         {
           backgroundColor: theme.colors.surfaceVariant,
           borderRadius: theme.radius.full,
-          borderColor: focused ? (accentColor ?? theme.colors.primary) : "transparent",
+          borderColor: focused ? ring : "transparent",
         },
+        IS_WEB && focused ? { boxShadow: `0 0 0 3px ${withAlpha(ring, 0.28)}` } : null,
         containerStyle,
       ]}
     >
@@ -68,6 +81,10 @@ export function SearchBar({
           fontSize: theme.typography.md,
           fontFamily: theme.fontFamily.regular,
           paddingVertical: 0,
+          // The pill shows focus; the browser's own outline would not follow it.
+          // `outline-style: auto` paints even at width 0, so the style itself
+          // goes (react-native-web accepts "none"; the RN types do not list it).
+          ...(IS_WEB ? ({ outlineStyle: "none", outlineWidth: 0 } as unknown as object) : null),
         }}
         {...props}
       />
