@@ -15,6 +15,11 @@ import { Text } from "react-native";
 import { sheetBodyPadding } from "./sheetDensity";
 import { useKeyboardHeight } from "@/hooks/useKeyboardHeight";
 import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
+import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
+import {
+  SPENDLY_DIALOG_MAX_WIDTH,
+  sheetPresentationOf,
+} from "@/shared/utils/responsiveLayout";
 
 export interface ModalProps {
   isOpen: boolean;
@@ -67,6 +72,12 @@ export function Modal({
   const scopeVars = useSpendlyScopeVars();
   const { height: windowHeight } = useWindowDimensions();
   const keyboardHeight = useKeyboardHeight();
+  const { layout } = useResponsiveLayout();
+  // SPENDLY-559: on tablet/desktop web a Spendly sheet opens as a centred
+  // dialog instead of spanning the browser. Only inside the Spendly shell
+  // (scope vars set): Ganesh Seva and Nutrition sheets are unchanged, and
+  // phones and native always get the bottom sheet.
+  const asDialog = scopeVars !== null && sheetPresentationOf(layout) === "dialog";
   // Never taller than the space between the status bar and the keyboard.
   const sheetMaxHeight = Math.min(
     resolveMaxHeight(maxHeight, windowHeight),
@@ -78,20 +89,24 @@ export function Modal({
       isOpen={isOpen}
       onClose={onClose}
       size="md"
-      className="justify-end m-0 p-0 w-full"
+      className={asDialog ? "justify-center items-center m-0 p-0 w-full" : "justify-end m-0 p-0 w-full"}
       // A real RN Modal window, as on main: it stays above the capsule nav
       // (Android elevation beats portal order) and keeps the caller's context.
       useRNModal
     >
       <ModalBackdrop />
       <ModalContent
-        className={`w-full bg-card rounded-t-3xl rounded-b-none border-t border-border overflow-hidden m-0 pb-0${compact ? " p-0" : ""}`}
+        className={
+          asDialog
+            ? `w-full bg-card rounded-3xl border border-border overflow-hidden m-0 pb-0${compact ? " p-0" : ""}`
+            : `w-full bg-card rounded-t-3xl rounded-b-none border-t border-border overflow-hidden m-0 pb-0${compact ? " p-0" : ""}`
+        }
         style={[scopeVars, {
           maxHeight: sheetMaxHeight,
           // The keyboard already covers the nav bar inset while it is up.
           paddingBottom: keyboardHeight > 0 ? 12 : Math.max(insets.bottom, 20),
           marginBottom: keyboardHeight,
-        }]}
+        }, asDialog ? { maxWidth: SPENDLY_DIALOG_MAX_WIDTH } : null]}
       >
         {title && (
           <ModalHeader

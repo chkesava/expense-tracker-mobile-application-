@@ -10,6 +10,7 @@ import { Header } from "@/components/Header";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 import { MobileActionDock } from "@/components/MobileActionDock";
 import { PrivacyLock } from "@/components/PrivacyLock";
+import { DesktopSidebar } from "@/components/navigation/DesktopSidebar";
 import { TabSwipeArea } from "@/components/navigation/TabSwipeArea";
 import { GlassBlurScope, GlassBlurTarget } from "@/components/ui/GlassSurface";
 import { OverlayProvider } from "@gluestack-ui/core/overlay/creator";
@@ -22,6 +23,7 @@ import { useAppShortcutHandler } from "@/hooks/useAppShortcutHandler";
 import { useNavigationStateRestoration } from "@/hooks/useNavigationStateRestoration";
 import { useNotificationTapRouting } from "@/hooks/useNotificationTapRouting";
 import { useRecurringSync } from "@/hooks/useRecurringSync";
+import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/providers/AuthProvider";
 import { BottomChromeProvider } from "@/components/layout/BottomChromeProvider";
@@ -41,6 +43,8 @@ function AppShellInner() {
   const { settings } = useSettings();
   const { theme, themeName } = useTheme();
   const { user } = useAuth();
+  // SPENDLY-559: desktop web swaps the bottom nav/dock for a left sidebar.
+  const { showSidebar } = useResponsiveLayout();
 
   // Android hardware / gesture Back button behavior
   useAndroidBackHandler();
@@ -62,7 +66,7 @@ function AppShellInner() {
     // The clearance every list pads by has to describe the chrome actually
     // on screen, so the dock's centred FAB is not measured as a bar
     // (SPENDLY-141).
-    <BottomChromeProvider navStyle={settings.navigationStyle}>
+    <BottomChromeProvider navStyle={showSidebar ? "sidebar" : settings.navigationStyle}>
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
         {/* Gluestack dialogs/sheets portal here: inside every app provider,
             so their content can use them (SPENDLY-154). */}
@@ -73,6 +77,11 @@ function AppShellInner() {
             of a light band under the capsule. The prop names the *button*
             colour; see lib/navigationBarStyle (SPENDLY-174). Android-only. */}
         <NavigationBar style={navigationBarStyleFor(themeUsesDarkPalette(themeName))} />
+        {/* SPENDLY-559: the sidebar sits beside the page column; on phones
+            the row holds the column alone, so the layout is unchanged. */}
+        <View style={styles.shellRow}>
+        {showSidebar ? <DesktopSidebar /> : null}
+        <View style={styles.pageColumn}>
         <Header />
         {/* SPENDLY-161/170: the glass nav/dock blur whatever scrolls in the
             target. The scope wraps the chrome too, or it can't find it. */}
@@ -259,8 +268,10 @@ function AppShellInner() {
         </TabSwipeArea>
         </GlassBlurTarget>
 
-        {settings.navigationStyle === "dock" ? <MobileActionDock /> : <BottomNav />}
+        {showSidebar ? null : settings.navigationStyle === "dock" ? <MobileActionDock /> : <BottomNav />}
         </GlassBlurScope>
+        </View>
+        </View>
         <AddTransactionModal />
         <AddActionSheet />
         <GlobalAddModals />
@@ -326,3 +337,8 @@ export default function AppLayout() {
     </PrivacyLock>
   );
 }
+
+const styles = StyleSheet.create({
+  shellRow: { flex: 1, flexDirection: "row" },
+  pageColumn: { flex: 1 },
+});

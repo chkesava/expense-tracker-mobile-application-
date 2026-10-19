@@ -55,6 +55,7 @@ import {
 import { getNextRenewalDate } from "@/shared/utils/subscriptionProcessor";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { GridItem, ResponsiveGrid } from "@/components/layout/ResponsiveGrid";
 
 /**
  * SPENDLY-532 — first-viewport widgets, pinned ahead of the user's order when
@@ -482,17 +483,27 @@ export default function DashboardScreen() {
           description={financeError.message}
         />
       ) : (
-        <View style={styles.widgetsGrid}>
-          {heroCount === 0 ? cashFlowOverview : null}
-          {displayWidgetIds.map((widgetId, index) => (
-            <View key={widgetId}>
-              {renderWidget(widgetId, index)}
-              {index === heroCount - 1 ? (
-                <View style={styles.quickInsightsSlot}>{cashFlowOverview}</View>
-              ) : null}
-              {index === insertInsightsAfter ||
-              (insertInsightsAfter < 0 && index === 0) ? (
-                <View style={styles.quickInsightsSlot}>
+        // SPENDLY-559: one column on phones (same 12 gap as before), two on
+        // tablet web, three on desktop web. The hero widgets and the cash-flow
+        // overview keep a full row; order and slot positions are unchanged.
+        <ResponsiveGrid gap={12}>
+          {heroCount === 0 ? (
+            <GridItem key="cashFlowOverview" span="full">{cashFlowOverview}</GridItem>
+          ) : null}
+          {displayWidgetIds.flatMap((widgetId, index) => {
+            const items = [
+              <GridItem key={widgetId} span={HERO_WIDGETS.includes(widgetId) ? "full" : 1}>
+                {renderWidget(widgetId, index)}
+              </GridItem>,
+            ];
+            if (index === heroCount - 1) {
+              items.push(
+                <GridItem key="cashFlowOverview" span="full">{cashFlowOverview}</GridItem>
+              );
+            }
+            if (index === insertInsightsAfter || (insertInsightsAfter < 0 && index === 0)) {
+              items.push(
+                <GridItem key="smartInsights">
                   <LazyMount delayMs={120}>
                     <SmartInsightsWidget
                       expenses={recentExpenses}
@@ -501,21 +512,24 @@ export default function DashboardScreen() {
                       todayKey={todayKey}
                     />
                   </LazyMount>
-                </View>
-              ) : null}
-            </View>
-          ))}
+                </GridItem>
+              );
+            }
+            return items;
+          })}
           {displayWidgetIds.length === 0 ? (
-            <LazyMount delayMs={120}>
-              <SmartInsightsWidget
-                expenses={recentExpenses}
-                monthlyBudget={settings.monthlyBudget}
-                currency={displayCurrency}
-                todayKey={todayKey}
-              />
-            </LazyMount>
+            <GridItem key="smartInsights">
+              <LazyMount delayMs={120}>
+                <SmartInsightsWidget
+                  expenses={recentExpenses}
+                  monthlyBudget={settings.monthlyBudget}
+                  currency={displayCurrency}
+                  todayKey={todayKey}
+                />
+              </LazyMount>
+            </GridItem>
           ) : null}
-        </View>
+        </ResponsiveGrid>
       )}
     </PageShell>
   );
@@ -546,12 +560,5 @@ const styles = StyleSheet.create({
   alertText: {
     fontSize: 12,
     lineHeight: 16,
-  },
-  widgetsGrid: {
-    gap: 12,
-  },
-  quickInsightsSlot: {
-    marginTop: 12,
-    gap: 12,
   },
 });

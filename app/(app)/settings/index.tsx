@@ -49,7 +49,7 @@ export default function SettingsHubScreen() {
   };
 
   return (
-    <PageShell contentContainerStyle={{ gap: 16, paddingBottom: 40 }}>
+    <PageShell layout="readable" contentContainerStyle={{ gap: 16, paddingBottom: 40 }}>
       <PageHeader
         title="Settings"
         subtitle="Preferences & security"

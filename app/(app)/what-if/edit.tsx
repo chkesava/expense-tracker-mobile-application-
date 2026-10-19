@@ -245,7 +245,7 @@ export default function WhatIfEditScreen() {
   }
 
   return (
-    <PageShell scrollable={false} listOwnsBottomInset>
+    <PageShell scrollable={false} listOwnsBottomInset layout="readable">
       <PageHeader
         title={existing ? "Edit scenario" : "New scenario"}
         subtitle="What If"

@@ -12,6 +12,7 @@ import { todayDateKey } from "@/shared/utils/dates";
 import { Chip } from "@/components/ui/Chip";
 import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 import { DateField } from "@/components/common/DateField";
+import { useSheetWidthStyle } from "@/hooks/useResponsiveLayout";
 export type SipPlanFormModalProps = {
   visible: boolean;
   onClose: () => void;
@@ -35,6 +36,8 @@ const FREQUENCIES = [
 
 export function SipPlanFormModal({ visible, onClose, onSubmit }: SipPlanFormModalProps) {
   const { theme } = useTheme();
+  // SPENDLY-559: centred at dialog width on tablet/desktop web.
+  const sheetWidthStyle = useSheetWidthStyle();
 
   const [assetType, setAssetType] = useState<"stock" | "etf" | "mutual_fund" | "crypto">("stock");
   const [symbol, setSymbol] = useState("");
@@ -106,7 +109,7 @@ export function SipPlanFormModal({ visible, onClose, onSubmit }: SipPlanFormModa
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={[styles.overlay]}>
         <ScrollView
-          style={[styles.container, { backgroundColor: theme.colors.background }]}
+          style={[styles.container, { backgroundColor: theme.colors.background }, sheetWidthStyle]}
           contentContainerStyle={styles.content}
         >
           <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>

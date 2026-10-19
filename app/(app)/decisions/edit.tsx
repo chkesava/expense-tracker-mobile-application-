@@ -126,7 +126,7 @@ export default function DecisionEditScreen() {
   // say so instead of showing a loading state that never ends.
   if (!uid) {
     return (
-      <PageShell scrollable={false}>
+      <PageShell scrollable={false} layout="readable">
         {header}
         <ErrorState title="Sign in to record a decision" description="Decisions are saved to your account, so you need to be signed in." onRetry={() => router.back()} retryLabel="Go back" />
       </PageShell>
@@ -134,7 +134,7 @@ export default function DecisionEditScreen() {
   }
   if (error) {
     return (
-      <PageShell scrollable={false}>
+      <PageShell scrollable={false} layout="readable">
         {header}
         <ErrorState title="Couldn't load this decision" description={error.message} onRetry={error.retryable ? retry : undefined} />
       </PageShell>
@@ -142,7 +142,7 @@ export default function DecisionEditScreen() {
   }
   if (!form || !base || (editingId && loading)) {
     return (
-      <PageShell scrollable={false}>
+      <PageShell scrollable={false} layout="readable">
         {header}
         <LoadingState variant="card" count={2} />
       </PageShell>
@@ -150,7 +150,7 @@ export default function DecisionEditScreen() {
   }
   if (editingId && !existing) {
     return (
-      <PageShell scrollable={false}>
+      <PageShell scrollable={false} layout="readable">
         {header}
         <ErrorState title="This decision isn't here any more" description="It may have been deleted on another device." onRetry={() => router.replace("/decisions" as Href)} retryLabel="Back to decisions" />
       </PageShell>
@@ -224,7 +224,7 @@ export default function DecisionEditScreen() {
   );
 
   return (
-    <PageShell scrollable={false} listOwnsBottomInset>
+    <PageShell scrollable={false} listOwnsBottomInset layout="readable">
       {header}
       <View style={[styles.progress, { gap: 4, paddingHorizontal: theme.space.lg }]} accessibilityLabel={`Step ${stepIndex + 1} of ${DECISION_STEPS.length}`}>
         {DECISION_STEPS.map((s, i) => (

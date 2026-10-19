@@ -11,6 +11,7 @@ import { addHoldingSchema } from "@/shared/features/portfolio/schemas";
 import type { Holding } from "@/shared/features/portfolio/types";
 import { useTheme } from "@/theme/ThemeProvider";
 import { SheetBottomInset } from "@/components/common/SheetBottomInset";
+import { useSheetWidthStyle } from "@/hooks/useResponsiveLayout";
 
 type CreateHoldingInput = Omit<Holding, "id" | "createdAt" | "updatedAt">;
 
@@ -89,6 +90,8 @@ function parseBrokerCsv(contents: string): CreateHoldingInput[] {
 
 export function CsvImportModal({ visible, onClose, onImport }: CsvImportModalProps) {
   const { theme } = useTheme();
+  // SPENDLY-559: centred at dialog width on tablet/desktop web.
+  const sheetWidthStyle = useSheetWidthStyle();
   const [fileName, setFileName] = useState<string | null>(null);
   const [holdings, setHoldings] = useState<CreateHoldingInput[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -144,7 +147,7 @@ export function CsvImportModal({ visible, onClose, onImport }: CsvImportModalPro
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
       <View style={styles.backdrop}>
-        <View style={[styles.sheet, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+        <View style={[styles.sheet, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }, sheetWidthStyle]}>
           <View style={styles.header}>
             <View style={styles.titleRow}>
               <FileSpreadsheet size={20} color={theme.colors.primary} />

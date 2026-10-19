@@ -168,6 +168,7 @@ import { currentMonthKey, todayDateKey, toLocalDateKey, parseLocalDate } from "@
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { useContentWidthStyle } from "@/hooks/useResponsiveLayout";
 
 const WIDE_ROW_BREAKPOINT = 420;
 
@@ -188,6 +189,8 @@ export default function AccountDetailScreen() {
   const listPaddingBottom = usePageListBottomPadding();
   const { width } = useWindowDimensions();
   const compact = width < WIDE_ROW_BREAKPOINT;
+  // SPENDLY-559: centred and capped on tablet/desktop web; unchanged on phones.
+  const contentWidthStyle = useContentWidthStyle("wide");
   const { id } = useLocalSearchParams<{ id: string }>();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -1487,7 +1490,7 @@ export default function AccountDetailScreen() {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }, contentWidthStyle]}>
       <AccountHeader
         title={account.name}
         subtitle={
