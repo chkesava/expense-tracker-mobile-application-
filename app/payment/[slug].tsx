@@ -10,15 +10,13 @@ import { PUBLIC_FALLBACK_CURRENCY } from "@/shared/utils/splitPublicShare";
 import { generateUpiLink } from "@/shared/utils/upi";
 import { getQrStyle } from "@/shared/utils/qrStyles";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 
 export default function PublicPaymentScreen() {
   const { slug: slugParam } = useLocalSearchParams<{ slug?: string | string[] }>();
   const slug = Array.isArray(slugParam) ? slugParam[0] : slugParam;
   const { request, loading, error, retry } = usePublicPaymentRequest(slug);
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
   // Never read system settings here: `system_settings/global` requires
   // sign-in, and this page's whole point is that the payer has no account.
   const currency = request?.currency || PUBLIC_FALLBACK_CURRENCY;
@@ -98,8 +96,8 @@ export default function PublicPaymentScreen() {
                 color: cancelled
                   ? theme.colors.destructive
                   : fullyPaid
-                    ? "#22C55E"
-                    : "#22C55E",
+                    ? theme.colors.success
+                    : theme.colors.success,
               },
             ]}
           >
@@ -108,7 +106,6 @@ export default function PublicPaymentScreen() {
           <Amount
             value={showBreakdown ? remainingDue : request.amount}
             currency={currency}
-            ghostable
             style={{
               fontSize: 32,
               fontWeight: "900",
@@ -124,7 +121,6 @@ export default function PublicPaymentScreen() {
                 <Amount
                   value={shareAmount}
                   currency={currency}
-                  ghostable
                   style={styles.breakdownValue}
                 />
               </View>
@@ -135,7 +131,6 @@ export default function PublicPaymentScreen() {
                 <Amount
                   value={paidAmount}
                   currency={currency}
-                  ghostable
                   style={styles.breakdownValue}
                 />
               </View>
@@ -146,7 +141,6 @@ export default function PublicPaymentScreen() {
                 <Amount
                   value={remainingDue}
                   currency={currency}
-                  ghostable
                   style={[styles.breakdownValue, { fontWeight: "800" }]}
                 />
               </View>
@@ -214,7 +208,7 @@ export default function PublicPaymentScreen() {
       <Text
         style={[
           styles.footer,
-          { color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.4)" },
+          { color: theme.colors.mutedForeground },
         ]}
       >
         Scan the QR or tap Pay via UPI. No app account needed.

@@ -13,8 +13,8 @@ import {
   publicParticipantStatusLabel,
   publicShareCurrency,
 } from "@/shared/utils/splitPublicShare";
+import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 
 export default function PublicSplitScreen() {
@@ -22,8 +22,8 @@ export default function PublicSplitScreen() {
   const slug = Array.isArray(slugParam) ? slugParam[0] : slugParam;
   const { share, loading, error, retry } = usePublicSplitShare(slug);
   const { push } = useRouter();
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   // Never read system settings here: `system_settings/global` requires
   // sign-in, so an anonymous visitor's read always fails and every share
   // would silently render as INR.
@@ -76,7 +76,7 @@ export default function PublicSplitScreen() {
                 {
                   color:
                     statusLabel === "SETTLED" || statusLabel === "SPENT"
-                      ? "#22C55E"
+                      ? theme.colors.success
                       : theme.colors.primary,
                 },
               ]}
@@ -94,7 +94,6 @@ export default function PublicSplitScreen() {
           <Amount
             value={share.totalAmount}
             currency={currency}
-            ghostable
             style={{
               fontSize: 32,
               fontWeight: "900",
@@ -116,9 +115,7 @@ export default function PublicSplitScreen() {
                   style={[
                     styles.personRow,
                     {
-                      backgroundColor: isDark
-                        ? "rgba(255,255,255,0.04)"
-                        : "rgba(0,0,0,0.03)",
+                      backgroundColor: surfaces.tile,
                       borderColor: theme.colors.border,
                     },
                   ]}
@@ -145,7 +142,7 @@ export default function PublicSplitScreen() {
                         {
                           color:
                             !p.optedOut && p.remainingDue <= 0.009
-                              ? "#22C55E"
+                              ? theme.colors.success
                               : p.shareRaised && !p.optedOut
                                 ? theme.colors.primary
                                 : theme.colors.mutedForeground,
@@ -162,7 +159,6 @@ export default function PublicSplitScreen() {
                     <Amount
                       value={p.optedOut ? p.paidAmount : p.remainingDue > 0.009 ? p.remainingDue : p.amount}
                       currency={currency}
-                      ghostable
                       style={{
                         fontSize: 14,
                         fontWeight: "800",
@@ -233,7 +229,7 @@ export default function PublicSplitScreen() {
       <Text
         style={[
           styles.footer,
-          { color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.4)" },
+          { color: theme.colors.mutedForeground },
         ]}
       >
         {share?.claimsEnabled === true

@@ -24,6 +24,8 @@ import {
   isTripOverBudget,
 } from "@/shared/utils/tripCalculations";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -34,6 +36,8 @@ export function TripsList() {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
+  // SPENDLY-550: budget text is masked in ghost mode, like every amount.
+  const money = useGhostMoney(displayCurrency);
   const { trips, loading } = useTrips();
   const { expenses } = useExpenses();
 
@@ -70,11 +74,7 @@ export function TripsList() {
           {
             backgroundColor: theme.colors.card,
             borderColor: theme.colors.border,
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 6 },
-            shadowOpacity: isDark ? 0.35 : 0.08,
-            shadowRadius: 16,
-            elevation: 6,
+            ...theme.elevation[4],
           },
         ]}
       >
@@ -119,7 +119,7 @@ export function TripsList() {
             <Text
               style={[
                 styles.summaryCount,
-                { color: "#22C55E" },
+                { color: theme.colors.success },
               ]}
             >
               {summary.activeCount}
@@ -145,7 +145,7 @@ export function TripsList() {
             <Text
               style={[
                 styles.summaryCount,
-                { color: "#3B82F6" },
+                { color: theme.colors.info },
               ]}
             >
               {summary.upcomingCount}
@@ -211,7 +211,7 @@ export function TripsList() {
           description="Organize vacation budgets, multi-currency itineraries, and group travel expenses."
           primaryAction={{
             label: "Plan New Trip",
-            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+            icon: <Plus size={16} color={theme.colors.primaryForeground} strokeWidth={2.4} />,
             onPress: () => setIsCreateOpen(true),
           }}
           tip="Travel mode automatically isolates trip expenses under designated vacation budgets."
@@ -235,9 +235,9 @@ export function TripsList() {
 
             const statusColor =
               status === "active"
-                ? "#22C55E"
+                ? theme.colors.success
                 : status === "upcoming"
-                  ? "#3B82F6"
+                  ? theme.colors.info
                   : theme.colors.mutedForeground;
 
             return (
@@ -252,7 +252,7 @@ export function TripsList() {
                   {
                     backgroundColor: theme.colors.card,
                     borderColor: over
-                      ? "rgba(239,68,68,0.4)"
+                      ? withAlpha(theme.colors.destructive, 0.4)
                       : theme.colors.border,
                   },
                   pressed && { opacity: 0.8 },
@@ -280,13 +280,13 @@ export function TripsList() {
                         <View
                           style={[
                             styles.statusBadge,
-                            { backgroundColor: "rgba(239,68,68,0.15)" },
+                            { backgroundColor: withAlpha(theme.colors.destructive, 0.15) },
                           ]}
                         >
                           <Text
                             style={[
                               styles.statusBadgeText,
-                              { color: "#EF4444" },
+                              { color: theme.colors.destructive },
                             ]}
                           >
                             OVER BUDGET
@@ -349,7 +349,7 @@ export function TripsList() {
                       style={{
                         fontSize: theme.typography.md,
                         fontWeight: "800",
-                        color: over ? "#EF4444" : theme.colors.foreground,
+                        color: over ? theme.colors.destructive : theme.colors.foreground,
                       }}
                     />
                     <Text
@@ -358,14 +358,13 @@ export function TripsList() {
                         color: theme.colors.mutedForeground,
                       }}
                     >
-                      of {displayCurrency}{" "}
-                      {trip.totalBudget.toLocaleString()}
+                      of {money(trip.totalBudget)}
                     </Text>
                     <Text
                       style={{
                         fontSize: 11,
                         fontWeight: "700",
-                        color: over ? "#EF4444" : theme.colors.primary,
+                        color: over ? theme.colors.destructive : theme.colors.primary,
                       }}
                     >
                       {spentPercent}% used
@@ -385,7 +384,7 @@ export function TripsList() {
                       styles.progressFill,
                       {
                         width: `${spentPercent}%`,
-                        backgroundColor: over ? "#EF4444" : theme.colors.primary,
+                        backgroundColor: over ? theme.colors.destructive : theme.colors.primary,
                       },
                     ]}
                   />

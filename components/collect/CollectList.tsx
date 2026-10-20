@@ -60,11 +60,7 @@ export function CollectList() {
           {
             backgroundColor: theme.colors.card,
             borderColor: theme.colors.border,
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 6 },
-            shadowOpacity: isDark ? 0.35 : 0.08,
-            shadowRadius: 16,
-            elevation: 6,
+            ...theme.elevation[4],
           },
         ]}
       >
@@ -146,7 +142,7 @@ export function CollectList() {
             activeTab === "active"
               ? {
                   label: "Create Request",
-                  icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+                  icon: <Plus size={16} color={theme.colors.primaryForeground} strokeWidth={2.4} />,
                   onPress: () => setIsCreateOpen(true),
                 }
               : undefined
