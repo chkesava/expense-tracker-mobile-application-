@@ -11,6 +11,8 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
+import { stageMutationOps } from "@/lib/stageMutationOps";
+import { dashboardOpsForRelabel, type DashboardRelabel } from "@/shared/utils/dashboardMutations";
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
@@ -20,6 +22,30 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useExpenseReferenceData } from "@/providers/ExpenseReferenceDataProvider";
 import type { Category } from "@/shared/types/expense";
+
+/** The expense fields a category relabel needs for its dashboard delta. */
+type RelabelSource = {
+  category?: string;
+  subcategory?: string;
+  amount?: number;
+  month?: string;
+  date?: string;
+  deletedAt?: unknown;
+};
+
+function relabelOf(
+  data: RelabelSource,
+  after: { category?: string; subcategory?: string }
+): DashboardRelabel {
+  return {
+    amount: Number(data.amount) || 0,
+    month: data.month,
+    date: data.date,
+    deletedAt: data.deletedAt,
+    before: { category: data.category, subcategory: data.subcategory },
+    after,
+  };
+}
 
 export const useCategories = () => {
   const { user } = useAuth();
@@ -237,16 +263,21 @@ export const useCategories = () => {
             })();
         let batch = writeBatch(db);
         let ops = 0;
+        // SPENDLY-563: the month's dashboard keys move with the expenses, in
+        // the same batch as the chunk they belong to.
+        let relabels: DashboardRelabel[] = [];
         const flush = async () => {
           if (ops === 0) return;
+          stageMutationOps(batch, db, dashboardOpsForRelabel(uid, relabels));
           await batch.commit();
           batch = writeBatch(db);
           ops = 0;
+          relabels = [];
         };
 
         for (const row of rows) {
           if (!row.id) continue;
-          const data = row.data;
+          const data = row.data as RelabelSource;
           const ref = doc(db, "users", uid, "expenses", row.id);
           if (cat.kind === "subcategory") {
             const parent = categories.find((c) => c.id === cat.parentId);
@@ -256,10 +287,12 @@ export const useCategories = () => {
               data.subcategory === oldName
             ) {
               batch.update(ref, { subcategory: trimmed });
+              relabels.push(relabelOf(data, { category: data.category, subcategory: trimmed }));
               ops++;
             }
           } else if (data.category === oldName) {
             batch.update(ref, { category: trimmed });
+            relabels.push(relabelOf(data, { category: trimmed, subcategory: data.subcategory }));
             ops++;
           }
           if (ops >= 400) await flush();
@@ -367,11 +400,16 @@ export const useCategories = () => {
 
       let batch = writeBatch(db);
       let ops = 0;
+      // SPENDLY-563: moved expenses carry their dashboard amounts with them,
+      // staged into the same batch as the chunk they were moved in.
+      let relabels: DashboardRelabel[] = [];
       const flush = async () => {
         if (ops === 0) return;
+        stageMutationOps(batch, db, dashboardOpsForRelabel(uid, relabels));
         await batch.commit();
         batch = writeBatch(db);
         ops = 0;
+        relabels = [];
       };
 
       for (const sub of sourceSubs) {
@@ -414,14 +452,16 @@ export const useCategories = () => {
           })();
       for (const row of expenseRows) {
         if (!row.id) continue;
-        const data = row.data;
+        const data = row.data as RelabelSource;
         if (data.category === source.name) {
           const oldSub = (data.subcategory as string) || "Other";
           const conflict = targetSubNames.has(oldSub.toLowerCase());
+          const subcategory = conflict ? `${oldSub} (from ${source.name})` : oldSub;
           batch.update(doc(db, "users", uid, "expenses", row.id), {
             category: target.name,
-            subcategory: conflict ? `${oldSub} (from ${source.name})` : oldSub,
+            subcategory,
           });
+          relabels.push(relabelOf(data, { category: target.name, subcategory }));
           ops++;
           if (ops >= 400) await flush();
         }

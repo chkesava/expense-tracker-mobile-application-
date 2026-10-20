@@ -153,3 +153,36 @@ export function computeDashboardRestoreOps(uid: string, row: ExpenseLike, type: 
   }
   return computeDashboardIncomeCreateOps(uid, row);
 }
+
+export type DashboardRelabel = {
+  amount: number;
+  month?: string;
+  date?: string;
+  deletedAt?: unknown;
+  before: { category?: string; subcategory?: string };
+  after: { category?: string; subcategory?: string };
+};
+
+/**
+ * SPENDLY-563 — dashboard ops for expenses whose category/subcategory was
+ * rewritten in bulk (category rename or merge). Amounts and months do not
+ * change, so each month only moves money between `categoryTotals` keys; the
+ * deltas are summed so a chunk costs one op per month. Soft-deleted rows are
+ * not counted by the summary, so they move nothing.
+ */
+export function dashboardOpsForRelabel(uid: string, rows: DashboardRelabel[]) {
+  const byMonth = new Map<string, Record<string, number>>();
+  for (const row of rows) {
+    if (row.deletedAt) continue;
+    const month = summaryMonthOf(row);
+    const amount = Number(row.amount) || 0;
+    if (!month || amount === 0) continue;
+    const deltas = byMonth.get(month) ?? {};
+    addCategoryDeltas(deltas, row.before, -amount);
+    addCategoryDeltas(deltas, row.after, amount);
+    byMonth.set(month, deltas);
+  }
+  return [...byMonth.entries()].flatMap(([month, categoryDeltas]) =>
+    buildDashboardSummaryOps(uid, month, { categoryDeltas })
+  );
+}
