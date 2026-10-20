@@ -49,7 +49,7 @@ import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces, withAlpha } from "@/theme/surfaces";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { haptic } from "@/lib/haptics";
 import { createExpense } from "@/services/ledger/createLedgerTransaction";
 import {
@@ -98,9 +98,12 @@ const WIZARD_STEPS = [
 
 export function SetupWizardModal() {
   const insets = useSafeAreaInsets();
-  const { theme, themeName } = useTheme();
+  const { theme } = useTheme();
   const surfaces = useSurfaces();
-  const isDark = themeUsesDarkPalette(themeName);
+  // SPENDLY-556: RN Modal portals outside SpendlyUIScope on web; keep the
+  // theme vars so the Gluestack inputs inside stay themed.
+  const scopeVars = useSpendlyScopeVars();
+  const selectedFill = surfaces.wash(theme.colors.primary);
   const { isSetupWizardOpen, setIsSetupWizardOpen, setupWizardInitialStep } = useModals();
   const { user } = useAuth();
   const { data: userDoc } = useUserDoc();
@@ -303,6 +306,7 @@ export function SetupWizardModal() {
             paddingTop: insets.top + 8,
             paddingBottom: Math.max(insets.bottom, 16),
           },
+          scopeVars,
         ]}
       >
         <KeyboardAvoidingView
@@ -364,7 +368,7 @@ export function SetupWizardModal() {
             {/* Step 0: Profile */}
             {currentStep === 0 && (
               <View style={styles.stepContainer}>
-                <View style={[styles.stepHeroCircle, { backgroundColor: isDark ? "rgba(99, 102, 241, 0.15)" : "rgba(99, 102, 241, 0.1)" }]}>
+                <View style={[styles.stepHeroCircle, { backgroundColor: surfaces.wash(theme.colors.primary) }]}>
                   <Text style={{ fontSize: 44 }}>{selectedEmoji}</Text>
                 </View>
 
@@ -419,8 +423,8 @@ export function SetupWizardModal() {
             {/* Step 1: Currency */}
             {currentStep === 1 && (
               <View style={styles.stepContainer}>
-                <View style={[styles.stepHeroCircle, { backgroundColor: isDark ? "rgba(16, 185, 129, 0.15)" : "rgba(16, 185, 129, 0.1)" }]}>
-                  <DollarSign size={36} color="#10B981" />
+                <View style={[styles.stepHeroCircle, { backgroundColor: surfaces.wash(theme.colors.success) }]}>
+                  <DollarSign size={36} color={theme.colors.success} />
                 </View>
 
                 <Text style={[styles.stepHeading, { color: theme.colors.foreground }]}>
@@ -443,11 +447,7 @@ export function SetupWizardModal() {
                         style={[
                           styles.currencyCard,
                           {
-                            backgroundColor: isSelected
-                              ? isDark
-                                ? "rgba(107, 99, 255, 0.18)"
-                                : "rgba(79, 70, 255, 0.1)"
-                              : theme.colors.card,
+                            backgroundColor: isSelected ? selectedFill : theme.colors.card,
                             borderColor: isSelected ? theme.colors.primary : theme.colors.border,
                           },
                         ]}
@@ -474,8 +474,8 @@ export function SetupWizardModal() {
             {/* Step 2: Budget */}
             {currentStep === 2 && (
               <View style={styles.stepContainer}>
-                <View style={[styles.stepHeroCircle, { backgroundColor: isDark ? "rgba(236, 72, 153, 0.15)" : "rgba(236, 72, 153, 0.1)" }]}>
-                  <PiggyBank size={36} color="#EC4899" />
+                <View style={[styles.stepHeroCircle, { backgroundColor: surfaces.wash(theme.colors.info) }]}>
+                  <PiggyBank size={36} color={theme.colors.info} />
                 </View>
 
                 <Text style={[styles.stepHeading, { color: theme.colors.foreground }]}>
@@ -524,7 +524,7 @@ export function SetupWizardModal() {
                           style={[
                             styles.presetText,
                             {
-                              color: budgetAmount === String(amount) ? "#FFFFFF" : theme.colors.foreground,
+                              color: budgetAmount === String(amount) ? theme.colors.primaryForeground : theme.colors.foreground,
                               fontWeight: "700",
                             },
                           ]}
@@ -541,8 +541,8 @@ export function SetupWizardModal() {
             {/* Step 3: First Account */}
             {currentStep === 3 && (
               <View style={styles.stepContainer}>
-                <View style={[styles.stepHeroCircle, { backgroundColor: isDark ? "rgba(245, 158, 11, 0.15)" : "rgba(245, 158, 11, 0.1)" }]}>
-                  <Wallet size={36} color="#F59E0B" />
+                <View style={[styles.stepHeroCircle, { backgroundColor: surfaces.wash(theme.colors.warning) }]}>
+                  <Wallet size={36} color={theme.colors.warning} />
                 </View>
 
                 <Text style={[styles.stepHeading, { color: theme.colors.foreground }]}>
@@ -584,11 +584,7 @@ export function SetupWizardModal() {
                           style={[
                             styles.typeCard,
                             {
-                              backgroundColor: isSelected
-                                ? isDark
-                                  ? "rgba(107, 99, 255, 0.18)"
-                                  : "rgba(79, 70, 255, 0.1)"
-                                : theme.colors.card,
+                              backgroundColor: isSelected ? selectedFill : theme.colors.card,
                               borderColor: isSelected ? theme.colors.primary : theme.colors.border,
                             },
                           ]}
@@ -674,7 +670,7 @@ export function SetupWizardModal() {
             {/* Step 4: First Expense */}
             {currentStep === 4 && (
               <View style={styles.stepContainer}>
-                <View style={[styles.stepHeroCircle, { backgroundColor: isDark ? "rgba(107, 99, 255, 0.15)" : "rgba(79, 70, 255, 0.1)" }]}>
+                <View style={[styles.stepHeroCircle, { backgroundColor: surfaces.wash(theme.colors.primary) }]}>
                   <Sparkles size={36} color={theme.colors.primary} />
                 </View>
 
@@ -737,13 +733,13 @@ export function SetupWizardModal() {
               accessibilityRole="button"
               accessibilityLabel={currentStep === WIZARD_STEPS.length - 1 ? "Finish Setup" : "Save & Continue"}
             >
-              <Text style={styles.primaryBtnText}>
+              <Text style={[styles.primaryBtnText, { color: theme.colors.primaryForeground }]}>
                 {currentStep === WIZARD_STEPS.length - 1 ? "Finish Setup" : "Save & Continue"}
               </Text>
               {currentStep === WIZARD_STEPS.length - 1 ? (
-                <CheckCircle2 size={18} color="#FFFFFF" strokeWidth={2.4} />
+                <CheckCircle2 size={18} color={theme.colors.primaryForeground} strokeWidth={2.4} />
               ) : (
-                <ArrowRight size={18} color="#FFFFFF" strokeWidth={2.4} />
+                <ArrowRight size={18} color={theme.colors.primaryForeground} strokeWidth={2.4} />
               )}
             </Pressable>
           </View>
@@ -945,7 +941,6 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
   },
   primaryBtnText: {
-    color: "#FFFFFF",
     fontSize: 15,
     fontWeight: "800",
   },

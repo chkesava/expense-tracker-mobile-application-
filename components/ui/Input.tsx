@@ -41,11 +41,12 @@ export function Input({
 
   return (
     <GluestackFormControl isInvalid={isInvalid} isDisabled={isDisabled} style={containerStyle as any}>
-      {label && (
+      {/* SPENDLY-556: a ternary, not `label &&` - label="" rendered a bare "" text node in a View. */}
+      {label ? (
         <GluestackFormControlLabel className="mb-1">
           <GluestackFormControlLabelText style={{ fontFamily: theme.fontFamily.medium }}>{label}</GluestackFormControlLabelText>
         </GluestackFormControlLabel>
-      )}
+      ) : null}
       
       <GluestackInput className="min-h-[52px]">
         {leadingIcon && (

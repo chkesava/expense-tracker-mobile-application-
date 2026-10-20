@@ -1,21 +1,28 @@
 import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { AuraBackground } from "@/components/layout/AuraBackground";
+import { ACTIVE_PRODUCT } from "@/lib/activeProduct";
+import { legacyAuthBackground, usesExpenseLook } from "@/lib/authLook";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export function AuthBackground() {
   const { theme } = useTheme();
   const { width, height } = useWindowDimensions();
 
-  const isDark = theme.colors.background === "#020817" || theme.colors.background === "#000000";
+  // SPENDLY-556: Expense uses the app's own background and aura glow, so
+  // sign-in reads as the same product. Nutrition keeps the previous artwork.
+  if (usesExpenseLook(ACTIVE_PRODUCT)) {
+    return (
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.background }]}>
+        <AuraBackground />
+      </View>
+    );
+  }
 
-  // Light mode background matches the reference
-  // Dark mode is a deep variant
-  const baseColors = isDark 
-    ? ["#0F172A", "#0B1120"] as const
-    : ["#F6F9FC", "#FFFFFF"] as const;
-
-  const accent1 = isDark ? "rgba(8, 117, 209, 0.15)" : "rgba(8, 117, 209, 0.08)";
-  const accent2 = isDark ? "rgba(25, 199, 154, 0.15)" : "rgba(25, 199, 154, 0.08)";
+  const legacy = legacyAuthBackground(theme);
+  const baseColors = legacy.base;
+  const accent1 = legacy.accent1;
+  const accent2 = legacy.accent2;
 
   return (
     <View style={[StyleSheet.absoluteFill, { backgroundColor: baseColors[0] }]}>
@@ -63,7 +70,7 @@ export function AuthBackground() {
                 key={`dot-${col}-${row}`}
                 style={[
                   styles.dot,
-                  { backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(15, 47, 75, 0.05)" },
+                  { backgroundColor: legacy.dot },
                 ]}
               />
             ))}
