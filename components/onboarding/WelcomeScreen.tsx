@@ -13,8 +13,8 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { haptic } from "@/lib/haptics";
 
 function getFriendlyFirstName(rawName?: string): string {
@@ -30,9 +30,10 @@ export function WelcomeScreen() {
   const { user } = useAuth();
   const { data } = useUserDoc();
   const { isFirstLaunch, completeWelcome, launchSetupWizard } = useSetupProgress();
-  const { theme, themeName } = useTheme();
+  const { theme } = useTheme();
   const surfaces = useSurfaces();
-  const isDark = themeUsesDarkPalette(themeName);
+  // SPENDLY-556: RN Modal portals outside SpendlyUIScope on web; keep the theme vars.
+  const scopeVars = useSpendlyScopeVars();
 
   const [visible, setVisible] = useState(isFirstLaunch);
 
@@ -68,14 +69,14 @@ export function WelcomeScreen() {
       statusBarTranslucent
       onRequestClose={handleExploreOnOwn}
     >
-      <View style={[styles.overlay, { backgroundColor: "rgba(0,0,0,0.72)" }]}>
+      <View style={[styles.overlay, { backgroundColor: theme.colors.scrim }, scopeVars]}>
         <Animated.View
           entering={SlideInUp.duration(350).springify().damping(18)}
           style={[
             styles.card,
             {
               backgroundColor: theme.colors.card,
-              borderColor: isDark ? "rgba(107, 99, 255, 0.3)" : "rgba(79, 70, 255, 0.2)",
+              borderColor: withAlpha(theme.colors.primary, surfaces.isDark ? 0.3 : 0.2),
             },
           ]}
         >
@@ -83,7 +84,7 @@ export function WelcomeScreen() {
           <View
             style={[
               styles.heroIconBadge,
-              { backgroundColor: isDark ? "rgba(107, 99, 255, 0.18)" : "rgba(79, 70, 255, 0.1)" },
+              { backgroundColor: surfaces.wash(theme.colors.primary) },
             ]}
           >
             <Sparkles size={36} color={theme.colors.primary} />
@@ -118,11 +119,11 @@ export function WelcomeScreen() {
             accessibilityRole="button"
             accessibilityLabel="Start interactive setup wizard"
           >
-            <Wand2 size={18} color="#FFFFFF" />
-            <Text style={styles.primaryButtonText}>
+            <Wand2 size={18} color={theme.colors.primaryForeground} />
+            <Text style={[styles.primaryButtonText, { color: theme.colors.primaryForeground }]}>
               Start Setup Wizard
             </Text>
-            <ArrowRight size={18} color="#FFFFFF" />
+            <ArrowRight size={18} color={theme.colors.primaryForeground} />
           </Pressable>
 
           {/* Secondary CTA: Explore on Own */}
@@ -217,7 +218,6 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   primaryButtonText: {
-    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "800",
   },
