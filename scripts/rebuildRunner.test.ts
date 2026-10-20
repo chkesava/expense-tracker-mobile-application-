@@ -92,6 +92,29 @@ describe("rebuild runner (SPENDLY-499)", () => {
     expect(commits).toEqual([]);
   });
 
+  it("never writes an excluded account, even with variance", async () => {
+    const { db, writes } = fakeDb({
+      u1: {
+        accounts: [
+          { id: "keep", typeId: "tb", openingBalance: 0, currentBalance: 5 },
+          { id: "fix", typeId: "tb", openingBalance: 0, currentBalance: 7 },
+        ],
+        accountTypes: [{ id: "tb", name: "Bank Account" }],
+      },
+    });
+    const lines: string[] = [];
+    const report = await rebuildUser(db, "u1", {
+      mode: "apply",
+      steps: { accounts: true, epf: false, dashboards: false },
+      excludeAccountIds: ["keep"],
+      log: (l) => lines.push(l),
+      today: "2026-10-20",
+    });
+    expect(report.accountsNeedingWrite).toBe(1);
+    expect(writes.map((w) => w.path)).toEqual(["users/u1/accounts/fix"]);
+    expect(lines).toContain("  [Excluded] keep (has variance, left as is)");
+  });
+
   it("skips a user whose source read fails, writing nothing", async () => {
     const { db, commits } = fakeDb({ u1: {} });
     (db as any).collection = () => ({

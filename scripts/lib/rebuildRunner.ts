@@ -27,6 +27,8 @@ export type RebuildOptions = {
   steps: { accounts: boolean; epf: boolean; dashboards: boolean };
   /** Only this account (accounts step). */
   accountId?: string | null;
+  /** Never touch these accounts (accounts step): left for a human, e.g. an ambiguous card. */
+  excludeAccountIds?: string[];
   /** Allow writing an EPF total of zero over a non-zero one. */
   overrideZeros?: boolean;
   log?: (line: string) => void;
@@ -174,6 +176,10 @@ export async function rebuildUser(db: Firestore, uid: string, options: RebuildOp
     log(`--- Accounts ---`);
     for (const plan of state.accounts) {
       if (options.accountId && plan.accountId !== options.accountId) continue;
+      if (options.excludeAccountIds?.includes(plan.accountId)) {
+        log(`  [Excluded] ${plan.accountId}${plan.needsWrite ? " (has variance, left as is)" : ""}`);
+        continue;
+      }
       if (!plan.needsWrite) {
         log(`  [OK] ${plan.accountId}`);
         continue;
@@ -276,6 +282,7 @@ export async function runRebuildCli(db: Firestore, argv: string[], steps: Rebuil
     mode,
     steps,
     accountId: value("--accountId"),
+    excludeAccountIds: (value("--excludeAccountId") ?? "").split(",").filter(Boolean),
     overrideZeros: argv.includes("--override-zeros"),
   };
   const uids = uid ? [uid] : await listUserIds(db);
