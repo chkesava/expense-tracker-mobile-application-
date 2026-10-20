@@ -80,6 +80,9 @@ import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { isActiveLedgerRow } from "@/shared/utils/ledgerRow";
 import { fetchAccountTypes } from "@/services/ledger/fetchAccountTypes";
 import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
+import { stageMutationOps } from "@/lib/stageMutationOps";
+import { computeDashboardExpenseCreateOps } from "@/shared/utils/dashboardMutations";
+import type { MutationOp } from "@/shared/types/mutations";
 
 async function loadSplitLedgerEntries(
   db: Firestore,
@@ -206,6 +209,42 @@ function applyShareSideEffects(
   })) {
     batch.update(doc(db, "paymentRequests", patch.requestId), patch.fields);
   }
+}
+
+type DashboardExpenseRow = Parameters<typeof computeDashboardExpenseCreateOps>[1];
+
+/**
+ * SPENDLY-496 — the ops a split's own-share expense needs besides the expense
+ * doc: its account balance (when it was paid from one) and the month's
+ * dashboard summary. Without them the share was counted by a rebuild but
+ * never by the stored balance or the dashboard.
+ */
+async function splitExpenseSideOps(
+  db: Firestore,
+  uid: string,
+  expense: Record<string, unknown>
+): Promise<MutationOp[]> {
+  const row = expense as DashboardExpenseRow & { accountId?: string };
+  const ops: MutationOp[] = [...computeDashboardExpenseCreateOps(uid, row)];
+  if (row.accountId) {
+    const account = (await fetchAccountTypes(db, uid, [row.accountId])).get(row.accountId);
+    if (account?.exists) {
+      ops.push(
+        ...buildAccountBalanceOps(uid, [
+          {
+            accountId: row.accountId,
+            amountDelta: -(Number(row.amount) || 0),
+            isCreditCard: account.isCreditCard,
+            oldBalance: account.oldBalance,
+            oldOutstanding: account.oldOutstanding,
+            needsInitialization: account.needsInitialization,
+            isUnbilled: true,
+          },
+        ])
+      );
+    }
+  }
+  return ops;
 }
 
 export function useSplits(options?: { enabled?: boolean }) {
@@ -427,6 +466,9 @@ export function useSplits(options?: { enabled?: boolean }) {
           ...expense,
           createdAt: serverTimestamp(),
         });
+        // SPENDLY-496: the share is an ordinary expense, so its account and
+        // the month's dashboard summary move with it, in the same batch.
+        stageMutationOps(batch, db, await splitExpenseSideOps(db, uid, expense));
       }
 
       const outcome = await commitWrite(() => batch.commit(), { label: "split" });
@@ -696,11 +738,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         isCreditCard: accountTypes.get(accountId)?.isCreditCard || false, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding,
         isUnbilled: true
       }]);
-      for (const op of balOps) {
-        if ("data" in op) {
-          batch.update(doc(db, (op.ref as any).path), op.data as any);
-        }
-      }
+      stageMutationOps(batch, db, balOps);
       if (options?.claimId) {
         batch.delete(doc(db, "splitShareClaims", options.claimId));
       }
@@ -752,11 +790,7 @@ export function useSplits(options?: { enabled?: boolean }) {
           isUnbilled: true
         }));
         const balOps = buildAccountBalanceOps(uid, balanceDeltas);
-        for (const op of balOps) {
-          if ("data" in op) {
-          batch.update(doc(db, (op.ref as any).path), op.data as any);
-        }
-        }
+        stageMutationOps(batch, db, balOps);
       }
 
       applyShareSideEffects(
@@ -827,6 +861,10 @@ export function useSplits(options?: { enabled?: boolean }) {
         built.splitUpdates,
         { currency }
       );
+      if (built.expense) {
+        // SPENDLY-496: the gift expense belongs in its month's dashboard summary.
+        stageMutationOps(batch, db, computeDashboardExpenseCreateOps(uid, built.expense as DashboardExpenseRow));
+      }
 
       let totalDelta = 0;
       if (built.expense) totalDelta -= Number(built.expense.amount) || 0;
@@ -840,11 +878,7 @@ export function useSplits(options?: { enabled?: boolean }) {
           isCreditCard: accountTypes.get(payingAccountId)?.isCreditCard || false, oldBalance: accountTypes.get(payingAccountId)?.oldBalance, oldOutstanding: accountTypes.get(payingAccountId)?.oldOutstanding,
           isUnbilled: true
         }]);
-        for (const op of balOps) {
-          if ("data" in op) {
-          batch.update(doc(db, (op.ref as any).path), op.data as any);
-        }
-        }
+        stageMutationOps(batch, db, balOps);
       }
       const outcome = await commitWrite(() => batch.commit(), {
         label: "gift purchase",
@@ -1312,11 +1346,7 @@ export function useSplits(options?: { enabled?: boolean }) {
           isUnbilled: true
         }));
         const balOps = buildAccountBalanceOps(uid, balanceDeltas);
-        for (const op of balOps) {
-          if ("data" in op) {
-          batch.update(doc(db, (op.ref as any).path), op.data as any);
-        }
-        }
+        stageMutationOps(batch, db, balOps);
       }
       for (const requestId of linked.paymentRequestIds) {
         batch.update(doc(db, "paymentRequests", requestId), {

@@ -33,6 +33,7 @@ import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite, type WriteOutcome } from "@/lib/firestoreWrite";
 import { newId } from "@/lib/id";
 import { docAlreadyWritten, fetchAccountTypes } from "@/services/ledger/fetchAccountTypes";
+import { stageMutationOps } from "@/lib/stageMutationOps";
 import type { AccountEntry } from "@/shared/types/expense";
 import type { MutationOp } from "@/shared/types/mutations";
 import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
@@ -129,20 +130,6 @@ function stageStockProfileUpsert(
     stripUndefined({ ...identity, status: "active", updatedAt: serverTimestamp() }),
     { merge: true }
   );
-}
-
-/** Stages {@link MutationOp}s (balance / net-worth) on a raw batch. */
-function stageMutationOps(
-  batch: ReturnType<typeof writeBatch>,
-  db: ReturnType<typeof requireDb>,
-  ops: MutationOp[]
-): void {
-  for (const op of ops) {
-    const ref = doc(db, op.ref.path);
-    if (op.op === "update") batch.update(ref, op.data as Record<string, unknown>);
-    else if (op.op === "set") batch.set(ref, op.data, op.merge ? { merge: true } : {});
-    else batch.delete(ref);
-  }
 }
 
 /**
