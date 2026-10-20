@@ -1,20 +1,15 @@
 import { collection, deleteField, doc, getDoc, getDocs, query, where, writeBatch, serverTimestamp } from "firebase/firestore";
 import { getFirestoreDb } from "@/lib/firebase";
-import {
-  computeBankBalance,
-  computeOutstandingCredit,
-  borrowingsCreditedTo,
-  repaymentsPaidFrom,
-  receivablesPaidFrom,
-  receivableRepaymentsInto,
-} from "@/shared/utils/accountBalance";
-import { getAccountKind } from "@/shared/utils/accountKind";
 import type { Account, Expense, Income, AccountPayment, AccountEntry, AccountTransfer } from "@/shared/types/expense";
 import type { Borrowing, BorrowingRepayment } from "@/shared/types/borrowing";
 import type { Receivable, ReceivableRepayment } from "@/shared/types/receivable";
 import { todayDateKey } from "@/shared/utils/dates";
 import type { OpenCreditBillSlice } from "@/shared/utils/accountBalance";
-import { planCardRebuild, type CardRebuildPlan } from "@/shared/utils/reconciliation";
+import {
+  accountRebuildWrite,
+  accountSourcesFor,
+  planAccountRebuild,
+} from "@/shared/utils/reconciliation";
 
 export type RebuildVariance = {
   field: string;
@@ -29,6 +24,14 @@ export type RebuildResult = {
   applied: boolean;
 };
 
+/**
+ * In-app rebuild of one account (EditAccountModal → "Rebuild").
+ *
+ * SPENDLY-499: computes through `planAccountRebuild` and writes
+ * `accountRebuildWrite`, the same single reference both scripts use, so the
+ * three rebuilds can no longer disagree. A source query that fails throws, so
+ * nothing is ever marked healthy on partial data.
+ */
 export async function rebuildFinancialSummaries(
   uid: string,
   accountId: string,
@@ -38,7 +41,7 @@ export async function rebuildFinancialSummaries(
   if (!db) throw new Error("Firestore not initialized");
   const accountRef = doc(db, "users", uid, "accounts", accountId);
   const accountSnap = await getDoc(accountRef);
-  
+
   if (!accountSnap.exists()) {
     throw new Error(`Account ${accountId} not found.`);
   }
@@ -46,10 +49,8 @@ export async function rebuildFinancialSummaries(
   const account = { id: accountSnap.id, ...accountSnap.data() } as unknown as Account;
   const typesSnap = await getDocs(collection(db, "users", uid, "accountTypes"));
   const typeMap = new Map<string, string>();
-  typesSnap.forEach(d => typeMap.set(d.id, d.data().name));
-  
+  typesSnap.forEach((d) => typeMap.set(d.id, d.data().name));
   const typeName = typeMap.get(account.typeId) || "";
-  const kind = getAccountKind(typeName);
 
   async function fetchCollection<T>(colName: string, idField?: string): Promise<T[]> {
     let q = query(collection(db!, "users", uid, colName));
@@ -57,112 +58,42 @@ export async function rebuildFinancialSummaries(
       q = query(q, where(idField, "==", accountId));
     }
     const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }) as unknown as T);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as unknown as T);
   }
 
-  const expenses = await fetchCollection<Expense>("expenses", "accountId");
-  // Payments are linked by fromAccountId or toAccountId, requiring 2 queries or a full fetch.
-  // For client reliability, just fetch all and filter in memory since payments volume is manageable.
-  const allPayments = await fetchCollection<AccountPayment>("accountPayments");
-  const filteredPayments = allPayments.filter(p => p.fromAccountId === account.id || p.toAccountId === account.id);
+  // Rows with an `accountId` are queried by it; the rest relate through other
+  // fields (fromAccountId/toAccountId, creditedAccountId, …) and are scoped in
+  // memory by `accountSourcesFor`, the same helper the scripts use.
+  const sources = accountSourcesFor(account.id, {
+    expenses: await fetchCollection<Expense>("expenses", "accountId"),
+    incomes: await fetchCollection<Income>("incomes", "accountId"),
+    entries: await fetchCollection<AccountEntry>("accountEntries", "accountId"),
+    payments: await fetchCollection<AccountPayment>("accountPayments"),
+    transfers: await fetchCollection<AccountTransfer>("accountTransfers"),
+    borrowings: await fetchCollection<Borrowing>("borrowings"),
+    borrowingRepayments: await fetchCollection<BorrowingRepayment>("borrowingRepayments"),
+    receivables: await fetchCollection<Receivable>("receivables"),
+    receivableRepayments: await fetchCollection<ReceivableRepayment>("receivableRepayments"),
+    bills: await fetchCollection<OpenCreditBillSlice>("creditCardBills", "accountId"),
+  });
 
-  let expectedUpdates: Partial<Account> = {};
-  const variances: RebuildVariance[] = [];
-  
-  let cardPlan: CardRebuildPlan | null = null;
-  if (kind === "credit") {
-    const bills = await fetchCollection<OpenCreditBillSlice>("creditCardBills", "accountId");
-    // SPENDLY-497: refunds, transfers and adjustments move a card too.
-    const cardIncomes = await fetchCollection<Income>("incomes", "accountId");
-    const cardEntries = await fetchCollection<AccountEntry>("accountEntries", "accountId");
-    const cardTransfers = (await fetchCollection<AccountTransfer>("accountTransfers")).filter(
-      (t) => t.fromAccountId === account.id || t.toAccountId === account.id
-    );
-    const usage = computeOutstandingCredit(account, expenses, filteredPayments, bills, todayDateKey(), {
-      incomes: cardIncomes,
-      entries: cardEntries,
-      transfers: cardTransfers,
-    });
-    cardPlan = planCardRebuild(
-      account as unknown as Record<string, unknown>,
-      usage.totalOutstanding,
-      usage.unappliedCredit
-    );
-    expectedUpdates = { currentOutstanding: cardPlan.currentOutstanding };
-  } else {
-    const incomes = await fetchCollection<Income>("incomes", "accountId");
-    const entries = await fetchCollection<AccountEntry>("accountEntries", "accountId");
-    
-    // SPENDLY-436: the real collection is "accountTransfers" — "transfers"
-    // doesn't exist, so transfers were always silently invisible here.
-    const allTransfers = await fetchCollection<AccountTransfer>("accountTransfers");
-    const filteredTransfers = allTransfers.filter(t => t.fromAccountId === account.id || t.toAccountId === account.id);
-    
-    // SPENDLY-436: these collections don't have a generic "accountId" field —
-    // each relates to an account through its own named field
-    // (creditedAccountId / paymentAccountId / sourceAccountId /
-    // receivedAccountId), so fetch the full collection and filter in memory
-    // with the same helpers `computeBankBalance` relies on.
-    const allBorrowings = await fetchCollection<Borrowing>("borrowings");
-    const allBorrowingRepayments = await fetchCollection<BorrowingRepayment>("borrowingRepayments");
-    const allReceivables = await fetchCollection<Receivable>("receivables");
-    const allReceivableRepayments = await fetchCollection<ReceivableRepayment>("receivableRepayments");
-    const borrowings = borrowingsCreditedTo(account.id, allBorrowings);
-    const borrowingRepayments = repaymentsPaidFrom(account.id, allBorrowingRepayments);
-    const receivables = receivablesPaidFrom(account.id, allReceivables);
-    const receivableRepayments = receivableRepaymentsInto(account.id, allReceivableRepayments);
+  const plan = planAccountRebuild(account, typeName, sources, todayDateKey());
+  const balanceField = plan.kind === "credit" ? "currentOutstanding" : "currentBalance";
+  const variances: RebuildVariance[] =
+    plan.variances.some((line) => line.startsWith(`${balanceField}:`))
+      ? [{ field: balanceField, expected: plan.set[balanceField], actual: (account as any)[balanceField] }]
+      : [];
 
-    const bal = computeBankBalance(
-      account,
-      expenses,
-      incomes,
-      filteredPayments,
-      entries,
-      filteredTransfers,
-      borrowings,
-      borrowingRepayments,
-      receivables,
-      receivableRepayments,
-      todayDateKey()
-    );
-
-    expectedUpdates = {
-      currentBalance: bal,
-    };
-  }
-
-  for (const [key, expected] of Object.entries(expectedUpdates)) {
-    const actual = (account as any)[key];
-    if (actual !== expected && !(actual === undefined && expected === null)) {
-      variances.push({ field: key, expected, actual });
-    }
-  }
-
-  const hasVariance = variances.length > 0;
-  // SPENDLY-497: a card also needs a write to clear stale derived fields and
-  // its "needs reconciliation" flag, even when the total is already right.
-  const needsWrite = hasVariance || Boolean(cardPlan?.needsWrite);
-
-  if (needsWrite && mode === "apply") {
+  if (plan.needsWrite && mode === "apply") {
     const batch = writeBatch(db);
-    batch.update(accountRef, {
-      ...expectedUpdates,
-      balanceReconciliationStatus: "healthy",
-      ...(cardPlan
-        ? {
-            summaryReconciliationStatus: "healthy",
-            ...Object.fromEntries(cardPlan.staleFields.map((field) => [field, deleteField()])),
-          }
-        : {}),
-      balanceLastRebuiltAt: serverTimestamp(),
-    });
+    batch.update(accountRef, accountRebuildWrite(plan, { remove: deleteField, now: serverTimestamp }));
     await batch.commit();
   }
 
   return {
     accountId,
-    hasVariance,
+    hasVariance: variances.length > 0,
     variances,
-    applied: needsWrite && mode === "apply",
+    applied: plan.needsWrite && mode === "apply",
   };
 }
