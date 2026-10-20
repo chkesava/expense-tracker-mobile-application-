@@ -6,6 +6,7 @@
 
 import type { GoalFundingMode, GoalFundingResult, GoalFundingResultSet, GoalFundingStatus } from "../types/goalFunding";
 import type { AdjustedCapacity } from "./goalFundingInputs";
+import { monthTitle } from "./calendarMonth";
 import { GOAL_FUNDING_ASSUMPTIONS } from "./goalFundingModel";
 
 export const GOAL_FUNDING_MODE_INFO: Record<GoalFundingMode, { label: string; explanation: string }> = {
@@ -50,10 +51,15 @@ export function comparisonText(r: GoalFundingResult, format: (n: number) => stri
   return `${current} · ${scenario}${change}`;
 }
 
+/** "2027-03-01" as "1 March 2027", so a screen reader never reads the ISO date (SPENDLY-555). */
+function spokenDate(date: string): string {
+  return `${Number(date.slice(8, 10))} ${monthTitle(date.slice(0, 7))}`;
+}
+
 export function goalRowAccessibilityLabel(r: GoalFundingResult, format: (n: number) => string): string {
   const parts = [r.name, GOAL_FUNDING_STATUS_LABELS[r.status], comparisonText(r, format)];
   if (r.requiredMonthly !== null) parts.push(`needs ${format(r.requiredMonthly)} a month`);
-  if (r.projectedCompletion) parts.push(`finishes ${r.projectedCompletion}${r.monthsAheadOfTarget !== null ? `, ${monthsPhrase(r.monthsAheadOfTarget)}` : ""}`);
+  if (r.projectedCompletion) parts.push(`finishes ${spokenDate(r.projectedCompletion)}${r.monthsAheadOfTarget !== null ? `, ${monthsPhrase(r.monthsAheadOfTarget)}` : ""}`);
   return parts.join(". ");
 }
 

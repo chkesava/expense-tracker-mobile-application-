@@ -2,8 +2,11 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Modal } from "@/components/common/Modal";
 import { appDialog } from "@/lib/appDialog";
+import { useSettings } from "@/providers/SettingsProvider";
 import { GOAL_FUNDING_ENGINE_VERSION } from "@/shared/types/goalFunding";
 import type { GoalFundingPlan } from "@/shared/utils/goalFundingPlans";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
+import { toLocalDateKey } from "@/shared/utils/dates";
 import { GOAL_FUNDING_MODE_INFO } from "@/shared/utils/goalFundingView";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -33,6 +36,8 @@ export function GoalFundingPlansSheet({
   onDelete: (plan: GoalFundingPlan) => void;
 }) {
   const { theme } = useTheme();
+  // SPENDLY-555: dates follow the user's date format, like the rest of the optimizer.
+  const { settings } = useSettings();
   const text = { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm };
   const muted = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
   const link = { color: theme.colors.primary, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.xs };
@@ -56,7 +61,7 @@ export function GoalFundingPlansSheet({
               {p.archived ? " · Archived" : ""}
             </Text>
             <Text style={muted}>
-              {GOAL_FUNDING_MODE_INFO[p.mode]?.label ?? p.mode} · {p.goalSnapshot.length} goal{p.goalSnapshot.length === 1 ? "" : "s"} · saved {new Date(p.updatedAtMs).toLocaleDateString()}
+              {GOAL_FUNDING_MODE_INFO[p.mode]?.label ?? p.mode} · {p.goalSnapshot.length} goal{p.goalSnapshot.length === 1 ? "" : "s"} · saved {formatDisplayDate(toLocalDateKey(new Date(p.updatedAtMs)), settings.dateFormat)}
               {p.engineVersion !== GOAL_FUNDING_ENGINE_VERSION ? ` · made with an older calculation (v${p.engineVersion})` : ""}
             </Text>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: theme.space.md }}>
