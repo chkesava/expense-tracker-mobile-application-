@@ -476,3 +476,23 @@ export interface Income {
   updatedAt?: unknown;
   createdAt: unknown;
 }
+
+/**
+ * Colours a user can pick for an account. Stored on the account (`color`),
+ * so they are data, not theme styling: never retheme them. The first is the
+ * default for a new account.
+ */
+export const ACCOUNT_COLORS = [
+  "#4F46E5",
+  "#2563EB",
+  "#0D9488",
+  "#16A34A",
+  "#D97706",
+  "#DC2626",
+  "#9333EA",
+  "#DB2777",
+  "#475569",
+] as const;
+
+/** Marks drawn on an account colour (the selected swatch's check): every one is mid-to-dark. */
+export const ACCOUNT_COLOR_INK = "#FFFFFF";

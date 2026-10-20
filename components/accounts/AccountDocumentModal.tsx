@@ -4,14 +4,13 @@ import * as DocumentPicker from "expo-document-picker";
 import { FileText, Paperclip } from "lucide-react-native";
 
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { accountAccent, ACCOUNT_RED } from "@/components/accounts/accountScreenTheme";
 import { haptic } from "@/lib/haptics";
 import { logWarning } from "@/lib/errors";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 import type { AccountDocument } from "@/shared/types/expense";
 import type { PickedDocumentFile } from "@/services/accounts/accountDocumentsStore";
 import {
@@ -44,10 +43,10 @@ export function AccountDocumentModal({
   onAdd: (file: PickedDocumentFile, meta: { name: string; note: string }) => Promise<void>;
   onSaveMeta: (meta: { name: string; note: string }) => Promise<void>;
 }) {
-  const { theme, themeName } = useTheme();
+  const { theme } = useTheme();
   const surfaces = useSurfaces();
-  const isDark = themeUsesDarkPalette(themeName);
-  const accent = accountAccent(isDark);
+  // SPENDLY-552: the theme accent, not the fixed account green.
+  const accent = theme.colors.primary;
 
   const [file, setFile] = useState<PickedDocumentFile | undefined>();
   const [name, setName] = useState("");
@@ -132,6 +131,21 @@ export function AccountDocumentModal({
       isOpen={isOpen}
       onClose={onClose}
       title={isEditing ? "Edit document" : "Add document"}
+      // SPENDLY-552: 6a form pattern, the submit is pinned below the body.
+      // Same handler, same disabled condition, same label as before.
+      footer={
+        <SheetActions
+          secondary={{ label: "Cancel", onPress: onClose }}
+          primary={{
+            label: isEditing ? "Save" : "Upload",
+            onPress: () => {
+              void handleSave();
+            },
+            disabled: !canSave,
+            loading: saving,
+          }}
+        />
+      }
     >
       <ScrollView
         keyboardShouldPersistTaps="handled"
@@ -143,9 +157,7 @@ export function AccountDocumentModal({
               styles.storedFile,
               {
                 backgroundColor: surfaces.tile,
-                borderColor: isDark
-                  ? "rgba(148,163,184,0.16)"
-                  : "rgba(15,23,42,0.08)",
+                borderColor: theme.colors.border,
               },
             ]}
           >
@@ -181,9 +193,7 @@ export function AccountDocumentModal({
                   : surfaces.tile,
                 borderColor: file
                   ? accent
-                  : isDark
-                    ? "rgba(148,163,184,0.20)"
-                    : "rgba(15,23,42,0.10)",
+                  : theme.colors.border,
                 opacity: pressed ? 0.7 : 1,
               },
             ]}
@@ -212,7 +222,7 @@ export function AccountDocumentModal({
         )}
 
         {pickError ? (
-          <Text style={[styles.error, { color: ACCOUNT_RED }]}>{pickError}</Text>
+          <Text style={[styles.error, { color: theme.colors.destructive }]}>{pickError}</Text>
         ) : null}
 
         <Input
@@ -236,21 +246,6 @@ export function AccountDocumentModal({
           style={styles.noteInput}
         />
 
-        <View style={styles.actions}>
-          <Button variant="ghost" onPress={onClose} style={styles.action}>
-            Cancel
-          </Button>
-          <Button
-            onPress={() => {
-              void handleSave();
-            }}
-            disabled={!canSave}
-            loading={saving}
-            style={styles.action}
-          >
-            {isEditing ? "Save" : "Upload"}
-          </Button>
-        </View>
       </ScrollView>
     </Modal>
   );
