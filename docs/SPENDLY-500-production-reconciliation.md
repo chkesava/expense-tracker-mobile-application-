@@ -20,8 +20,8 @@ Run from `main` `1995db9` with the user's service account. Nothing was written. 
 
 | Account | Stored | Rebuilt | Explanation | Proposed action |
 |---|---|---|---|---|
-| **State Bank of India** (savings) | ₹49,654.96 | **₹23,654.96** | Two transfers to Hand Cash, **₹24,000 on 29 Jul** and **₹2,000 on 12 Aug**, never reached the stored balance. The 9 Oct rebuild used the pre-436 script, which read a non-existent `transfers` collection and so saw no transfers. Rebuilt = opening ₹29,999.96 + income ₹33,000 − expenses ₹9,334 − card payment ₹4,011 − transfers ₹26,000 | **Needs the user to confirm** the real SBI balance |
-| **Hand Cash** | ₹0 | **₹26,000** | The receiving side of the same two transfers. Its baseline is 29 Jul with opening ₹0, so both transfers count | **Needs the user to confirm** the real cash in hand |
+| **State Bank of India** (savings) | ₹49,654.96 | **₹23,654.96** | Two transfers to Hand Cash, **₹24,000 on 29 Jul** and **₹2,000 on 12 Aug**, never reached the stored balance. The 9 Oct rebuild used the pre-436 script, which read a non-existent `transfers` collection and so saw no transfers. Rebuilt = opening ₹29,999.96 + income ₹33,000 − expenses ₹9,334 − card payment ₹4,011 − transfers ₹26,000 | **The user's real balance is ₹562** (2026-10-20). Neither the stored nor the rebuilt value is right: about ₹23,093 of SBI activity was never recorded. **Do not apply the rebuild.** Instead the user re-baselines (below) |
+| **Hand Cash** | ₹0 | **₹26,000** | The receiving side of the same two transfers. Its baseline is 29 Jul with opening ₹0, so both transfers count | **The user's real cash is ₹2,792** (2026-10-20). About ₹23,208 of cash spending was never recorded. **Do not apply the rebuild.** Re-baseline instead |
 | **Axis Credit Card** | ₹146 | ₹0 | Charges ₹299 (2 Sep) and ₹146 (11 Oct); payments **₹299 on 2 Sep and ₹299 on 3 Sep**. If both payments are real, the card is ₹153 in credit; the ledger sets that aside (497 rule) and shows ₹0 owed. If the 3 Sep payment is a duplicate entry, the real amount owed is ₹146 and the rebuild would be wrong | **Ambiguous: excluded from the apply** (ticket rule) until the user confirms whether ₹299 was paid twice |
 | One card (another user) | ₹13,977.539999… | ₹13,977.54 | Floating-point dust only | Apply (no money change) |
 | 9 cards (several users) | — | — | Stale stored `unbilledSpend` / `availableCredit` (no longer read since 497) | Clear (no visible change) |
@@ -37,6 +37,17 @@ Run from `main` `1995db9` with the user's service account. Nothing was written. 
 
 The stored and rebuilt EPF balance are both **₹45,671.11**. There is no change.
 
+### SBI and Hand Cash: re-baseline instead of rebuild (user's real balances, 2026-10-20)
+
+A rebuild can only recompute from recorded rows. When real-world money moved without being recorded, the supported fix is the account's **opening balance as of a date** (`openingBalance` + `balanceAsOfDate`, the "balance as of" fields in the account editor):
+
+| Account | Set opening balance | As of | Effect |
+|---|---|---|---|
+| State Bank of India | **₹562** | 2026-10-20 | Rows dated before it are treated as inside the opening balance. The stored value and every later rebuild = ₹562 + activity after that date |
+| Hand Cash | **₹2,792** | 2026-10-20 | Same |
+
+The user does this in the app (account editor → balance and "as of" date). After that, dry-run 2 must show **no** variance for either account. It is recorded here so the apply never "corrects" them back to the ledger values.
+
 ## Found during the dry-run: live dashboard write gaps (not fixed by 495)
 
 These paths change spending without updating the month's dashboard summary, so the dashboard drifts again after any rebuild until they are fixed:
@@ -45,12 +56,13 @@ These paths change spending without updating the month's dashboard summary, so t
 2. **Merging a category into another.** `hooks/useCategories.ts` re-labels expenses but leaves `categoryTotals` on the old category.
 3. **Deleting a split.** `hooks/useSplits.ts` soft-deletes the linked expenses without a dashboard decrement.
 
-**Proposal:** fix these as a follow-up ticket **before** the production apply.
+**Now fixed** in [SPENDLY-563](https://kesavach.atlassian.net/browse/SPENDLY-563), which blocks this task. It also fixes a split delete refunding an already-deleted expense twice.
 
 ## Required order before any `--apply`
 
-1. Fix the three dashboard write gaps above (a follow-up ticket).
-2. **Release the app.** Phones on old builds keep writing the pre-495/496/497 shapes.
+1. ~~Fix the three dashboard write gaps~~: SPENDLY-563, built; merge to `main` before the release.
+2. **Release the app.** The user plans a major release for 2026-10-21. Phones on old builds keep writing the pre-495/496/497/563 shapes.
+2a. The user re-baselines SBI (₹562) and Hand Cash (₹2,792) as of the release date.
 3. Dry-run 2, from `main` after the release.
 4. The user approves item by item, especially SBI, Hand Cash and Axis.
 5. `--apply`, one script at a time.
