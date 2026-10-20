@@ -45,11 +45,11 @@ import { GlassSurface } from "@/components/ui/GlassSurface";
 import {
   SMOKE_INACTIVE_ALPHA,
   SMOKE_INACTIVE_ICON_ALPHA,
+  accentLens,
   glassAccent,
   rgbaString,
   smokeActiveLens,
   smokeActivePill,
-  smokeLensFor,
 } from "@/components/ui/glassTokens";
 import { haptic } from "@/lib/haptics";
 import { useModals } from "@/providers/ModalProvider";
@@ -78,8 +78,10 @@ const ICON_MAP: Record<
 
 /** Inner padding between the capsule edge and the tab row. */
 const CAPSULE_PADDING = 8;
-/** How far the active lens reaches into that padding: just enough to stay contained. */
-const PILL_OVERHANG = 2;
+/** Horizontal inset of the active tile inside its tab, so tiles never touch. */
+const TILE_INSET = 4;
+/** The active tile is a rounded rectangle, not a pill (SPENDLY-561). */
+const TILE_RADIUS = 16;
 
 function NavDestination({
   link,
@@ -118,7 +120,7 @@ function NavDestination({
         <Text
           style={[
             styles.tabLabel,
-            { color, fontWeight: isActive ? "700" : "500" },
+            { color, fontWeight: isActive ? "600" : "500" },
           ]}
           numberOfLines={1}
           adjustsFontSizeToFit
@@ -186,7 +188,7 @@ export function BottomNav() {
     };
   }, [keyboardProgress, motionMs]);
 
-  // ---- Sliding active indicator -------------------------------------------
+  // ---- Sliding active tile ------------------------------------------------
   // SPENDLY-172: React owns where the lens is and whether it shows; Reanimated
   // only animates a transient offset that slides it in from the previous tab.
   // The tabs are equal-width flex children, so the lens's frame follows from
@@ -239,14 +241,14 @@ export function BottomNav() {
     ],
   }));
 
-  // SPENDLY-170/172: the capsule is blue-indigo glass in every theme, so its
-  // content is white; the active tab takes the user's accent, lifted toward
-  // white only as far as it needs to read, inside a blue/purple lens.
-  // lib/navContrast.test.ts pins both against the lightest backdrops.
+  // SPENDLY-561: the capsule is deep charcoal in every theme, so inactive
+  // content is muted grey; the active tab takes the user's accent, lifted
+  // toward white only as far as it needs to read, on a translucent tile of
+  // that same accent. lib/navContrast.test.ts pins both against the lightest
+  // backdrops.
   const isDark = themeUsesDarkPalette(themeName);
-  // Every theme keeps the blue/purple lens except Midnight Emerald (SPENDLY-533).
-  const lens = smokeLensFor(themeName);
   const { primary, background, card } = theme.colors;
+  const lens = useMemo(() => accentLens(primary), [primary]);
   const activeColor = useMemo(
     () =>
       glassAccent(
@@ -287,27 +289,24 @@ export function BottomNav() {
           accessibilityRole="tablist"
           onLayout={(event) => setRowWidth(event.nativeEvent.layout.width)}
         >
-          {/* A subtle tinted lens, contained inside the capsule. */}
+          {/* A translucent accent tile behind the active tab's icon and label. */}
           {showLens ? (
             <Animated.View
               pointerEvents="none"
               style={[
                 styles.indicator,
                 styles.indicatorLens,
-                { left: activeIndex * tabWidth, width: tabWidth, borderColor: lens.border },
+                {
+                  left: activeIndex * tabWidth + TILE_INSET,
+                  width: tabWidth - TILE_INSET * 2,
+                  borderColor: lens.border,
+                },
                 slideStyle,
               ]}
             >
               <LinearGradient
                 colors={[rgbaString(lens.top), rgbaString(lens.bottom)]}
                 style={StyleSheet.absoluteFill}
-              />
-              {/* The lens's own glint along its top edge. */}
-              <LinearGradient
-                colors={[`rgba(${lens.glint}, 0)`, `rgba(${lens.glint}, 0.4)`, `rgba(${lens.glint}, 0)`]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.lensGlint}
               />
             </Animated.View>
           ) : null}
@@ -365,20 +364,12 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
   },
   indicator: {
-    // Reaches past the row into the capsule padding, so the lens fills
-    // nearly the full height of the glass.
+    // Fills the row's height, inside the capsule padding.
     position: "absolute",
-    top: -PILL_OVERHANG,
-    bottom: -PILL_OVERHANG,
-    borderRadius: 999,
+    top: 0,
+    bottom: 0,
+    borderRadius: TILE_RADIUS,
     borderCurve: "continuous",
-  },
-  lensGlint: {
-    position: "absolute",
-    top: 1,
-    left: "22%",
-    right: "22%",
-    height: 1,
   },
   indicatorLens: {
     overflow: "hidden",
@@ -390,16 +381,16 @@ const styles = StyleSheet.create({
     minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
-    gap: 2,
+    gap: 3,
     paddingHorizontal: 2,
-    borderRadius: 999,
+    borderRadius: TILE_RADIUS,
   },
   tabPressed: {
     opacity: 0.7,
   },
   tabLabel: {
-    fontSize: 10.5,
-    lineHeight: 13,
+    fontSize: 11,
+    lineHeight: 14,
     letterSpacing: 0,
     textAlign: "center",
   },

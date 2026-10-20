@@ -3,25 +3,21 @@
  * Pure module (no react-native) so lib/navContrast.test.ts can import it.
  */
 
-import type { ThemeName } from "@/theme/tokens";
-
 /**
- * SPENDLY-154/170/172: "smoke" is the iOS-style glass used by the capsule nav:
- * a backdrop blur under a cool blue/indigo tint, a subtle cool rim, a restrained
- * gloss and a blue atmospheric glow, with white content on top. It looks the
- * same in every theme; only the tint density adapts, because a light page shows
- * through brighter than a dark one.
+ * SPENDLY-154/170/172/561: "smoke" is the surface of the capsule nav. Since
+ * SPENDLY-561 it is a deep charcoal fintech capsule (the #171B24 family) in
+ * every theme, over a light backdrop blur, with white-ish content on top.
+ * Only the tint density adapts: a light page shows through brighter than a
+ * dark one, so light themes get the denser film.
  */
-export const SMOKE_TINT_RGB = [25, 32, 58] as const;
+export const SMOKE_TINT_RGB = [23, 27, 36] as const;
 /**
- * Dark themes: a thin film, so the blurred page shows through as glass rather
- * than a grey slab (the tint is lighter than a dark page, so a dense one reads
- * opaque). Light themes need more, or white labels lose contrast over a white
- * page; lib/navContrast.test.ts holds that line.
+ * Both are dense, so the capsule reads as a solid charcoal bar with only a
+ * hint of glass; lib/navContrast.test.ts holds the label contrast line.
  */
-export const SMOKE_TINT_ALPHA = { dark: 0.2, light: 0.72 } as const;
+export const SMOKE_TINT_ALPHA = { dark: 0.86, light: 0.9 } as const;
 /** Without blur the tint has to carry contrast on its own. */
-export const SMOKE_TINT_ALPHA_NO_BLUR = 0.9;
+export const SMOKE_TINT_ALPHA_NO_BLUR = 0.96;
 
 /**
  * Blur radius in dp. expo-blur's Android radius is `intensity /
@@ -51,55 +47,45 @@ export function smokeAndroidBlur(pixelRatio: number): {
 }
 
 /**
- * Specular gloss across the top of the glass: white at this alpha along the
- * top edge, fading out by `SMOKE_GLOSS_END` of the height. Icons sit in that
- * band, so the contrast test checks them against the glossed glass.
+ * Sheen across the top of the capsule: white at this alpha along the top
+ * edge, fading out by `SMOKE_GLOSS_END` of the height. Kept faint since
+ * SPENDLY-561 (no glossy glass). Icons sit in that band, so the contrast test
+ * checks them against the glossed surface.
  */
-export const SMOKE_GLOSS_ALPHA = 0.18;
+export const SMOKE_GLOSS_ALPHA = 0.05;
 export const SMOKE_GLOSS_END = 0.55;
 
-/** Inactive nav labels on smoke glass. */
-export const SMOKE_INACTIVE_ALPHA = 0.85;
-/** Inactive nav icons: a touch brighter than labels, as in the reference. */
-export const SMOKE_INACTIVE_ICON_ALPHA = 0.9;
-/**
- * The lens behind the active tab: a blue/purple translucent gradient rather
- * than a white bubble. The contrast model uses the brighter top stop.
- */
-export const SMOKE_LENS_TOP = { rgb: [120, 110, 255] as const, alpha: 0.16 } as const;
-export const SMOKE_LENS_BOTTOM = { rgb: [80, 90, 180] as const, alpha: 0.08 } as const;
-export const SMOKE_LENS_BORDER = "rgba(160, 170, 255, 0.10)";
+/** Inactive nav labels: muted grey (white at this alpha over the charcoal). */
+export const SMOKE_INACTIVE_ALPHA = 0.62;
+/** Inactive nav icons: a touch brighter than labels. */
+export const SMOKE_INACTIVE_ICON_ALPHA = 0.68;
 
-/** The active-tab lens: gradient stops, hairline and top-edge glint (`r, g, b`). */
+/**
+ * The tile behind the active tab: a translucent gradient of the accent and
+ * a hairline of it. The contrast model uses the brighter top stop.
+ */
 export type SmokeLens = {
   top: { rgb: readonly [number, number, number]; alpha: number };
   bottom: { rgb: readonly [number, number, number]; alpha: number };
   border: string;
-  glint: string;
 };
 
-/** The blue/purple lens every theme has used since SPENDLY-172. */
-export const SMOKE_LENS: SmokeLens = {
-  top: SMOKE_LENS_TOP,
-  bottom: SMOKE_LENS_BOTTOM,
-  border: SMOKE_LENS_BORDER,
-  glint: "220, 225, 255",
-};
+/** Alpha of the accent tile's top and bottom stops, and of its hairline. */
+export const ACCENT_LENS_ALPHA = { top: 0.2, bottom: 0.12, border: 0.24 } as const;
 
 /**
- * SPENDLY-533: Midnight Emerald's lens. The same smoke glass and alphas, tinted
- * emerald so the active tab matches the theme instead of a blue/purple accent.
+ * SPENDLY-561: the active tile is tinted with the theme's own accent, so the
+ * orange accent gets the orange tile of the reference, Midnight Emerald keeps
+ * its emerald (SPENDLY-533) and every other accent matches itself.
  */
-export const EMERALD_LENS: SmokeLens = {
-  top: { rgb: [53, 232, 137], alpha: 0.16 },
-  bottom: { rgb: [20, 120, 80], alpha: 0.08 },
-  border: "rgba(53, 232, 137, 0.14)",
-  glint: "190, 255, 220",
-};
-
-/** The lens for a theme. Only Midnight Emerald has its own. */
-export function smokeLensFor(themeName: ThemeName): SmokeLens {
-  return themeName === "midnight-emerald" ? EMERALD_LENS : SMOKE_LENS;
+export function accentLens(primaryHex: string): SmokeLens {
+  const rgb = hexToRgb(primaryHex);
+  const [r, g, b] = rgb;
+  return {
+    top: { rgb, alpha: ACCENT_LENS_ALPHA.top },
+    bottom: { rgb, alpha: ACCENT_LENS_ALPHA.bottom },
+    border: `rgba(${r}, ${g}, ${b}, ${ACCENT_LENS_ALPHA.border})`,
+  };
 }
 
 /** `{rgb, alpha}` as a CSS colour string. */
@@ -143,12 +129,12 @@ export function over(fg: RGB, bg: RGB, alpha: number): RGB {
  * smoke glass over the lightest surface that can scroll beneath the capsule,
  * plus the lens tint. `backdrops` are that theme's page and card colours.
  */
-export function smokeActivePill(backdrops: string[], isDark: boolean, lens: SmokeLens = SMOKE_LENS): RGB {
+export function smokeActivePill(backdrops: string[], isDark: boolean, lens: SmokeLens): RGB {
   return overLens(smokeGlass(lightestOf(backdrops), isDark), lens);
 }
 
 /** The active lens at the icon's height, where the top gloss adds to it. */
-export function smokeActiveLens(backdrops: string[], isDark: boolean, lens: SmokeLens = SMOKE_LENS): RGB {
+export function smokeActiveLens(backdrops: string[], isDark: boolean, lens: SmokeLens): RGB {
   const glossed = over([255, 255, 255], smokeGlass(lightestOf(backdrops), isDark), SMOKE_GLOSS_ALPHA);
   return overLens(glossed, lens);
 }
