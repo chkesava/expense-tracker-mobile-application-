@@ -19,6 +19,7 @@ import { useSettings } from "@/providers/SettingsProvider";
 import { useAuth } from "@/providers/AuthProvider";
 import type { QrStyleId } from "@/shared/utils/qrStyles";
 import { QR_STYLES, storeQrStyleId } from "@/shared/utils/qrStyles";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
@@ -36,6 +37,9 @@ export function CreatePaymentRequestModal({
   onClose,
 }: CreatePaymentRequestModalProps) {
   const { theme } = useTheme();
+  // SPENDLY-550: an RN Modal portals outside SpendlyUIScope on web, so its
+  // Gluestack Inputs/Buttons lost the theme variables (dark text on dark).
+  const scopeVars = useSpendlyScopeVars();
   const surfaces = useSurfaces();
   const { user } = useAuth();
   const { settings: userSettings } = useSettings();
@@ -103,7 +107,7 @@ export function CreatePaymentRequestModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, { backgroundColor: theme.colors.scrim }, scopeVars]}>
         <View
           style={[
             styles.modalCard,
@@ -265,11 +269,11 @@ export function CreatePaymentRequestModal({
                       style={[
                         styles.swatch,
                         { backgroundColor: style.fg },
-                        isSelected && styles.swatchSelected,
+                        isSelected && [styles.swatchSelected, { borderColor: theme.colors.card }],
                       ]}
                     >
                       {isSelected && (
-                        <View style={styles.swatchCheck} />
+                        <View style={[styles.swatchCheck, { backgroundColor: theme.colors.card }]} />
                       )}
                     </Pressable>
                   );
@@ -301,7 +305,6 @@ export function CreatePaymentRequestModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.65)",
     justifyContent: "center",
     alignItems: "center",
     padding: 16,
@@ -374,18 +377,11 @@ const styles = StyleSheet.create({
   },
   swatchSelected: {
     borderWidth: 3,
-    borderColor: "#FFFFFF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
   },
   swatchCheck: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: "#FFFFFF",
   },
   actionFooter: {
     flexDirection: "row",

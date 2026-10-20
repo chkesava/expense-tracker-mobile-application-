@@ -39,6 +39,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | SPENDLY-560 | Bug: exact price tooltip on stock chart points (hover, tap, keyboard; line and candle) | `feature/SPENDLY-560-stock-chart-tooltip` | Done. Merged straight to `main` via `c2b9347` (2026-10-19, at the user's request). Native device QA open ([doc](SPENDLY-560-stock-chart-tooltip.md)) |
 | SPENDLY-548 | Phase 6a: Form foundations (Input theme font, SearchBar focus ring, form sheet pattern) | `feature/SPENDLY-548-form-foundations` | Merged into the epic; not on `main` yet ([doc](SPENDLY-548-form-foundations.md)) |
 | SPENDLY-551 | Phase 6d: Settings (theme tokens, one themed switch, outline chips, ghost mode) | `feature/SPENDLY-551-settings` | Merged into the epic; not on `main` yet ([doc](SPENDLY-551-settings.md)) |
+| SPENDLY-550 | Phase 6c: Splits, Trips and public pay pages (tokens, owed signs, ghost in-app only, sheet input fix) | `feature/SPENDLY-550-splits-trips-pay` | Built; awaiting epic merge ([doc](SPENDLY-550-splits-trips-pay.md)) |
 | SPENDLY-561 | Bottom nav: dark charcoal fintech capsule with an accent-tinted active tile | `feature/SPENDLY-561-bottom-nav-fintech` | Merged straight to `main` (2026-10-20, at the user's request), cherry-picked without 548/551. Native device QA open ([doc](SPENDLY-561-bottom-nav-fintech.md)) |
 | SPENDLY-549 | Phase 6b: Vaults and Spaces (tokens, foundations, ghost mode, 6a forms) | `feature/SPENDLY-549-vaults-spaces` | Merged into the epic; not on `main` yet ([doc](SPENDLY-549-vaults-spaces.md)) |
 
