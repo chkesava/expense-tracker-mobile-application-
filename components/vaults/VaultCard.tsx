@@ -2,11 +2,14 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Users } from "lucide-react-native";
 
-import { Amount } from "@/components/common/Amount";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
+import { ProgressIndicator } from "@/components/dashboard/ProgressIndicator";
+import { Pill } from "@/components/dashboard/primitives";
 import { Card } from "@/components/ui/Card";
-import type { SharedVault, VaultStats } from "@/shared/types/vault";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { DEFAULT_VAULT_COLOR, type SharedVault, type VaultStats } from "@/shared/types/vault";
+import { vaultBudgetPresentation } from "@/shared/utils/vaultSpacePresentation";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
 
 export interface VaultCardProps {
   vault: SharedVault;
@@ -14,169 +17,85 @@ export interface VaultCardProps {
   onPress: () => void;
 }
 
+/**
+ * One shared vault in the hub list. SPENDLY-549: theme tokens and the
+ * dashboard foundations; every amount respects ghost mode and the budget
+ * state is a word as well as a colour. The accent strip is the vault's own
+ * stored colour.
+ */
 export function VaultCard({ vault, stats, onPress }: VaultCardProps) {
   const { theme } = useTheme();
-  const surfaces = useSurfaces();
+  const money = useGhostMoney(vault.currency);
 
-  const themeColor = vault.themeColor || "#6366F1";
-  const progressRatio = Math.min(
-    1,
-    stats && stats.budget > 0 ? stats.totalWithdrawals / stats.budget : 0
-  );
+  const themeColor = vault.themeColor || DEFAULT_VAULT_COLOR;
+  const budget = stats ? vaultBudgetPresentation(stats.status) : null;
 
   return (
-    <Card
-      onPress={onPress}
-      elevation={2}
-      contentStyle={styles.cardContent}
-      style={styles.card}
-    >
-      {/* Accent Top Strip */}
+    <Card onPress={onPress} elevation={2} contentStyle={styles.cardContent} style={styles.card}>
+      {/* The vault's own accent colour (user data). */}
       <View style={[styles.accentStrip, { backgroundColor: themeColor }]} />
 
-      {/* Body */}
       <View style={styles.body}>
-        <View style={styles.cardHeader}>
-          <View style={styles.titleCol}>
-            <View style={styles.nameRow}>
-              <Text
-                style={[styles.vaultName, { color: theme.colors.foreground }]}
-                numberOfLines={1}
-              >
-                {vault.name}
-              </Text>
-              {stats ? (
-                <View
-                  style={[
-                    styles.badge,
-                    {
-                      backgroundColor:
-                        stats.status === "healthy"
-                          ? "rgba(34,197,94,0.15)"
-                          : stats.status === "warning"
-                          ? "rgba(245,158,11,0.15)"
-                          : "rgba(239,68,68,0.15)",
-                    },
-                  ]}
-                >
-                  <Text
-                    style={{
-                      fontSize: 10,
-                      fontWeight: "800",
-                      color:
-                        stats.status === "healthy"
-                          ? "#22C55E"
-                          : stats.status === "warning"
-                          ? "#F59E0B"
-                          : "#EF4444",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    {stats.status}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-
-            {vault.description ? (
-              <Text
-                style={[styles.vaultDesc, { color: theme.colors.mutedForeground }]}
-                numberOfLines={1}
-              >
-                {vault.description}
-              </Text>
-            ) : null}
+        <View style={styles.titleCol}>
+          <View style={styles.nameRow}>
+            <Text
+              style={[styles.vaultName, { color: theme.colors.foreground, fontFamily: theme.fontFamily.bold }]}
+              numberOfLines={1}
+            >
+              {vault.name}
+            </Text>
+            {budget ? <Pill label={budget.label} tone={budget.tone} /> : null}
           </View>
-
+          {vault.description ? (
+            <Text style={[styles.vaultDesc, { color: theme.colors.mutedForeground }]} numberOfLines={1}>
+              {vault.description}
+            </Text>
+          ) : null}
         </View>
 
         {stats ? (
           <>
             <View style={styles.metricsRow}>
               <View style={styles.metricBlock}>
-                <Text style={[styles.metricLabel, { color: theme.colors.mutedForeground }]}>
-                  VAULT BALANCE
-                </Text>
-                <Amount
+                <Text style={[styles.metricLabel, { color: theme.colors.mutedForeground }]}>Vault balance</Text>
+                <FinancialAmount
                   value={stats.currentBalance}
                   currency={vault.currency}
-                  style={{
-                    fontSize: 18,
-                    fontWeight: "900",
-                    color:
-                      stats.currentBalance >= 0
-                        ? theme.colors.foreground
-                        : theme.colors.destructive,
-                  }}
+                  size="lg"
+                  weight="bold"
+                  sign={stats.currentBalance < 0 ? "auto" : "none"}
+                  tone={stats.currentBalance < 0 ? "negative" : "default"}
                 />
               </View>
-
               <View style={[styles.metricBlock, { alignItems: "flex-end" }]}>
-                <Text style={[styles.metricLabel, { color: theme.colors.mutedForeground }]}>
-                  BUDGET
-                </Text>
-                <Amount
-                  value={vault.budget}
-                  currency={vault.currency}
-                  style={{
-                    fontSize: 15,
-                    fontWeight: "700",
-                    color: theme.colors.mutedForeground,
-                  }}
-                />
+                <Text style={[styles.metricLabel, { color: theme.colors.mutedForeground }]}>Budget</Text>
+                <FinancialAmount value={vault.budget} currency={vault.currency} size="sm" tone="muted" />
               </View>
             </View>
 
-            {vault.budget > 0 ? (
-              <View style={styles.progressContainer}>
-                <View
-                  style={[
-                    styles.progressBarBg,
-                    {
-                      backgroundColor: surfaces.track,
-                    },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.progressBarFill,
-                      {
-                        width: `${Math.round(progressRatio * 100)}%`,
-                        backgroundColor:
-                          stats.status === "healthy"
-                            ? themeColor
-                            : stats.status === "warning"
-                            ? "#F59E0B"
-                            : "#EF4444",
-                      },
-                    ]}
-                  />
-                </View>
-                <View style={styles.progressInfo}>
-                  <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
-                    {stats.budgetUsagePercent}% spent
-                  </Text>
-                  <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
-                    Remaining: {vault.currency} {stats.remainingBudget.toLocaleString()}
-                  </Text>
-                </View>
-              </View>
+            {vault.budget > 0 && budget ? (
+              <ProgressIndicator
+                pct={stats.budgetUsagePercent}
+                status={budget.status}
+                color={budget.status === "good" ? themeColor : undefined}
+                statusLabel={`${budget.label} · ${money(stats.remainingBudget)} left`}
+                trailing={`${stats.budgetUsagePercent}% spent`}
+                accessibilityLabel={`${vault.name}: ${stats.budgetUsagePercent} percent of budget spent, ${budget.label}`}
+              />
             ) : null}
           </>
         ) : null}
 
-        {/* Footer info: Members & Transaction Count */}
         <View style={[styles.cardFooter, { borderTopColor: theme.colors.border }]}>
           <View style={styles.footerLeft}>
             <Users size={14} color={theme.colors.mutedForeground} />
-            <Text style={{ fontSize: 12, color: theme.colors.mutedForeground, fontWeight: "600" }}>
-              {vault.memberIds?.length || 1} Member{vault.memberIds?.length === 1 ? "" : "s"}
+            <Text style={[styles.footerText, { color: theme.colors.mutedForeground }]}>
+              {vault.memberIds?.length || 1} member{vault.memberIds?.length === 1 ? "" : "s"}
             </Text>
           </View>
-
           {stats ? (
-            <Text style={{ fontSize: 12, color: theme.colors.mutedForeground }}>
-              {stats.transactionCount} Activity
+            <Text style={[styles.footerText, { color: theme.colors.mutedForeground }]}>
+              {stats.transactionCount} {stats.transactionCount === 1 ? "entry" : "entries"}
             </Text>
           ) : null}
         </View>
@@ -205,15 +124,8 @@ const styles = StyleSheet.create({
     right: 0,
     height: 4,
   },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
   titleCol: {
-    flex: 1,
     gap: 2,
-    marginRight: 10,
   },
   nameRow: {
     flexDirection: "row",
@@ -221,13 +133,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   vaultName: {
+    flexShrink: 1,
     fontSize: 16,
-    fontWeight: "800",
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
   },
   vaultDesc: {
     fontSize: 12,
@@ -241,26 +148,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   metricLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  progressContainer: {
-    gap: 6,
-  },
-  progressBarBg: {
-    height: 6,
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  progressBarFill: {
-    height: "100%",
-    borderRadius: 3,
-  },
-  progressInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    fontSize: 11,
+    fontWeight: "600",
   },
   cardFooter: {
     flexDirection: "row",
@@ -273,5 +162,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+  },
+  footerText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
 });

@@ -1,23 +1,22 @@
 import React, { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Plus } from "lucide-react-native";
 
-import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { SearchBar } from "@/components/common/SearchBar";
-import { SkeletonCard } from "@/components/common/Skeleton";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
 import { SpaceCard } from "@/components/spaces/SpaceCard";
 import { SpaceDetailModal } from "@/components/spaces/SpaceDetailModal";
 import { SpaceFormModal } from "@/components/spaces/SpaceFormModal";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Chip } from "@/components/ui/Chip";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useSpaces } from "@/hooks/useSpaces";
 import type { Space } from "@/shared/types/space";
 import { summarizeSpace, summarizeSpaces } from "@/shared/utils/spaceMath";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
-import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
@@ -30,8 +29,7 @@ const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
 ];
 
 export function SpacesList() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
   const displayCurrency = useDisplayCurrency();
 
   const { expenses } = useExpenses();
@@ -88,20 +86,6 @@ export function SpacesList() {
     setIsFormOpen(true);
   };
 
-  const pillStyle = (isActive: boolean) => ({
-    backgroundColor: isActive
-      ? theme.colors.primary
-      : isDark
-        ? "rgba(255,255,255,0.06)"
-        : "rgba(0,0,0,0.04)",
-    borderColor: isActive ? theme.colors.primary : theme.colors.border,
-  });
-
-  const pillTextStyle = (isActive: boolean) => ({
-    color: isActive ? theme.colors.primaryForeground : theme.colors.foreground,
-    fontWeight: isActive ? ("700" as const) : ("500" as const),
-  });
-
   return (
     <View style={styles.container}>
       {spaces.length > 0 ? (
@@ -111,24 +95,16 @@ export function SpacesList() {
               <Text
                 style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
               >
-                TRACKED IN SPACES
+                Tracked in spaces
               </Text>
-              <Amount
-                value={totals.totalSpent}
-                currency={displayCurrency}
-                style={{
-                  fontSize: 20,
-                  fontWeight: "900",
-                  color: theme.colors.foreground,
-                }}
-              />
+              <FinancialAmount value={totals.totalSpent} currency={displayCurrency} size="lg" weight="bold" />
             </View>
 
             <View style={{ alignItems: "flex-end" }}>
               <Text
                 style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}
               >
-                SPACES
+                Spaces
               </Text>
               <Text style={[styles.summaryValue, { color: theme.colors.foreground }]}>
                 {totals.spaceCount}
@@ -137,7 +113,7 @@ export function SpacesList() {
           </View>
 
           {totals.overBudgetCount > 0 ? (
-            <Text style={[styles.warning, { color: "#EF4444" }]}>
+            <Text style={[styles.warning, { color: theme.colors.destructive }]}>
               {totals.overBudgetCount} space
               {totals.overBudgetCount === 1 ? " is" : "s are"} over budget
             </Text>
@@ -152,23 +128,17 @@ export function SpacesList() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.pillRow}
           >
-            {STATUS_FILTERS.map((filter) => {
-              const isActive = statusFilter === filter.id;
-              return (
-                <Pressable
-                  key={filter.id}
-                  onPress={() => {
-                    haptic.selection().catch(() => undefined);
-                    setStatusFilter(filter.id);
-                  }}
-                  style={[styles.pill, pillStyle(isActive)]}
-                >
-                  <Text style={[styles.pillText, pillTextStyle(isActive)]}>
-                    {filter.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
+            {STATUS_FILTERS.map((filter) => (
+              <Chip
+                key={filter.id}
+                label={filter.label}
+                selected={statusFilter === filter.id}
+                appearance="outline"
+                accessibilityRole="tab"
+                haptic={statusFilter !== filter.id}
+                onPress={() => setStatusFilter(filter.id)}
+              />
+            ))}
           </ScrollView>
         </HorizontalSwipeBoundary>
       ) : null}
@@ -191,10 +161,7 @@ export function SpacesList() {
       ) : null}
 
       {loading ? (
-        <View style={{ gap: 12 }}>
-          <SkeletonCard />
-          <SkeletonCard />
-        </View>
+        <DashboardSkeleton variant="section" rows={2} />
       ) : filtered.length === 0 ? (
         <EmptyState
           illustration="general"
@@ -206,7 +173,7 @@ export function SpacesList() {
           }
           primaryAction={{
             label: "Create Space",
-            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+            icon: <Plus size={16} color={theme.colors.primaryForeground} strokeWidth={2.4} />,
             onPress: openCreate,
           }}
           tip="A space only labels existing expenses. Nothing is duplicated and your totals never change."
@@ -301,15 +268,5 @@ const styles = StyleSheet.create({
   pillRow: {
     flexDirection: "row",
     gap: 8,
-  },
-  pill: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderCurve: "continuous",
-    borderWidth: 1,
-  },
-  pillText: {
-    fontSize: 12,
   },
 });
