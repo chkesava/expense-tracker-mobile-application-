@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { DEFAULT_VAULT_COLOR, VAULT_COLORS } from "../types/vault";
 import { budgetProgressTier, type BudgetProgressTier } from "./spaceMath";
-import { spaceBudgetPresentation, vaultBudgetPresentation } from "./vaultSpacePresentation";
+import { spaceBudgetLeftText, spaceBudgetPresentation, vaultBudgetPresentation } from "./vaultSpacePresentation";
 
 describe("vaultBudgetPresentation", () => {
   it("gives every vault status a word and a matching tone", () => {
@@ -27,6 +27,19 @@ describe("spaceBudgetPresentation", () => {
     expect(spaceBudgetPresentation(budgetProgressTier(95, true)).label).toBe("Nearly at budget");
     expect(spaceBudgetPresentation(budgetProgressTier(120, true)).status).toBe("over");
     expect(spaceBudgetPresentation(budgetProgressTier(0, false)).status).toBe("neutral");
+  });
+});
+
+describe("spaceBudgetLeftText", () => {
+  const money = (v: number) => `₹${v}`;
+  it("says left or over, never a bare or negative number", () => {
+    expect(spaceBudgetLeftText(1200, money)).toBe("₹1200 left");
+    expect(spaceBudgetLeftText(0, money)).toBe("₹0 left");
+    expect(spaceBudgetLeftText(-300, money)).toBe("₹300 over");
+  });
+
+  it("goes through the formatter, so ghost mode masks it", () => {
+    expect(spaceBudgetLeftText(-300, () => "••••••")).toBe("•••••• over");
   });
 });
 

@@ -171,7 +171,11 @@ export function VaultDetailModal({
               pct={stats.budgetUsagePercent}
               status={budget.status}
               color={budget.status === "good" ? themeColor : undefined}
-              value={`${money(stats.totalWithdrawals)} spent`}
+              value={
+                <Text style={[styles.progressValue, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium }]}>
+                  {money(stats.totalWithdrawals)} spent
+                </Text>
+              }
               statusLabel={`${budget.label} · ${money(stats.remainingBudget)} left`}
               trailing={`${stats.budgetUsagePercent}%`}
               accessibilityLabel={`${stats.budgetUsagePercent} percent of the budget spent, ${budget.label}`}
@@ -344,6 +348,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  progressValue: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   statLabel: {
     fontSize: 11,

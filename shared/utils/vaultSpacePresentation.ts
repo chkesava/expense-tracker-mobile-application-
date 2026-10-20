@@ -45,3 +45,8 @@ export function spaceBudgetPresentation(tier: BudgetProgressTier): BudgetPresent
       return { status: "over", tone: "negative", label: "Over budget" };
   }
 }
+
+/** "₹1,200 left" or "₹300 over", through a ghost-aware money formatter. */
+export function spaceBudgetLeftText(budgetRemaining: number, money: (value: number) => string): string {
+  return budgetRemaining >= 0 ? `${money(budgetRemaining)} left` : `${money(Math.abs(budgetRemaining))} over`;
+}

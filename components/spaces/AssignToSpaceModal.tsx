@@ -6,8 +6,8 @@ import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { useSpaces } from "@/hooks/useSpaces";
 import { SPACE_COLORS } from "@/shared/types/space";
+import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 
 export interface AssignToSpaceModalProps {
@@ -27,8 +27,8 @@ export function AssignToSpaceModal({
   onClose,
   onAssigned,
 }: AssignToSpaceModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { spaces, assignExpensesToSpace } = useSpaces();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -59,7 +59,7 @@ export function AssignToSpaceModal({
       <View style={styles.body}>
         {activeSpaces.length === 0 ? (
           <Text style={[styles.helper, { color: theme.colors.mutedForeground }]}>
-            No spaces yet. Create one from the Spaces tab in the Ledger Hub.
+            No spaces yet. Create one from the Spaces tab in Vaults.
           </Text>
         ) : (
           <View style={{ gap: 8 }}>
@@ -75,9 +75,7 @@ export function AssignToSpaceModal({
                   styles.option,
                   {
                     borderColor: theme.colors.border,
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.04)"
-                      : "rgba(0,0,0,0.02)",
+                    backgroundColor: surfaces.tile,
                     opacity: pressed ? 0.8 : 1,
                   },
                 ]}
