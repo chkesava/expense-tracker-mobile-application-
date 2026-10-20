@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { ArrowDownLeft, ArrowUpRight, Wallet } from "lucide-react-native";
 
+import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Chip } from "@/components/ui/Chip";
@@ -89,7 +91,22 @@ export function AddAccountEntryModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Manual Adjustment">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Manual Adjustment"
+      // SPENDLY-552: 6a form pattern, the submit is pinned below the body.
+      // Same handler, same disabled condition, same label as before.
+      footer={
+        <SheetActions
+          primary={{
+            label: saving ? "Recording..." : "Record Adjustment",
+            onPress: handleSubmit,
+            disabled: saving,
+          }}
+        />
+      }
+    >
       <ScrollView
         contentContainerStyle={{ gap: 16, paddingBottom: 20 }}
         keyboardShouldPersistTaps="handled"
@@ -155,6 +172,7 @@ export function AddAccountEntryModal({
             Amount *
           </Text>
           <Input
+            leadingIcon={<CurrencyPrefix />}
             value={amount}
             onChangeText={setAmount}
             keyboardType="decimal-pad"
@@ -192,15 +210,6 @@ export function AddAccountEntryModal({
           />
         </View>
 
-        {/* Action Button */}
-        <Button
-          onPress={handleSubmit}
-          disabled={saving}
-          size="lg"
-          style={{ marginTop: 8 }}
-        >
-          {saving ? "Recording..." : "Record Adjustment"}
-        </Button>
       </ScrollView>
     </Modal>
   );

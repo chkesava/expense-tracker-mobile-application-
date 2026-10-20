@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { ArrowRight, TrendingUp, Wallet } from "lucide-react-native";
 
+import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAccountTransfers } from "@/hooks/useAccountTransfers";
@@ -174,7 +176,22 @@ export function TransferFundsModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Transfer Funds">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Transfer Funds"
+      // SPENDLY-552: 6a form pattern, the submit is pinned below the body.
+      // Same handler, same disabled condition, same label as before.
+      footer={
+        <SheetActions
+          primary={{
+            label: saving ? "Transferring..." : "Complete Transfer",
+            onPress: handleSubmit,
+            disabled: saving,
+          }}
+        />
+      }
+    >
       <ScrollView
         contentContainerStyle={{ gap: 16, paddingBottom: 20 }}
         keyboardShouldPersistTaps="handled"
@@ -363,6 +380,7 @@ export function TransferFundsModal({
             Transfer Amount *
           </Text>
           <Input
+            leadingIcon={<CurrencyPrefix />}
             value={amount}
             onChangeText={setAmount}
             keyboardType="decimal-pad"
@@ -400,15 +418,6 @@ export function TransferFundsModal({
           />
         </View>
 
-        {/* Submit */}
-        <Button
-          onPress={handleSubmit}
-          disabled={saving}
-          size="lg"
-          style={{ marginTop: 8 }}
-        >
-          {saving ? "Transferring..." : "Complete Transfer"}
-        </Button>
       </ScrollView>
     </Modal>
   );

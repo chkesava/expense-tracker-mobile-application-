@@ -65,7 +65,7 @@ export function DateField({
     <GluestackFormControl isInvalid={Boolean(error)} isDisabled={disabled} style={containerStyle as never}>
       {label ? (
         <GluestackFormControlLabel className="mb-1">
-          <GluestackFormControlLabelText>{label}</GluestackFormControlLabelText>
+          <GluestackFormControlLabelText style={{ fontFamily: theme.fontFamily.medium }}>{label}</GluestackFormControlLabelText>
         </GluestackFormControlLabel>
       ) : null}
       <Pressable
@@ -113,11 +113,11 @@ export function DateField({
       ) : null}
       {error ? (
         <GluestackFormControlError>
-          <GluestackFormControlErrorText>{error}</GluestackFormControlErrorText>
+          <GluestackFormControlErrorText style={{ fontFamily: theme.fontFamily.medium }}>{error}</GluestackFormControlErrorText>
         </GluestackFormControlError>
       ) : helperText ? (
         <GluestackFormControlHelper>
-          <GluestackFormControlHelperText>{helperText}</GluestackFormControlHelperText>
+          <GluestackFormControlHelperText style={{ fontFamily: theme.fontFamily.regular }}>{helperText}</GluestackFormControlHelperText>
         </GluestackFormControlHelper>
       ) : null}
     </GluestackFormControl>

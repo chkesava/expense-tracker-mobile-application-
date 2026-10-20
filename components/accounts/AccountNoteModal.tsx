@@ -5,11 +5,9 @@ import { Pin } from "lucide-react-native";
 import { Modal } from "@/components/common/Modal";
 import { SheetActions } from "@/components/common/SheetActions";
 import { Input } from "@/components/ui/Input";
-import { accountAccent } from "@/components/accounts/accountScreenTheme";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 import type { AccountNote } from "@/shared/types/expense";
 import {
   ACCOUNT_NOTE_BODY_MAX,
@@ -41,10 +39,10 @@ export function AccountNoteModal({
   onClose: () => void;
   onSave: (draft: AccountNoteDraft) => Promise<void>;
 }) {
-  const { theme, themeName } = useTheme();
+  const { theme } = useTheme();
   const surfaces = useSurfaces();
-  const isDark = themeUsesDarkPalette(themeName);
-  const accent = accountAccent(isDark);
+  // SPENDLY-552: the theme accent, not the fixed account green.
+  const accent = theme.colors.primary;
 
   const [draft, setDraft] = useState<AccountNoteDraft>(createEmptyAccountNoteDraft);
   const [saving, setSaving] = useState(false);
@@ -140,9 +138,7 @@ export function AccountNoteModal({
                 : surfaces.tile,
               borderColor: draft.pinned
                 ? accent
-                : isDark
-                  ? "rgba(148,163,184,0.16)"
-                  : "rgba(15,23,42,0.08)",
+                : theme.colors.border,
             },
           ]}
         >
