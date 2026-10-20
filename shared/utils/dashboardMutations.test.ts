@@ -12,6 +12,7 @@ import {
   computeDashboardIncomeCreateOps,
   computeDashboardIncomeUpdateOps,
   computeDashboardRestoreOps,
+  dashboardOpsForRelabel,
 } from "./dashboardMutations";
 import { calculateDashboardSummaries } from "./reconciliation";
 
@@ -198,5 +199,45 @@ describe("incremental writes match a rebuild (SPENDLY-495)", () => {
         expect(round(parentSum)).toBe(round((doc.totalExpenses as number) ?? 0));
       }
     }
+  });
+});
+
+describe("dashboardOpsForRelabel (SPENDLY-563)", () => {
+  it("moves amounts between keys per month, leaving totals alone", () => {
+    const ops = dashboardOpsForRelabel("u1", [
+      { amount: 100, month: "2026-10", before: { category: "Food", subcategory: "Snacks" }, after: { category: "Groceries", subcategory: "Snacks" } },
+      { amount: 50, month: "2026-10", before: { category: "Food", subcategory: "Fruit" }, after: { category: "Groceries", subcategory: "Fruit" } },
+      { amount: 30, date: "2026-09-12", before: { category: "Food" }, after: { category: "Groceries" } },
+    ]);
+    expect(ops).toHaveLength(2);
+    expect(totalsOf(ops, "2026-10")).toEqual({
+      Food: -150,
+      "Food::Snacks": -100,
+      "Food::Fruit": -50,
+      Groceries: 150,
+      "Groceries::Snacks": 100,
+      "Groceries::Fruit": 50,
+    });
+    expect(totalsOf(ops, "2026-09")).toEqual({ Food: -30, Groceries: 30 });
+    for (const op of ops) {
+      expect(op.data.totalExpenses).toBeUndefined();
+      expect(op.data.transactionCount).toBeUndefined();
+    }
+  });
+
+  it("a subcategory rename only moves the subcategory key", () => {
+    const ops = dashboardOpsForRelabel("u1", [
+      { amount: 80, month: "2026-10", before: { category: "Food", subcategory: "Snacks" }, after: { category: "Food", subcategory: "Treats" } },
+    ]);
+    expect(totalsOf(ops, "2026-10")).toEqual({ "Food::Snacks": -80, "Food::Treats": 80 });
+  });
+
+  it("ignores soft-deleted rows and writes nothing for an empty chunk", () => {
+    expect(
+      dashboardOpsForRelabel("u1", [
+        { amount: 80, month: "2026-10", deletedAt: "x", before: { category: "Food" }, after: { category: "Groceries" } },
+      ])
+    ).toEqual([]);
+    expect(dashboardOpsForRelabel("u1", [])).toEqual([]);
   });
 });
