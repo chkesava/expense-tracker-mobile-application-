@@ -48,6 +48,7 @@ import { decisionCategoryLabel, newDecisionDraft, transitionDecision } from "@/s
 import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
 import { DateField } from "@/components/common/DateField";
+import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
 
 /**
  * Capture / edit a Money Decision (SPENDLY-363). Five short steps; only the
@@ -403,7 +404,7 @@ export default function DecisionEditScreen() {
           <>
             <Input label="What do you expect to happen? (optional)" value={form.expectedSummary} onChangeText={(expectedSummary) => set({ expectedSummary })} multiline maxLength={DECISION_LIMITS.text} placeholder={template.prompts.expected} />
             <View style={[styles.row, { gap: theme.space.sm, flexWrap: "wrap", alignItems: "flex-start" }]}>
-              <Input label="Expected amount, ₹ (optional)" value={form.expectedAmount} onChangeText={(expectedAmount) => set({ expectedAmount })} keyboardType="decimal-pad" placeholder="0" error={fieldError("expectedAmount")} containerStyle={{ flexGrow: 1, flexBasis: 140 }} helperText="Your estimate" />
+              <Input label="Expected amount (optional)" value={form.expectedAmount} onChangeText={(expectedAmount) => set({ expectedAmount })} keyboardType="decimal-pad" placeholder="0" leadingIcon={<CurrencyPrefix />} error={fieldError("expectedAmount")} containerStyle={{ flexGrow: 1, flexBasis: 140 }} helperText="Your estimate" />
               <DateField label="By (optional)" value={form.expectedByDate} onChange={(expectedByDate) => set({ expectedByDate })} clearable placeholder="Not set" error={fieldError("expectedByDate")} containerStyle={{ flexGrow: 1, flexBasis: 220 }} />
             </View>
             {sectionTitle("When should you look back at this? (optional)")}

@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 
+import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { ChipRow } from "@/components/settings/SettingsControls";
-import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import {
   REMINDER_CATEGORIES,
@@ -86,7 +87,30 @@ export function ReminderEditorSheet({
   const hint = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={existing ? "Edit reminder" : "New reminder"} density="compact" maxHeight="92%">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={existing ? "Edit reminder" : "New reminder"}
+      density="compact"
+      maxHeight="92%"
+      // SPENDLY-555: the 6a form pattern; the action is pinned below the body.
+      footer={
+        <SheetActions
+          secondary={{ label: "Cancel", onPress: onClose }}
+          primary={{
+            label: existing ? "Save reminder" : "Add reminder",
+            loading: saving,
+            onPress: () => {
+              if (issues.length) {
+                setShowErrors(true);
+                return;
+              }
+              onSave(draft);
+            },
+          }}
+        />
+      }
+    >
       <View style={{ gap: theme.space.md }}>
         <Text style={hint}>A reminder is a note on your calendar. It never records an expense or income.</Text>
         <Input label="What to remember" value={title} onChangeText={setTitle} placeholder="e.g. Renew car insurance" maxLength={120} />
@@ -101,7 +125,7 @@ export function ReminderEditorSheet({
           onSelect={setStartDate}
         />
         <Input label="Time (optional, HH:mm)" value={time} onChangeText={setTime} placeholder="09:30" autoCapitalize="none" />
-        <Input label="Amount (optional)" value={amount} onChangeText={setAmount} keyboardType="numeric" helperText="Shown on the calendar only — not counted as money." />
+        <Input label="Amount (optional)" value={amount} onChangeText={setAmount} keyboardType="numeric" leadingIcon={<CurrencyPrefix />} helperText="Shown on the calendar only — not counted as money." />
 
         <View style={{ gap: theme.space.xs }}>
           <Text style={label}>Category</Text>
@@ -135,18 +159,6 @@ export function ReminderEditorSheet({
             ))}
           </View>
         ) : null}
-        <Button
-          loading={saving}
-          onPress={() => {
-            if (issues.length) {
-              setShowErrors(true);
-              return;
-            }
-            onSave(draft);
-          }}
-        >
-          {existing ? "Save reminder" : "Add reminder"}
-        </Button>
       </View>
     </Modal>
   );
