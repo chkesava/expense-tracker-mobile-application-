@@ -17,10 +17,10 @@ import {
   SMOKE_TINT_ALPHA_NO_BLUR,
   SMOKE_TINT_RGB,
   contrastRatio as contrast,
+  accentLens,
   glassAccent,
   smokeActiveLens,
   smokeActivePill,
-  smokeLensFor,
   hexToRgb as rgb,
   luminance,
   over,
@@ -70,20 +70,20 @@ describe("capsule nav contrast (smoke glass)", () => {
     expect(contrast(icon, glass)).toBeGreaterThanOrEqual(4.5);
   });
 
-  // The lens is a tint over the glass, modelled at its brighter top stop:
-  // blue/purple in every theme (SPENDLY-172), emerald in Midnight Emerald
-  // (SPENDLY-533).
-  const lensTop = (name: (typeof THEME_NAMES)[number]) => smokeLensFor(name).top;
+  // The active tile is a tint over the glass, modelled at its brighter top
+  // stop: the theme's own accent since SPENDLY-561.
+  const lensFor = (name: (typeof THEME_NAMES)[number], accent: (typeof ACCENT_COLOR_NAMES)[number]) =>
+    accentLens(createTheme(name, accent).colors.primary);
 
   it.each(COMBOS)("%s / %s: the accent active tab reads on its lens", (name, accent) => {
     const t = createTheme(name, accent);
-    const top = lensTop(name);
+    const top = lensFor(name, accent).top;
     const pill = over([...top.rgb] as RGB, glassOver(name, accent), top.alpha);
     // BottomNav's pill model must agree with this test's independent one.
     const navPill = smokeActivePill(
       [t.colors.background, t.colors.card],
       themeUsesDarkPalette(name),
-      smokeLensFor(name)
+      lensFor(name, accent)
     );
     expect(navPill).toEqual(pill);
     expect(contrast(rgb(glassAccent(t.colors.primary, navPill)), pill)).toBeGreaterThanOrEqual(4.5);
@@ -96,22 +96,22 @@ describe("capsule nav contrast (smoke glass)", () => {
     const glossed = over(WHITE, glassOver(name, accent), SMOKE_GLOSS_ALPHA);
     const icon = over(WHITE, glossed, SMOKE_INACTIVE_ICON_ALPHA);
     expect(contrast(icon, glossed)).toBeGreaterThanOrEqual(3);
-    const top = lensTop(name);
+    const top = lensFor(name, accent).top;
     const lens = over([...top.rgb] as RGB, glossed, top.alpha);
     const backdrops = [t.colors.background, t.colors.card];
     const dark = themeUsesDarkPalette(name);
-    const navLens = smokeActiveLens(backdrops, dark, smokeLensFor(name));
+    const navLens = smokeActiveLens(backdrops, dark, lensFor(name, accent));
     expect(navLens).toEqual(lens);
     const accentColor = glassAccent(
       t.colors.primary,
-      smokeActivePill(backdrops, dark, smokeLensFor(name)),
+      smokeActivePill(backdrops, dark, lensFor(name, accent)),
       navLens
     );
     expect(contrast(rgb(accentColor), lens)).toBeGreaterThanOrEqual(3);
   });
 
   it("keeps an accent that already reads, and only lightens the ones that don't", () => {
-    const pill = smokeActivePill(["#FFFFFF"], false);
+    const pill = smokeActivePill(["#FFFFFF"], false, accentLens("#4F46FF"));
     const lifted = glassAccent("#4F46FF", pill);
     // A colour that already passes comes back untouched.
     expect(glassAccent(lifted, pill)).toBe(lifted);
@@ -135,12 +135,24 @@ describe("capsule nav contrast (smoke glass)", () => {
   });
 });
 
-describe("theme lens (SPENDLY-533)", () => {
-  it("keeps the SPENDLY-172 blue/purple lens for every theme but Midnight Emerald", () => {
+describe("accent tile (SPENDLY-561)", () => {
+  it("tints the active tile with the theme's own accent", () => {
     for (const name of THEME_NAMES) {
-      const lens = smokeLensFor(name);
-      if (name === "midnight-emerald") expect(lens.top.rgb).toEqual([53, 232, 137]);
-      else expect(lens.top.rgb).toEqual([120, 110, 255]);
+      for (const accent of ACCENT_COLOR_NAMES) {
+        const { primary } = createTheme(name, accent).colors;
+        const lens = accentLens(primary);
+        expect(lens.top.rgb).toEqual(rgb(primary));
+        expect(lens.bottom.rgb).toEqual(rgb(primary));
+        expect(lens.top.alpha).toBeGreaterThan(lens.bottom.alpha);
+      }
     }
+    // Midnight Emerald keeps its emerald tile (SPENDLY-533).
+    expect(accentLens(createTheme("midnight-emerald", "indigo").colors.primary).top.rgb).toEqual([
+      53, 232, 137,
+    ]);
+  });
+
+  it("uses a deep charcoal capsule", () => {
+    expect(luminance([...SMOKE_TINT_RGB] as RGB)).toBeLessThan(0.02);
   });
 });

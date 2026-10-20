@@ -52,6 +52,8 @@ describe("fetchAccountTypes", () => {
       oldBalance: 500,
       oldOutstanding: 0,
       needsInitialization: false,
+      exists: true,
+      balanceAsOfDate: null,
     });
   });
 
@@ -65,6 +67,8 @@ describe("fetchAccountTypes", () => {
       oldBalance: 18981,
       oldOutstanding: 0,
       needsInitialization: true,
+      exists: true,
+      balanceAsOfDate: null,
     });
   });
 

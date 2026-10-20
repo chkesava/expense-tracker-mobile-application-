@@ -114,8 +114,8 @@ export type GlassSurfaceProps = {
   blur?: boolean;
   /**
    * `adaptive` (default): tinted with the theme card colour.
-   * `smoke`: glossy dark glass in every theme, with a gradient rim and a top
-   * sheen. Put white content on it (SPENDLY-154 nav capsule).
+   * `smoke`: deep charcoal in every theme, with a white hairline rim and a
+   * faint top sheen. Put light content on it (SPENDLY-154/561 nav capsule).
    */
   tone?: "adaptive" | "smoke";
   style?: StyleProp<ViewStyle>;
@@ -182,36 +182,28 @@ export function GlassSurface({
       <View style={[StyleSheet.absoluteFill, { backgroundColor: overlay }]} />
       {smoke ? (
         <>
-          {/* Glossy sheen over the top of the glass: bright at the edge and
-              falling off by mid-height, so the surface reads as curved glass. */}
+          {/* A faint sheen over the top of the charcoal, falling off by
+              mid-height (SPENDLY-561: subtle, not glossy glass). */}
           <LinearGradient
             pointerEvents="none"
             colors={[
-              `rgba(200,210,255,${SMOKE_GLOSS_ALPHA})`,
-              `rgba(200,210,255,${SMOKE_GLOSS_ALPHA * 0.35})`,
-              "rgba(200,210,255,0)",
+              `rgba(255,255,255,${SMOKE_GLOSS_ALPHA})`,
+              `rgba(255,255,255,${SMOKE_GLOSS_ALPHA * 0.35})`,
+              "rgba(255,255,255,0)",
             ]}
             locations={[0, SMOKE_GLOSS_END * 0.6, SMOKE_GLOSS_END]}
             style={StyleSheet.absoluteFill}
           />
-          {/* Light catching the top edge: a thin cool line, brightest mid-width.
-              Inset from the corner curve, so it needs a real radius; the 999
-              pill default would push it off the glass. */}
+          {/* Light catching the top edge: a thin neutral line, brightest
+              mid-width. Inset from the corner curve, so it needs a real
+              radius; the 999 pill default would push it off the surface. */}
           <LinearGradient
             pointerEvents="none"
-            colors={["rgba(210,220,255,0)", "rgba(230,236,255,0.55)", "rgba(210,220,255,0)"]}
+            colors={["rgba(255,255,255,0)", "rgba(255,255,255,0.14)", "rgba(255,255,255,0)"]}
             locations={[0, 0.5, 1]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={[styles.specularLine, { left: specularInset, right: specularInset }]}
-          />
-          {/* Soft reflection along the bottom edge, where glass catches light
-              bounced from below. */}
-          <LinearGradient
-            pointerEvents="none"
-            colors={["rgba(200,210,255,0)", "rgba(200,210,255,0.07)"]}
-            locations={[0.72, 1]}
-            style={StyleSheet.absoluteFill}
           />
         </>
       ) : (
@@ -222,10 +214,10 @@ export function GlassSurface({
   );
 
   if (smoke) {
-    // Everything drawn here stays outside or on the edge of the glass: the
-    // blue glow and drop shadow are outset-only box shadows, and the rim is a
-    // 1px cool border, brightest along the top and left like light catching a
-    // glass edge. Nothing translucent sits *under* the glass to grey it.
+    // Everything drawn here stays outside or on the edge of the surface: the
+    // drop shadow is an outset-only box shadow, and the rim is a 1px white
+    // hairline, brightest along the top. Nothing translucent sits *under* the
+    // surface to grey it.
     return (
       <View
         testID={testID}
@@ -261,10 +253,10 @@ export function GlassSurface({
 }
 
 /**
- * A restrained blue atmospheric glow plus a soft drop, both outset-only and
- * static, so nothing translucent sits under the glass and nothing animates.
+ * A restrained, neutral drop shadow (SPENDLY-561: no coloured glow),
+ * outset-only and static, so nothing translucent sits under the surface.
  */
-const SMOKE_SHADOW = "0px 0px 28px 8px rgba(70, 90, 220, 0.18), 0px 8px 24px rgba(0, 0, 0, 0.35)";
+const SMOKE_SHADOW = "0px 8px 16px rgba(0, 0, 0, 0.25)";
 
 const styles = StyleSheet.create({
   fill: {
@@ -285,10 +277,9 @@ const styles = StyleSheet.create({
     left: 0,
     borderWidth: 1,
     borderCurve: "continuous",
-    // A subtle cool edge, brightest along the top, not a white outline.
-    borderColor: "rgba(170, 185, 255, 0.14)",
-    borderTopColor: "rgba(220, 228, 255, 0.34)",
-    borderLeftColor: "rgba(190, 205, 255, 0.22)",
+    // A low-opacity white hairline, a touch brighter along the top edge.
+    borderColor: "rgba(255, 255, 255, 0.07)",
+    borderTopColor: "rgba(255, 255, 255, 0.11)",
   },
   specularLine: {
     position: "absolute",

@@ -13,6 +13,10 @@ export type AccountInfo = {
   oldOutstanding: number;
   /** SPENDLY-436: true when `balanceInitialized` was missing on the account. */
   needsInitialization: boolean;
+  /** SPENDLY-496: false when no account doc was found (e.g. it was deleted). */
+  exists: boolean;
+  /** SPENDLY-496: the account's baseline; earlier rows sit inside the opening balance. */
+  balanceAsOfDate: string | null;
 };
 
 /**
@@ -59,7 +63,14 @@ export async function docAlreadyWritten(ref: DocumentReference): Promise<boolean
 
 export function accountInfoFromSnap(snap: DocumentSnapshot): AccountInfo {
   if (!snap.exists()) {
-    return { isCreditCard: false, oldBalance: 0, oldOutstanding: 0, needsInitialization: false };
+    return {
+      isCreditCard: false,
+      oldBalance: 0,
+      oldOutstanding: 0,
+      needsInitialization: false,
+      exists: false,
+      balanceAsOfDate: null,
+    };
   }
   const data = snap.data();
   const isCreditCard = data.accountTypeId === "credit_card" ||
@@ -73,6 +84,8 @@ export function accountInfoFromSnap(snap: DocumentSnapshot): AccountInfo {
     oldBalance: needsInitialization ? (data.openingBalance ?? 0) : (data.currentBalance ?? 0),
     oldOutstanding: data.currentOutstanding ?? 0,
     needsInitialization,
+    exists: true,
+    balanceAsOfDate: typeof data.balanceAsOfDate === "string" ? data.balanceAsOfDate : null,
   };
 }
 
