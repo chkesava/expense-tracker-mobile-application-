@@ -1,6 +1,6 @@
 import { initializeApp, applicationDefault, cert } from "firebase-admin/app";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import { calculateAccountBalances, calculateEpfSummary, calculateDashboardSummaries, calculateNetWorthSummary } from "../shared/utils/reconciliation";
+import { getFirestore, FieldValue, FieldPath } from "firebase-admin/firestore";
+import { calculateAccountBalances, calculateEpfSummary, calculateDashboardSummaries, calculateNetWorthSummary, planDashboardSummaryRepair } from "../shared/utils/reconciliation";
 import {
   borrowingsCreditedTo,
   repaymentsPaidFrom,
@@ -166,19 +166,63 @@ async function rebuildForUser(uid: string) {
   }
 
   // 3. Dashboard Summaries
-  console.log(`\n--- 3. Dashboard Summaries ---`);
+  // SPENDLY-495: compare every stored dashboard_{YYYY-MM} doc with the rebuild,
+  // replace categoryTotals wholesale (a merge would keep stale/negative keys),
+  // zero months whose rows are all gone, and delete the literal
+  // "categoryTotals.<x>" top-level fields the pre-495 writes created.
+  console.log(`
+--- 3. Dashboard Summaries ---`);
   const dashboards = calculateDashboardSummaries(data.expenses, data.incomes);
-  console.log(`  Found ${dashboards.size} active dashboard periods.`);
-  for (const [period, dash] of dashboards.entries()) {
-    if (mode === "apply") {
-      batch.set(db.doc(`users/${uid}/financialSummaries/dashboard_${period}`), {
-        ...dash,
-        summaryVersion: 1,
-        calculatedAt: FieldValue.serverTimestamp()
-      }, { merge: true });
+  const summariesRes = await fetchCollection(uid, "financialSummaries");
+  if (!summariesRes.success) {
+    console.warn(`  [BLOCKED] Could not read financialSummaries; dashboard docs are reported but not written.`);
+  }
+  const dashboardPlans = planDashboardSummaryRepair(
+    summariesRes.docs.map(({ id, ...rest }) => ({ id, data: rest })),
+    dashboards
+  );
+  console.log(`  ${dashboards.size} active period(s); ${dashboardPlans.length} stored or recalculated.`);
+  let dashboardChanges = 0;
+  for (const plan of dashboardPlans) {
+    if (plan.variances.length === 0 && plan.strayFields.length === 0) {
+      console.log(`  [OK] dashboard_${plan.period}`);
+      continue;
+    }
+    dashboardChanges++;
+    console.log(`  [Variance] dashboard_${plan.period}`);
+    for (const line of plan.variances) console.log(`    - ${line}`);
+    if (plan.strayFields.length > 0) {
+      console.log(`    - stray dotted fields to delete: ${plan.strayFields.join(", ")}`);
+    }
+    if (mode === "apply" && summariesRes.success) {
+      const ref = db.doc(`users/${uid}/financialSummaries/dashboard_${plan.period}`);
+      batch.set(
+        ref,
+        { ...plan.next, summaryVersion: 1, calculatedAt: FieldValue.serverTimestamp() },
+        {
+          mergeFields: [
+            "period",
+            "totalExpenses",
+            "totalIncome",
+            "transactionCount",
+            "categoryTotals",
+            "summaryVersion",
+            "calculatedAt",
+          ],
+        }
+      );
       totalWrites++;
+      if (plan.strayFields.length > 0) {
+        // One-segment FieldPaths (the names literally contain a dot), all in
+        // one update so a month costs at most two batch operations.
+        const [first, ...rest] = plan.strayFields.map((field) => new FieldPath(field));
+        const moreDeletes = rest.flatMap((fieldPath) => [fieldPath, FieldValue.delete()]);
+        batch.update(ref, first, FieldValue.delete(), ...moreDeletes);
+        totalWrites++;
+      }
     }
   }
+  console.log(`  ${dashboardChanges} dashboard doc(s) need repair.`);
 
   // 4. Net Worth Summary
   console.log(`\n--- 4. Net Worth Summary ---`);
