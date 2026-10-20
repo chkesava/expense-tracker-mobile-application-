@@ -29,6 +29,7 @@ import { subscriptionFrequency } from "@/shared/types/subscription";
 import { todayDateKey } from "@/shared/utils/dates";
 import { acceptRecurringSuggestion } from "@/services/recurring/recurringSync";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
@@ -88,6 +89,9 @@ export function EditSubscriptionModal({
   onClose,
 }: EditSubscriptionModalProps) {
   const { theme } = useTheme();
+  // SPENDLY-553: an RN Modal portals outside SpendlyUIScope on web; re-apply
+  // the theme variables so its Gluestack controls keep their colours.
+  const scopeVars = useSpendlyScopeVars();
   const displayCurrency = useDisplayCurrency();
   const { accounts } = useAccounts();
   const { categories } = useCategories();
@@ -320,7 +324,7 @@ export function EditSubscriptionModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, { backgroundColor: theme.colors.scrim }, scopeVars]}>
         <View
           style={[
             styles.modalCard,
@@ -718,7 +722,6 @@ export function EditSubscriptionModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.65)",
     justifyContent: "center",
     alignItems: "center",
     padding: 16,

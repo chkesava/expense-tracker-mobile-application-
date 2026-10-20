@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Modal } from "@/components/common/Modal";
+import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Chip } from "@/components/ui/Chip";
@@ -119,7 +121,22 @@ export function CreateBorrowingModal({
   };
 
   return (
-    <Modal isOpen={visible} onClose={onClose} title="Record Borrowing">
+    <Modal
+      isOpen={visible}
+      onClose={onClose}
+      title="Record Borrowing"
+      // SPENDLY-553: 6a form pattern; same handler, disabled and label as before.
+      footer={
+        <SheetActions
+          primary={{
+            label: "Record Borrowing",
+            onPress: handleSave,
+            disabled: !lenderName.trim() || !principal || isSubmitting,
+            loading: isSubmitting,
+          }}
+        />
+      }
+    >
       <View style={styles.body}>
         <View style={styles.group}>
           <Text style={[styles.label, { color: theme.colors.foreground }]}>
@@ -156,6 +173,7 @@ export function CreateBorrowingModal({
             Amount Borrowed ({displayCurrency}) *
           </Text>
           <Input
+            leadingIcon={<CurrencyPrefix />}
             value={principal}
             onChangeText={setPrincipal}
             placeholder="e.g. 20000"
@@ -290,15 +308,6 @@ export function CreateBorrowingModal({
           />
         </View>
 
-        <Button
-          onPress={handleSave}
-          loading={isSubmitting}
-          disabled={!lenderName.trim() || !principal || isSubmitting}
-        >
-          <Text style={{ fontWeight: "800", color: theme.colors.primaryForeground }}>
-            Record Borrowing
-          </Text>
-        </Button>
       </View>
     </Modal>
   );
