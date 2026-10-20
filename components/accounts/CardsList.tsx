@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
+import { useCreditCardLiveUsage } from "@/hooks/useCreditCardLiveUsage";
 import { useSettings } from "@/providers/SettingsProvider";
 import { OPEN_BILL_STATUSES } from "@/shared/types/creditCardBill";
 import type { Account } from "@/shared/types/expense";
@@ -71,13 +72,16 @@ export function CardsList() {
     });
   }, [accounts, typeMap]);
 
+  // SPENDLY-497: cycle numbers derived live; only the total is stored.
+  const liveUsage = useCreditCardLiveUsage(creditCards);
+
   const creditOverview = useMemo(() => {
     let totalLimit = 0;
     let totalUsed = 0;
 
     creditCards.forEach((c) => {
       totalLimit += c.creditLimit || 0;
-      totalUsed += c.unbilledSpend ?? 0;
+      totalUsed += liveUsage.get(c.id)?.unbilledSpend ?? 0;
     });
 
     const totalAvailable = Math.max(0, totalLimit - totalUsed);
@@ -85,12 +89,13 @@ export function CardsList() {
       totalLimit > 0 ? Math.min(100, (totalUsed / totalLimit) * 100) : 0;
 
     return { totalLimit, totalUsed, totalAvailable, utilizationRate };
-  }, [creditCards]);
+  }, [creditCards, liveUsage]);
 
   const cardRows = useMemo((): CreditCardRowModel[] => {
     return creditCards.map((card) => {
       const limit = card.creditLimit || 0;
-      const unbilledSpend = card.unbilledSpend ?? 0;
+      const live = liveUsage.get(card.id);
+      const unbilledSpend = live?.unbilledSpend ?? 0;
       const billDay = normalizeBillGenerationDay(card.billGenerationDay);
       // Pure date math, computed live rather than trusting `nextDueDate`
       // (never written by anything) or a stale materialized cycle field —
@@ -110,7 +115,7 @@ export function CardsList() {
         billDayConfigured: billDay != null,
         usedThisCycle: unbilledSpend,
         cancelledSpend: 0, // Unused natively, handled elsewhere or omitted.
-        statementDue: card.statementDue ?? 0,
+        statementDue: live?.statementDue ?? 0,
         outstanding: card.currentOutstanding ?? 0,
         availableCredit: roundMoney(Math.max(0, limit - unbilledSpend)),
         limit,
@@ -119,7 +124,7 @@ export function CardsList() {
         openBill: openBillByAccount.get(card.id) ?? null,
       };
     });
-  }, [creditCards, openBillByAccount, today, defaultCardAccent, theme.colors.mutedForeground]);
+  }, [creditCards, liveUsage, openBillByAccount, today, defaultCardAccent, theme.colors.mutedForeground]);
 
   const handleOpenCardDetail = useCallback(
     (cardId: string) => {

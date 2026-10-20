@@ -1,4 +1,4 @@
-import type { Account, AccountPayment, Expense } from "../types/expense";
+import type { Account, AccountEntry, AccountPayment, AccountTransfer, Expense, Income } from "../types/expense";
 import { isCashbackPayment } from "../types/expense";
 import type { CreditCardBill, CreditCardBillStatus } from "../types/creditCardBill";
 import {
@@ -98,6 +98,15 @@ export type CreditCardLedger = {
    * liabilities and net worth consume.
    */
   totalOutstanding: number;
+  /**
+   * SPENDLY-497: credit (payments, refunds) the ledger deliberately set aside
+   * because no statement it can see could absorb it — e.g. a payment made
+   * before its statement closed, or one for spend the app never recorded.
+   * The stored `currentOutstanding` (a running sum of every write) still
+   * subtracts it, so stored == totalOutstanding − unappliedCredit is a
+   * consistent state, not drift.
+   */
+  unappliedCredit: number;
   availableCredit: number;
   creditLimit: number;
   openCycle: {
@@ -109,11 +118,82 @@ export type CreditCardLedger = {
   };
 };
 
+/**
+ * SPENDLY-497 — money that moves a card's outstanding without being an
+ * expense or a bill payment. The write path (`buildAccountBalanceOps`) has
+ * always applied these to `currentOutstanding`; the ledger now counts them
+ * too, so a rebuild and the stored value agree.
+ */
+export type CardMovementInput = {
+  /** Income into the card (a refund): reduces what is owed. */
+  incomes?: Income[];
+  /** Manual adjustments: a credit reduces what is owed, a debit adds to it. */
+  entries?: AccountEntry[];
+  /** To the card reduces what is owed; from the card adds to it. */
+  transfers?: AccountTransfer[];
+};
+
+/** Synthetic ids keep these rows apart from real payments and expenses. */
+export const CARD_MOVEMENT_ID_PREFIX = "movement:";
+
+/**
+ * Maps card movements onto the two shapes the ledger already understands:
+ * debits behave like spend, credits like a (non-cashback) payment. Pure.
+ */
+export function cardMovementLedgerRows(
+  cardId: string,
+  movements: CardMovementInput | undefined
+): { debits: Expense[]; credits: AccountPayment[] } {
+  const debits: Expense[] = [];
+  const credits: AccountPayment[] = [];
+  if (!movements) return { debits, credits };
+  const credit = (id: string, amount: number, date: string) =>
+    credits.push({
+      id: `${CARD_MOVEMENT_ID_PREFIX}${id}`,
+      fromAccountId: "external",
+      toAccountId: cardId,
+      amount,
+      date,
+      sourceType: "external",
+    } as AccountPayment);
+  const debit = (id: string, amount: number, date: string) =>
+    debits.push({
+      id: `${CARD_MOVEMENT_ID_PREFIX}${id}`,
+      accountId: cardId,
+      amount,
+      date,
+      month: date.slice(0, 7),
+      category: "",
+      note: "",
+    } as Expense);
+
+  for (const income of movements.incomes ?? []) {
+    if (income.accountId !== cardId || !isActiveLedgerRow(income)) continue;
+    credit(`income:${income.id}`, income.amount, income.date);
+  }
+  for (const entry of movements.entries ?? []) {
+    if (entry.accountId !== cardId) continue;
+    if (entry.direction === "credit") credit(`entry:${entry.id}`, entry.amount, entry.date);
+    else debit(`entry:${entry.id}`, entry.amount, entry.date);
+  }
+  for (const transfer of movements.transfers ?? []) {
+    if (transfer.fromAccountId === transfer.toAccountId) continue;
+    if (transfer.toAccountId === cardId) credit(`transfer:${transfer.id}`, transfer.amount, transfer.date);
+    else if (transfer.fromAccountId === cardId) debit(`transfer:${transfer.id}`, transfer.amount, transfer.date);
+  }
+  return { debits, credits };
+}
+
 export type BuildCreditCardLedgerInput = {
   account: Account;
   expenses: Expense[];
   payments: AccountPayment[];
   bills?: LedgerBillSlice[];
+  /**
+   * SPENDLY-497: refunds, transfers and adjustments on the card. Leave unset
+   * where real payment ids matter (bill allocation writes `paymentIds`).
+   */
+  movements?: CardMovementInput;
   /** YYYY-MM-DD "today" in the user's timezone. */
   today?: string;
   /** How many closed cycles to derive when no statement document exists. */
@@ -129,6 +209,7 @@ function emptyLedger(account: Account, today: string): CreditCardLedger {
     statementDue: 0,
     unbilledSpend: 0,
     cancelledSpend: 0,
+    unappliedCredit: 0,
     totalOutstanding: 0,
     availableCredit: limit,
     creditLimit: limit,
@@ -276,16 +357,21 @@ export function buildCreditCardLedger(
   const billDay = normalizeBillGenerationDay(account.billGenerationDay);
   const limit = Math.max(0, account.creditLimit ?? 0);
 
-  const cardExpenses = input.expenses.filter(
-    (expense) => isActiveLedgerRow(expense) && expense.accountId === account.id
-  );
+  const movementRows = cardMovementLedgerRows(account.id, input.movements);
+  const cardExpenses = [
+    ...input.expenses.filter(
+      (expense) => isActiveLedgerRow(expense) && expense.accountId === account.id
+    ),
+    ...movementRows.debits,
+  ];
   // A voided credit is kept on file but must not settle anything — corrections
   // are reversals here, never deletes, so the row outlives the money it moved.
-  const cardPayments = sortPayments(
-    input.payments.filter(
+  const cardPayments = sortPayments([
+    ...input.payments.filter(
       (payment) => payment.toAccountId === account.id && !payment.voidedAt
-    )
-  );
+    ),
+    ...movementRows.credits,
+  ]);
   const cardBills = (input.bills || []).filter(
     (bill) => bill.accountId === account.id
   );
@@ -304,6 +390,7 @@ export function buildCreditCardLedger(
       ...emptyLedger(account, today),
       unbilledSpend,
       totalOutstanding: unbilledSpend,
+      unappliedCredit: roundMoney(Math.max(0, paid - spend)),
       availableCredit: roundMoney(Math.max(0, limit - unbilledSpend)),
       openCycle: { start: today, end: today, spend, daysRemaining: 0 },
     };
@@ -630,6 +717,17 @@ export function buildCreditCardLedger(
   const totalOutstanding = roundMoney(
     statementDue + unbilledSpend + cancelledSpend
   );
+  // Everything in the credit pool that neither cancelled spend nor the open
+  // cycle consumed (statements were settled earlier, before the pool).
+  const creditPool = roundMoney(carriedCredit + cycleCredit);
+  const unappliedCredit = roundMoney(
+    Math.max(
+      0,
+      creditPool -
+        Math.min(voidedSpend, creditPool) -
+        Math.min(openCycleSpend, cycleCreditForOpen)
+    )
+  );
 
   return {
     statements: [...statements].reverse(),
@@ -637,6 +735,7 @@ export function buildCreditCardLedger(
     unbilledSpend,
     cancelledSpend,
     totalOutstanding,
+    unappliedCredit,
     availableCredit: roundMoney(Math.max(0, limit - unbilledSpend)),
     creditLimit: limit,
     openCycle: {
@@ -864,4 +963,25 @@ export function validateUnbilledSpend(limit: number, unbilledSpend: number): voi
   if (unbilledSpend > limit * MAX_UNBILLED_PERCENT) {
     throw new Error(`Unbilled spend ${unbilledSpend} exceeds ${MAX_UNBILLED_PERCENT * 100}% of credit limit ${limit}`);
   }
+}
+
+/**
+ * SPENDLY-497 — compare-and-set guard for the bill allocation pass. The pass
+ * computes an absolute `amountPaid` from a snapshot; a payment recorded since
+ * (an `increment` + `arrayUnion`) would be overwritten. Inside a transaction
+ * the pass re-reads the bill and writes only when it still holds exactly the
+ * state the patch was computed from. Otherwise it skips, and the next pass
+ * recomputes from the newer state. Pure.
+ */
+export function billAllocationBasisUnchanged(
+  current: { amountPaid?: unknown; paymentIds?: unknown } | undefined,
+  basis: { amountPaid?: number; paymentIds?: string[] }
+): boolean {
+  if (!current) return false;
+  const currentPaid = typeof current.amountPaid === "number" ? current.amountPaid : 0;
+  const basisPaid = basis.amountPaid ?? 0;
+  if (roundMoney(currentPaid) !== roundMoney(basisPaid)) return false;
+  const currentIds = Array.isArray(current.paymentIds) ? (current.paymentIds as unknown[]) : [];
+  const basisIds = basis.paymentIds ?? [];
+  return currentIds.length === basisIds.length && currentIds.every((id, i) => id === basisIds[i]);
 }

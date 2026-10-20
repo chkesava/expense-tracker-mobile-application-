@@ -238,7 +238,6 @@ async function splitExpenseSideOps(
             oldBalance: account.oldBalance,
             oldOutstanding: account.oldOutstanding,
             needsInitialization: account.needsInitialization,
-            isUnbilled: true,
           },
         ])
       );
@@ -735,8 +734,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       const balOps = buildAccountBalanceOps(uid, [{
         accountId,
         amountDelta,
-        isCreditCard: accountTypes.get(accountId)?.isCreditCard || false, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding,
-        isUnbilled: true
+        isCreditCard: accountTypes.get(accountId)?.isCreditCard || false, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding
       }]);
       stageMutationOps(batch, db, balOps);
       if (options?.claimId) {
@@ -786,8 +784,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         const balanceDeltas = rawDeltas.map(d => ({
           accountId: d.accountId,
           amountDelta: d.amountDelta,
-          isCreditCard: accountTypes.get(d.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(d.accountId)?.oldBalance, oldOutstanding: accountTypes.get(d.accountId)?.oldOutstanding,
-          isUnbilled: true
+          isCreditCard: accountTypes.get(d.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(d.accountId)?.oldBalance, oldOutstanding: accountTypes.get(d.accountId)?.oldOutstanding
         }));
         const balOps = buildAccountBalanceOps(uid, balanceDeltas);
         stageMutationOps(batch, db, balOps);
@@ -875,8 +872,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         const balOps = buildAccountBalanceOps(uid, [{
           accountId: payingAccountId,
           amountDelta: totalDelta,
-          isCreditCard: accountTypes.get(payingAccountId)?.isCreditCard || false, oldBalance: accountTypes.get(payingAccountId)?.oldBalance, oldOutstanding: accountTypes.get(payingAccountId)?.oldOutstanding,
-          isUnbilled: true
+          isCreditCard: accountTypes.get(payingAccountId)?.isCreditCard || false, oldBalance: accountTypes.get(payingAccountId)?.oldBalance, oldOutstanding: accountTypes.get(payingAccountId)?.oldOutstanding
         }]);
         stageMutationOps(batch, db, balOps);
       }
@@ -1342,8 +1338,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         const balanceDeltas = rawDeltas.map(d => ({
           accountId: d.accountId,
           amountDelta: d.amountDelta,
-          isCreditCard: accountTypes.get(d.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(d.accountId)?.oldBalance, oldOutstanding: accountTypes.get(d.accountId)?.oldOutstanding,
-          isUnbilled: true
+          isCreditCard: accountTypes.get(d.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(d.accountId)?.oldBalance, oldOutstanding: accountTypes.get(d.accountId)?.oldOutstanding
         }));
         const balOps = buildAccountBalanceOps(uid, balanceDeltas);
         stageMutationOps(batch, db, balOps);

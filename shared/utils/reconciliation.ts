@@ -26,17 +26,23 @@ export function calculateAccountBalances(inputs: {
 }): Partial<Account> {
   const kind = getAccountKind(inputs.typeName);
   if (kind === "credit") {
+    // SPENDLY-497: only the total is stored; the cycle split is derived on
+    // read. Refunds, transfers and adjustments count, as the write path does.
     const res = computeOutstandingCredit(
       inputs.account,
       inputs.expenses,
       inputs.payments,
       inputs.bills,
-      inputs.today
+      inputs.today,
+      { incomes: inputs.incomes, entries: inputs.entries, transfers: inputs.transfers }
     );
+    // Leaves a stored total that differs only by credit the ledger set aside.
     return {
-      currentOutstanding: res.totalOutstanding,
-      unbilledSpend: res.unbilledSpend,
-      availableCredit: res.availableCredit,
+      currentOutstanding: planCardRebuild(
+        inputs.account as unknown as Record<string, unknown>,
+        res.totalOutstanding,
+        res.unappliedCredit
+      ).currentOutstanding,
     };
   } else {
     const bal = computeBankBalance(
@@ -201,3 +207,63 @@ export function calculateNetWorthSummary(inputs: Parameters<typeof composeNetWor
   };
 }
 
+
+/**
+ * SPENDLY-497 — card fields that used to be stored but cannot be kept current
+ * by incremental writes (they change when a billing cycle closes, and nothing
+ * writes at that moment). Screens now derive them live from the ledger; a
+ * rebuild clears the stale stored copies.
+ */
+export const DERIVED_CARD_FIELDS = [
+  "unbilledSpend",
+  "statementDue",
+  "availableCredit",
+  "paidThisCycle",
+  "cashbackThisCycle",
+  "oldestOpenRemaining",
+  "oldestOpenBillId",
+  "openCycleStart",
+] as const;
+
+export type CardRebuildPlan = {
+  currentOutstanding: number;
+  /** "currentOutstanding: was → now" when the stored total is wrong. */
+  variances: string[];
+  /** Stored derived fields to delete. */
+  staleFields: string[];
+  /** True when anything must be written, including clearing the reconciliation flag. */
+  needsWrite: boolean;
+};
+
+/**
+ * What a card rebuild should write, from the stored doc and the recomputed
+ * total. Pure.
+ *
+ * The ledger sets aside credit it cannot match to a statement it sees (the
+ * user's 2026-10-20 decision keeps that safe rule). The stored total is a
+ * running sum of every write, which does subtract that credit — so a stored
+ * value of exactly `ledger total − unappliedCredit` is consistent and is left
+ * alone rather than raised.
+ */
+export function planCardRebuild(
+  account: Record<string, unknown>,
+  recalculatedOutstanding: number,
+  unappliedCredit = 0
+): CardRebuildPlan {
+  const stored = typeof account.currentOutstanding === "number" ? account.currentOutstanding : undefined;
+  const netOfSetAside = roundPaise(recalculatedOutstanding - unappliedCredit);
+  const consistent =
+    stored === recalculatedOutstanding || (unappliedCredit > 0 && stored === netOfSetAside);
+  const target = consistent && stored !== undefined ? stored : recalculatedOutstanding;
+  const variances = consistent
+    ? []
+    : [`currentOutstanding: ${stored ?? "missing"} → ${recalculatedOutstanding}`];
+  const staleFields = DERIVED_CARD_FIELDS.filter((field) => account[field] !== undefined);
+  const flagged = account.summaryReconciliationStatus === "needs_reconciliation";
+  return {
+    currentOutstanding: target,
+    variances,
+    staleFields,
+    needsWrite: variances.length > 0 || staleFields.length > 0 || flagged,
+  };
+}

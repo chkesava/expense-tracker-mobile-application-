@@ -1,6 +1,6 @@
 import { initializeApp, applicationDefault, cert } from "firebase-admin/app";
 import { getFirestore, FieldValue, FieldPath } from "firebase-admin/firestore";
-import { calculateAccountBalances, calculateEpfSummary, calculateDashboardSummaries, calculateNetWorthSummary, planDashboardSummaryRepair } from "../shared/utils/reconciliation";
+import { calculateAccountBalances, calculateEpfSummary, calculateDashboardSummaries, calculateNetWorthSummary, planCardRebuild, planDashboardSummaryRepair } from "../shared/utils/reconciliation";
 import {
   borrowingsCreditedTo,
   repaymentsPaidFrom,
@@ -10,6 +10,7 @@ import {
 import { summarizeBorrowings } from "../shared/utils/borrowingMath";
 import { summarizeReceivables } from "../shared/utils/receivableMath";
 import { todayDateKey } from "../shared/utils/dates";
+import { getAccountKind } from "../shared/utils/accountKind";
 
 function loadCredential() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -110,6 +111,14 @@ async function rebuildForUser(uid: string) {
         hasVariance = true;
       }
     }
+    // SPENDLY-497: cards keep only currentOutstanding; clear stale derived
+    // fields and the "needs reconciliation" flag in the same write.
+    const isCard = getAccountKind(typeMap.get(account.typeId) || "") === "credit";
+    const cardPlan = isCard ? planCardRebuild(account, (updates as any).currentOutstanding) : null;
+    if (cardPlan && cardPlan.staleFields.length > 0) {
+      console.log(`  [Variance] Account ${account.id} (${account.name}) stale derived fields to clear: ${cardPlan.staleFields.join(", ")}`);
+    }
+    if (cardPlan?.needsWrite) hasVariance = true;
     
     if (!hasVariance) console.log(`  [OK] Account ${account.id} (${account.name}) is fully reconciled.`);
 
@@ -121,7 +130,16 @@ async function rebuildForUser(uid: string) {
     Object.assign(account, updates);
 
     if (hasVariance && mode === "apply") {
-      batch.update(db.doc(`users/${uid}/accounts/${account.id}`), { ...updates, balanceLastRebuiltAt: FieldValue.serverTimestamp() });
+      batch.update(db.doc(`users/${uid}/accounts/${account.id}`), {
+        ...updates,
+        ...(cardPlan
+          ? {
+              summaryReconciliationStatus: "healthy",
+              ...Object.fromEntries(cardPlan.staleFields.map((field) => [field, FieldValue.delete()])),
+            }
+          : {}),
+        balanceLastRebuiltAt: FieldValue.serverTimestamp(),
+      });
       totalWrites++;
     }
   }
