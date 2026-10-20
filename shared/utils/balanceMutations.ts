@@ -1,13 +1,12 @@
 import { increment, serverTimestamp } from "firebase/firestore";
 import type { MutationOp } from "@/shared/types/mutations";
-import { buildNetWorthOps } from "./netWorthMutations";
 import { roundMoney } from "./money";
 
 export type BalanceDeltaParams = {
   accountId: string;
   amountDelta: number;
   isCreditCard: boolean;
-  /** The account's balance prior to this mutation. Required for accurate net worth delta calculation if balance crosses zero. */
+  /** The account's balance prior to this mutation; seeds an uninitialized account. */
   oldBalance?: number;
   /** The account's outstanding liability prior to this mutation. */
   oldOutstanding?: number;
@@ -38,10 +37,6 @@ export function buildAccountBalanceOps(
   }
   
   const ops: MutationOp[] = [];
-  
-  let totalBankCashDelta = 0;
-  let totalOverdraftDelta = 0;
-  let totalCreditCardDelta = 0;
 
   for (const d of aggregated.values()) {
     if (d.amountDelta === 0) continue;
@@ -64,14 +59,6 @@ export function buildAccountBalanceOps(
         updateData.currentOutstanding = increment(-d.amountDelta);
       }
       ops.push({ op: "update", ref: { path: ref.path }, data: updateData });
-
-      // In Spendly, a positive credit card delta (e.g. paying bill) reduces liability.
-      // So outstanding goes down by amountDelta. Thus liability goes down by amountDelta.
-      // Actually wait, amountDelta is the change in "balance". 
-      // For credit cards, if you spend 100, amountDelta is -100.
-      // currentOutstanding gets increment(-(-100)) = +100.
-      // So liability increases by 100.
-      totalCreditCardDelta += -d.amountDelta;
     } else {
       const updateData: any = {
         balanceUpdatedAt: serverTimestamp(),
@@ -91,33 +78,7 @@ export function buildAccountBalanceOps(
         ref: { path: ref.path },
         data: updateData,
       });
-
-      // Compute Net Worth Deltas for Bank Accounts
-      const oldBal = d.oldBalance ?? 0;
-      const newBal = oldBal + d.amountDelta;
-
-      if (oldBal >= 0 && newBal >= 0) {
-        totalBankCashDelta += d.amountDelta;
-      } else if (oldBal <= 0 && newBal <= 0) {
-        totalOverdraftDelta += Math.abs(newBal) - Math.abs(oldBal);
-      } else if (oldBal > 0 && newBal < 0) {
-        totalBankCashDelta += -oldBal;
-        totalOverdraftDelta += Math.abs(newBal);
-      } else if (oldBal < 0 && newBal > 0) {
-        totalOverdraftDelta += -Math.abs(oldBal);
-        totalBankCashDelta += newBal;
-      }
     }
-  }
-
-  // Push the net worth ops
-  if (totalBankCashDelta !== 0 || totalOverdraftDelta !== 0 || totalCreditCardDelta !== 0) {
-    const nwOps = buildNetWorthOps(uid, {
-      bankCashTotal: totalBankCashDelta,
-      bankOverdraftLiabilities: totalOverdraftDelta,
-      creditCardLiabilities: totalCreditCardDelta,
-    });
-    ops.push(...nwOps);
   }
 
   return ops;

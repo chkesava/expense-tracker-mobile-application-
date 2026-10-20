@@ -1,4 +1,3 @@
-import { buildNetWorthOps } from "./netWorthMutations";
 import { increment, serverTimestamp } from "firebase/firestore";
 import type { MutationOp } from "@/shared/types/mutations";
 
@@ -56,9 +55,6 @@ export function buildEpfSummaryOps(
     }
   ];
 
-  if (totalDelta !== 0) {
-    ops.push(...buildNetWorthOps(uid, { epfValue: totalDelta }));
-  }
 
   return ops;
 }
