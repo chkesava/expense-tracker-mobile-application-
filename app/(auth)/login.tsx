@@ -22,11 +22,13 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
-import { activeProductRootRoute } from "@/lib/activeProduct";
+import { ACTIVE_PRODUCT, activeProductRootRoute } from "@/lib/activeProduct";
+import { authPalette, usesExpenseLook } from "@/lib/authLook";
 
 import { SpendlyLogo } from "@/components/auth/SpendlyLogo";
 import { AuthBackground } from "@/components/auth/AuthBackground";
 import { SocialLoginButton } from "@/components/auth/SocialLoginButton";
+import { SpendlyUIScope } from "@/components/layout/SpendlyUIScope";
 
 type AuthMode = "login" | "signup" | "forgot";
 
@@ -56,8 +58,11 @@ export default function AuthScreen() {
     return <Redirect href={activeProductRootRoute() as never} />;
   }
 
-  const isDark = theme.colors.background === "#020817" || theme.colors.background === "#000000";
-  const iconColor = isDark ? "#94A3B8" : "#64748B";
+  // SPENDLY-556: Expense follows the theme (Midnight Emerald); Nutrition, which
+  // shares this screen, keeps its exact previous colours.
+  const expenseLook = usesExpenseLook(ACTIVE_PRODUCT);
+  const p = authPalette(theme, expenseLook);
+  const iconColor = p.icon;
 
   const onSubmit = async () => {
     setSubmitting(true);
@@ -106,7 +111,7 @@ export default function AuthScreen() {
 
   const ctaDisabled = submitting || !email.trim() || (mode !== "forgot" && !password) || (mode === "signup" && settings.disableSignups);
 
-  return (
+  const screen = (
     <SafeAreaView style={{ flex: 1 }} edges={["top", "bottom"]}>
       <AuthBackground />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -119,10 +124,10 @@ export default function AuthScreen() {
           <Animated.View entering={FadeInDown.duration(600).springify()} style={styles.headerArea}>
             <SpendlyLogo size={88} />
             <View style={{ marginTop: 24, alignItems: "center" }}>
-              <Text style={[styles.title, { color: isDark ? "#F8FAFC" : "#0B172A", fontFamily: theme.fontFamily.bold }]}>
+              <Text style={[styles.title, { color: p.title, fontFamily: theme.fontFamily.bold }]}>
                 {mode === "login" ? "Welcome back" : mode === "signup" ? "Create an account" : "Reset Password"}
               </Text>
-              <Text style={[styles.subtitle, { color: isDark ? "#94A3B8" : "#64748B", fontFamily: theme.fontFamily.regular }]}>
+              <Text style={[styles.subtitle, { color: p.muted, fontFamily: theme.fontFamily.regular }]}>
                 {mode === "login"
                   ? "Sign in to access your vault"
                   : mode === "signup"
@@ -138,9 +143,9 @@ export default function AuthScreen() {
             style={[
               styles.formSurface,
               { 
-                backgroundColor: isDark ? "#1E293B" : "#FFFFFF",
-                shadowColor: isDark ? "#000" : "#0875D1",
-                borderColor: isDark ? "#334155" : "#F1F5F9",
+                backgroundColor: p.surface,
+                shadowColor: p.surfaceShadow,
+                borderColor: p.surfaceBorder,
               }
             ]}
           >
@@ -169,12 +174,12 @@ export default function AuthScreen() {
             {mode !== "forgot" && (
               <View>
                 <View style={styles.passwordHeader}>
-                  <Text style={[styles.label, { color: isDark ? "#F8FAFC" : "#0B172A", fontFamily: theme.fontFamily.medium }]}>
+                  <Text style={[styles.label, { color: p.title, fontFamily: theme.fontFamily.medium }]}>
                     Password
                   </Text>
                   {mode === "login" && (
                     <Pressable onPress={() => setMode("forgot")} hitSlop={8}>
-                      <Text style={[styles.forgotText, { color: "#19C79A", fontFamily: theme.fontFamily.medium }]}>
+                      <Text style={[styles.forgotText, { color: p.link, fontFamily: theme.fontFamily.medium }]}>
                         Forgot password?
                       </Text>
                     </Pressable>
@@ -201,15 +206,15 @@ export default function AuthScreen() {
               {({ pressed }) => (
                 <View style={[styles.ctaWrapper, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }, ctaDisabled && { opacity: 0.5 }]}>
                   <LinearGradient
-                    colors={["#0875D1", "#19C79A"]}
+                    colors={p.cta}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={styles.ctaGradient}
                   >
                     {submitting ? (
-                      <ActivityIndicator color="#FFFFFF" />
+                      <ActivityIndicator color={p.ctaText} />
                     ) : (
-                      <Text style={[styles.ctaText, { fontFamily: theme.fontFamily.semibold }]}>
+                      <Text style={[styles.ctaText, { color: p.ctaText, fontFamily: theme.fontFamily.semibold }]}>
                         {mode === "login" ? "Sign in" : mode === "signup" ? (settings.disableSignups ? "Signups disabled" : "Create account") : "Send Reset Link"}
                       </Text>
                     )}
@@ -221,9 +226,9 @@ export default function AuthScreen() {
             {mode === "login" && (
               <>
                 <View style={styles.dividerBox}>
-                  <View style={[styles.dividerLine, { backgroundColor: isDark ? "#334155" : "#E2E8F0" }]} />
-                  <Text style={[styles.dividerText, { color: isDark ? "#64748B" : "#94A3B8" }]}>or continue with</Text>
-                  <View style={[styles.dividerLine, { backgroundColor: isDark ? "#334155" : "#E2E8F0" }]} />
+                  <View style={[styles.dividerLine, { backgroundColor: p.divider }]} />
+                  <Text style={[styles.dividerText, { color: p.dividerText }]}>or continue with</Text>
+                  <View style={[styles.dividerLine, { backgroundColor: p.divider }]} />
                 </View>
                 <SocialLoginButton onPress={onGoogle} loading={submitting} disabled={submitting} />
               </>
@@ -233,23 +238,23 @@ export default function AuthScreen() {
           {/* Footer toggle */}
           {mode !== "login" ? (
             <Animated.View entering={FadeInUp.duration(700).delay(300)} style={styles.footer}>
-              <Text style={{ color: isDark ? "#94A3B8" : "#64748B", fontSize: 15 }}>Remembered your password?</Text>
+              <Text style={{ color: p.muted, fontSize: 15 }}>Remembered your password?</Text>
               <Pressable onPress={() => setMode("login")} hitSlop={8}>
-                <Text style={{ color: "#19C79A", fontSize: 15, fontFamily: theme.fontFamily.semibold, marginLeft: 4 }}>Sign in</Text>
+                <Text style={{ color: p.link, fontSize: 15, fontFamily: theme.fontFamily.semibold, marginLeft: 4 }}>Sign in</Text>
               </Pressable>
             </Animated.View>
           ) : (
             <Animated.View entering={FadeInUp.duration(700).delay(300)} style={styles.footer}>
-              <Text style={{ color: isDark ? "#94A3B8" : "#64748B", fontSize: 15 }}>Don't have an account?</Text>
+              <Text style={{ color: p.muted, fontSize: 15 }}>Don't have an account?</Text>
               <Pressable onPress={() => setMode("signup")} disabled={settings.disableSignups} hitSlop={8}>
-                <Text style={{ color: settings.disableSignups ? "#94A3B8" : "#19C79A", fontSize: 15, fontFamily: theme.fontFamily.semibold, marginLeft: 4 }}>
+                <Text style={{ color: settings.disableSignups ? p.linkDisabled : p.link, fontSize: 15, fontFamily: theme.fontFamily.semibold, marginLeft: 4 }}>
                   Create account
                 </Text>
               </Pressable>
             </Animated.View>
           )}
           <Pressable onPress={() => replace("/welcome" as never)} hitSlop={8}>
-            <Text style={{ color: isDark ? "#94A3B8" : "#64748B", textAlign: "center", fontSize: 14 }}>
+            <Text style={{ color: p.muted, textAlign: "center", fontSize: 14 }}>
               Choose Expense Tracker or Ganesh Seva
             </Text>
           </Pressable>
@@ -257,6 +262,11 @@ export default function AuthScreen() {
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
+
+  // This screen sits outside the (app) SpendlyUIScope, so the shared Input
+  // fell back to the default Gluestack palette (dark labels on Midnight
+  // Emerald). Expense gets the theme scope; Nutrition keeps what it had.
+  return expenseLook ? <SpendlyUIScope>{screen}</SpendlyUIScope> : screen;
 }
 
 const styles = StyleSheet.create({
@@ -318,7 +328,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   ctaText: {
-    color: "#FFFFFF",
     fontSize: 17,
     letterSpacing: 0.2,
   },

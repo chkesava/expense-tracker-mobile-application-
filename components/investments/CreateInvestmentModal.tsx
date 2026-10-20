@@ -26,6 +26,8 @@ import type {
   InvestmentKind,
 } from "@/shared/types/investment";
 import { todayDateKey } from "@/shared/utils/dates";
+import { withAlpha } from "@/theme/surfaces";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { SheetBottomInset } from "@/components/common/SheetBottomInset";
@@ -43,6 +45,8 @@ export function CreateInvestmentModal({
   onSubmit,
 }: CreateInvestmentModalProps) {
   const { theme } = useTheme();
+  // SPENDLY-554: RN Modal portals outside SpendlyUIScope on web; keep the theme vars.
+  const scopeVars = useSpendlyScopeVars();
   const displayCurrency = useDisplayCurrency();
 
   const [kind, setKind] = useState<InvestmentKind>("fixed_deposit");
@@ -109,7 +113,7 @@ export function CreateInvestmentModal({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, { backgroundColor: theme.colors.scrim }, scopeVars]}>
         <View
           style={[
             styles.sheetContainer,
@@ -128,19 +132,19 @@ export function CreateInvestmentModal({
                   {
                     backgroundColor:
                       kind === "fixed_deposit"
-                        ? "rgba(59,130,246,0.15)"
+                        ? withAlpha(theme.colors.info, 0.15)
                         : kind === "interest_savings"
-                        ? "rgba(16,185,129,0.15)"
-                        : "rgba(139,92,246,0.15)",
+                        ? withAlpha(theme.colors.success, 0.15)
+                        : withAlpha(theme.colors.primary, 0.15),
                   },
                 ]}
               >
                 {kind === "fixed_deposit" ? (
-                  <Landmark size={20} color="#3B82F6" />
+                  <Landmark size={20} color={theme.colors.info} />
                 ) : kind === "interest_savings" ? (
-                  <Banknote size={20} color="#10B981" />
+                  <Banknote size={20} color={theme.colors.success} />
                 ) : (
-                  <TrendingUp size={20} color="#8B5CF6" />
+                  <TrendingUp size={20} color={theme.colors.primary} />
                 )}
               </View>
               <View>
@@ -291,7 +295,7 @@ export function CreateInvestmentModal({
               disabled={!name.trim() || !principal || isSubmitting}
               style={{ flex: 1 }}
             >
-              <Text style={{ fontWeight: "800", color: "#FFFFFF" }}>
+              <Text style={{ fontWeight: "800", color: theme.colors.primaryForeground }}>
                 Add Investment
               </Text>
             </Button>
@@ -306,7 +310,6 @@ export function CreateInvestmentModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "flex-end",
   },
   sheetContainer: {

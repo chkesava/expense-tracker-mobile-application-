@@ -42,6 +42,12 @@ describe("goal funding view", () => {
     expect(goalRowAccessibilityLabel(car, fmt)).toMatch(/^Car\. Behind target\. Current plan: ₹16000 a month · Scenario: ₹11000 a month \(down ₹5000\)\. needs ₹20000 a month\. finishes .*months behind$/);
   });
 
+  it("reads the completion date in words, not as an ISO date", () => {
+    const label = goalRowAccessibilityLabel({ ...car, projectedCompletion: "2027-03-01" }, fmt);
+    expect(label).toContain("finishes 1 March 2027");
+    expect(label).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
   it("says why, including the mode rule and the shortfall", () => {
     const lines = whyLines(car, "priority", fmt);
     expect(lines.some((l) => l.startsWith("Mode: My priority order."))).toBe(true);

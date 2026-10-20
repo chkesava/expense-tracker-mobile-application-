@@ -2,10 +2,9 @@ import type { ComponentType } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 
-import { ACCOUNT_GREEN } from "@/components/accounts/accountScreenTheme";
 import { haptic } from "@/lib/haptics";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export function SettingsGroupLabel({ label }: { label: string }) {
   const { theme } = useTheme();
@@ -44,9 +43,9 @@ export function SettingsHubRow({
   /** Marks the row as the current destination (SPENDLY-137's sections sheet). */
   selected?: boolean;
 }) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const accent = isDark ? ACCOUNT_GREEN : theme.colors.success;
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
+  const accent = theme.colors.primary;
 
   return (
     <Pressable
@@ -57,12 +56,8 @@ export function SettingsHubRow({
       style={({ pressed }) => [
         styles.row,
         {
-          backgroundColor: isDark ? "#10141C" : theme.colors.card,
-          borderColor: selected
-            ? accent
-            : isDark
-              ? "rgba(148, 163, 184, 0.12)"
-              : theme.colors.border,
+          backgroundColor: theme.colors.card,
+          borderColor: selected ? accent : theme.colors.border,
           opacity: pressed ? 0.92 : 1,
         },
       ]}
@@ -74,16 +69,12 @@ export function SettingsHubRow({
         style={[
           styles.iconWrap,
           {
-            backgroundColor: isDark
-              ? "rgba(74, 222, 128, 0.12)"
-              : "rgba(22, 163, 74, 0.1)",
-            borderColor: isDark
-              ? "rgba(74, 222, 128, 0.28)"
-              : "rgba(22, 163, 74, 0.2)",
+            backgroundColor: surfaces.wash(accent),
+            borderColor: withAlpha(accent, 0.24),
           },
         ]}
       >
-        <Icon size={18} color={isDark ? ACCOUNT_GREEN : theme.colors.success} strokeWidth={2.2} />
+        <Icon size={18} color={accent} strokeWidth={2.2} />
       </View>
       <View style={styles.copy}>
         <Text

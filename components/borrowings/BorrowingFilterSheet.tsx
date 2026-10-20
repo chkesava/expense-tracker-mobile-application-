@@ -1,10 +1,6 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import {
-  ACCOUNT_GREEN,
-  accountAccent,
-} from "@/components/accounts/accountScreenTheme";
 import { Modal } from "@/components/common";
 import { Button } from "@/components/ui/Button";
 import {
@@ -21,7 +17,6 @@ import {
   type BorrowingFilterState,
 } from "@/shared/utils/borrowingFilters";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 /**
  * Borrowings filter sheet (SPENDLY-139).
@@ -48,9 +43,9 @@ export function BorrowingFilterSheet({
   onApply: (filters: BorrowingFilterState) => void;
   getResultCount: (filters: BorrowingFilterState) => number;
 }) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const accent = accountAccent(isDark);
+  const { theme } = useTheme();
+  // SPENDLY-553: the theme accent, not the fixed account green.
+  const accent = theme.colors.primary;
 
   const [draft, setDraft] = useState<BorrowingFilterState>(filters);
 
@@ -135,14 +130,14 @@ export function BorrowingFilterSheet({
           style={({ pressed }) => [
             styles.applyBtn,
             {
-              backgroundColor: isDark ? ACCOUNT_GREEN : accent,
+              backgroundColor: accent,
               opacity: pressed ? 0.85 : 1,
             },
           ]}
           accessibilityRole="button"
           accessibilityLabel={`Show ${resultCount} matching borrowings`}
         >
-          <Text style={styles.applyLabel}>
+          <Text style={[styles.applyLabel, { color: theme.colors.primaryForeground }]}>
             {resultCount === 1 ? "Show 1 borrowing" : `Show ${resultCount} borrowings`}
           </Text>
         </Pressable>
@@ -207,7 +202,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   applyLabel: {
-    color: "#052E16",
     fontSize: 15,
     fontWeight: "800",
   },

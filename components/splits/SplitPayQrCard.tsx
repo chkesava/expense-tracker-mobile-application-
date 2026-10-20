@@ -122,8 +122,8 @@ export function SplitPayQrCard({
                 pressed && { opacity: 0.8 },
               ]}
             >
-              <Share2 size={14} color="#FFFFFF" />
-              <Text style={styles.payText}>Share</Text>
+              <Share2 size={14} color={qrStyle.bg} />
+              <Text style={[styles.payText, { color: qrStyle.bg }]}>Share</Text>
             </Pressable>
           </View>
         </View>
@@ -178,7 +178,6 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   payText: {
-    color: "#FFFFFF",
     fontSize: 11,
     fontWeight: "700",
   },

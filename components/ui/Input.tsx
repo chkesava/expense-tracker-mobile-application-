@@ -1,5 +1,6 @@
 import React from "react";
 import { type StyleProp, type TextInputProps, type ViewStyle, View } from "react-native";
+import { useTheme } from "@/theme/ThemeProvider";
 import { Input as GluestackInput, InputField as GluestackInputField, InputSlot as GluestackInputSlot } from "@/components/ui/input/index";
 import { FormControl as GluestackFormControl, FormControlLabel as GluestackFormControlLabel, FormControlLabelText as GluestackFormControlLabelText, FormControlError as GluestackFormControlError, FormControlErrorText as GluestackFormControlErrorText, FormControlHelper as GluestackFormControlHelper, FormControlHelperText as GluestackFormControlHelperText } from "@/components/ui/form-control/index";
 
@@ -12,6 +13,15 @@ export type InputProps = TextInputProps & {
   containerStyle?: StyleProp<ViewStyle>;
 };
 
+/**
+ * Shared text field (Expense, Nutrition and Ganesh Seva).
+ *
+ * SPENDLY-548: the Gluestack text styles use `font-body`, i.e.
+ * `var(--font-sans)`, which nothing defines. On web that fell back to the
+ * browser's default serif; on native, to the system font. Label, helper,
+ * error and field text now take the theme font explicitly, the way every
+ * other Spendly and Ganesh Seva text does. A caller's `style` still wins.
+ */
 export function Input({
   label,
   error,
@@ -25,16 +35,18 @@ export function Input({
   editable,
   ...props
 }: InputProps) {
+  const { theme } = useTheme();
   const isInvalid = Boolean(error);
   const isDisabled = editable === false;
 
   return (
     <GluestackFormControl isInvalid={isInvalid} isDisabled={isDisabled} style={containerStyle as any}>
-      {label && (
+      {/* SPENDLY-556: a ternary, not `label &&` - label="" rendered a bare "" text node in a View. */}
+      {label ? (
         <GluestackFormControlLabel className="mb-1">
-          <GluestackFormControlLabelText>{label}</GluestackFormControlLabelText>
+          <GluestackFormControlLabelText style={{ fontFamily: theme.fontFamily.medium }}>{label}</GluestackFormControlLabelText>
         </GluestackFormControlLabel>
-      )}
+      ) : null}
       
       <GluestackInput className="min-h-[52px]">
         {leadingIcon && (
@@ -46,7 +58,7 @@ export function Input({
           onFocus={onFocus as any}
           onBlur={onBlur as any}
           editable={editable}
-          style={style as any}
+          style={[{ fontFamily: theme.fontFamily.regular }, style] as any}
           {...props}
         />
         {trailingIcon && (
@@ -58,11 +70,11 @@ export function Input({
 
       {error ? (
         <GluestackFormControlError>
-          <GluestackFormControlErrorText>{error}</GluestackFormControlErrorText>
+          <GluestackFormControlErrorText style={{ fontFamily: theme.fontFamily.medium }}>{error}</GluestackFormControlErrorText>
         </GluestackFormControlError>
       ) : helperText ? (
         <GluestackFormControlHelper>
-          <GluestackFormControlHelperText>{helperText}</GluestackFormControlHelperText>
+          <GluestackFormControlHelperText style={{ fontFamily: theme.fontFamily.regular }}>{helperText}</GluestackFormControlHelperText>
         </GluestackFormControlHelper>
       ) : null}
     </GluestackFormControl>

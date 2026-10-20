@@ -46,8 +46,9 @@ import { NO_UPI_PAY_LINK_REASON } from "@/shared/utils/splitShareLink";
 import { splitClaimDocId } from "@/shared/utils/splitClaims";
 import type { SplitShareClaim } from "@/shared/types/splitShareClaim";
 import { toast } from "@/lib/toast";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { logError } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -64,6 +65,9 @@ export function SplitDetailModal({
   onClose,
 }: SplitDetailModalProps) {
   const { theme } = useTheme();
+  // SPENDLY-550: an RN Modal portals outside SpendlyUIScope on web, so its
+  // Gluestack Inputs/Buttons lost the theme variables (dark text on dark).
+  const scopeVars = useSpendlyScopeVars();
   const surfaces = useSurfaces();
   const { user } = useAuth();
   const displayCurrency = useDisplayCurrency();
@@ -474,7 +478,7 @@ export function SplitDetailModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, { backgroundColor: theme.colors.scrim }, scopeVars]}>
         <View
           style={[
             styles.modalCard,
@@ -490,7 +494,7 @@ export function SplitDetailModal({
                 <View
                   style={[
                     styles.categoryBadge,
-                    { backgroundColor: "rgba(107, 99, 255, 0.15)" },
+                    { backgroundColor: withAlpha(theme.colors.primary, 0.15) },
                   ]}
                 >
                   <Text
@@ -510,8 +514,8 @@ export function SplitDetailModal({
                       {
                         backgroundColor:
                           statusLabel === "COLLECTING"
-                            ? "rgba(107, 99, 255, 0.15)"
-                            : "rgba(34, 197, 94, 0.15)",
+                            ? withAlpha(theme.colors.primary, 0.15)
+                            : withAlpha(theme.colors.success, 0.15),
                       },
                     ]}
                   >
@@ -522,7 +526,7 @@ export function SplitDetailModal({
                           color:
                             statusLabel === "COLLECTING"
                               ? theme.colors.primary
-                              : "#22C55E",
+                              : theme.colors.success,
                         },
                       ]}
                     >
@@ -699,7 +703,7 @@ export function SplitDetailModal({
                       fontSize: 16,
                       fontWeight: "800",
                       color: progress.isFullySettled
-                        ? "#22C55E"
+                        ? theme.colors.success
                         : theme.colors.primary,
                     }}
                   >
@@ -720,7 +724,7 @@ export function SplitDetailModal({
                     {
                       width: `${progress.percentage}%`,
                       backgroundColor: progress.isFullySettled
-                        ? "#22C55E"
+                        ? theme.colors.success
                         : theme.colors.primary,
                     },
                   ]}
@@ -850,16 +854,16 @@ export function SplitDetailModal({
                             styles.checkbox,
                             {
                               backgroundColor: settledShare
-                                ? "#22C55E"
+                                ? theme.colors.success
                                 : "transparent",
                               borderColor: settledShare
-                                ? "#22C55E"
+                                ? theme.colors.success
                                 : theme.colors.mutedForeground,
                             },
                           ]}
                         >
                           {settledShare ? (
-                            <Check size={12} color="#FFFFFF" strokeWidth={3} />
+                            <Check size={12} color={theme.colors.successForeground} strokeWidth={3} />
                           ) : null}
                         </View>
 
@@ -1161,7 +1165,6 @@ export function SplitDetailModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.65)",
     justifyContent: "center",
     alignItems: "center",
     padding: 16,

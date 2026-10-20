@@ -10,10 +10,6 @@ import {
 import { RotateCcw, X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import {
-  accountAccent,
-  accountAccentBorder,
-} from "@/components/accounts/accountScreenTheme";
 import { haptic } from "@/lib/haptics";
 import type {
   AccountActivityFilterOptions,
@@ -25,8 +21,9 @@ import {
   createEmptyAccountActivityFilters,
   getAccountActivityFilterValidationError,
 } from "@/shared/utils/accountActivityFilters";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
+import { withAlpha } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 import { Input } from "@/components/ui/Input";
 import { Chip } from "@/components/ui/Chip";
@@ -69,15 +66,16 @@ export function AccountActivityFilterModal({
   onApply,
   getResultCount,
 }: AccountActivityFilterModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  // SPENDLY-552: an RN Modal portals outside SpendlyUIScope on web; re-apply
+  // the theme variables so its Gluestack controls keep their colours.
+  const scopeVars = useSpendlyScopeVars();
   const insets = useSafeAreaInsets();
-  const accent = accountAccent(isDark);
-  const accentBorder = accountAccentBorder(isDark);
-  const surface = isDark ? "#10141C" : theme.colors.card;
-  const insetBorder = isDark
-    ? "rgba(148,163,184,0.16)"
-    : "rgba(15,23,42,0.09)";
+  // SPENDLY-552: the theme accent, not the fixed account green.
+  const accent = theme.colors.primary;
+  const accentBorder = withAlpha(theme.colors.primary, 0.45);
+  const surface = theme.colors.card;
+  const insetBorder = theme.colors.border;
   const [draft, setDraft] = useState<AccountActivityFilters>(filters);
 
   useEffect(() => {
@@ -179,7 +177,7 @@ export function AccountActivityFilterModal({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, { backgroundColor: theme.colors.scrim }, scopeVars]}>
         <Pressable
           style={styles.backdropFill}
           onPress={onClose}
@@ -373,7 +371,7 @@ export function AccountActivityFilterModal({
           </ScrollView>
 
           {validationError ? (
-            <Text style={styles.validationError} accessibilityRole="alert">
+            <Text style={[styles.validationError, { color: theme.colors.destructive }]} accessibilityRole="alert">
               {validationError}
             </Text>
           ) : null}
@@ -403,9 +401,7 @@ export function AccountActivityFilterModal({
               style={({ pressed }) => [
                 styles.footerButton,
                 {
-                  backgroundColor: isDark
-                    ? "rgba(74,222,128,0.16)"
-                    : "rgba(22,163,74,0.12)",
+                  backgroundColor: withAlpha(theme.colors.primary, 0.14),
                   borderColor: accentBorder,
                   opacity: validationError ? 0.45 : pressed ? 0.75 : 1,
                 },
@@ -426,7 +422,6 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.65)",
   },
   backdropFill: {
     flex: 1,
@@ -540,7 +535,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   validationError: {
-    color: "#F87171",
     fontSize: 12,
     fontWeight: "600",
     paddingHorizontal: 20,

@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/Input";
 import { useTrips } from "@/hooks/useTrips";
 import type { TripCategoryBudget } from "@/shared/types/trip";
 import { TRIP_BUDGET_CATEGORIES } from "@/shared/utils/tripCalculations";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
@@ -37,6 +38,9 @@ type WizardStep = 1 | 2 | 3;
 
 export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
   const { theme } = useTheme();
+  // SPENDLY-550: an RN Modal portals outside SpendlyUIScope on web, so its
+  // Gluestack Inputs/Buttons lost the theme variables (dark text on dark).
+  const scopeVars = useSpendlyScopeVars();
   const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
   const { createTrip } = useTrips({ enabled: false });
@@ -144,7 +148,7 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, { backgroundColor: theme.colors.scrim }, scopeVars]}>
         <View
           style={[
             styles.modalCard,
@@ -506,7 +510,6 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.65)",
     justifyContent: "center",
     alignItems: "center",
     padding: 16,

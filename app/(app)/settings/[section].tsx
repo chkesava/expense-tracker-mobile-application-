@@ -17,11 +17,9 @@ import {
   SETTINGS_SECTIONS,
 } from "@/shared/config/settingsNav";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export default function SettingsSectionScreen() {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
   const { back } = useRouter();
   const params = useLocalSearchParams<{ section?: string }>();
   const sectionId = Array.isArray(params.section)
@@ -51,7 +49,7 @@ export default function SettingsSectionScreen() {
         icon={
           <Icon
             size={22}
-            color={isDark ? "#FFFFFF" : theme.colors.success}
+            color={theme.colors.primary}
             strokeWidth={2.2}
           />
         }

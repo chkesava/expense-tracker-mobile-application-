@@ -28,6 +28,7 @@ import {
   splitDetailsBlockedReason,
   type SplitDetailsUpdate,
 } from "@/shared/utils/splitMath";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
@@ -64,6 +65,9 @@ export function EditSplitModal({
   onConfirm,
 }: EditSplitModalProps) {
   const { theme } = useTheme();
+  // SPENDLY-550: an RN Modal portals outside SpendlyUIScope on web, so its
+  // Gluestack Inputs/Buttons lost the theme variables (dark text on dark).
+  const scopeVars = useSpendlyScopeVars();
   const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
   const { visibleParents } = useCategories();
@@ -162,7 +166,7 @@ export function EditSplitModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, { backgroundColor: theme.colors.scrim }, scopeVars]}>
         <View
           style={[
             styles.card,
@@ -414,7 +418,6 @@ function FieldLabel({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.65)",
     justifyContent: "center",
     padding: 16,
   },

@@ -20,8 +20,11 @@ import {
 import { Redirect, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { SpendlyUIScope } from "@/components/layout/SpendlyUIScope";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { ACTIVE_PRODUCT } from "@/lib/activeProduct";
+import { usesExpenseLook } from "@/lib/authLook";
 import { logError } from "@/lib/errors";
 import { clearAllPins } from "@/lib/pinVault";
 import { forgetPrivacyLockout } from "@/lib/privacyLockout";
@@ -33,6 +36,7 @@ import {
 } from "@/lib/reauthenticate";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
+import { useWorkspace } from "@/providers/WorkspaceProvider";
 import {
   ReauthRequiredError,
   runAccountDeletion,
@@ -44,6 +48,7 @@ type Step = "confirm" | "reauth" | "running" | "failed";
 
 export default function DeleteAccountScreen() {
   const { theme } = useTheme();
+  const { activeWorkspace } = useWorkspace();
   const insets = useSafeAreaInsets();
   const { realUser, isDuress, logout } = useAuth();
 
@@ -143,7 +148,7 @@ export default function DeleteAccountScreen() {
     [theme],
   );
 
-  return (
+  const screen = (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.background }}
       contentContainerStyle={{
@@ -269,4 +274,11 @@ export default function DeleteAccountScreen() {
       ) : null}
     </ScrollView>
   );
+
+  // SPENDLY-556: this route sits outside the (app) SpendlyUIScope, so its
+  // Input and outline Button fell back to the default palette (a white
+  // button on Midnight Emerald). Scope it only when it is used as Expense;
+  // Nutrition and Ganesh reach the same screen and keep what they had.
+  const asExpense = usesExpenseLook(ACTIVE_PRODUCT) && (ACTIVE_PRODUCT !== null || activeWorkspace === "expense");
+  return asExpense ? <SpendlyUIScope>{screen}</SpendlyUIScope> : screen;
 }

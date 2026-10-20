@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 
+import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { ChipRow, RowSwitch } from "@/components/settings/SettingsControls";
-import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import type { BaselineMethod, BaselineWindow } from "@/shared/utils/runwayBaseline";
 import {
@@ -67,7 +68,19 @@ export function RunwaySettingsSheet({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Runway settings" density="compact">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Runway settings"
+      density="compact"
+      // SPENDLY-555: the 6a form pattern; the action is pinned below the body.
+      footer={
+        <SheetActions
+          secondary={{ label: "Cancel", onPress: onClose }}
+          primary={{ label: "Save settings", onPress: save, loading: saving, disabled: Boolean(amountError || monthsError) }}
+        />
+      }
+    >
       <View style={{ gap: theme.space.md }}>
         <View style={{ gap: theme.space.xs }}>
           <Text style={label}>Minimum reserve</Text>
@@ -82,7 +95,7 @@ export function RunwaySettingsSheet({
             onSelect={(v) => setDraft({ ...draft, thresholdKind: v })}
           />
           {draft.thresholdKind === "amount" ? (
-            <Input label="Reserve amount" keyboardType="numeric" value={amountText} onChangeText={setAmountText} error={amountError} />
+            <Input label="Reserve amount" keyboardType="numeric" leadingIcon={<CurrencyPrefix />} value={amountText} onChangeText={setAmountText} error={amountError} />
           ) : null}
           {draft.thresholdKind === "essential_months" ? (
             <Input
@@ -138,9 +151,6 @@ export function RunwaySettingsSheet({
           />
         </View>
 
-        <Button onPress={save} loading={saving} disabled={Boolean(amountError || monthsError)}>
-          Save settings
-        </Button>
       </View>
     </Modal>
   );

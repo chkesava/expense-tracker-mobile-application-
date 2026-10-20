@@ -14,10 +14,10 @@ import {
   Users,
 } from "lucide-react-native";
 
-import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
-import { SkeletonCard } from "@/components/common/Skeleton";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
 import { CollectList } from "@/components/collect/CollectList";
 import { SpacesList } from "@/components/spaces/SpacesList";
 import { SplitsList } from "@/components/splits/SplitsList";
@@ -145,8 +145,8 @@ function SharedVaultsPanel() {
           }}
           style={styles.headerActionBtn}
         >
-          <Plus size={16} color="#FFFFFF" />
-          <Text style={styles.headerActionText}>Create</Text>
+          <Plus size={16} color={theme.colors.primaryForeground} />
+          <Text style={[styles.headerActionText, { color: theme.colors.primaryForeground }]}>Create</Text>
         </Button>
       </View>
 
@@ -155,22 +155,18 @@ function SharedVaultsPanel() {
           <View style={styles.summaryRow}>
             <View style={styles.summaryBlock}>
               <Text style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}>
-                ACTIVE VAULTS
+                Active vaults
               </Text>
               <Text style={[styles.summaryValue, { color: theme.colors.foreground }]}>
-                {aggregateStats.vaultCount} Space{aggregateStats.vaultCount === 1 ? "" : "s"}
+                {aggregateStats.vaultCount} vault{aggregateStats.vaultCount === 1 ? "" : "s"}
               </Text>
             </View>
 
             <View style={[styles.summaryBlock, { alignItems: "flex-end" }]}>
               <Text style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}>
-                TOTAL ALLOCATED BUDGET
+                Total allocated budget
               </Text>
-              <Amount
-                value={aggregateStats.totalBudget}
-                currency={displayCurrency}
-                style={{ fontSize: 18, fontWeight: "900", color: theme.colors.primary }}
-              />
+              <FinancialAmount value={aggregateStats.totalBudget} currency={displayCurrency} size="lg" weight="bold" />
             </View>
           </View>
         </Card>
@@ -185,11 +181,7 @@ function SharedVaultsPanel() {
       ) : null}
 
       {loading ? (
-        <View style={{ gap: 12, marginTop: 4 }}>
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-        </View>
+        <DashboardSkeleton variant="section" rows={3} />
       ) : error ? (
         <ErrorState
           title="Couldn't load your vaults"
@@ -207,7 +199,7 @@ function SharedVaultsPanel() {
           }
           primaryAction={{
             label: "Create First Vault",
-            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+            icon: <Plus size={16} color={theme.colors.primaryForeground} strokeWidth={2.4} />,
             onPress: () => setIsCreateModalOpen(true),
           }}
           secondaryAction={
@@ -271,7 +263,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   headerActionText: {
-    color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "700",
   },
@@ -289,8 +280,7 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.5,
+    fontWeight: "600",
   },
   summaryValue: {
     fontSize: 19,

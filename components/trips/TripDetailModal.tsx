@@ -31,8 +31,10 @@ import {
   getTripStatus,
   isTripOverBudget,
 } from "@/shared/utils/tripCalculations";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 
 export interface TripDetailModalProps {
@@ -43,8 +45,13 @@ export interface TripDetailModalProps {
 
 export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps) {
   const { theme } = useTheme();
+  // SPENDLY-550: an RN Modal portals outside SpendlyUIScope on web, so its
+  // Gluestack Inputs/Buttons lost the theme variables (dark text on dark).
+  const scopeVars = useSpendlyScopeVars();
   const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
+  // SPENDLY-550: budget text is masked in ghost mode, like every amount.
+  const money = useGhostMoney(displayCurrency);
   const { expenses } = useExpenses();
   const { deleteTrip, completeTrip, unlinkExpense } = useTrips({ enabled: false });
 
@@ -72,8 +79,8 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
     : 0;
 
   const statusColors: Record<string, string> = {
-    active: "#22C55E",
-    upcoming: "#3B82F6",
+    active: theme.colors.success,
+    upcoming: theme.colors.info,
     completed: theme.colors.mutedForeground,
   };
   const statusColor = statusColors[status] || theme.colors.mutedForeground;
@@ -127,7 +134,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, { backgroundColor: theme.colors.scrim }, scopeVars]}>
         <View
           style={[
             styles.modalCard,
@@ -155,10 +162,10 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
                   <View
                     style={[
                       styles.statusBadge,
-                      { backgroundColor: "rgba(239,68,68,0.15)" },
+                      { backgroundColor: withAlpha(theme.colors.destructive, 0.15) },
                     ]}
                   >
-                    <Text style={[styles.statusBadgeText, { color: "#EF4444" }]}>
+                    <Text style={[styles.statusBadgeText, { color: theme.colors.destructive }]}>
                       OVER BUDGET
                     </Text>
                   </View>
@@ -239,7 +246,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
                     style={{
                       fontSize: 22,
                       fontWeight: "900",
-                      color: overBudget ? "#EF4444" : theme.colors.foreground,
+                      color: overBudget ? theme.colors.destructive : theme.colors.foreground,
                     }}
                   />
                 </View>
@@ -276,7 +283,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
                     styles.progressFill,
                     {
                       width: `${spentPercent}%`,
-                      backgroundColor: overBudget ? "#EF4444" : theme.colors.primary,
+                      backgroundColor: overBudget ? theme.colors.destructive : theme.colors.primary,
                     },
                   ]}
                 />
@@ -284,13 +291,12 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
               <Text
                 style={{
                   fontSize: 11,
-                  color: overBudget ? "#EF4444" : theme.colors.mutedForeground,
+                  color: overBudget ? theme.colors.destructive : theme.colors.mutedForeground,
                   fontWeight: "600",
                   textAlign: "right",
                 }}
               >
-                {spentPercent}% used · {displayCurrency}{" "}
-                {Math.max(0, trip.totalBudget - spent).toLocaleString()} remaining
+                {spentPercent}% used · {money(Math.max(0, trip.totalBudget - spent))} remaining
               </Text>
             </View>
 
@@ -325,7 +331,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
                           style={{
                             fontSize: 12,
                             fontWeight: "700",
-                            color: cat.isOverBudget ? "#EF4444" : theme.colors.foreground,
+                            color: cat.isOverBudget ? theme.colors.destructive : theme.colors.foreground,
                           }}
                         />
                         {cat.limit > 0 && (
@@ -335,7 +341,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
                               color: theme.colors.mutedForeground,
                             }}
                           >
-                            / {displayCurrency} {cat.limit.toLocaleString()}
+                            / {money(cat.limit)}
                           </Text>
                         )}
                       </View>
@@ -354,7 +360,7 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
                             {
                               width: `${cat.percentage}%`,
                               backgroundColor: cat.isOverBudget
-                                ? "#EF4444"
+                                ? theme.colors.destructive
                                 : theme.colors.primary,
                             },
                           ]}
@@ -465,7 +471,6 @@ export function TripDetailModal({ visible, trip, onClose }: TripDetailModalProps
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.65)",
     justifyContent: "center",
     alignItems: "center",
     padding: 16,

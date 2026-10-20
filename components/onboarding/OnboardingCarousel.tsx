@@ -27,6 +27,8 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
+import { ACTIVE_PRODUCT } from "@/lib/activeProduct";
+import { usesExpenseLook } from "@/lib/authLook";
 
 export const FIRST_LAUNCH_KEY = "@vault_has_launched_before";
 
@@ -91,6 +93,33 @@ export function OnboardingCarousel() {
   const { theme, themeName } = useTheme();
   const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
+  // SPENDLY-556: every build shows this carousel. Expense follows the theme
+  // (one accent, theme surfaces and type); the other builds keep the
+  // per-slide colours they had.
+  const expenseLook = usesExpenseLook(ACTIVE_PRODUCT);
+  const look = expenseLook
+    ? {
+        background: theme.colors.background,
+        title: theme.colors.foreground,
+        muted: theme.colors.mutedForeground,
+        iconSurface: theme.colors.card,
+        dotIdle: surfaces.track,
+        onAccent: theme.colors.primaryForeground,
+        heading: { fontFamily: theme.fontFamily.bold },
+        body: { fontFamily: theme.fontFamily.regular },
+      }
+    : {
+        background: isDark ? "#0A0D18" : "#F8FAFC",
+        title: isDark ? "#FFFFFF" : "#0F172A",
+        muted: isDark ? "#94A3B8" : "#64748B",
+        iconSurface: isDark ? "rgba(15, 23, 42, 0.85)" : "#FFFFFF",
+        dotIdle: isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)",
+        onAccent: "#FFFFFF",
+        heading: null,
+        body: null,
+      };
+  const accentOf = (slide: OnboardingSlide) => (expenseLook ? theme.colors.primary : slide.accentColor);
+  const glowOf = (slide: OnboardingSlide) => (expenseLook ? withAlpha(theme.colors.primary, 0.25) : slide.glowColor);
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
 
@@ -123,13 +152,14 @@ export function OnboardingCarousel() {
   };
 
   const currentSlide = ONBOARDING_SLIDES[activeIndex] || ONBOARDING_SLIDES[0];
+  const currentAccent = accentOf(currentSlide);
 
   return (
     <View
       style={[
         styles.container,
         {
-          backgroundColor: isDark ? "#0A0D18" : "#F8FAFC",
+          backgroundColor: look.background,
           paddingTop: insets.top + 8,
           paddingBottom: Math.max(insets.bottom, 16),
         },
@@ -141,13 +171,14 @@ export function OnboardingCarousel() {
           <View
             style={[
               styles.brandDot,
-              { backgroundColor: currentSlide.accentColor },
+              { backgroundColor: currentAccent },
             ]}
           />
           <Text
             style={[
               styles.brandText,
-              { color: isDark ? "#FFFFFF" : "#0F172A" },
+              { color: look.title },
+              look.heading,
             ]}
           >
             VAULT
@@ -169,7 +200,8 @@ export function OnboardingCarousel() {
           <Text
             style={[
               styles.skipText,
-              { color: isDark ? "#94A3B8" : "#64748B" },
+              { color: look.muted },
+              look.body,
             ]}
           >
             Skip
@@ -197,7 +229,7 @@ export function OnboardingCarousel() {
                 <View
                   style={[
                     styles.heroGlow,
-                    { backgroundColor: item.glowColor },
+                    { backgroundColor: glowOf(item) },
                   ]}
                 />
 
@@ -205,15 +237,13 @@ export function OnboardingCarousel() {
                   style={[
                     styles.iconCircle,
                     {
-                      backgroundColor: isDark
-                        ? "rgba(15, 23, 42, 0.85)"
-                        : "#FFFFFF",
-                      borderColor: item.accentColor,
-                      shadowColor: item.accentColor,
+                      backgroundColor: look.iconSurface,
+                      borderColor: accentOf(item),
+                      shadowColor: accentOf(item),
                     },
                   ]}
                 >
-                  <Icon size={44} color={item.accentColor} strokeWidth={2.2} />
+                  <Icon size={44} color={accentOf(item)} strokeWidth={2.2} />
                 </View>
               </View>
 
@@ -224,14 +254,15 @@ export function OnboardingCarousel() {
                     styles.badge,
                     {
                       backgroundColor: surfaces.control,
-                      borderColor: withAlpha(item.accentColor, 0.25),
+                      borderColor: withAlpha(accentOf(item), 0.25),
                     },
                   ]}
                 >
                   <Text
                     style={[
                       styles.badgeText,
-                      { color: item.accentColor },
+                      { color: accentOf(item) },
+                      look.body,
                     ]}
                   >
                     {item.badge}
@@ -241,7 +272,8 @@ export function OnboardingCarousel() {
                 <Text
                   style={[
                     styles.title,
-                    { color: isDark ? "#FFFFFF" : "#0F172A" },
+                    { color: look.title },
+                    look.heading,
                   ]}
                 >
                   {item.title}
@@ -250,7 +282,8 @@ export function OnboardingCarousel() {
                 <Text
                   style={[
                     styles.description,
-                    { color: isDark ? "#94A3B8" : "#64748B" },
+                    { color: look.muted },
+                    look.body,
                   ]}
                 >
                   {item.description}
@@ -275,13 +308,9 @@ export function OnboardingCarousel() {
                   isActive
                     ? [
                         styles.dotActive,
-                        { backgroundColor: currentSlide.accentColor },
+                        { backgroundColor: currentAccent },
                       ]
-                    : {
-                        backgroundColor: isDark
-                          ? "rgba(255,255,255,0.15)"
-                          : "rgba(0,0,0,0.12)",
-                      },
+                    : { backgroundColor: look.dotIdle },
                 ]}
               />
             );
@@ -294,8 +323,8 @@ export function OnboardingCarousel() {
           style={({ pressed }) => [
             styles.actionButton,
             {
-              backgroundColor: currentSlide.accentColor,
-              shadowColor: currentSlide.accentColor,
+              backgroundColor: currentAccent,
+              shadowColor: currentAccent,
             },
             pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] },
           ]}
@@ -306,12 +335,12 @@ export function OnboardingCarousel() {
               : "Continue"
           }
         >
-          <Text style={styles.actionButtonText}>
+          <Text style={[styles.actionButtonText, { color: look.onAccent }, look.heading]}>
             {activeIndex === ONBOARDING_SLIDES.length - 1
               ? "Get Started"
               : "Continue"}
           </Text>
-          <ChevronRight size={18} color="#FFFFFF" strokeWidth={2.6} />
+          <ChevronRight size={18} color={look.onAccent} strokeWidth={2.6} />
         </Pressable>
 
         {/* Already have an account link */}
@@ -323,14 +352,15 @@ export function OnboardingCarousel() {
           <Text
             style={[
               styles.signInText,
-              { color: isDark ? "#94A3B8" : "#64748B" },
+              { color: look.muted },
+              look.body,
             ]}
           >
             Already have an account?{" "}
             <Text
               style={[
                 styles.signInHighlight,
-                { color: currentSlide.accentColor },
+                { color: currentAccent },
               ]}
             >
               Sign In
@@ -473,7 +503,6 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
   },
   actionButtonText: {
-    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "800",
     letterSpacing: 0.2,

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { epfProfileFormSchema, type EpfProfileFormInput } from "@/shared/features/epf/schemas";
@@ -46,7 +47,21 @@ export function EpfProfileFormModal({ isOpen, onClose, profile, onSubmit }: Prop
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={profile ? "Edit EPF profile" : "Set up EPF"}>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={profile ? "Edit EPF profile" : "Set up EPF"}
+      // SPENDLY-554: 6a form pattern; same handler, loading, disabled and label.
+      footer={
+        <SheetActions
+          primary={{
+            label: profile ? "Save changes" : "Create EPF profile",
+            onPress: handleSubmit,
+            loading: saving,
+          }}
+        />
+      }
+    >
       <View style={styles.form}>
         <Input
           label="Employee name *"
@@ -77,9 +92,6 @@ export function EpfProfileFormModal({ isOpen, onClose, profile, onSubmit }: Prop
           multiline
         />
 
-        <Button onPress={handleSubmit} loading={saving}>
-          {profile ? "Save changes" : "Create EPF profile"}
-        </Button>
       </View>
     </Modal>
   );

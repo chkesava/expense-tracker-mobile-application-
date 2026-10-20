@@ -1,4 +1,5 @@
 import { Text, type StyleProp, type TextStyle } from "react-native";
+import { GHOST_AMOUNT } from "@/shared/utils/ghostMoney";
 import { useSettings } from "@/providers/SettingsProvider";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -46,7 +47,7 @@ export function Amount({
   if (isGhosted) {
     return (
       <Text
-        accessibilityLabel="Hidden amount"
+        accessibilityLabel={value < 0 ? "Hidden negative amount" : "Hidden amount"}
         numberOfLines={numberOfLines}
         adjustsFontSizeToFit={adjustsFontSizeToFit}
         minimumFontScale={minimumFontScale}
@@ -60,7 +61,9 @@ export function Amount({
           style,
         ]}
       >
-        ••••••
+        {/* SPENDLY-554: a hidden amount keeps its sign, like ghostMoney and
+            FinancialAmount, so money out still reads as money out. */}
+        {value < 0 ? `-${GHOST_AMOUNT}` : GHOST_AMOUNT}
       </Text>
     );
   }

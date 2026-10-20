@@ -12,6 +12,7 @@ import {
 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { SkeletonHero, SkeletonList } from "@/components/common/Skeleton";
@@ -25,6 +26,7 @@ import {
   computeSplitSummary,
 } from "@/shared/utils/splitMath";
 import { useTheme } from "@/theme/ThemeProvider";
+import { withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -84,11 +86,7 @@ export function SplitsList() {
           {
             backgroundColor: theme.colors.card,
             borderColor: theme.colors.border,
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 6 },
-            shadowOpacity: isDark ? 0.35 : 0.08,
-            shadowRadius: 16,
-            elevation: 6,
+            ...theme.elevation[4],
           },
         ]}
       >
@@ -125,16 +123,19 @@ export function SplitsList() {
         <View style={styles.debtRow}>
           <View style={styles.debtItem}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-              <ArrowDownLeft size={14} color="#22C55E" />
+              <ArrowDownLeft size={14} color={theme.colors.success} />
               <Text style={[styles.debtLabel, { color: theme.colors.mutedForeground }]}>
                 You are owed
               </Text>
             </View>
-            <Amount
+            {/* Owed and owing carry a sign as well as a word and a colour. */}
+            <FinancialAmount
               value={summary.totalOwedToYou}
               currency={displayCurrency}
-              ghostable
-              style={{ fontSize: 20, fontWeight: "900", color: "#22C55E" }}
+              size="lg"
+              weight="bold"
+              sign={summary.totalOwedToYou > 0 ? "plus" : "none"}
+              tone={summary.totalOwedToYou > 0 ? "positive" : "default"}
             />
           </View>
 
@@ -147,16 +148,18 @@ export function SplitsList() {
 
           <View style={styles.debtItem}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-              <ArrowUpRight size={14} color="#F59E0B" />
+              <ArrowUpRight size={14} color={theme.colors.warning} />
               <Text style={[styles.debtLabel, { color: theme.colors.mutedForeground }]}>
                 You owe
               </Text>
             </View>
-            <Amount
+            <FinancialAmount
               value={summary.totalYouOwe}
               currency={displayCurrency}
-              ghostable
-              style={{ fontSize: 20, fontWeight: "900", color: "#F59E0B" }}
+              size="lg"
+              weight="bold"
+              sign={summary.totalYouOwe > 0 ? "minus" : "none"}
+              style={summary.totalYouOwe > 0 ? { color: theme.colors.warning } : undefined}
             />
           </View>
         </View>
@@ -185,7 +188,7 @@ export function SplitsList() {
           description="Split a bill you already paid, or collect money for a gift and spend it later."
           primaryAction={{
             label: "Create First Split",
-            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+            icon: <Plus size={16} color={theme.colors.primaryForeground} strokeWidth={2.4} />,
             onPress: () => setIsCreateOpen(true),
           }}
           tip="Split balances update automatically as participants settle up their share."
@@ -218,7 +221,7 @@ export function SplitsList() {
                       <View
                         style={[
                           styles.categoryBadge,
-                          { backgroundColor: "rgba(107, 99, 255, 0.15)" },
+                          { backgroundColor: withAlpha(theme.colors.primary, 0.15) },
                         ]}
                       >
                         <Text
@@ -237,13 +240,13 @@ export function SplitsList() {
                         <View
                           style={[
                             styles.settledBadge,
-                            { backgroundColor: "rgba(34, 197, 94, 0.15)" },
+                            { backgroundColor: withAlpha(theme.colors.success, 0.15) },
                           ]}
                         >
                           <Text
                             style={[
                               styles.settledBadgeText,
-                              { color: "#22C55E" },
+                              { color: theme.colors.success },
                             ]}
                           >
                             SETTLED
@@ -298,7 +301,7 @@ export function SplitsList() {
                         fontSize: 11,
                         fontWeight: "700",
                         color: progress.isFullySettled
-                          ? "#22C55E"
+                          ? theme.colors.success
                           : theme.colors.primary,
                       }}
                     >
@@ -320,7 +323,7 @@ export function SplitsList() {
                       {
                         width: `${progress.percentage}%`,
                         backgroundColor: progress.isFullySettled
-                          ? "#22C55E"
+                          ? theme.colors.success
                           : theme.colors.primary,
                       },
                     ]}

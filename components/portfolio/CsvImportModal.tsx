@@ -9,6 +9,7 @@ import { toast } from "@/lib/toast";
 import { logError } from "@/lib/errors";
 import { addHoldingSchema } from "@/shared/features/portfolio/schemas";
 import type { Holding } from "@/shared/features/portfolio/types";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useTheme } from "@/theme/ThemeProvider";
 import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 import { useSheetWidthStyle } from "@/hooks/useResponsiveLayout";
@@ -90,6 +91,8 @@ function parseBrokerCsv(contents: string): CreateHoldingInput[] {
 
 export function CsvImportModal({ visible, onClose, onImport }: CsvImportModalProps) {
   const { theme } = useTheme();
+  // SPENDLY-554: RN Modal portals outside SpendlyUIScope on web; keep the theme vars.
+  const scopeVars = useSpendlyScopeVars();
   // SPENDLY-559: centred at dialog width on tablet/desktop web.
   const sheetWidthStyle = useSheetWidthStyle();
   const [fileName, setFileName] = useState<string | null>(null);
@@ -146,7 +149,7 @@ export function CsvImportModal({ visible, onClose, onImport }: CsvImportModalPro
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, { backgroundColor: theme.colors.scrim }, scopeVars]}>
         <View style={[styles.sheet, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }, sheetWidthStyle]}>
           <View style={styles.header}>
             <View style={styles.titleRow}>
@@ -191,7 +194,7 @@ export function CsvImportModal({ visible, onClose, onImport }: CsvImportModalPro
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
+  backdrop: { flex: 1, justifyContent: "flex-end" },
   sheet: { maxHeight: "82%", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, paddingTop: 20 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 14 },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
