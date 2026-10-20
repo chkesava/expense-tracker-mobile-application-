@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { RotateCcw, Trash2 } from "lucide-react-native";
 
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { appDialog } from "@/lib/appDialog";
@@ -150,7 +151,20 @@ export function EpfContributionEditSheet({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={monthLabel}>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={monthLabel}
+      // SPENDLY-554: 6a form pattern; same handler, loading, disabled and label.
+      footer={
+        <SheetActions
+          primary={{
+            label: "Apply",
+            onPress: handleApply,
+          }}
+        />
+      }
+    >
       <View style={styles.form}>
         <Input
           label="EPF wage (basic + DA)"
@@ -228,7 +242,6 @@ export function EpfContributionEditSheet({
           </Text>
         ) : null}
 
-        <Button onPress={handleApply}>Apply</Button>
 
         {row.persisted ? (
           <Pressable onPress={confirmRemove} style={styles.removeRow}>
