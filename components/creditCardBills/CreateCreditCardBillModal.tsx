@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, Switch, Text, View } from "react-native";
 import { CreditCard } from "lucide-react-native";
 
+import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Chip } from "@/components/ui/Chip";
@@ -192,7 +194,21 @@ export function CreateCreditCardBillModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Add Credit Card Bill">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Add Credit Card Bill"
+      // SPENDLY-553: 6a form pattern; same handler, disabled and label as before.
+      footer={
+        <SheetActions
+          primary={{
+            label: saving ? "Saving…" : "Create Bill",
+            onPress: () => void handleSubmit(),
+            disabled: saving || creditCards.length === 0,
+          }}
+        />
+      }
+    >
       <ScrollView
         contentContainerStyle={{ gap: 16, paddingBottom: 20 }}
         keyboardShouldPersistTaps="handled"
@@ -233,6 +249,7 @@ export function CreateCreditCardBillModal({
         </View>
 
         <Input
+          leadingIcon={<CurrencyPrefix />}
           label="Statement Amount *"
           value={statementAmount}
           onChangeText={setStatementAmount}
@@ -240,6 +257,7 @@ export function CreateCreditCardBillModal({
           placeholder="8450"
         />
         <Input
+          leadingIcon={<CurrencyPrefix />}
           label="Minimum Due *"
           value={minimumDue}
           onChangeText={setMinimumDue}
@@ -301,13 +319,6 @@ export function CreateCreditCardBillModal({
           />
         </View>
 
-        <Button
-          size="lg"
-          onPress={() => void handleSubmit()}
-          disabled={saving || creditCards.length === 0}
-        >
-          {saving ? "Saving…" : "Create Bill"}
-        </Button>
       </ScrollView>
     </Modal>
   );
