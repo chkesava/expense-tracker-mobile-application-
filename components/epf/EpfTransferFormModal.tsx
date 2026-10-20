@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { ArrowRight } from "lucide-react-native";
 
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Chip } from "@/components/ui/Chip";
@@ -186,7 +187,21 @@ export function EpfTransferFormModal({
   );
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Transfer EPF balance">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Transfer EPF balance"
+      // SPENDLY-554: 6a form pattern; same handler, loading, disabled and label.
+      footer={
+        <SheetActions
+          primary={{
+            label: "Record transfer",
+            onPress: handleSubmit,
+            loading: saving,
+          }}
+        />
+      }
+    >
       <View style={styles.form}>
         {picker("From", sourceId, setSourceId, destinationId, errors.sourceEstablishmentId)}
         {picker(
@@ -252,9 +267,6 @@ export function EpfTransferFormModal({
           once it lands.
         </Text>
 
-        <Button onPress={handleSubmit} loading={saving}>
-          Record transfer
-        </Button>
       </View>
     </Modal>
   );

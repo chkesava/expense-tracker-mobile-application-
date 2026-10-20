@@ -21,8 +21,8 @@ import { toast } from "@/lib/toast";
 import { writeSavedMessage } from "@/lib/firestoreWrite";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { useAuth } from "@/providers/AuthProvider";
+import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 import type { HoldingWithMetrics } from "@/shared/features/portfolio/types";
 import { todayDateKey } from "@/shared/utils/dates";
 import { roundMoney } from "@/shared/utils/money";
@@ -43,8 +43,9 @@ export function HoldingAdjustmentModal({
   onClose: () => void;
 }) {
   const { user } = useAuth();
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  // SPENDLY-554: theme surface tokens.
+  const surfaces = useSurfaces();
   const insets = useSafeAreaInsets();
   
   const [type, setType] = useState<AdjustmentType>("add_missing_acquisition");
@@ -187,7 +188,7 @@ export function HoldingAdjustmentModal({
                   ]}
                   onPress={() => setType("add_missing_acquisition")}
                 >
-                  <Text style={[styles.typeText, type === "add_missing_acquisition" && { color: "#FFF" }]}>Add missing purchase</Text>
+                  <Text style={[styles.typeText, { color: type === "add_missing_acquisition" ? theme.colors.primaryForeground : theme.colors.foreground }]}>Add missing purchase</Text>
                 </Pressable>
                 <Pressable
                   style={[
@@ -197,7 +198,7 @@ export function HoldingAdjustmentModal({
                   ]}
                   onPress={() => setType("correct_cost_basis")}
                 >
-                  <Text style={[styles.typeText, type === "correct_cost_basis" && { color: "#FFF" }]}>Correct cost basis</Text>
+                  <Text style={[styles.typeText, { color: type === "correct_cost_basis" ? theme.colors.primaryForeground : theme.colors.foreground }]}>Correct cost basis</Text>
                 </Pressable>
               </View>
             </View>
@@ -253,7 +254,7 @@ export function HoldingAdjustmentModal({
                     ]}
                     onPress={() => setFundingSource("investment_cash")}
                   >
-                    <Text style={[styles.typeText, fundingSource === "investment_cash" && { color: "#FFF" }]}>Investment Cash</Text>
+                    <Text style={[styles.typeText, { color: fundingSource === "investment_cash" ? theme.colors.primaryForeground : theme.colors.foreground }]}>Investment Cash</Text>
                   </Pressable>
                   <Pressable
                     style={[
@@ -263,7 +264,7 @@ export function HoldingAdjustmentModal({
                     ]}
                     onPress={() => setFundingSource("external")}
                   >
-                    <Text style={[styles.typeText, fundingSource === "external" && { color: "#FFF" }]}>External / Already owned</Text>
+                    <Text style={[styles.typeText, { color: fundingSource === "external" ? theme.colors.primaryForeground : theme.colors.foreground }]}>External / Already owned</Text>
                   </Pressable>
                 </View>
 
@@ -287,30 +288,30 @@ export function HoldingAdjustmentModal({
 
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Preview</Text>
-              <View style={[styles.previewBox, { backgroundColor: isDark ? "#1E293B" : "#F1F5F9" }]}>
+              <View style={[styles.previewBox, { backgroundColor: surfaces.tile }]}>
                 <View style={styles.previewRow}>
                   <Text style={[styles.previewLabel, { color: theme.colors.mutedForeground }]}>Invested</Text>
                   <View style={styles.previewValues}>
-                    <Amount value={existingInvested} currency={currency} style={[styles.previewOld, { color: theme.colors.mutedForeground }]} />
+                    <Amount ghostable value={existingInvested} currency={currency} style={[styles.previewOld, { color: theme.colors.mutedForeground }]} />
                     <Text style={{ color: theme.colors.mutedForeground }}> → </Text>
-                    <Amount value={nextInvested} currency={currency} style={[styles.previewNew, { color: theme.colors.foreground }]} />
+                    <Amount ghostable value={nextInvested} currency={currency} style={[styles.previewNew, { color: theme.colors.foreground }]} />
                   </View>
                 </View>
                 <View style={styles.previewRow}>
                   <Text style={[styles.previewLabel, { color: theme.colors.mutedForeground }]}>Average</Text>
                   <View style={styles.previewValues}>
-                    <Amount value={existingAvg} currency={currency} style={[styles.previewOld, { color: theme.colors.mutedForeground }]} />
+                    <Amount ghostable value={existingAvg} currency={currency} style={[styles.previewOld, { color: theme.colors.mutedForeground }]} />
                     <Text style={{ color: theme.colors.mutedForeground }}> → </Text>
-                    <Amount value={nextAvg} currency={currency} style={[styles.previewNew, { color: theme.colors.foreground }]} />
+                    <Amount ghostable value={nextAvg} currency={currency} style={[styles.previewNew, { color: theme.colors.foreground }]} />
                   </View>
                 </View>
                 <View style={styles.previewRow}>
                   <Text style={[styles.previewLabel, { color: theme.colors.mutedForeground }]}>Difference</Text>
-                  <Amount
+                  <Amount ghostable
                     value={Math.abs(diffInvested)}
                     currency={currency}
                     prefix={diffInvested >= 0 ? "+" : "-"}
-                    style={[styles.previewNew, { color: diffInvested >= 0 ? theme.colors.primary : "#EF4444" }]}
+                    style={[styles.previewNew, { color: diffInvested >= 0 ? theme.colors.primary : theme.colors.destructive }]}
                   />
                 </View>
               </View>
@@ -318,16 +319,16 @@ export function HoldingAdjustmentModal({
 
           </View>
         </ScrollView>
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12), borderTopColor: theme.colors.border }]}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12), borderTopColor: theme.colors.border, backgroundColor: theme.colors.card }]}>
           <Pressable
             onPress={handleConfirm}
             disabled={submitting}
             style={[styles.confirmBtn, { backgroundColor: theme.colors.primary, opacity: submitting ? 0.7 : 1 }]}
           >
             {submitting ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={theme.colors.primaryForeground} />
             ) : (
-              <Text style={styles.confirmText}>Confirm Adjustment</Text>
+              <Text style={[styles.confirmText, { color: theme.colors.primaryForeground }]}>Confirm Adjustment</Text>
             )}
           </Pressable>
         </View>
@@ -344,7 +345,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     minHeight: 48,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(0,0,0,0.1)",
   },
   headerTitle: { flex: 1, textAlign: "center", fontSize: 17, fontWeight: "700" },
   iconBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
@@ -379,7 +379,7 @@ const styles = StyleSheet.create({
   previewValues: { flexDirection: "row", alignItems: "center" },
   previewOld: { textDecorationLine: "line-through", fontSize: 14 },
   previewNew: { fontSize: 15, fontWeight: "700" },
-  footer: { padding: 16, borderTopWidth: StyleSheet.hairlineWidth, backgroundColor: "#FFF" },
+  footer: { padding: 16, borderTopWidth: StyleSheet.hairlineWidth },
   confirmBtn: { height: 52, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  confirmText: { color: "#FFF", fontSize: 16, fontWeight: "800" },
+  confirmText: { fontSize: 16, fontWeight: "800" },
 });

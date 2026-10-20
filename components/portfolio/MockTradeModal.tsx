@@ -3,8 +3,8 @@ import { View, StyleSheet, Text, Modal, ScrollView, KeyboardAvoidingView, Platfo
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Amount } from '@/components/common/Amount';
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useTheme } from '@/theme/ThemeProvider';
-import { themeUsesDarkPalette } from '@/theme/tokens';
 import { X } from 'lucide-react-native';
 import type { HoldingWithMetrics } from '@/shared/features/portfolio/types';
 import { canAfford } from '@/shared/features/portfolio/utils/investmentCash';
@@ -24,8 +24,9 @@ interface MockTradeModalProps {
 }
 
 export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, cashBalance, currency, initialTradeType = "BUY" }: MockTradeModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  // SPENDLY-554: RN Modal portals outside SpendlyUIScope on web; keep the theme vars.
+  const scopeVars = useSpendlyScopeVars();
 
   const [tradeType, setTradeType] = useState<'BUY' | 'SELL'>('BUY');
   const [quantity, setQuantity] = useState('');
@@ -106,8 +107,8 @@ export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, cashB
   const subTextStyle = { color: theme.colors.mutedForeground };
   const cardBg = { backgroundColor: theme.colors.card };
 
-  const buyBg = { backgroundColor: isDark ? '#166534' : '#22c55e' }; // green
-  const sellBg = { backgroundColor: isDark ? '#991b1b' : '#ef4444' }; // red
+  const buyBg = { backgroundColor: theme.colors.success }; // buy
+  const sellBg = { backgroundColor: theme.colors.destructive }; // sell
   const activeBg = tradeType === 'BUY' ? buyBg : sellBg;
 
   if (!holding) return null;
@@ -115,7 +116,7 @@ export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, cashB
   return (
     <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={handleClose}>
       <KeyboardAvoidingView
-        style={styles.modalOverlay}
+        style={[styles.modalOverlay, { backgroundColor: theme.colors.scrim }, scopeVars]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -156,7 +157,7 @@ export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, cashB
 
               <View style={styles.holdingInfo}>
                 <Text style={[styles.infoText, subTextStyle]}>
-                  Current Position: {holding.quantity} Shares @ Average Buy: <Amount value={holding.averageBuyPrice} currency={currency} style={styles.inlineAmount} />
+                  Current Position: {holding.quantity} Shares @ Average Buy: <Amount ghostable value={holding.averageBuyPrice} currency={currency} style={styles.inlineAmount} />
                 </Text>
               </View>
 
@@ -196,28 +197,28 @@ export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, cashB
               <View style={[styles.summaryBox, { backgroundColor: theme.colors.muted }]}>
                 <View style={styles.summaryRow}>
                   <Text style={[styles.summaryLabel, textStyle]}>Order Value:</Text>
-                  <Amount value={numQty * numPrice} currency={currency} style={[styles.summaryValue, textStyle]} />
+                  <Amount ghostable value={numQty * numPrice} currency={currency} style={[styles.summaryValue, textStyle]} />
                 </View>
                 {tradeType === 'BUY' && (
                   <View style={styles.summaryRow}>
                     <Text style={[styles.summaryLabel, textStyle]}>Available Cash:</Text>
-                    <Amount value={cashBalance} currency={currency} style={[styles.summaryValue, textStyle]} />
+                    <Amount ghostable value={cashBalance} currency={currency} style={[styles.summaryValue, textStyle]} />
                   </View>
                 )}
                 <View style={[styles.totalRow, { borderTopColor: theme.colors.border }]}>
                   <Text style={[styles.totalLabel, textStyle]}>Estimated Total:</Text>
-                  <Amount value={totalAmount} currency={currency} style={[styles.totalValue, textStyle]} />
+                  <Amount ghostable value={totalAmount} currency={currency} style={[styles.totalValue, textStyle]} />
                 </View>
               </View>
 
-              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+              {error ? <Text style={[styles.errorText, { color: theme.colors.destructive }]}>{error}</Text> : null}
 
               <Button
                 onPress={handleSubmit}
                 loading={loading}
                 style={[styles.submitBtn, activeBg]}
               >
-                <Text style={{ color: '#fff', fontWeight: '700' }}>
+                <Text style={{ color: tradeType === 'BUY' ? theme.colors.successForeground : theme.colors.destructiveForeground, fontWeight: '700' }}>
                   {tradeType === 'BUY' ? `Buy ${holding.symbol}` : `Sell ${holding.symbol}`}
                 </Text>
               </Button>
@@ -240,7 +241,6 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   modalContent: {
     borderTopLeftRadius: 24,
@@ -344,7 +344,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   errorText: {
-    color: '#ef4444',
     marginBottom: 16,
     textAlign: 'center',
   },

@@ -13,8 +13,9 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { toast } from "@/lib/toast";
 import type { PortfolioSettings } from "@/shared/features/portfolio/types";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 
@@ -30,6 +31,8 @@ export function OnboardingFlow({
   onComplete,
 }: OnboardingFlowProps) {
   const { theme } = useTheme();
+  // SPENDLY-554: RN Modal portals outside SpendlyUIScope on web; keep the theme vars.
+  const scopeVars = useSpendlyScopeVars();
   const surfaces = useSurfaces();
 
   const [cashAmount, setCashAmount] = useState("100000");
@@ -73,7 +76,7 @@ export function OnboardingFlow({
       animationType="slide"
       onRequestClose={() => {}}
     >
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, { backgroundColor: theme.colors.scrim }, scopeVars]}>
         <View
           style={[
             styles.sheet,
@@ -89,7 +92,7 @@ export function OnboardingFlow({
               <View
                 style={[
                   styles.iconCircle,
-                  { backgroundColor: "rgba(99, 102, 241, 0.15)" },
+                  { backgroundColor: withAlpha(theme.colors.primary, 0.15) },
                 ]}
               >
                 <Rocket size={28} color={theme.colors.primary} />
@@ -179,7 +182,7 @@ export function OnboardingFlow({
                           hasExisting === opt.value ? "800" : "600",
                         color:
                           hasExisting === opt.value
-                            ? "#FFFFFF"
+                            ? theme.colors.primaryForeground
                             : theme.colors.foreground,
                       }}
                     >
@@ -200,9 +203,9 @@ export function OnboardingFlow({
               loading={isSubmitting}
               style={{ flex: 1 }}
             >
-              <Rocket size={18} color="#FFFFFF" />
+              <Rocket size={18} color={theme.colors.primaryForeground} />
               <Text
-                style={{ marginLeft: 8, fontWeight: "800", color: "#FFFFFF" }}
+                style={{ marginLeft: 8, fontWeight: "800", color: theme.colors.primaryForeground }}
               >
                 Launch Portfolio 🚀
               </Text>
@@ -218,7 +221,6 @@ export function OnboardingFlow({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.65)",
     justifyContent: "flex-end",
   },
   sheet: {

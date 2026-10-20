@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { Archive, ArchiveRestore, Trash2 } from "lucide-react-native";
 
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import type { EpfEstablishmentInput } from "@/hooks/useEpf";
@@ -154,6 +155,17 @@ export function EpfEstablishmentFormModal({
       isOpen={isOpen}
       onClose={onClose}
       title={establishment ? "Edit establishment" : "Add establishment"}
+      // SPENDLY-554: 6a form pattern; same handler, loading, disabled and label.
+      footer={
+        <SheetActions
+          primary={{
+            label: establishment ? "Save changes" : "Add establishment",
+            onPress: handleSubmit,
+            loading: saving,
+            disabled: Boolean(conflict),
+          }}
+        />
+      }
     >
       <View style={styles.form}>
         <Input
@@ -228,9 +240,6 @@ export function EpfEstablishmentFormModal({
           <Text style={[styles.conflict, { color: theme.colors.destructive }]}>{conflict}</Text>
         ) : null}
 
-        <Button onPress={handleSubmit} loading={saving} disabled={Boolean(conflict)}>
-          {establishment ? "Save changes" : "Add establishment"}
-        </Button>
 
         {establishment ? (
           <>
