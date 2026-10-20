@@ -51,8 +51,12 @@ export const CAPSULE_HEIGHT = 68;
 export const CAPSULE_RADIUS = CAPSULE_HEIGHT / 2;
 /** The capsule floats: it floors the system inset higher than the old bar. */
 export const CAPSULE_MIN_INSET = 12;
-/** Horizontal margin between the capsule and the screen edge: nearly full width. */
-export const CAPSULE_SIDE_MARGIN = 4;
+/**
+ * Horizontal margin between the capsule and the screen edge: nearly full
+ * width, with enough of the page either side that it reads as floating
+ * (SPENDLY-561).
+ */
+export const CAPSULE_SIDE_MARGIN = 10;
 /** Vertical gap between the capsule's top and the FAB floating above it. */
 export const CAPSULE_FAB_GAP = 10;
 export const CAPSULE_FAB_SIZE = 56;
