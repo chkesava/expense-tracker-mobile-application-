@@ -16,6 +16,7 @@ import { getAccountKind } from "./accountKind";
 import {
   buildCreditCardLedger,
   oldestOpenStatement,
+  type CardMovementInput,
   type LedgerBillSlice,
 } from "./creditCardLedger";
 import { parseLocalDate, todayDateKey } from "./dates";
@@ -230,7 +231,9 @@ export function computeOutstandingCredit(
   expenses: Expense[],
   payments: AccountPayment[] = [],
   bills: OpenCreditBillSlice[] = [],
-  today: string = todayDateKey()
+  today: string = todayDateKey(),
+  /** SPENDLY-497: refunds, transfers and adjustments on the card. */
+  movements?: CardMovementInput
 ): {
   unpaidBills: number;
   statementDue: number;
@@ -239,6 +242,8 @@ export function computeOutstandingCredit(
   cancelledSpend: number;
   outstanding: number;
   totalOutstanding: number;
+  /** SPENDLY-497: credit the ledger set aside; see `CreditCardLedger.unappliedCredit`. */
+  unappliedCredit: number;
   availableCredit: number;
   usedThisCycle: number;
   /** Money the user actually paid this cycle. Excludes cashback. */
@@ -257,6 +262,7 @@ export function computeOutstandingCredit(
     payments,
     bills,
     today,
+    movements,
   });
   const oldest = oldestOpenStatement(ledger);
   // Cashback settles the card too, but it is not money the user paid — summing
@@ -286,6 +292,7 @@ export function computeOutstandingCredit(
     cancelledSpend: ledger.cancelledSpend,
     outstanding: ledger.totalOutstanding,
     totalOutstanding: ledger.totalOutstanding,
+    unappliedCredit: ledger.unappliedCredit,
     availableCredit: ledger.availableCredit,
     usedThisCycle: ledger.unbilledSpend,
     paidThisCycle,
@@ -716,7 +723,8 @@ export function previewBalanceAfterTransaction(
       expenses,
       payments,
       bills,
-      today
+      today,
+      { incomes, entries, transfers }
     );
     return roundMoney(availableCredit - amount);
   }

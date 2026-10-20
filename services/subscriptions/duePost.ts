@@ -21,6 +21,7 @@ import {
   fetchAccountTypes,
 } from "@/services/ledger/fetchAccountTypes";
 import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
+import { computeDashboardExpenseCreateOps } from "@/shared/utils/dashboardMutations";
 import { omitUndefined } from "@/shared/utils/firestorePayload";
 import {
   ledgerRowAccountDeltas,
@@ -111,6 +112,12 @@ export async function postDueSubscriptionCharge(
   });
 
   ops.push(...balanceOps);
+  // SPENDLY-563: a posted expense belongs in its month's dashboard summary.
+  // Same first-write-only guard as the balance ops, so a re-run or a second
+  // device landing on the same deterministic id cannot count it twice.
+  if (!alreadyPosted && action.kind === "expense") {
+    ops.push(...computeDashboardExpenseCreateOps(owner, action.expense));
+  }
 
   const outcome = await commitMutations(owner, ops, {
     label: "subscription charge",

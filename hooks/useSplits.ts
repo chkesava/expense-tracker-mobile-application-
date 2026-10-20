@@ -81,7 +81,7 @@ import { isActiveLedgerRow } from "@/shared/utils/ledgerRow";
 import { fetchAccountTypes } from "@/services/ledger/fetchAccountTypes";
 import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
 import { stageMutationOps } from "@/lib/stageMutationOps";
-import { computeDashboardExpenseCreateOps } from "@/shared/utils/dashboardMutations";
+import { computeDashboardDeleteOps, computeDashboardExpenseCreateOps } from "@/shared/utils/dashboardMutations";
 import type { MutationOp } from "@/shared/types/mutations";
 
 async function loadSplitLedgerEntries(
@@ -238,7 +238,6 @@ async function splitExpenseSideOps(
             oldBalance: account.oldBalance,
             oldOutstanding: account.oldOutstanding,
             needsInitialization: account.needsInitialization,
-            isUnbilled: true,
           },
         ])
       );
@@ -735,8 +734,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       const balOps = buildAccountBalanceOps(uid, [{
         accountId,
         amountDelta,
-        isCreditCard: accountTypes.get(accountId)?.isCreditCard || false, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding,
-        isUnbilled: true
+        isCreditCard: accountTypes.get(accountId)?.isCreditCard || false, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding
       }]);
       stageMutationOps(batch, db, balOps);
       if (options?.claimId) {
@@ -786,8 +784,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         const balanceDeltas = rawDeltas.map(d => ({
           accountId: d.accountId,
           amountDelta: d.amountDelta,
-          isCreditCard: accountTypes.get(d.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(d.accountId)?.oldBalance, oldOutstanding: accountTypes.get(d.accountId)?.oldOutstanding,
-          isUnbilled: true
+          isCreditCard: accountTypes.get(d.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(d.accountId)?.oldBalance, oldOutstanding: accountTypes.get(d.accountId)?.oldOutstanding
         }));
         const balOps = buildAccountBalanceOps(uid, balanceDeltas);
         stageMutationOps(batch, db, balOps);
@@ -875,8 +872,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         const balOps = buildAccountBalanceOps(uid, [{
           accountId: payingAccountId,
           amountDelta: totalDelta,
-          isCreditCard: accountTypes.get(payingAccountId)?.isCreditCard || false, oldBalance: accountTypes.get(payingAccountId)?.oldBalance, oldOutstanding: accountTypes.get(payingAccountId)?.oldOutstanding,
-          isUnbilled: true
+          isCreditCard: accountTypes.get(payingAccountId)?.isCreditCard || false, oldBalance: accountTypes.get(payingAccountId)?.oldBalance, oldOutstanding: accountTypes.get(payingAccountId)?.oldOutstanding
         }]);
         stageMutationOps(batch, db, balOps);
       }
@@ -1329,11 +1325,19 @@ export function useSplits(options?: { enabled?: boolean }) {
           deletedAt,
         });
         const snap = expenseSnaps[i];
-        if (snap.exists()) {
+        // SPENDLY-563: only a live expense still counts anywhere. An already
+        // soft-deleted one was reversed when it was deleted; reversing it
+        // again would refund its account (and the dashboard) twice.
+        if (snap.exists() && !snap.data().deletedAt) {
           const expenseData = snap.data();
           if (expenseData.accountId) {
             rawDeltas.push({ accountId: expenseData.accountId, amountDelta: expenseData.amount });
           }
+          stageMutationOps(
+            batch,
+            db,
+            computeDashboardDeleteOps(uid, expenseData as Parameters<typeof computeDashboardDeleteOps>[1], "expense")
+          );
         }
       }
 
@@ -1342,8 +1346,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         const balanceDeltas = rawDeltas.map(d => ({
           accountId: d.accountId,
           amountDelta: d.amountDelta,
-          isCreditCard: accountTypes.get(d.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(d.accountId)?.oldBalance, oldOutstanding: accountTypes.get(d.accountId)?.oldOutstanding,
-          isUnbilled: true
+          isCreditCard: accountTypes.get(d.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(d.accountId)?.oldBalance, oldOutstanding: accountTypes.get(d.accountId)?.oldOutstanding
         }));
         const balOps = buildAccountBalanceOps(uid, balanceDeltas);
         stageMutationOps(batch, db, balOps);

@@ -849,7 +849,6 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         // drops openingBalance the moment the account is first touched.
         if (getAccountKind(typeName || "") === "credit") {
           payload.currentOutstanding = 0;
-          payload.unbilledSpend = 0;
           payload.balanceInitialized = true;
           payload.summaryReconciliationStatus = "healthy";
         } else {
@@ -1243,7 +1242,6 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
               // `recordCreditBillPayment` uses for a bill payment.
               amountDelta: input.amount,
               isCreditCard: true,
-              isUnbilled: false,
               oldOutstanding: accountInfo?.oldOutstanding,
               needsInitialization: accountInfo?.needsInitialization,
               // Unlike a bill payment, a cashback credit isn't tied to one
@@ -1251,7 +1249,6 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
               // the leftover reduces unbilled spend, a split this delta
               // can't express. Flag it so the existing "tap Edit to
               // rebuild" banner prompts the precise split to be recomputed.
-              flagReconciliation: true,
             },
           ]);
         }
@@ -1324,10 +1321,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             // Reverse of the credit `addCashback` applied.
             amountDelta: -(Number(data.amount) || 0),
             isCreditCard: true,
-            isUnbilled: false,
             oldOutstanding: accountInfo?.oldOutstanding,
             needsInitialization: accountInfo?.needsInitialization,
-            flagReconciliation: true,
           },
         ]);
       }
@@ -1398,8 +1393,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           accountId,
           amountDelta: direction === "credit" ? amount : -amount,
           isCreditCard: accountTypes.get(accountId)?.isCreditCard || false, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding,
-          needsInitialization: accountTypes.get(accountId)?.needsInitialization,
-          isUnbilled: true
+          needsInitialization: accountTypes.get(accountId)?.needsInitialization
         }];
         const balOps = buildAccountBalanceOps(u.uid, balanceDeltas);
 
@@ -1456,8 +1450,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           accountId: data.accountId,
           amountDelta,
           isCreditCard: accountTypes.get(data.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(data.accountId)?.oldBalance, oldOutstanding: accountTypes.get(data.accountId)?.oldOutstanding,
-          needsInitialization: accountTypes.get(data.accountId)?.needsInitialization,
-          isUnbilled: true
+          needsInitialization: accountTypes.get(data.accountId)?.needsInitialization
         }]));
       }
 

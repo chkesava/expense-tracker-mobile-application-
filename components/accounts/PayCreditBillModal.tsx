@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/Input";
 import { Chip } from "@/components/ui/Chip";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
+import { useCreditCardLiveUsage } from "@/hooks/useCreditCardLiveUsage";
 import { useExpenses } from "@/hooks/useExpenses";
 import { appDialog } from "@/lib/appDialog";
 import { logError } from "@/lib/errors";
@@ -116,16 +117,20 @@ export function PayCreditBillModal({
     return creditCards.find((c) => c.id === toCardId);
   }, [creditCards, toCardId]);
 
+  // SPENDLY-497: cycle numbers derived live; only the total is stored.
+  const selectedCards = useMemo(() => (selectedCard ? [selectedCard] : []), [selectedCard]);
+  const live = useCreditCardLiveUsage(selectedCards).get(selectedCard?.id ?? "");
+
   const usageInfo = useMemo(() => {
     if (!selectedCard) return null;
     return {
-      unbilledSpend: selectedCard.unbilledSpend ?? 0,
-      statementDue: selectedCard.statementDue ?? 0,
+      unbilledSpend: live?.unbilledSpend ?? 0,
+      statementDue: live?.statementDue ?? 0,
       outstanding: selectedCard.currentOutstanding ?? 0,
-      oldestOpenRemaining: selectedCard.oldestOpenRemaining ?? 0,
-      oldestOpenBillId: selectedCard.oldestOpenBillId,
+      oldestOpenRemaining: live?.oldestOpenRemaining ?? 0,
+      oldestOpenBillId: live?.oldestOpenBillId,
     };
-  }, [selectedCard]);
+  }, [selectedCard, live]);
 
   // Sync default credit card
   useEffect(() => {

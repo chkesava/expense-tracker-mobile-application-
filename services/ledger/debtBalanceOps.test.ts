@@ -45,12 +45,13 @@ describe("debtLedgerBalanceOps (SPENDLY-496)", () => {
     accounts.set("card-1", { isCreditCard: true });
   });
 
-  it("a new borrowing credits its account and updates net worth", async () => {
+  it("a new borrowing credits its account (and writes no retired net-worth doc)", async () => {
     const ops = await debtLedgerBalanceOps(db, "u1", [], [
       { kind: "borrowing", row: { id: "b1", principalAmount: 300, borrowedDate: "2026-10-01", creditedAccountId: "bank-1" } as Borrowing },
     ], TODAY);
     expect(accountIncrement(ops, "bank-1")).toBe(300);
-    expect(ops.some((o) => o.ref.path === "users/u1/financialSummaries/netWorth")).toBe(true);
+    // SPENDLY-499: the netWorth summary doc is retired; nothing writes it.
+    expect(ops.some((o) => o.ref.path === "users/u1/financialSummaries/netWorth")).toBe(false);
   });
 
   it("a repayment delete gives the money back", async () => {

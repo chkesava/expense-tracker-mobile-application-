@@ -170,6 +170,40 @@ describe("postDueSubscriptionCharge", () => {
     expect(accountWrite("bank-2")?.data.currentBalance).toEqual(increment(5000));
   });
 
+  // SPENDLY-563: auto-posted EMIs/subscriptions were missing from the dashboard.
+  it("adds the posted expense to its month's dashboard summary in the same batch", async () => {
+    await postDueSubscriptionCharge("u1", EXPENSE_ACTION);
+    expect(commits).toBe(1);
+    const dash = writes.find((w) => w.path === "users/u1/financialSummaries/dashboard_2026-08");
+    expect(dash?.merge).toBe(true);
+    expect(dash?.data).toMatchObject({
+      totalExpenses: increment(649),
+      transactionCount: increment(1),
+      categoryTotals: {
+        Entertainment: increment(649),
+        "Entertainment::Subscriptions": increment(649),
+      },
+    });
+  });
+
+  it("does not count an already-posted charge on the dashboard again", async () => {
+    chargeExists = true;
+    await postDueSubscriptionCharge("u1", EXPENSE_ACTION);
+    expect(writes.some((w) => w.path.includes("financialSummaries/dashboard_"))).toBe(false);
+  });
+
+  it("writes no dashboard op for a recurring transfer (not spend)", async () => {
+    await postDueSubscriptionCharge("u1", {
+      kind: "transfer",
+      subscriptionId: "sub-rd",
+      docId: "sub-rd_2026-08",
+      monthKey: "2026-08",
+      transfer: { fromAccountId: "bank-1", toAccountId: "bank-2", amount: 1000, date: "2026-08-05", month: "2026-08" },
+      markCompleted: false,
+    } as DuePostAction);
+    expect(writes.some((w) => w.path.includes("financialSummaries/dashboard_"))).toBe(false);
+  });
+
   it("does not apply the balance again when the charge doc already exists", async () => {
     chargeExists = true;
     const result = await postDueSubscriptionCharge("u1", EXPENSE_ACTION);

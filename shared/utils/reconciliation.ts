@@ -1,17 +1,22 @@
-import { computeBankBalance, computeOutstandingCredit } from "./accountBalance";
+import {
+  borrowingsCreditedTo,
+  computeBankBalance,
+  computeOutstandingCredit,
+  receivableRepaymentsInto,
+  receivablesPaidFrom,
+  repaymentsPaidFrom,
+} from "./accountBalance";
 import { getAccountKind } from "./accountKind";
-import type { NetWorthSummary, EpfSummary, DashboardPeriodSummary } from "../types/financialSummary";
+import type { EpfSummary, DashboardPeriodSummary } from "../types/financialSummary";
 import type { Account, Expense, Income, AccountPayment, AccountTransfer, AccountEntry } from "../types/expense";
 import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
 import type { Receivable, ReceivableRepayment } from "../types/receivable";
-import { composeNetWorth } from "./netWorth";
 import { addCategoryDeltas, summaryMonthOf } from "./dashboardSummaryKeys";
 import { epfPortfolioSummary } from "../features/epf/utils/portfolio";
 import type { EpfEstablishment, EpfContribution, EpfTransfer, EpfInterestEntry, EpfReconciliation } from "../features/epf/types";
 
-export function calculateAccountBalances(inputs: {
-  account: Account;
-  typeName: string;
+/** Ledger rows that can move one account, already scoped to it. */
+export type AccountSources = {
   expenses: Expense[];
   incomes: Income[];
   payments: AccountPayment[];
@@ -22,40 +27,150 @@ export function calculateAccountBalances(inputs: {
   receivables: Receivable[];
   receivableRepayments: ReceivableRepayment[];
   bills: any[];
-  today: string;
-}): Partial<Account> {
-  const kind = getAccountKind(inputs.typeName);
-  if (kind === "credit") {
-    const res = computeOutstandingCredit(
-      inputs.account,
-      inputs.expenses,
-      inputs.payments,
-      inputs.bills,
-      inputs.today
-    );
+};
+
+export type AccountRebuildPlan = {
+  accountId: string;
+  kind: "credit" | "bank";
+  /** Fields a rebuild writes (the balance and both status fields). */
+  set: Record<string, number | string>;
+  /** Stored fields a rebuild deletes (stale derived card fields). */
+  clear: string[];
+  /** Human-readable differences, empty when the stored value is right. */
+  variances: string[];
+  /** True when anything must be written, including only clearing a flag. */
+  needsWrite: boolean;
+};
+
+const flagged = (account: Record<string, unknown>) =>
+  account.balanceReconciliationStatus === "needs_reconciliation" ||
+  account.summaryReconciliationStatus === "needs_reconciliation";
+
+/**
+ * SPENDLY-499 — the single reference for what a rebuild writes to one
+ * account. The in-app rebuild, both scripts and `recomputeFinancialState`
+ * all call this, so they cannot diverge. Pure.
+ *
+ * - Card: `currentOutstanding` from the ledger (refunds, transfers and
+ *   adjustments count; credit the ledger set aside is left alone — SPENDLY-497),
+ *   stale derived fields cleared.
+ * - Bank: `currentBalance` from `computeBankBalance`.
+ * - Both status fields become `healthy`, and a flagged account whose value is
+ *   already right is still written so the flag clears (it never did before).
+ */
+export function planAccountRebuild(
+  account: Account,
+  typeName: string,
+  sources: AccountSources,
+  today: string
+): AccountRebuildPlan {
+  const stored = account as unknown as Record<string, unknown>;
+  const healthy = { balanceReconciliationStatus: "healthy", summaryReconciliationStatus: "healthy" };
+  if (getAccountKind(typeName) === "credit") {
+    const res = computeOutstandingCredit(account, sources.expenses, sources.payments, sources.bills, today, {
+      incomes: sources.incomes,
+      entries: sources.entries,
+      transfers: sources.transfers,
+    });
+    const card = planCardRebuild(stored, res.totalOutstanding, res.unappliedCredit);
     return {
-      currentOutstanding: res.totalOutstanding,
-      unbilledSpend: res.unbilledSpend,
-      availableCredit: res.availableCredit,
-    };
-  } else {
-    const bal = computeBankBalance(
-      inputs.account,
-      inputs.expenses,
-      inputs.incomes,
-      inputs.payments,
-      inputs.entries,
-      inputs.transfers,
-      inputs.borrowings,
-      inputs.borrowingRepayments,
-      inputs.receivables,
-      inputs.receivableRepayments,
-      inputs.today
-    );
-    return {
-      currentBalance: bal,
+      accountId: account.id,
+      kind: "credit",
+      set: { currentOutstanding: card.currentOutstanding, ...healthy },
+      clear: card.staleFields,
+      variances: [
+        ...card.variances,
+        ...(card.staleFields.length ? [`stale derived fields to clear: ${card.staleFields.join(", ")}`] : []),
+      ],
+      needsWrite: card.needsWrite || flagged(stored),
     };
   }
+  const balance = computeBankBalance(
+    account,
+    sources.expenses,
+    sources.incomes,
+    sources.payments,
+    sources.entries,
+    sources.transfers,
+    sources.borrowings,
+    sources.borrowingRepayments,
+    sources.receivables,
+    sources.receivableRepayments,
+    today
+  );
+  const was = typeof stored.currentBalance === "number" ? stored.currentBalance : undefined;
+  const variances = was === balance ? [] : [`currentBalance: ${was ?? "missing"} → ${balance}`];
+  return {
+    accountId: account.id,
+    kind: "bank",
+    set: { currentBalance: balance, ...healthy },
+    clear: [],
+    variances,
+    needsWrite: variances.length > 0 || flagged(stored),
+  };
+}
+
+/** The balance a rebuild would store for one account (kept for existing callers). */
+export function calculateAccountBalances(
+  inputs: AccountSources & { account: Account; typeName: string; today: string }
+): Partial<Account> {
+  const plan = planAccountRebuild(inputs.account, inputs.typeName, inputs, inputs.today);
+  return plan.kind === "credit"
+    ? { currentOutstanding: plan.set.currentOutstanding as number }
+    : { currentBalance: plan.set.currentBalance as number };
+}
+
+/** Scopes a user's ledger to the rows that can move `accountId`. Pure. */
+export function accountSourcesFor(
+  accountId: string,
+  rows: AccountSources
+): AccountSources {
+  return {
+    expenses: rows.expenses.filter((e) => e.accountId === accountId),
+    incomes: rows.incomes.filter((i) => i.accountId === accountId),
+    payments: rows.payments.filter((p) => p.fromAccountId === accountId || p.toAccountId === accountId),
+    transfers: rows.transfers.filter((t) => t.fromAccountId === accountId || t.toAccountId === accountId),
+    entries: rows.entries.filter((e) => e.accountId === accountId),
+    // SPENDLY-436: each relates to an account through its own named field.
+    borrowings: borrowingsCreditedTo(accountId, rows.borrowings),
+    borrowingRepayments: repaymentsPaidFrom(accountId, rows.borrowingRepayments),
+    receivables: receivablesPaidFrom(accountId, rows.receivables),
+    receivableRepayments: receivableRepaymentsInto(accountId, rows.receivableRepayments),
+    bills: rows.bills.filter((b: { accountId?: string }) => b.accountId === accountId),
+  };
+}
+
+export type FinancialStateInput = AccountSources & {
+  accounts: Account[];
+  accountTypes: { id: string; name?: string }[];
+  epfEstablishments: EpfEstablishment[];
+  epfContributions: EpfContribution[];
+  epfTransfers: EpfTransfer[];
+  epfInterestEntries: EpfInterestEntry[];
+  epfReconciliations: EpfReconciliation[];
+};
+
+/**
+ * SPENDLY-499 — everything a full rebuild derives for one user, from source
+ * rows only: per-account plans, the EPF summary and the dashboard periods.
+ * Net worth is deliberately absent: `composeNetWorth` (computed live) is its
+ * single definition; the stored netWorth/investments docs are retired. Pure.
+ */
+export function recomputeFinancialState(input: FinancialStateInput, today: string) {
+  const typeNames = new Map(input.accountTypes.map((t) => [t.id, t.name ?? ""]));
+  return {
+    accounts: input.accounts.map((account) =>
+      planAccountRebuild(account, typeNames.get(account.typeId) ?? "", accountSourcesFor(account.id, input), today)
+    ),
+    epf: calculateEpfSummary({
+      establishments: input.epfEstablishments,
+      contributions: input.epfContributions,
+      transfers: input.epfTransfers,
+      interestEntries: input.epfInterestEntries,
+      adjustments: input.epfReconciliations,
+    }),
+    dashboards: calculateDashboardSummaries(input.expenses, input.incomes),
+  };
 }
 
 export function calculateEpfSummary(inputs: {
@@ -185,19 +300,82 @@ export function planDashboardSummaryRepair(
   });
 }
 
-export function calculateNetWorthSummary(inputs: Parameters<typeof composeNetWorth>[0]): Partial<NetWorthSummary> {
-  const nw = composeNetWorth(inputs);
+
+
+/**
+ * SPENDLY-497 — card fields that used to be stored but cannot be kept current
+ * by incremental writes (they change when a billing cycle closes, and nothing
+ * writes at that moment). Screens now derive them live from the ledger; a
+ * rebuild clears the stale stored copies.
+ */
+export const DERIVED_CARD_FIELDS = [
+  "unbilledSpend",
+  "statementDue",
+  "availableCredit",
+  "paidThisCycle",
+  "cashbackThisCycle",
+  "oldestOpenRemaining",
+  "oldestOpenBillId",
+  "openCycleStart",
+] as const;
+
+export type CardRebuildPlan = {
+  currentOutstanding: number;
+  /** "currentOutstanding: was → now" when the stored total is wrong. */
+  variances: string[];
+  /** Stored derived fields to delete. */
+  staleFields: string[];
+  /** True when anything must be written, including clearing the reconciliation flag. */
+  needsWrite: boolean;
+};
+
+/**
+ * What a card rebuild should write, from the stored doc and the recomputed
+ * total. Pure.
+ *
+ * The ledger sets aside credit it cannot match to a statement it sees (the
+ * user's 2026-10-20 decision keeps that safe rule). The stored total is a
+ * running sum of every write, which does subtract that credit — so a stored
+ * value of exactly `ledger total − unappliedCredit` is consistent and is left
+ * alone rather than raised.
+ */
+export function planCardRebuild(
+  account: Record<string, unknown>,
+  recalculatedOutstanding: number,
+  unappliedCredit = 0
+): CardRebuildPlan {
+  const stored = typeof account.currentOutstanding === "number" ? account.currentOutstanding : undefined;
+  const netOfSetAside = roundPaise(recalculatedOutstanding - unappliedCredit);
+  const consistent =
+    stored === recalculatedOutstanding || (unappliedCredit > 0 && stored === netOfSetAside);
+  const target = consistent && stored !== undefined ? stored : recalculatedOutstanding;
+  const variances = consistent
+    ? []
+    : [`currentOutstanding: ${stored ?? "missing"} → ${recalculatedOutstanding}`];
+  const staleFields = DERIVED_CARD_FIELDS.filter((field) => account[field] !== undefined);
+  const flagged = account.summaryReconciliationStatus === "needs_reconciliation";
   return {
-    netWorth: nw.totalNetWorth,
-    totalAssets: nw.totalAssets,
-    totalLiabilities: nw.totalLiabilities,
-    bankCashTotal: nw.liquidBankAssets,
-    investmentCash: nw.stocksCashBalance,
-    epfValue: nw.epfValue,
-    creditCardLiabilities: nw.creditCardLiabilities,
-    bankOverdraftLiabilities: nw.bankOverdraftLiabilities,
-    borrowingLiabilities: nw.borrowingLiabilities,
-    receivableAssets: nw.receivableAssets,
+    currentOutstanding: target,
+    variances,
+    staleFields,
+    needsWrite: variances.length > 0 || staleFields.length > 0 || flagged,
   };
 }
 
+/**
+ * SPENDLY-499 — the exact field map a rebuild writes for one account plan.
+ * The in-app rebuild passes the client SDK's `deleteField`/`serverTimestamp`,
+ * the scripts pass the Admin SDK's, so every caller writes the same fields and
+ * the same timestamp type. Pure.
+ */
+export function accountRebuildWrite<D, T>(
+  plan: AccountRebuildPlan,
+  sentinels: { remove: () => D; now: () => T }
+): Record<string, number | string | D | T> {
+  return {
+    ...plan.set,
+    ...Object.fromEntries(plan.clear.map((field) => [field, sentinels.remove()])),
+    balanceLastRebuiltAt: sentinels.now(),
+    lastReconciledAt: sentinels.now(),
+  };
+}

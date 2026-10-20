@@ -1,0 +1,254 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`financial baseline (SPENDLY-503) > matches the checked-in reference snapshot for the golden fixture 1`] = `
+{
+  "accounts": [
+    {
+      "accountId": "bank",
+      "kind": "bank",
+      "name": "Fixture Bank",
+      "recomputed": 65650,
+      "status": "match",
+      "stored": 65650,
+      "variance": 0,
+    },
+    {
+      "accountId": "wallet",
+      "kind": "bank",
+      "name": "Fixture Wallet",
+      "recomputed": 2250,
+      "status": "match",
+      "stored": 2250,
+      "variance": 0,
+    },
+    {
+      "accountId": "card",
+      "kind": "credit",
+      "name": "Fixture Card",
+      "recomputed": 3050,
+      "status": "match",
+      "stored": 3050,
+      "variance": 0,
+    },
+  ],
+  "cards": [
+    {
+      "accountId": "card",
+      "amountPaid": 3000,
+      "name": "Fixture Card",
+      "openAmount": 1000,
+      "openBills": 1,
+    },
+  ],
+  "counts": {
+    "accountEntries": {
+      "active": 2,
+      "inactive": 0,
+      "total": 2,
+    },
+    "accountPayments": {
+      "active": 2,
+      "inactive": 1,
+      "total": 3,
+    },
+    "accountTransfers": {
+      "active": 2,
+      "inactive": 0,
+      "total": 2,
+    },
+    "accountTypes": {
+      "active": 3,
+      "inactive": 0,
+      "total": 3,
+    },
+    "accounts": {
+      "active": 3,
+      "inactive": 0,
+      "total": 3,
+    },
+    "borrowingRepayments": {
+      "active": 1,
+      "inactive": 0,
+      "total": 1,
+    },
+    "borrowings": {
+      "active": 1,
+      "inactive": 0,
+      "total": 1,
+    },
+    "categories": {
+      "active": 1,
+      "inactive": 0,
+      "total": 1,
+    },
+    "creditCardBills": {
+      "active": 1,
+      "inactive": 0,
+      "total": 1,
+    },
+    "epfContributions": {
+      "active": 2,
+      "inactive": 0,
+      "total": 2,
+    },
+    "epfEstablishments": {
+      "active": 1,
+      "inactive": 0,
+      "total": 1,
+    },
+    "epfInterestEntries": {
+      "active": 1,
+      "inactive": 0,
+      "total": 1,
+    },
+    "epfReconciliations": {
+      "active": 0,
+      "inactive": 0,
+      "total": 0,
+    },
+    "epfTransfers": {
+      "active": 0,
+      "inactive": 0,
+      "total": 0,
+    },
+    "expenses": {
+      "active": 7,
+      "inactive": 1,
+      "total": 8,
+    },
+    "holdings": {
+      "active": 1,
+      "inactive": 0,
+      "total": 1,
+    },
+    "incomes": {
+      "active": 2,
+      "inactive": 0,
+      "total": 2,
+    },
+    "investmentCashTransactions": {
+      "active": 2,
+      "inactive": 0,
+      "total": 2,
+    },
+    "investments": {
+      "active": 0,
+      "inactive": 0,
+      "total": 0,
+    },
+    "ledgerEvents": {
+      "active": 1,
+      "inactive": 0,
+      "total": 1,
+    },
+    "portfolioSettings": {
+      "active": 0,
+      "inactive": 0,
+      "total": 0,
+    },
+    "portfolioTransactions": {
+      "active": 2,
+      "inactive": 0,
+      "total": 2,
+    },
+    "receivableRepayments": {
+      "active": 1,
+      "inactive": 0,
+      "total": 1,
+    },
+    "receivables": {
+      "active": 1,
+      "inactive": 0,
+      "total": 1,
+    },
+    "subscriptions": {
+      "active": 0,
+      "inactive": 0,
+      "total": 0,
+    },
+  },
+  "epfClosingBalance": 9912.5,
+  "netWorth": {
+    "totalAssets": 87312.5,
+    "totalLiabilities": 18341.94,
+    "totalNetWorth": 68970.56,
+  },
+  "netWorthRecomputed": {
+    "totalAssets": 87312.5,
+    "totalLiabilities": 18341.94,
+    "totalNetWorth": 68970.56,
+  },
+  "sumsByAccount": {
+    "accountEntries": {
+      "bank": 100,
+      "card": 50,
+    },
+    "accountPayments": {
+      "bank": 3000,
+      "cashback": 100,
+    },
+    "accountTransfers": {
+      "bank": 2000,
+      "wallet": 500,
+    },
+    "borrowingRepayments": {
+      "bank": 5000,
+    },
+    "borrowings": {
+      "bank": 20000,
+    },
+    "expenses": {
+      "bank": 1950,
+      "card": 6300,
+      "wallet": 250,
+    },
+    "incomes": {
+      "bank": 50000,
+      "card": 200,
+    },
+    "receivableRepayments": {
+      "wallet": 1000,
+    },
+    "receivables": {
+      "bank": 3000,
+    },
+  },
+  "sumsByMonth": {
+    "accountEntries": {
+      "2026-09": 100,
+      "2026-10": 50,
+    },
+    "accountPayments": {
+      "2026-09": 3000,
+      "2026-10": 100,
+    },
+    "accountTransfers": {
+      "2026-09": 2000,
+      "2026-10": 500,
+    },
+    "borrowingRepayments": {
+      "2026-10": 5000,
+    },
+    "borrowings": {
+      "2026-09": 20000,
+    },
+    "expenses": {
+      "2026-09": 7150,
+      "2026-10": 1350,
+    },
+    "incomes": {
+      "2026-09": 50000,
+      "2026-10": 200,
+    },
+    "investmentCashTransactions": {
+      "2026-09": 17500,
+    },
+    "receivableRepayments": {
+      "2026-10": 1000,
+    },
+    "receivables": {
+      "2026-09": 3000,
+    },
+  },
+}
+`;
