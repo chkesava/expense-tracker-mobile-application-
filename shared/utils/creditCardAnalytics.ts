@@ -10,6 +10,7 @@ import { isCashbackPayment } from "../types/expense";
 import { groupByCategory } from "./analytics";
 import {
   buildCreditCardLedger,
+  type CardMovementInput,
   type CreditCardLedger,
   type LedgerBillSlice,
   type LedgerStatement,
@@ -97,6 +98,8 @@ export type BuildCardAnalyticsInput = {
   today?: string;
   /** SPENDLY-97/104: false while the expense list is still staged. */
   expensesComplete: boolean;
+  /** SPENDLY-497: refunds, transfers and adjustments, as the card total counts them. */
+  movements?: CardMovementInput;
   mode?: CardAnalyticsPeriodMode;
   /** How many closed+open cycles (or calendar months) to project. */
   lookback?: number;
@@ -341,6 +344,7 @@ export function buildCardAnalyticsWorkspace(
     bills: input.bills,
     today,
     cycles: Math.max(lookback, 6),
+    movements: input.movements,
   });
 
   const cardExpenses = cardExpensesFor(input.account.id, input.expenses);

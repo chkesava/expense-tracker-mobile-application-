@@ -13,6 +13,7 @@ import type { Account } from "../shared/types/expense";
 
 // Minimal shim for `todayDateKey` if needed, or import it.
 import { todayDateKey } from "../shared/utils/dates";
+import { planCardRebuild } from "../shared/utils/reconciliation";
 
 function loadCredential() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -81,32 +82,30 @@ async function rebuildForUser(uid: string) {
     const payments = await fetchCollection(uid, "accountPayments");
     const filteredPayments = payments.filter((p: any) => p.fromAccountId === account.id || p.toAccountId === account.id);
 
+    let staleFields: string[] = [];
     if (kind === "credit") {
       const bills = await fetchCollection(uid, "creditCardBills", "accountId", account.id);
-      
-      const usage = computeOutstandingCredit(account, expenses, filteredPayments, bills, todayDateKey());
-      
-      expectedUpdates = {
-        currentOutstanding: usage.totalOutstanding,
-        unbilledSpend: usage.unbilledSpend,
-        statementDue: usage.statementDue,
-        availableCredit: usage.availableCredit,
-        paidThisCycle: usage.paidThisCycle,
-        cashbackThisCycle: usage.cashbackThisCycle,
-        oldestOpenRemaining: usage.oldestOpenRemaining,
-        oldestOpenBillId: usage.oldestOpenBillId || undefined,
-        openCycleStart: usage.openCycleStart,
-      };
-
-      // Check variance
-      for (const [key, expected] of Object.entries(expectedUpdates)) {
-        const actual = (account as any)[key];
-        if (actual !== expected && !(actual === undefined && expected === null)) {
-          hasVariance = true;
-          variances.push(`${key}: expected ${expected}, got ${actual}`);
-        }
-      }
-      
+      // SPENDLY-497: refunds, transfers and adjustments move a card too.
+      const cardIncomes = await fetchCollection(uid, "incomes", "accountId", account.id);
+      const cardEntries = await fetchCollection(uid, "accountEntries", "accountId", account.id);
+      const cardTransfers = (await fetchCollection(uid, "accountTransfers")).filter(
+        (t: any) => t.fromAccountId === account.id || t.toAccountId === account.id
+      );
+      const usage = computeOutstandingCredit(account, expenses, filteredPayments, bills, todayDateKey(), {
+        incomes: cardIncomes,
+        entries: cardEntries,
+        transfers: cardTransfers,
+      });
+      const plan = planCardRebuild(
+        account as unknown as Record<string, unknown>,
+        usage.totalOutstanding,
+        usage.unappliedCredit
+      );
+      expectedUpdates = { currentOutstanding: plan.currentOutstanding };
+      staleFields = plan.staleFields;
+      variances.push(...plan.variances);
+      if (plan.staleFields.length > 0) variances.push(`stale derived fields to clear: ${plan.staleFields.join(", ")}`);
+      hasVariance = plan.needsWrite;
     } else {
       const incomes = await fetchCollection(uid, "incomes", "accountId", account.id);
       const entries = await fetchCollection(uid, "accountEntries", "accountId", account.id);
@@ -164,6 +163,8 @@ async function rebuildForUser(uid: string) {
       if (mode === "apply") {
         await doc.ref.update({
           ...expectedUpdates,
+          ...(kind === "credit" ? { summaryReconciliationStatus: "healthy" } : {}),
+          ...Object.fromEntries(staleFields.map((field) => [field, FieldValue.delete()])),
           balanceReconciliationStatus: "healthy",
           balanceLastRebuiltAt: new Date().toISOString(),
           // Use FieldValue.serverTimestamp() in actual SDK if needed, but ISO string matches the schema 'string'

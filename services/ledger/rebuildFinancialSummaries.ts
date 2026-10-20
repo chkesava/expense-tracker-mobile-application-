@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, query, where, writeBatch, serverTimestamp } from "firebase/firestore";
+import { collection, deleteField, doc, getDoc, getDocs, query, where, writeBatch, serverTimestamp } from "firebase/firestore";
 import { getFirestoreDb } from "@/lib/firebase";
 import {
   computeBankBalance,
@@ -14,6 +14,7 @@ import type { Borrowing, BorrowingRepayment } from "@/shared/types/borrowing";
 import type { Receivable, ReceivableRepayment } from "@/shared/types/receivable";
 import { todayDateKey } from "@/shared/utils/dates";
 import type { OpenCreditBillSlice } from "@/shared/utils/accountBalance";
+import { planCardRebuild, type CardRebuildPlan } from "@/shared/utils/reconciliation";
 
 export type RebuildVariance = {
   field: string;
@@ -68,21 +69,26 @@ export async function rebuildFinancialSummaries(
   let expectedUpdates: Partial<Account> = {};
   const variances: RebuildVariance[] = [];
   
+  let cardPlan: CardRebuildPlan | null = null;
   if (kind === "credit") {
     const bills = await fetchCollection<OpenCreditBillSlice>("creditCardBills", "accountId");
-    const usage = computeOutstandingCredit(account, expenses, filteredPayments, bills, todayDateKey());
-    
-    expectedUpdates = {
-      currentOutstanding: usage.totalOutstanding,
-      unbilledSpend: usage.unbilledSpend,
-      statementDue: usage.statementDue,
-      availableCredit: usage.availableCredit,
-      paidThisCycle: usage.paidThisCycle,
-      cashbackThisCycle: usage.cashbackThisCycle,
-      oldestOpenRemaining: usage.oldestOpenRemaining,
-      oldestOpenBillId: usage.oldestOpenBillId || undefined,
-      openCycleStart: usage.openCycleStart,
-    };
+    // SPENDLY-497: refunds, transfers and adjustments move a card too.
+    const cardIncomes = await fetchCollection<Income>("incomes", "accountId");
+    const cardEntries = await fetchCollection<AccountEntry>("accountEntries", "accountId");
+    const cardTransfers = (await fetchCollection<AccountTransfer>("accountTransfers")).filter(
+      (t) => t.fromAccountId === account.id || t.toAccountId === account.id
+    );
+    const usage = computeOutstandingCredit(account, expenses, filteredPayments, bills, todayDateKey(), {
+      incomes: cardIncomes,
+      entries: cardEntries,
+      transfers: cardTransfers,
+    });
+    cardPlan = planCardRebuild(
+      account as unknown as Record<string, unknown>,
+      usage.totalOutstanding,
+      usage.unappliedCredit
+    );
+    expectedUpdates = { currentOutstanding: cardPlan.currentOutstanding };
   } else {
     const incomes = await fetchCollection<Income>("incomes", "accountId");
     const entries = await fetchCollection<AccountEntry>("accountEntries", "accountId");
@@ -133,12 +139,21 @@ export async function rebuildFinancialSummaries(
   }
 
   const hasVariance = variances.length > 0;
+  // SPENDLY-497: a card also needs a write to clear stale derived fields and
+  // its "needs reconciliation" flag, even when the total is already right.
+  const needsWrite = hasVariance || Boolean(cardPlan?.needsWrite);
 
-  if (hasVariance && mode === "apply") {
+  if (needsWrite && mode === "apply") {
     const batch = writeBatch(db);
     batch.update(accountRef, {
       ...expectedUpdates,
       balanceReconciliationStatus: "healthy",
+      ...(cardPlan
+        ? {
+            summaryReconciliationStatus: "healthy",
+            ...Object.fromEntries(cardPlan.staleFields.map((field) => [field, deleteField()])),
+          }
+        : {}),
       balanceLastRebuiltAt: serverTimestamp(),
     });
     await batch.commit();
@@ -148,6 +163,6 @@ export async function rebuildFinancialSummaries(
     accountId,
     hasVariance,
     variances,
-    applied: hasVariance && mode === "apply",
+    applied: needsWrite && mode === "apply",
   };
 }

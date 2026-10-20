@@ -64,6 +64,7 @@ import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useBorrowings } from "@/hooks/useBorrowings";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
+import { useCreditCardLiveUsage } from "@/hooks/useCreditCardLiveUsage";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useReceivables } from "@/hooks/useReceivables";
@@ -313,10 +314,19 @@ export default function AccountDetailScreen() {
     return account.currentBalance ?? 0;
   }, [account, isCreditCard]);
 
+  // SPENDLY-497: cycle numbers are derived live from the ledger; only the
+  // total outstanding is a stored value.
+  const liveCards = useMemo(
+    () => (account && isCreditCard ? [account] : []),
+    [account, isCreditCard]
+  );
+  const liveUsage = useCreditCardLiveUsage(liveCards).get(account?.id ?? "");
+  const cardMovements = useMemo(() => ({ incomes, entries, transfers }), [incomes, entries, transfers]);
+
   const creditUsage = useMemo(() => {
     if (!account || !isCreditCard) return null;
     const limit = account.creditLimit || 0;
-    const unbilledSpend = account.unbilledSpend ?? 0;
+    const unbilledSpend = liveUsage?.unbilledSpend ?? 0;
     const billDay = normalizeBillGenerationDay(account.billGenerationDay);
     // Cycle boundaries are pure date math — compute them live from the bill
     // date instead of trusting `account.openCycleStart`/`nextDueDate`. Those
@@ -329,7 +339,7 @@ export default function AccountDetailScreen() {
     return {
       unbilledSpend,
       usedThisCycle: unbilledSpend,
-      statementDue: account.statementDue ?? 0,
+      statementDue: liveUsage?.statementDue ?? 0,
       totalOutstanding: account.currentOutstanding ?? 0,
       // Trivial arithmetic on two always-fresh numbers — compute it live
       // rather than trust a materialized field the rebuild script alone
@@ -341,12 +351,12 @@ export default function AccountDetailScreen() {
       /** False when this card has no bill date configured yet — there is no real cycle to show. */
       billDayConfigured: billDay != null,
       cancelledSpend: 0,
-      cashbackThisCycle: account.cashbackThisCycle ?? 0,
-      oldestOpenRemaining: account.oldestOpenRemaining ?? 0,
-      oldestOpenBillId: account.oldestOpenBillId,
+      cashbackThisCycle: liveUsage?.cashbackThisCycle ?? 0,
+      oldestOpenRemaining: liveUsage?.oldestOpenRemaining ?? 0,
+      oldestOpenBillId: liveUsage?.oldestOpenBillId,
       nextResetDate: cycle ? cycle.cycleEnd : null,
     };
-  }, [account, isCreditCard, today]);
+  }, [account, isCreditCard, today, liveUsage]);
 
 
 
@@ -1341,6 +1351,7 @@ export default function AccountDetailScreen() {
             bills={bills}
             today={today}
             expensesComplete={expensesComplete}
+            movements={cardMovements}
             currency={currency}
             onOpenStatement={onOpenBillingCycle}
           />

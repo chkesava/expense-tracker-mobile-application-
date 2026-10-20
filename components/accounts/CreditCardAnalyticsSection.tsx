@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { Chip } from "@/components/ui/Chip";
+import type { CardMovementInput } from "@/shared/utils/creditCardLedger";
 import type { Account, AccountPayment, Expense } from "@/shared/types/expense";
 import type { CreditCardBill } from "@/shared/types/creditCardBill";
 import {
@@ -20,6 +21,8 @@ type Props = {
   bills: CreditCardBill[];
   today: string;
   expensesComplete: boolean;
+  /** SPENDLY-497: refunds, transfers and adjustments on the card. */
+  movements?: CardMovementInput;
   currency: string;
   onOpenStatement?: (billId: string) => void;
   onFocusPeriod?: (start: string, end: string) => void;
@@ -71,6 +74,7 @@ export function CreditCardAnalyticsSection({
   bills,
   today,
   expensesComplete,
+  movements,
   currency,
   onOpenStatement,
   onFocusPeriod,
@@ -88,10 +92,11 @@ export function CreditCardAnalyticsSection({
         bills,
         today,
         expensesComplete,
+        movements,
         mode,
         lookback: 6,
       }),
-    [account, expenses, payments, bills, today, expensesComplete, mode]
+    [account, expenses, payments, bills, today, expensesComplete, movements, mode]
   );
 
   const comparison = workspace.cycleComparison;
