@@ -58,6 +58,12 @@ These paths change spending without updating the month's dashboard summary, so t
 
 **Now fixed** in [SPENDLY-563](https://kesavach.atlassian.net/browse/SPENDLY-563), which blocks this task. It also fixes a split delete refunding an already-deleted expense twice.
 
+## Dry-run 2: 2026-10-20 (production, read-only, from `main` with 563)
+
+`rebuild-domain-summaries.ts --excludeAccountId=<Axis>`: 24 users, 0 blocked. The output is **identical to dry-run 1**, except that the Axis card is now reported as `[Excluded] (has variance, left as is)`.
+
+`--excludeAccountId=` is new in `scripts/lib/rebuildRunner.ts` (comma-separated, tested). It lets the rebuild skip an account a human still has to decide on, without hand-picking users.
+
 ## Required order before any `--apply`
 
 1. ~~Fix the three dashboard write gaps~~: SPENDLY-563, built; merge to `main` before the release.
