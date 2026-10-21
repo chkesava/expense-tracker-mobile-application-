@@ -15,7 +15,7 @@ This ADR records the decisions that SPENDLY-502 lists and the evidence for each.
 - Every decision that belongs to the user is marked **PENDING** until the user signs off in a Jira comment on SPENDLY-502.
 - Until then, **no Phase 1+ story starts** (SPENDLY-502 blocks 504, 505 and 506).
 
-## 0. Decision (user, 2026-10-17)
+## 0. Decision (user, 2026-10-17; schedule amended 2026-10-22)
 
 | # | Decision | User's answer | Note |
 |---|---|---|---|
@@ -24,6 +24,7 @@ This ADR records the decisions that SPENDLY-502 lists and the evidence for each.
 | 3 | Capture option | **C: scheduled reconciler only** | Follows from 2. Options B and D stay rejected (§4) |
 | 4 | Supabase project | **Dedicated Spendly project** (2nd Free project) | The earlier "use the shared project" answer was superseded by this choice |
 | 5 | Read identity | Third-party auth + RLS, Netlify broker fallback (§7) | Not changed by the user. See the Blaze note below |
+| 6 | Sync schedule (amended 2026-10-22) | **Every 3 hours, changed documents only, plus a full copy nightly** | Replaces "once a day". The app shows the user's own writes immediately (511 overlay). See "Schedule amendment" below |
 
 **What option C changes. This ticket requires these follow-ups, and they are *not* done by this story:**
 - **Phase 4 (SPENDLY-514…518) becomes Won't Do.** Current balances, cards, investments and net worth stay on Firestore. Changing the Jira status needs the user's explicit instruction.
@@ -39,10 +40,28 @@ This ADR records the decisions that SPENDLY-502 lists and the evidence for each.
 |---|---|---|---|
 | Every hour | ≈ 91,000 | ≤ 1 h | **Not possible**: alone it is ~2× the quota |
 | Every 6 h | ≈ 15,000 | ≤ 6 h | Unsafe while daily peaks reach ≈ 44K |
-| **Once a day (night, IST)** | **≈ 3,800** | ≤ 24 h | **Chosen default.** Re-evaluate after the 501 release shows lower reads |
+| Once a day (night, IST) | ≈ 3,800 | ≤ 24 h | The 2026-10-17 default. **Superseded on 2026-10-22** |
+| **Every 3 h, changed documents only, plus a nightly full copy** | **≈ 8–9K** | **≤ 3 h** for creates and edits; ≤ 24 h for category deletes | **Chosen 2026-10-22.** See below |
 
 - The reconciler must also check its own budget. It stops early and resumes next run once it has used a fixed daily read allowance. It also never runs if the day's usage is already high, where measurable.
 - Count-first checks (`count()` aggregation, about 1 read per 1,000 entries) find missing or extra rows cheaply. They cannot detect edits, so edits wait for the full pass.
+
+**Schedule amendment (user, 2026-10-22).** The full re-read above assumed there was no field to query changes by. Making "changed only" work needed a pre-check of `updatedAt`, run read-only in production on 2026-10-22:
+- **Coverage is close to zero:** `creditCardBills` 36/36, `expenses` 9/1,369, `categories` 0/2,093, the rest ≈ 0.
+- **Creates do have a usable field:** they stamp `createdAt` (a server timestamp).
+- **Many updates stamp nothing**, and there are hard deletes in `accounts`, `accountTypes`, `accountTransfers`, `accountEntries` and `categories`.
+
+The design that follows (SPENDLY-506):
+
+| Collection | Each 3-hourly run |
+|---|---|
+| expenses, categories, incomes, accountPayments, creditCardBills, ledgerEvents | **Changed only**: `createdAt` or `updatedAt` after the last high-water mark (minus a 10-minute overlap). **SPENDLY-571** first stamps `updatedAt` on the expense and category updates that miss it, plus one payment create |
+| accounts, accountTypes, accountTransfers, accountEntries | **Full copy every run.** They're small (≈ 220 docs), and this catches balance increments and hard deletes, which leave nothing to query |
+| All | **Nightly full copy**: the only pass that tombstones the changed-only collections. It also catches writers that don't stamp (older app versions, scripts) |
+
+- **Cost:** ≈ 550 reads per 3-hourly run and ≈ 3.8K for the nightly run, so **≈ 8–9K reads a day**.
+- **The job enforces its own budget:** per run and per day (default 12K). Optionally it also skips when the project's own daily read count is already high, so a peak app day (≈ 44K before 501) can't be pushed over 50K.
+- **Why not sync after every write:** it would need Blaze triggers, a per-write Netlify call (credits risk), or app write access to Supabase. All three are out on the free plans.
 
 **Evidence grades used below:**
 - **M-prod:** measured in production.
@@ -198,11 +217,18 @@ The read model is rebuildable from Firestore (SPENDLY-509 backfill), so the lack
 
 ## 8. Decision 6: freshness SLOs and the kill switch
 
-| Screen group | SLO (option A) | SLO (option C) |
+| Screen group | SLO (option A) | SLO (option C, amended 2026-10-22) |
 |---|---|---|
-| Journal history, reports and export (Phase 3) | ≤ 60 s | ≤ reconciler interval (hours); shown as "last synced HH:MM" |
+| Journal history, reports and export (Phase 3) | ≤ 60 s | **≤ 3 h** for creates and edits, **plus the user's own writes shown immediately** (overlay). Shown as "last synced HH:MM" |
 | Insights and range analytics (Phase 3) | ≤ 5 min | same as above |
 | Current balances, cards, net worth (Phase 4) | ≤ 10 s **plus an overlay of the user's own pending writes** | **not offered**: Phase 4 is cancelled |
+
+**Exceptions to the 3 hours under option C:**
+- **Category hard deletes:** ≤ 24 h, because only the nightly full copy can see them.
+- **Edits from writers that don't stamp `updatedAt`** (app versions older than SPENDLY-571, admin scripts): ≤ 24 h.
+- **GitHub schedule delay:** scheduled runs can start late. GitHub also disables schedules after 60 days without repo activity, so SPENDLY-507 alerts on a missing run.
+
+A screen whose lag passes its bound falls back to Firestore (below). The "last synced" label reads the user's own `sync_status` rows (SPENDLY-505 policy).
 
 **Kill switch:** `system_settings/global.readModel.<screen>`, with the values `firestore | shadow | supabase`.
 - It is remote, per screen, and needs no app release.
