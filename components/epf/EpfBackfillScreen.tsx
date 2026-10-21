@@ -4,11 +4,9 @@ import { FlashList } from "@shopify/flash-list";
 import { AlertTriangle } from "lucide-react-native";
 
 import { ErrorState } from "@/components/common/ErrorState";
-import { SkeletonCard } from "@/components/common/Skeleton";
 import { EpfContributionEditSheet } from "@/components/epf/EpfContributionEditSheet";
 import { EpfContributionRow } from "@/components/epf/EpfContributionRow";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { useSpendlyBottomClearance } from "@/components/layout/useSpendlyBottomClearance";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -30,7 +28,6 @@ import {
   groupContributionsByFinancialYear,
   validateBackfillBatch,
 } from "@/shared/features/epf/utils/contributions";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { financialYearLabel } from "@/shared/utils/financialYear";
 import { useTheme } from "@/theme/ThemeProvider";
 import { monthLabel } from "@/shared/utils/monthLabel";
@@ -49,6 +46,9 @@ import {
   persistedMonths,
   summarizeSaveResults,
 } from "@/shared/features/epf/utils/saveOutcome";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { Section } from "@/components/dashboard/primitives";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 
 type ListItem =
   | { type: "header"; id: string; financialYear: string; recorded: number; expected: number; credit: number }
@@ -134,10 +134,8 @@ export function EpfBackfillScreen({
    */
   const backfillMonth = backfillThroughMonth(establishment, monthKey);
 
-  const money = useCallback(
-    (value: number) => formatAmount(value, currency),
-    [currency]
-  );
+  // SPENDLY-544: ghost-aware; EPF ignored ghost mode almost everywhere.
+  const money = useGhostMoney(currency);
 
   /** Generated months merged with saved docs, then with unsaved local edits. */
   const rows = useMemo(() => {
@@ -396,8 +394,8 @@ export function EpfBackfillScreen({
   if (contributionsLoading) {
     return (
       <View style={styles.container}>
-        <SkeletonCard />
-        <SkeletonCard />
+        <DashboardSkeleton variant="section" rows={3} />
+        <DashboardSkeleton variant="section" rows={2} />
       </View>
     );
   }
@@ -427,7 +425,7 @@ export function EpfBackfillScreen({
           still in progress — it is tracked on Current.
         </Text>
       ) : null}
-      <Card>
+      <Section>
         <Input
           label="Monthly EPF wage (basic + DA)"
           value={wage}
@@ -472,7 +470,7 @@ export function EpfBackfillScreen({
             </Text>
           </Text>
         ) : null}
-      </Card>
+      </Section>
 
       {validation.errorCount > 0 ? (
         <View style={[styles.issueBanner, { borderColor: theme.colors.destructive }]}>

@@ -10,7 +10,9 @@ import {
 import { Check, CreditCard } from "lucide-react-native";
 
 import { InstitutionSearchField } from "@/components/accounts/InstitutionSearchField";
+import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
@@ -38,18 +40,8 @@ import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
-
-const ACCOUNT_COLORS = [
-  "#4F46E5",
-  "#2563EB",
-  "#0D9488",
-  "#16A34A",
-  "#D97706",
-  "#DC2626",
-  "#9333EA",
-  "#DB2777",
-  "#475569",
-];
+import { DateField } from "@/components/common/DateField";
+import { ACCOUNT_COLORS, ACCOUNT_COLOR_INK } from "@/shared/types/expense";
 
 export interface EditAccountModalProps {
   isOpen: boolean;
@@ -84,7 +76,7 @@ export function EditAccountModal({
   const [accountNumber, setAccountNumber] = useState("");
   const [creditLimit, setCreditLimit] = useState("");
   const [billGenerationDay, setBillGenerationDay] = useState("");
-  const [color, setColor] = useState(ACCOUNT_COLORS[0]);
+  const [color, setColor] = useState<string>(ACCOUNT_COLORS[0]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -316,6 +308,21 @@ export function EditAccountModal({
       isOpen={isOpen}
       onClose={onClose}
       title={isEditing ? "Edit Account" : "Add Account"}
+      // SPENDLY-552: 6a form pattern, the submit is pinned below the body.
+      // Same handler, same disabled condition, same label as before.
+      footer={
+        <SheetActions
+          primary={{
+            label: saving
+              ? "Saving..."
+              : isEditing
+                ? "Update Account"
+                : "Create Account",
+            onPress: handleSave,
+            disabled: saving,
+          }}
+        />
+      }
     >
       <ScrollView
         contentContainerStyle={{ gap: 16, paddingBottom: 24 }}
@@ -421,6 +428,7 @@ export function EditAccountModal({
             Opening Balance
           </Text>
           <Input
+            leadingIcon={<CurrencyPrefix />}
             value={openingBalance}
             onChangeText={setOpeningBalance}
             keyboardType="decimal-pad"
@@ -435,11 +443,14 @@ export function EditAccountModal({
               { color: theme.colors.foreground, fontSize: theme.typography.sm },
             ]}
           >
-            Balance As Of Date (YYYY-MM-DD)
+            Balance As Of Date
           </Text>
-          <Input
+          <DateField
             value={balanceAsOfDate}
-            onChangeText={setBalanceAsOfDate}
+            onChange={setBalanceAsOfDate}
+            clearable
+            placeholder="Not set"
+            accessibilityLabel="Balance as of date"
             helperText="Leave blank to keep every past transaction. Only set this if the opening balance is a bank snapshot from that date."
           />
         </View>
@@ -472,6 +483,7 @@ export function EditAccountModal({
                 Credit Limit
               </Text>
               <Input
+                leadingIcon={<CurrencyPrefix />}
                 value={creditLimit}
                 onChangeText={setCreditLimit}
                 keyboardType="decimal-pad"
@@ -549,10 +561,10 @@ export function EditAccountModal({
                   style={[
                     styles.colorDot,
                     { backgroundColor: c },
-                    isSelected && styles.colorDotSelected,
+                    isSelected && [styles.colorDotSelected, { borderColor: theme.colors.card }],
                   ]}
                 >
-                  {isSelected ? <Check size={14} color="#FFF" /> : null}
+                  {isSelected ? <Check size={14} color={ACCOUNT_COLOR_INK} /> : null}
                 </Pressable>
               );
             })}
@@ -560,14 +572,6 @@ export function EditAccountModal({
         </View>
 
         <View style={{ gap: 10, marginTop: 8 }}>
-          <Button onPress={handleSave} disabled={saving} size="lg">
-            {saving
-              ? "Saving..."
-              : isEditing
-                ? "Update Account"
-                : "Create Account"}
-          </Button>
-
           {isEditing ? (
             <Button
               variant="outline"
@@ -633,6 +637,5 @@ const styles = StyleSheet.create({
   colorDotSelected: {
     transform: [{ scale: 1.15 }],
     borderWidth: 2,
-    borderColor: "#FFF",
   },
 });

@@ -11,9 +11,15 @@ import {
   ModalCloseButton,
   ModalBody
 } from "@/components/ui/modal";
-import { Text } from "react-native";
-import { sheetBodyPadding } from "./sheetDensity";
+import { Text, View } from "react-native";
+import { sheetBodyPadding, sheetFooterPadding } from "./sheetDensity";
 import { useKeyboardHeight } from "@/hooks/useKeyboardHeight";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
+import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
+import {
+  SPENDLY_DIALOG_MAX_WIDTH,
+  sheetPresentationOf,
+} from "@/shared/utils/responsiveLayout";
 
 export interface ModalProps {
   isOpen: boolean;
@@ -30,6 +36,12 @@ export interface ModalProps {
    * gutter. The default is unchanged for every other sheet (Ganesh included).
    */
   density?: "default" | "compact";
+  /**
+   * SPENDLY-548: pinned below the scrolling body, so a form's primary action
+   * is always reachable. Pass a `SheetActions` row. Without it the sheet is
+   * exactly as before.
+   */
+  footer?: ReactNode;
 }
 
 
@@ -60,11 +72,19 @@ export function Modal({
   children,
   maxHeight = "88%",
   density = "default",
+  footer,
 }: ModalProps) {
   const compact = density === "compact";
   const insets = useSafeAreaInsets();
+  const scopeVars = useSpendlyScopeVars();
   const { height: windowHeight } = useWindowDimensions();
   const keyboardHeight = useKeyboardHeight();
+  const { layout } = useResponsiveLayout();
+  // SPENDLY-559: on tablet/desktop web a Spendly sheet opens as a centred
+  // dialog instead of spanning the browser. Only inside the Spendly shell
+  // (scope vars set): Ganesh Seva and Nutrition sheets are unchanged, and
+  // phones and native always get the bottom sheet.
+  const asDialog = scopeVars !== null && sheetPresentationOf(layout) === "dialog";
   // Never taller than the space between the status bar and the keyboard.
   const sheetMaxHeight = Math.min(
     resolveMaxHeight(maxHeight, windowHeight),
@@ -76,20 +96,24 @@ export function Modal({
       isOpen={isOpen}
       onClose={onClose}
       size="md"
-      className="justify-end m-0 p-0 w-full"
+      className={asDialog ? "justify-center items-center m-0 p-0 w-full" : "justify-end m-0 p-0 w-full"}
       // A real RN Modal window, as on main: it stays above the capsule nav
       // (Android elevation beats portal order) and keeps the caller's context.
       useRNModal
     >
       <ModalBackdrop />
       <ModalContent
-        className={`w-full bg-card rounded-t-3xl rounded-b-none border-t border-border overflow-hidden m-0 pb-0${compact ? " p-0" : ""}`}
-        style={{
+        className={
+          asDialog
+            ? `w-full bg-card rounded-3xl border border-border overflow-hidden m-0 pb-0${compact ? " p-0" : ""}`
+            : `w-full bg-card rounded-t-3xl rounded-b-none border-t border-border overflow-hidden m-0 pb-0${compact ? " p-0" : ""}`
+        }
+        style={[scopeVars, {
           maxHeight: sheetMaxHeight,
           // The keyboard already covers the nav bar inset while it is up.
           paddingBottom: keyboardHeight > 0 ? 12 : Math.max(insets.bottom, 20),
           marginBottom: keyboardHeight,
-        }}
+        }, asDialog ? { maxWidth: SPENDLY_DIALOG_MAX_WIDTH } : null]}
       >
         {title && (
           <ModalHeader
@@ -114,7 +138,7 @@ export function Modal({
           className={compact ? "p-0 m-0" : "p-0"}
           scrollEnabled
           style={{ flexGrow: 0, flexShrink: 1 }}
-          contentContainerStyle={sheetBodyPadding(density)}
+          contentContainerStyle={sheetBodyPadding(density, { withFooter: footer != null })}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="always"
           bounces
@@ -122,6 +146,11 @@ export function Modal({
         >
           {children}
         </ModalBody>
+        {footer != null ? (
+          <View className="border-t border-border" style={sheetFooterPadding(density)}>
+            {footer}
+          </View>
+        ) : null}
       </ModalContent>
     </GluestackModal>
   );

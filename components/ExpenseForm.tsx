@@ -87,9 +87,11 @@ import {
   todayDateKey,
 } from "@/shared/utils/dates";
 import { roundMoney } from "@/shared/utils/money";
+import { currencySymbol } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { DateField } from "@/components/common/DateField";
 
 export interface ExpenseFormProps {
   editingExpense?: Expense | null;
@@ -644,7 +646,8 @@ export function ExpenseForm({
                     : theme.colors.primary,
               }}
             >
-              {displayCurrency}
+              {/* SPENDLY-552: the symbol, not the bare currency code. */}
+              {currencySymbol(displayCurrency)}
             </Text>
             <TextInput
               value={amount}
@@ -907,12 +910,7 @@ export function ExpenseForm({
             }
           />
 
-          <Input
-            label="DATE (YYYY-MM-DD)"
-            value={date}
-            onChangeText={setDate}
-            placeholder="2026-08-05"
-          />
+          <DateField label="DATE" value={date} onChange={setDate} />
 
           {/* Tags */}
           {type === "expense" ? (

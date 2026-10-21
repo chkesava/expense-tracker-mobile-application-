@@ -1,20 +1,14 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { Amount } from "@/components/common/Amount";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
+import { ProgressIndicator } from "@/components/dashboard/ProgressIndicator";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 import type { Space } from "@/shared/types/space";
 import { SPACE_COLORS } from "@/shared/types/space";
-import type { BudgetProgressTier, SpaceSummary } from "@/shared/utils/spaceMath";
+import type { SpaceSummary } from "@/shared/utils/spaceMath";
+import { spaceBudgetLeftText, spaceBudgetPresentation } from "@/shared/utils/vaultSpacePresentation";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
-
-const TIER_COLORS: Record<BudgetProgressTier, string> = {
-  none: "#6B7280",
-  safe: "#10B981",
-  warning: "#F59E0B",
-  danger: "#F97316",
-  over: "#EF4444",
-};
 
 export interface SpaceCardProps {
   space: Space;
@@ -23,15 +17,17 @@ export interface SpaceCardProps {
   onPress: () => void;
 }
 
+/**
+ * One space in the list. SPENDLY-549: theme tokens, ghost-aware amounts, and
+ * a budget bar whose state is a word as well as a colour. The accent bar is
+ * the space's own stored colour.
+ */
 export function SpaceCard({ space, summary, currency, onPress }: SpaceCardProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const money = useGhostMoney(currency ?? "INR");
 
   const accent = space.color ?? SPACE_COLORS[0];
-  const tierColor = TIER_COLORS[summary.tier];
-  const progress = summary.hasBudget
-    ? Math.min(1, summary.percentUsed / 100)
-    : 0;
+  const budget = spaceBudgetPresentation(summary.tier);
 
   return (
     <Pressable
@@ -64,48 +60,17 @@ export function SpaceCard({ space, summary, currency, onPress }: SpaceCardProps)
           </Text>
         </View>
 
-        <Amount
-          value={summary.totalSpent}
-          currency={currency}
-          style={{
-            fontSize: 17,
-            fontWeight: "900",
-            color: theme.colors.foreground,
-          }}
-        />
+        <FinancialAmount value={summary.totalSpent} currency={currency ?? "INR"} size="md" weight="bold" />
       </View>
 
       {summary.hasBudget ? (
-        <>
-          <View
-            style={[
-              styles.track,
-              {
-                backgroundColor: isDark
-                  ? "rgba(255,255,255,0.08)"
-                  : "rgba(0,0,0,0.06)",
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.fill,
-                { width: `${progress * 100}%`, backgroundColor: tierColor },
-              ]}
-            />
-          </View>
-
-          <View style={styles.footerRow}>
-            <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
-              {summary.percentUsed}% of budget used
-            </Text>
-            <Text style={[styles.remaining, { color: tierColor }]}>
-              {summary.budgetRemaining >= 0
-                ? `${summary.budgetRemaining} left`
-                : `${Math.abs(summary.budgetRemaining)} over`}
-            </Text>
-          </View>
-        </>
+        <ProgressIndicator
+          pct={summary.percentUsed}
+          status={budget.status}
+          statusLabel={`${budget.label} · ${spaceBudgetLeftText(summary.budgetRemaining, money)}`}
+          trailing={`${summary.percentUsed}% used`}
+          accessibilityLabel={`${space.name}: ${summary.percentUsed} percent of budget used, ${budget.label}`}
+        />
       ) : null}
     </Pressable>
   );
@@ -140,24 +105,5 @@ const styles = StyleSheet.create({
   },
   meta: {
     fontSize: 11,
-  },
-  track: {
-    height: 6,
-    borderRadius: 3,
-    borderCurve: "continuous",
-    overflow: "hidden",
-  },
-  fill: {
-    height: "100%",
-    borderRadius: 3,
-  },
-  footerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  remaining: {
-    fontSize: 11,
-    fontWeight: "800",
   },
 });

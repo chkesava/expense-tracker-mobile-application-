@@ -5,18 +5,12 @@ import {
   Text,
   View,
 } from "react-native";
-import {
-  Banknote,
-  Landmark,
-  Plus,
-  TrendingUp,
-} from "lucide-react-native";
+import { Plus, Wallet } from "lucide-react-native";
 
-import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
-import { SkeletonCard } from "@/components/common/Skeleton";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
+import { MetaLabel, Section } from "@/components/dashboard/primitives";
 import { CreateInvestmentModal } from "@/components/investments/CreateInvestmentModal";
 import { InvestmentCard } from "@/components/investments/InvestmentCard";
 import { InvestmentDetailModal } from "@/components/investments/InvestmentDetailModal";
@@ -25,6 +19,10 @@ import { useInvestments } from "@/hooks/useInvestments";
 import type { Investment, InvestmentKind } from "@/shared/types/investment";
 import { todayDateKey } from "@/shared/utils/dates";
 import { getInvestmentValuation } from "@/shared/utils/investmentInterest";
+import {
+  formatSignedPercent,
+  investmentReturnPercent,
+} from "@/shared/utils/investmentPresentation";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
@@ -74,8 +72,7 @@ export function InvestmentsList() {
     });
 
     const netGain = totalCurrentValue - totalPrincipal;
-    const gainPct =
-      totalPrincipal > 0 ? ((netGain / totalPrincipal) * 100).toFixed(1) : "0.0";
+    const gainPct = investmentReturnPercent(netGain, totalPrincipal);
 
     return {
       totalPrincipal,
@@ -101,39 +98,51 @@ export function InvestmentsList() {
     <View style={styles.container}>
       {/* Portfolio Overview Card */}
       {investments.length > 0 && (
-        <Card style={styles.summaryCard}>
+        <Section
+          title="Deposits & funds"
+          subtitle={`${portfolioSummary.activeCount} active`}
+          icon={<Wallet size={16} color={theme.colors.primary} />}
+        >
           <View style={styles.summaryTop}>
-            <View>
-              <Text style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}>
-                PORTFOLIO VALUE (ASSETS)
-              </Text>
-              <Amount
+            <View style={styles.summaryCol}>
+              <MetaLabel>Current value</MetaLabel>
+              <FinancialAmount
                 value={portfolioSummary.totalCurrentValue}
                 currency={displayCurrency}
-                style={{
-                  fontSize: 22,
-                  fontWeight: "900",
-                  color: theme.colors.foreground,
-                }}
+                size="xl"
+                weight="bold"
+                fit
               />
             </View>
 
-            <View style={{ alignItems: "flex-end" }}>
-              <Text style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}>
-                NET RETURN
-              </Text>
-              <Text
-                style={{
-                  fontSize: 16,
-                  fontWeight: "800",
-                  color: portfolioSummary.netGain >= 0 ? "#10B981" : "#EF4444",
-                }}
-              >
-                +{displayCurrency} {Math.round(portfolioSummary.netGain).toLocaleString()} (+{portfolioSummary.gainPct}%)
-              </Text>
+            <View style={[styles.summaryCol, styles.summaryEnd]}>
+              <MetaLabel>Net return</MetaLabel>
+              {/* SPENDLY-542: the old line always printed "+", so a loss read
+                  "+INR -500 (+-3.2%)". */}
+              <FinancialAmount
+                value={Math.round(portfolioSummary.netGain)}
+                currency={displayCurrency}
+                size="md"
+                sign="auto"
+                tone="auto"
+                weight="semibold"
+              />
+              {portfolioSummary.gainPct !== null ? (
+                <Text
+                  style={[
+                    styles.summaryPct,
+                    {
+                      color: theme.colors.mutedForeground,
+                      fontFamily: theme.fontFamily.medium,
+                    },
+                  ]}
+                >
+                  {formatSignedPercent(portfolioSummary.gainPct)} on principal
+                </Text>
+              ) : null}
             </View>
           </View>
-        </Card>
+        </Section>
       )}
 
       {/* Filter Tabs & Add Button */}
@@ -156,6 +165,8 @@ export function InvestmentsList() {
                   key={tab.id}
                   label={tab.label}
                   selected={isActive}
+                  appearance="outline"
+                  accessibilityRole="tab"
                   onPress={() => setActiveFilter(tab.id as FilterTab)}
                 />
               );
@@ -170,15 +181,15 @@ export function InvestmentsList() {
           value={searchQuery}
           onChangeText={setSearchQuery}
           placeholder="Search investment assets..."
+          accessibilityLabel="Search investments"
         />
       )}
 
       {/* Investment Asset Cards */}
       {loading ? (
         <View style={{ gap: 12, marginTop: 4 }}>
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
+          <DashboardSkeleton variant="hero" />
+          <DashboardSkeleton variant="section" rows={3} />
         </View>
       ) : filteredInvestments.length === 0 ? (
         <EmptyState
@@ -191,7 +202,7 @@ export function InvestmentsList() {
           }
           primaryAction={{
             label: "Add Investment",
-            icon: <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />,
+            icon: <Plus size={16} color={theme.colors.primaryForeground} strokeWidth={2.4} />,
             onPress: () => setIsCreateModalOpen(true),
           }}
           secondaryAction={
@@ -240,18 +251,21 @@ const styles = StyleSheet.create({
   container: {
     gap: 14,
   },
-  summaryCard: {
-    borderRadius: 18,
-  },
   summaryTop: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
+    gap: 12,
   },
-  summaryLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
+  summaryCol: {
+    gap: 3,
+    flexShrink: 1,
+  },
+  summaryEnd: {
+    alignItems: "flex-end",
+  },
+  summaryPct: {
+    fontSize: 12,
   },
   filterRow: {
     flexDirection: "row",

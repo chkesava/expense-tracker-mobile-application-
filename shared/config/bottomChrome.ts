@@ -14,8 +14,12 @@
  * the FAB's offset and the list's padding is provable in a unit test.
  */
 
-/** Which bottom chrome the app shell is rendering (`settings.navigationStyle`). */
-export type BottomNavStyle = "bottom" | "dock";
+/**
+ * Which bottom chrome the app shell is rendering (`settings.navigationStyle`).
+ * `sidebar` is the desktop web layout (SPENDLY-559): navigation and the add
+ * action live in a left sidebar, so nothing floats over the bottom of a page.
+ */
+export type BottomNavStyle = "bottom" | "dock" | "sidebar";
 
 export const BOTTOM_NAV_BAR_HEIGHT = 64;
 /** BottomNav never sits flush: it floors the system inset at this. */
@@ -47,8 +51,12 @@ export const CAPSULE_HEIGHT = 68;
 export const CAPSULE_RADIUS = CAPSULE_HEIGHT / 2;
 /** The capsule floats: it floors the system inset higher than the old bar. */
 export const CAPSULE_MIN_INSET = 12;
-/** Horizontal margin between the capsule and the screen edge: nearly full width. */
-export const CAPSULE_SIDE_MARGIN = 4;
+/**
+ * Horizontal margin between the capsule and the screen edge: nearly full
+ * width, with enough of the page either side that it reads as floating
+ * (SPENDLY-561).
+ */
+export const CAPSULE_SIDE_MARGIN = 10;
 /** Vertical gap between the capsule's top and the FAB floating above it. */
 export const CAPSULE_FAB_GAP = 10;
 export const CAPSULE_FAB_SIZE = 56;
@@ -92,6 +100,7 @@ export function bottomChromeTopEdge(
   bottomInset: number,
   { navStyle = "bottom" }: BottomChromeOptions = {}
 ): number {
+  if (navStyle === "sidebar") return bottomInset;
   if (navStyle === "dock") {
     return actionDockOffset(bottomInset) + ACTION_DOCK_FAB_SIZE;
   }

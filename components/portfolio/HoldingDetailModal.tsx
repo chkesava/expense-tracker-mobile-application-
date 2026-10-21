@@ -10,10 +10,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronLeft, Info, MoreHorizontal } from "lucide-react-native";
 
-import {
-  ACCOUNT_GREEN,
-  ACCOUNT_RED,
-} from "@/components/accounts/accountScreenTheme";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
+import { usePortfolioColors } from "@/components/portfolio/portfolioColors";
 import { Amount } from "@/components/common/Amount";
 import { appDialog } from "@/lib/appDialog";
 import { haptic } from "@/lib/haptics";
@@ -24,43 +22,17 @@ import type {
 } from "@/shared/features/portfolio/types";
 import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { todayDateKey } from "@/shared/utils/dates";
-import { currencySymbol } from "@/shared/utils/formatCurrency";
+import { formatSignedPercent } from "@/shared/utils/investmentPresentation";
 import { computeHoldingXirr } from "@/shared/utils/portfolioXirr";
 import { tradeCashEffect } from "@/shared/features/portfolio/utils/tradeCharges";
+import { quoteKeyFor } from "@/shared/features/portfolio/utils/portfolioMetrics";
+import { normalizeHistorySymbol } from "@/shared/utils/stockHistory";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { withAlpha } from "@/theme/surfaces";
 import { HoldingAdjustmentModal } from "./HoldingAdjustmentModal";
+import { StockChartCard } from "./stockChart/StockChartCard";
 import { useState } from "react";
-
-const INSTRUMENT_COLORS: Record<InstrumentType | string, string> = {
-  stock: "#3B82F6",
-  etf: "#14B8A6",
-  mutual_fund: "#8B5CF6",
-  crypto: "#F59E0B",
-  gold: "#EAB308",
-};
-
-const SELL_BG = "#FF5A3D";
-const BUY_BG = "#00B386";
-const ADJUST_BG = "#64748B";
-
-function pnlColor(value: number, isDark: boolean, muted: string) {
-  if (value > 0) return isDark ? ACCOUNT_GREEN : "#16A34A";
-  if (value < 0) return isDark ? ACCOUNT_RED : "#DC2626";
-  return muted;
-}
-
-function signedPercent(value: number) {
-  const sign = value > 0 ? "+" : "";
-  return `${sign}${value.toFixed(2)}%`;
-}
-
-function signedPrefix(value: number, symbol: string) {
-  if (value > 0) return `+${symbol}`;
-  if (value < 0) return `-${symbol}`;
-  return symbol;
-}
 
 function formatQuantity(value: number) {
   if (Number.isInteger(value)) return String(value);
@@ -84,12 +56,11 @@ export function HoldingDetailModal({
   onBuy: () => void;
   onSell: () => void;
 }) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const colors = usePortfolioColors();
   const insets = useSafeAreaInsets();
   const { settings } = useSettings();
   const muted = theme.colors.mutedForeground;
-  const symbol = currencySymbol(currency);
   const asOfDate = todayDateKey();
   
   const [isAdjustVisible, setIsAdjustVisible] = useState(false);
@@ -119,18 +90,19 @@ export function HoldingDetailModal({
 
   if (!holding) return null;
 
-  const instrumentColor = INSTRUMENT_COLORS[holding.instrumentType] || "#94A3B8";
+  // SPENDLY-558: price history is Yahoo equity data, so stocks and ETFs only.
+  // Mounted only while the modal is open, so nothing is fetched in the background.
+  const chartSymbol =
+    visible && (holding.instrumentType === "stock" || holding.instrumentType === "etf")
+      ? normalizeHistorySymbol(quoteKeyFor(holding))
+      : null;
+  const instrumentColor = colors.instrument(holding.instrumentType);
   const letter = (holding.name || holding.symbol).trim().charAt(0).toUpperCase();
   const shareDayChange =
     holding.quantity > 0 ? holding.dayChange / holding.quantity : 0;
-  const quoteTone = pnlColor(shareDayChange, isDark, muted);
-  const unrealisedTone = pnlColor(holding.profit, isDark, muted);
-  const dayTone = pnlColor(holding.dayChange, isDark, muted);
-  const xirrTone =
-    xirr == null ? muted : pnlColor(xirr, isDark, muted);
-  const divider = {
-    borderColor: isDark ? "rgba(148, 163, 184, 0.16)" : theme.colors.border,
-  };
+  const quoteTone = colors.pnl(shareDayChange);
+  const xirrTone = xirr == null ? muted : colors.pnl(xirr);
+  const divider = { borderColor: colors.hairline };
 
   const explainXirr = () => {
     void haptic.selection();
@@ -195,7 +167,7 @@ export function HoldingDetailModal({
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.identity}>
-            <View style={[styles.avatar, { backgroundColor: `${instrumentColor}33` }]}>
+            <View style={[styles.avatar, { backgroundColor: withAlpha(instrumentColor, 0.2) }]}>
               <Text style={[styles.avatarLetter, { color: instrumentColor }]}>
                 {letter}
               </Text>
@@ -214,28 +186,22 @@ export function HoldingDetailModal({
                   style={[styles.quotePrice, { color: theme.colors.foreground }]}
                   ghostable
                 />
-                <Amount
-                  value={Math.abs(shareDayChange)}
-                  currency={currency}
-                  prefix={signedPrefix(shareDayChange, symbol)}
-                  style={[styles.quoteChange, { color: quoteTone }]}
-                  ghostable
-                />
+                <FinancialAmount value={shareDayChange} currency={currency} size="sm" sign="auto" tone="auto" weight="semibold" />
                 <Text style={[styles.quoteChange, { color: quoteTone }]}>
-                  ({signedPercent(holding.dayChangePercent)})
+                  ({formatSignedPercent(holding.dayChangePercent, 2)})
                 </Text>
               </View>
             </View>
           </View>
 
+          {chartSymbol ? <StockChartCard symbol={chartSymbol} /> : null}
+
           <View
             style={[
               styles.card,
               {
-                backgroundColor: isDark ? "#10141C" : theme.colors.card,
-                borderColor: isDark
-                  ? "rgba(148, 163, 184, 0.12)"
-                  : theme.colors.border,
+                backgroundColor: colors.card,
+                borderColor: colors.border,
               },
             ]}
           >
@@ -266,8 +232,6 @@ export function HoldingDetailModal({
               amount={holding.profit}
               percent={holding.profitPercent}
               currency={currency}
-              symbol={symbol}
-              tone={unrealisedTone}
             />
             <MetricRow
               label="1D returns"
@@ -275,8 +239,6 @@ export function HoldingDetailModal({
               amount={holding.dayChange}
               percent={holding.dayChangePercent}
               currency={currency}
-              symbol={symbol}
-              tone={dayTone}
             />
 
             <View style={[styles.rule, divider]} />
@@ -320,7 +282,7 @@ export function HoldingDetailModal({
                 <Text style={[styles.specValue, { color: muted }]}>NA</Text>
               ) : (
                 <Text style={[styles.specValue, { color: xirrTone }]}>
-                  {signedPercent(xirr * 100)}
+                  {formatSignedPercent(xirr * 100, 2)}
                 </Text>
               )}
             </SpecRow>
@@ -348,7 +310,7 @@ export function HoldingDetailModal({
                         <Text
                           style={[
                             styles.historyType,
-                            { color: buy ? BUY_BG : tx.type === "ADJUSTMENT" ? ADJUST_BG : SELL_BG },
+                            { color: buy ? colors.buy : tx.type === "ADJUSTMENT" ? colors.adjust : colors.sell },
                           ]}
                         >
                           {tx.type === "ADJUSTMENT" ? "ADJ" : tx.type}
@@ -356,12 +318,8 @@ export function HoldingDetailModal({
                         {tx.type === "ADJUSTMENT" ? (
                           <Text style={[styles.historyMeta, { color: muted }]}>
                             Cost base:{" "}
-                            <Amount
-                              value={tx.price}
-                              currency={currency}
-                              prefix={tx.price > 0 ? "+" : ""}
-                              style={{ color: muted }}
-                            />
+                            {/* SPENDLY-543: prefix="+" replaced the currency symbol. */}
+                            <FinancialAmount value={tx.price} currency={currency} size="xs" sign="auto" tone="muted" />
                           </Text>
                         ) : (
                           <>
@@ -371,6 +329,7 @@ export function HoldingDetailModal({
                             <Amount
                               value={tx.price}
                               currency={currency}
+                              ghostable
                               style={[styles.historyMeta, { color: muted }]}
                             />
                           </>
@@ -382,12 +341,13 @@ export function HoldingDetailModal({
                     </View>
                     {effect ? (
                       <Text style={[styles.historyBreakdown, { color: muted }]}>
-                        Value <Amount value={effect.gross} currency={currency} style={[styles.historyBreakdown, { color: muted }]} />
-                        {" · "}Charges <Amount value={effect.fees} currency={currency} style={[styles.historyBreakdown, { color: muted }]} />
+                        Value <Amount value={effect.gross} currency={currency} ghostable style={[styles.historyBreakdown, { color: muted }]} />
+                        {" · "}Charges <Amount value={effect.fees} currency={currency} ghostable style={[styles.historyBreakdown, { color: muted }]} />
                         {" · "}{buy ? "Total cost" : "Net proceeds"}{" "}
                         <Amount
                           value={effect.net}
                           currency={currency}
+                          ghostable
                           style={[styles.historyBreakdown, { color: theme.colors.foreground, fontWeight: "700" }]}
                         />
                       </Text>
@@ -403,9 +363,7 @@ export function HoldingDetailModal({
           style={[
             styles.footer,
             {
-              borderTopColor: isDark
-                ? "rgba(148, 163, 184, 0.16)"
-                : theme.colors.border,
+              borderTopColor: colors.hairline,
               paddingBottom: Math.max(insets.bottom, 12),
               backgroundColor: theme.colors.background,
             },
@@ -418,12 +376,12 @@ export function HoldingDetailModal({
             }}
             style={({ pressed }) => [
               styles.actionBtn,
-              { backgroundColor: SELL_BG, opacity: pressed ? 0.88 : 1 },
+              { backgroundColor: colors.sell, opacity: pressed ? 0.88 : 1 },
             ]}
             accessibilityRole="button"
             accessibilityLabel={`Sell ${holding.symbol}`}
           >
-            <Text style={styles.actionLabel}>Sell</Text>
+            <Text style={[styles.actionLabel, { color: theme.colors.destructiveForeground }]}>Sell</Text>
           </Pressable>
           <Pressable
             onPress={() => {
@@ -432,12 +390,12 @@ export function HoldingDetailModal({
             }}
             style={({ pressed }) => [
               styles.actionBtn,
-              { backgroundColor: BUY_BG, opacity: pressed ? 0.88 : 1 },
+              { backgroundColor: colors.buy, opacity: pressed ? 0.88 : 1 },
             ]}
             accessibilityRole="button"
             accessibilityLabel={`Buy ${holding.symbol}`}
           >
-            <Text style={styles.actionLabel}>Buy</Text>
+            <Text style={[styles.actionLabel, { color: theme.colors.successForeground }]}>Buy</Text>
           </Pressable>
         </View>
       </View>
@@ -459,30 +417,21 @@ function MetricRow({
   amount,
   percent,
   currency,
-  symbol,
-  tone,
 }: {
   label: string;
   muted: string;
   amount: number;
   percent: number;
   currency: string;
-  symbol: string;
-  tone: string;
 }) {
+  const tone = usePortfolioColors().pnl(amount);
   return (
     <View style={styles.metricRow}>
       <Text style={[styles.metricLabel, { color: muted }]}>{label}</Text>
       <View style={styles.metricValues}>
-        <Amount
-          value={Math.abs(amount)}
-          currency={currency}
-          prefix={signedPrefix(amount, symbol)}
-          style={[styles.metricAmount, { color: tone }]}
-          ghostable
-        />
+        <FinancialAmount value={amount} currency={currency} size="sm" sign="auto" tone="auto" weight="semibold" />
         <Text style={[styles.metricPercent, { color: tone }]}>
-          ({signedPercent(percent)})
+          ({formatSignedPercent(percent, 2)})
         </Text>
       </View>
     </View>
@@ -627,11 +576,6 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     gap: 2,
   },
-  metricAmount: {
-    fontSize: 15,
-    fontWeight: "700",
-    fontVariant: ["tabular-nums"],
-  },
   metricPercent: {
     fontSize: 13,
     fontWeight: "700",
@@ -716,7 +660,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   actionLabel: {
-    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "800",
   },

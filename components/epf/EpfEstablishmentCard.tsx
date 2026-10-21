@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Building2, ListChecks, Pencil } from "lucide-react-native";
 
-import { Card } from "@/components/ui/Card";
 import { haptic } from "@/lib/haptics";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
 import { contributionMonthsFor } from "@/shared/features/epf/utils/contributions";
@@ -13,6 +12,9 @@ import {
 import { useTheme } from "@/theme/ThemeProvider";
 
 import { withAlpha } from "@/theme/surfaces";
+import { Section } from "@/components/dashboard/primitives";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 type Props = {
   establishment: EpfEstablishment;
   todayKey: string;
@@ -47,22 +49,27 @@ export function EpfEstablishmentCard({
   const monthsLabel = contributionMonthsLabel(
     contributionMonthsFor(establishment, todayKey.slice(0, 7)).length
   );
+  const { settings } = useSettings();
+  const toggleReveal = () => {
+    haptic.selection();
+    setRevealed((value) => !value);
+  };
+  const revealLabel = revealed
+    ? `Hide identifiers for ${establishment.employerName}, ${monthsLabel}`
+    : `Reveal identifiers for ${establishment.employerName}, ${monthsLabel}`;
 
   return (
-    <Card>
-      <Pressable
-        onPress={() => {
-          haptic.selection();
-          setRevealed((value) => !value);
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={
-          revealed
-            ? `Hide identifiers for ${establishment.employerName}, ${monthsLabel}`
-            : `Reveal identifiers for ${establishment.employerName}, ${monthsLabel}`
-        }
-      >
-        <View style={styles.header}>
+    <Section>
+      {/* SPENDLY-544: the Edit button used to sit inside the tap-to-reveal
+          button (a <button> inside a <button> on web). The reveal target is
+          now the identity block and the identifiers; Edit is a sibling. */}
+      <View style={styles.header}>
+        <Pressable
+          onPress={toggleReveal}
+          style={styles.headerReveal}
+          accessibilityRole="button"
+          accessibilityLabel={revealLabel}
+        >
           <View style={[styles.iconBadge, { backgroundColor: withAlpha(chipColor, 0.1) }]}>
             <Building2 size={theme.iconSize.md} color={chipColor} />
           </View>
@@ -72,27 +79,37 @@ export function EpfEstablishmentCard({
               {establishment.employerName}
             </Text>
             <Text style={[styles.dates, { color: theme.colors.mutedForeground }]}>
-              {establishment.dateJoined} – {establishment.dateLeft ?? "Present"}
+              {formatDisplayDate(establishment.dateJoined, settings?.dateFormat)} –{" "}
+              {establishment.dateLeft
+                ? formatDisplayDate(establishment.dateLeft, settings?.dateFormat)
+                : "Present"}
             </Text>
           </View>
+        </Pressable>
 
-          <View style={styles.headerActions}>
-            <View style={[styles.chip, { backgroundColor: withAlpha(chipColor, 0.1) }]}>
-              <Text style={[styles.chipText, { color: chipColor }]}>
-                {STATE_LABEL[state] ?? state}
-              </Text>
-            </View>
-            <Pressable
-              onPress={() => onEdit(establishment)}
-              hitSlop={12}
-              accessibilityRole="button"
-              accessibilityLabel={`Edit ${establishment.employerName}`}
-            >
-              <Pencil size={theme.iconSize.sm} color={theme.colors.mutedForeground} />
-            </Pressable>
+        <View style={styles.headerActions}>
+          <View style={[styles.chip, { backgroundColor: withAlpha(chipColor, 0.1) }]}>
+            <Text style={[styles.chipText, { color: chipColor }]}>
+              {STATE_LABEL[state] ?? state}
+            </Text>
           </View>
+          <Pressable
+            onPress={() => onEdit(establishment)}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel={`Edit ${establishment.employerName}`}
+          >
+            <Pencil size={theme.iconSize.sm} color={theme.colors.mutedForeground} />
+          </Pressable>
         </View>
+      </View>
 
+      <Pressable
+        onPress={toggleReveal}
+        // The header button above already announces this action.
+        accessible={false}
+        importantForAccessibility="no"
+      >
         <View style={[styles.detailRow, { borderTopColor: theme.colors.border }]}>
           <View style={styles.detailCol}>
             <Text style={[styles.detailLabel, { color: theme.colors.mutedForeground }]}>
@@ -138,12 +155,19 @@ export function EpfEstablishmentCard({
           </Text>
         </Pressable>
       ) : null}
-    </Card>
+    </Section>
   );
 }
 
 const styles = StyleSheet.create({
   header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  headerReveal: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,

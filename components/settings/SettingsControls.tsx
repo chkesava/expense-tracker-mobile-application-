@@ -1,11 +1,10 @@
 import { type ReactNode } from "react";
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, StyleSheet, Switch, Text, View, type SwitchProps } from "react-native";
 
-import { ACCOUNT_GREEN } from "@/components/accounts/accountScreenTheme";
+import { Chip } from "@/components/ui/Chip";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces, withAlpha } from "@/theme/surfaces";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { withAlpha } from "@/theme/surfaces";
 
 export function SettingsPanel({
   title,
@@ -16,17 +15,13 @@ export function SettingsPanel({
   subtitle?: string;
   children: ReactNode;
 }) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
 
   return (
     <View
       style={[
         styles.panel,
-        {
-          backgroundColor: isDark ? "#10141C" : theme.colors.card,
-          borderColor: isDark ? "rgba(148, 163, 184, 0.12)" : theme.colors.border,
-        },
+        { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
       ]}
     >
       {title ? (
@@ -65,6 +60,25 @@ export function FieldLabel({ label }: { label: string }) {
     >
       {label}
     </Text>
+  );
+}
+
+/**
+ * The one switch style for Spendly (SPENDLY-551): primary track when on,
+ * theme thumbs. react-native-web ignores `thumbColor` while on and falls back
+ * to teal, so `activeThumbColor` is passed as well (first fixed for the runway
+ * sources list, SPENDLY-545). Use this instead of a bare `Switch`.
+ */
+export function ThemedSwitch({ value, ...props }: Omit<SwitchProps, "trackColor" | "thumbColor">) {
+  const { theme } = useTheme();
+  return (
+    <Switch
+      value={value}
+      trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+      thumbColor={value ? theme.colors.primaryForeground : theme.colors.mutedForeground}
+      {...({ activeThumbColor: theme.colors.primaryForeground } as object)}
+      {...props}
+    />
   );
 }
 
@@ -107,16 +121,15 @@ export function RowSwitch({
           </Text>
         ) : null}
       </View>
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-        thumbColor="#FFFFFF"
-      />
+      <ThemedSwitch value={value} onValueChange={onValueChange} accessibilityLabel={label} />
     </Pressable>
   );
 }
 
+/**
+ * A single-choice row of options. SPENDLY-551: drawn with the outline `Chip`
+ * used across Phases 3–5 instead of its own filled green chip.
+ */
 export function ChipRow<T extends string>({
   options,
   selected,
@@ -126,53 +139,20 @@ export function ChipRow<T extends string>({
   selected: T;
   onSelect: (value: T) => void;
 }) {
-  const { theme, themeName } = useTheme();
-  const surfaces = useSurfaces();
-  const isDark = themeUsesDarkPalette(themeName);
-
   return (
-    <View style={styles.chipWrap}>
-      {options.map((opt) => {
-        const active = opt.value === selected;
-        return (
-          <Pressable
-            key={opt.value}
-            onPress={() => {
-              haptic.selection().catch(() => undefined);
-              onSelect(opt.value);
-            }}
-            android_ripple={{
-              color: active ? "rgba(15,23,42,0.12)" : withAlpha(theme.colors.primary, 0.1),
-              borderless: false,
-            }}
-            style={[
-              styles.chip,
-              {
-                borderColor: active
-                  ? ACCOUNT_GREEN
-                  : isDark
-                    ? "rgba(148,163,184,0.16)"
-                    : theme.colors.border,
-                backgroundColor: active
-                  ? ACCOUNT_GREEN
-                  : surfaces.tile,
-              },
-            ]}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: active }}
-          >
-            <Text
-              style={{
-                color: active ? "#052E16" : theme.colors.foreground,
-                fontSize: 13,
-                fontWeight: active ? "800" : "600",
-              }}
-            >
-              {opt.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+    <View style={styles.chipWrap} accessibilityRole="radiogroup">
+      {options.map((opt) => (
+        <Chip
+          key={opt.value}
+          label={opt.label}
+          selected={opt.value === selected}
+          appearance="outline"
+          accessibilityRole="radio"
+          // Re-selecting the current option is a no-op, so it gets no tick.
+          haptic={opt.value !== selected}
+          onPress={() => onSelect(opt.value)}
+        />
+      ))}
     </View>
   );
 }
@@ -210,14 +190,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-  },
-  chip: {
-    paddingHorizontal: 14,
-    minHeight: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    borderRadius: 999,
-    borderCurve: "continuous",
-    borderWidth: 1,
   },
 });

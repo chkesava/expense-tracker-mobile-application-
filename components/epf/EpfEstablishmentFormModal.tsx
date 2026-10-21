@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { Archive, ArchiveRestore, Trash2 } from "lucide-react-native";
 
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import type { EpfEstablishmentInput } from "@/hooks/useEpf";
@@ -12,6 +13,7 @@ import type { EpfEstablishment } from "@/shared/features/epf/types";
 import { validateEstablishmentAgainstExisting } from "@/shared/features/epf/utils";
 import { useTheme } from "@/theme/ThemeProvider";
 import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
+import { DateField } from "@/components/common/DateField";
 
 type Props = {
   isOpen: boolean;
@@ -153,6 +155,17 @@ export function EpfEstablishmentFormModal({
       isOpen={isOpen}
       onClose={onClose}
       title={establishment ? "Edit establishment" : "Add establishment"}
+      // SPENDLY-554: 6a form pattern; same handler, loading, disabled and label.
+      footer={
+        <SheetActions
+          primary={{
+            label: establishment ? "Save changes" : "Add establishment",
+            onPress: handleSubmit,
+            loading: saving,
+            disabled: Boolean(conflict),
+          }}
+        />
+      }
     >
       <View style={styles.form}>
         <Input
@@ -182,14 +195,7 @@ export function EpfEstablishmentFormModal({
           autoCapitalize="characters"
         />
 
-        <Input
-          label="Date joined (YYYY-MM-DD) *"
-          value={dateJoined}
-          onChangeText={setDateJoined}
-          placeholder="YYYY-MM-DD"
-          error={errors.dateJoined}
-          autoCapitalize="none"
-        />
+        <DateField label="Date joined *" value={dateJoined} onChange={setDateJoined} maxDate={(!stillWorking && dateLeft) || undefined} error={errors.dateJoined} />
 
         <View style={styles.switchRow}>
           <Text style={[styles.switchLabel, { color: theme.colors.foreground }]}>
@@ -218,14 +224,7 @@ export function EpfEstablishmentFormModal({
         </View>
 
         {stillWorking ? null : (
-          <Input
-            label="Date left (YYYY-MM-DD) *"
-            value={dateLeft}
-            onChangeText={setDateLeft}
-            placeholder="YYYY-MM-DD"
-            error={errors.dateLeft}
-            autoCapitalize="none"
-          />
+          <DateField label="Date left *" value={dateLeft} onChange={setDateLeft} minDate={dateJoined || undefined} error={errors.dateLeft} />
         )}
 
         <Input
@@ -241,9 +240,6 @@ export function EpfEstablishmentFormModal({
           <Text style={[styles.conflict, { color: theme.colors.destructive }]}>{conflict}</Text>
         ) : null}
 
-        <Button onPress={handleSubmit} loading={saving} disabled={Boolean(conflict)}>
-          {establishment ? "Save changes" : "Add establishment"}
-        </Button>
 
         {establishment ? (
           <>

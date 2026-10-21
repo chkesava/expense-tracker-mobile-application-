@@ -30,6 +30,8 @@ const FUNCTIONS = [
   "stock",
   "mutual-funds",
   "crypto",
+  // SPENDLY-558: historical OHLCV series for the stock chart.
+  "stock-history",
 ];
 
 fs.mkdirSync(outDir, { recursive: true });

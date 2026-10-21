@@ -17,10 +17,10 @@ import {
   wageChangeNeedsConfirmation,
   wageForMonth,
 } from "@/shared/features/epf/utils/wageHistory";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
 import { monthLabel } from "@/shared/utils/monthLabel";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 
 type Props = {
   isOpen: boolean;
@@ -90,7 +90,8 @@ export function EpfWageChangeSheet({
     setErrors({});
   }, [isOpen, currentMonth, establishment.epsMember]);
 
-  const money = (value: number) => formatAmount(value, currency);
+  // SPENDLY-544: ghost-aware; EPF ignored ghost mode almost everywhere.
+  const money = useGhostMoney(currency);
   const currentWage = wageForMonth(history, currentMonth, fallbackWage);
 
   const preview = useMemo(

@@ -38,10 +38,12 @@ import { writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import { formatDateKey } from "@/shared/utils/dates";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
+import { DateField } from "@/components/common/DateField";
 
 interface ManageStockCashModalProps {
   visible: boolean;
@@ -88,6 +90,8 @@ export function ManageStockCashModal({
   currency,
 }: ManageStockCashModalProps) {
   const { theme, themeName } = useTheme();
+  // SPENDLY-554: RN Modal portals outside SpendlyUIScope on web; keep the theme vars.
+  const scopeVars = useSpendlyScopeVars();
   const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const insets = useSafeAreaInsets();
@@ -321,7 +325,7 @@ export function ManageStockCashModal({
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, { backgroundColor: theme.colors.scrim }, scopeVars]}>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={styles.sheetAvoider}
@@ -382,8 +386,8 @@ export function ManageStockCashModal({
                 styles.balanceBanner,
                 {
                   backgroundColor: isDark
-                    ? "rgba(99, 102, 241, 0.12)"
-                    : "rgba(99, 102, 241, 0.08)",
+                    ? withAlpha(theme.colors.primary, 0.12)
+                    : withAlpha(theme.colors.primary, 0.08),
                   borderColor: theme.colors.border,
                 },
               ]}
@@ -397,7 +401,7 @@ export function ManageStockCashModal({
               >
                 Current Cash Balance
               </Text>
-              <Amount
+              <Amount ghostable
                 value={currentCash}
                 currency={currency}
                 style={{
@@ -476,7 +480,7 @@ export function ManageStockCashModal({
                         styles.modeIconWrap,
                         {
                           backgroundColor: selected
-                            ? "rgba(255,255,255,0.18)"
+                            ? withAlpha(theme.colors.primaryForeground, 0.18)
                             : surfaces.track,
                         },
                       ]}
@@ -601,8 +605,8 @@ export function ManageStockCashModal({
                       {
                         borderColor: theme.colors.border,
                         backgroundColor: isDark
-                          ? "rgba(234, 179, 8, 0.12)"
-                          : "rgba(234, 179, 8, 0.10)",
+                          ? withAlpha(theme.colors.warning, 0.12)
+                          : withAlpha(theme.colors.warning, 0.1),
                       },
                     ]}
                   >
@@ -692,11 +696,7 @@ export function ManageStockCashModal({
                 >
                   Date *
                 </Text>
-                <Input
-                  placeholder="YYYY-MM-DD"
-                  value={date}
-                  onChangeText={setDate}
-                />
+                <DateField value={date} onChange={setDate} accessibilityLabel="Date" />
               </View>
 
               {mode === "adjust" ? (
@@ -763,7 +763,7 @@ export function ManageStockCashModal({
                   >
                     Balance after adjustment
                   </Text>
-                  <Amount
+                  <Amount ghostable
                     value={adjustedPreview}
                     currency={currency}
                     style={{
@@ -807,7 +807,6 @@ export function ManageStockCashModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "flex-end",
   },
   sheetAvoider: {

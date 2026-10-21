@@ -6,6 +6,7 @@ import {
   type DocumentSnapshot,
   type Firestore,
 } from "firebase/firestore";
+import { isCreditCardAccount } from "@/shared/utils/accountKind";
 
 export type AccountInfo = {
   isCreditCard: boolean;
@@ -13,6 +14,10 @@ export type AccountInfo = {
   oldOutstanding: number;
   /** SPENDLY-436: true when `balanceInitialized` was missing on the account. */
   needsInitialization: boolean;
+  /** SPENDLY-496: false when no account doc was found (e.g. it was deleted). */
+  exists: boolean;
+  /** SPENDLY-496: the account's baseline; earlier rows sit inside the opening balance. */
+  balanceAsOfDate: string | null;
 };
 
 /**
@@ -33,6 +38,19 @@ export async function readAccountSnap(
     return await getDocFromCache(ref);
   } catch {
     return getDoc(ref);
+  }
+}
+
+/** Cache first, then server; null when neither can answer. */
+async function readDocCacheFirst(ref: DocumentReference): Promise<DocumentSnapshot | null> {
+  try {
+    return await getDocFromCache(ref);
+  } catch {
+    try {
+      return await getDoc(ref);
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -57,13 +75,20 @@ export async function docAlreadyWritten(ref: DocumentReference): Promise<boolean
   }
 }
 
-export function accountInfoFromSnap(snap: DocumentSnapshot): AccountInfo {
+export function accountInfoFromSnap(snap: DocumentSnapshot, typeName?: string | null): AccountInfo {
   if (!snap.exists()) {
-    return { isCreditCard: false, oldBalance: 0, oldOutstanding: 0, needsInitialization: false };
+    return {
+      isCreditCard: false,
+      oldBalance: 0,
+      oldOutstanding: 0,
+      needsInitialization: false,
+      exists: false,
+      balanceAsOfDate: null,
+    };
   }
   const data = snap.data();
-  const isCreditCard = data.accountTypeId === "credit_card" ||
-    (data.name || "").toLowerCase().includes("credit");
+  // SPENDLY-497: the same rule the screens use (the account type's name).
+  const isCreditCard = isCreditCardAccount({ typeName, accountTypeId: data.accountTypeId });
   // SPENDLY-436: a missing `balanceInitialized` means currentBalance was
   // never seeded — reading it as `?? 0` here would silently drop
   // openingBalance the moment this edit/delete/restore applies.
@@ -73,6 +98,8 @@ export function accountInfoFromSnap(snap: DocumentSnapshot): AccountInfo {
     oldBalance: needsInitialization ? (data.openingBalance ?? 0) : (data.currentBalance ?? 0),
     oldOutstanding: data.currentOutstanding ?? 0,
     needsInitialization,
+    exists: true,
+    balanceAsOfDate: typeof data.balanceAsOfDate === "string" ? data.balanceAsOfDate : null,
   };
 }
 
@@ -85,9 +112,27 @@ export async function fetchAccountTypes(
   const snaps = await Promise.all(
     uniqueIds.map((id) => readAccountSnap(db, uid, id))
   );
+  // SPENDLY-497: the account type's name decides card vs bank, as on read.
+  // accountTypes has a session-long listener too, so this is a cache read.
+  const typeIds = Array.from(
+    new Set(
+      snaps
+        .map((snap) => (snap.exists() ? (snap.data().typeId as string | undefined) : undefined))
+        .filter((typeId): typeId is string => Boolean(typeId))
+    )
+  );
+  const typeNames = new Map<string, string>();
+  await Promise.all(
+    typeIds.map(async (typeId) => {
+      const typeSnap = await readDocCacheFirst(doc(db, "users", uid, "accountTypes", typeId));
+      if (typeSnap?.exists()) typeNames.set(typeId, String(typeSnap.data().name ?? ""));
+    })
+  );
   const result = new Map<string, AccountInfo>();
   uniqueIds.forEach((id, index) => {
-    result.set(id, accountInfoFromSnap(snaps[index]));
+    const snap = snaps[index];
+    const typeId = snap.exists() ? (snap.data().typeId as string | undefined) : undefined;
+    result.set(id, accountInfoFromSnap(snap, typeId ? typeNames.get(typeId) : undefined));
   });
   return result;
 }

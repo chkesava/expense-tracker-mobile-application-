@@ -1,5 +1,7 @@
 import { Image, Pressable, StyleSheet, Text, type ViewStyle, type StyleProp } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { ACTIVE_PRODUCT } from "@/lib/activeProduct";
+import { socialButtonPalette, usesExpenseLook } from "@/lib/authLook";
 import { useTheme } from "@/theme/ThemeProvider";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -34,7 +36,9 @@ export function SocialLoginButton({
     transform: [{ scale: scale.value }],
   }));
 
-  const isDark = theme.colors.background === "#020817" || theme.colors.background === "#000000";
+  // SPENDLY-556: themed for Expense; Nutrition keeps its previous colours.
+  const expenseLook = usesExpenseLook(ACTIVE_PRODUCT);
+  const palette = socialButtonPalette(theme, expenseLook);
 
   return (
     <AnimatedPressable
@@ -45,8 +49,8 @@ export function SocialLoginButton({
       style={[
         styles.button,
         {
-          backgroundColor: isDark ? "#1E293B" : "#FFFFFF",
-          borderColor: isDark ? "#334155" : "#E2E8F0",
+          backgroundColor: palette.background,
+          borderColor: palette.border,
           opacity: disabled || loading ? 0.6 : 1,
         },
         style,
@@ -55,12 +59,12 @@ export function SocialLoginButton({
     >
       {/* Fallback to simple G text if we don't have a local google logo asset handy, 
           though standard best practice is using an SVG/png. We'll use an emoji/text hybrid to guarantee it renders */}
-      <Text style={{ fontSize: 20, marginRight: 8 }}>Google</Text>
+      <Text style={[{ fontSize: 20, marginRight: 8 }, expenseLook && { color: palette.text, fontFamily: theme.fontFamily.semibold }]}>Google</Text>
       <Text
         style={[
           styles.text,
           {
-            color: isDark ? "#FFFFFF" : "#0F172A",
+            color: palette.text,
             fontFamily: theme.fontFamily.semibold,
           },
         ]}

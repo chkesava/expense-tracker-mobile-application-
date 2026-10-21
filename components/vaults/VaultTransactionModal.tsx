@@ -1,22 +1,16 @@
 import React, { useState } from "react";
-import {
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import { ArrowDownLeft, ArrowUpRight, Plus, X } from "lucide-react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { ArrowDownLeft, ArrowUpRight } from "lucide-react-native";
 
-import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { toast } from "@/lib/toast";
 import type { SharedVault } from "@/shared/types/vault";
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
-import { SheetBottomInset } from "@/components/common/SheetBottomInset";
+import { useSurfaces } from "@/theme/surfaces";
 
 export interface VaultTransactionModalProps {
   visible: boolean;
@@ -31,6 +25,11 @@ export interface VaultTransactionModalProps {
   }) => Promise<any>;
 }
 
+/**
+ * Add a deposit or a withdrawal to a vault. SPENDLY-549: on the 6a form sheet
+ * pattern; the semantic deposit/withdrawal colours come from the theme. What
+ * it submits is unchanged.
+ */
 export function VaultTransactionModal({
   visible,
   vault,
@@ -38,12 +37,13 @@ export function VaultTransactionModal({
   onSubmit,
 }: VaultTransactionModalProps) {
   const { theme } = useTheme();
+  const surfaces = useSurfaces();
 
   const [type, setType] = useState<"deposit" | "withdrawal">("deposit");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [note, setNote] = useState("");
-  const [date, setDate] = useState(todayDateKey());
+  const [date] = useState(todayDateKey());
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSave = async () => {
@@ -71,197 +71,106 @@ export function VaultTransactionModal({
     }
   };
 
+  const isDeposit = type === "deposit";
+  const tone = isDeposit ? theme.colors.success : theme.colors.destructive;
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
-        <View
-          style={[
-            styles.sheetContainer,
+    <Modal
+      isOpen={visible}
+      onClose={onClose}
+      title={isDeposit ? "Add deposit" : "Record withdrawal"}
+      footer={
+        <SheetActions
+          secondary={{ label: "Cancel", onPress: onClose }}
+          primary={{
+            label: isDeposit ? "Add deposit" : "Record withdrawal",
+            onPress: () => {
+              void handleSave();
+            },
+            disabled: !amount || isSubmitting,
+            loading: isSubmitting,
+          }}
+        />
+      }
+    >
+      <View style={styles.content}>
+        <View style={styles.intro}>
+          <View style={[styles.iconTile, { backgroundColor: surfaces.wash(tone) }]}>
+            {isDeposit ? <ArrowDownLeft size={20} color={tone} /> : <ArrowUpRight size={20} color={tone} />}
+          </View>
+          <Text
+            style={[styles.introText, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+            numberOfLines={1}
+          >
+            {vault.name}
+          </Text>
+        </View>
+
+        <SegmentedControl
+          value={type}
+          onChange={setType}
+          options={[
             {
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.border,
+              value: "deposit",
+              label: "Deposit (Inflow)",
+              activeColor: theme.colors.success,
+              icon: (color) => <ArrowDownLeft size={16} color={color} />,
+            },
+            {
+              value: "withdrawal",
+              label: "Withdrawal (Spend)",
+              activeColor: theme.colors.destructive,
+              icon: (color) => <ArrowUpRight size={16} color={color} />,
             },
           ]}
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.titleRow}>
-              <View
-                style={[
-                  styles.iconCircle,
-                  {
-                    backgroundColor:
-                      type === "deposit"
-                        ? "rgba(34,197,94,0.15)"
-                        : "rgba(239,68,68,0.15)",
-                  },
-                ]}
-              >
-                {type === "deposit" ? (
-                  <ArrowDownLeft size={20} color="#22C55E" />
-                ) : (
-                  <ArrowUpRight size={20} color="#EF4444" />
-                )}
-              </View>
-              <View>
-                <Text style={[styles.title, { color: theme.colors.foreground }]}>
-                  {type === "deposit" ? "Add Deposit" : "Record Expense"}
-                </Text>
-                <Text style={[styles.subtitle, { color: theme.colors.mutedForeground }]}>
-                  {vault.name}
-                </Text>
-              </View>
-            </View>
+        />
 
-            <Button
-              variant="ghost"
-              size="icon"
-              onPress={onClose}
-              hitSlop={12}
-              accessibilityLabel="Close"
-              style={styles.closeBtn}
-            >
-              <X size={20} color={theme.colors.mutedForeground} />
-            </Button>
-          </View>
+        <Input
+          label={`Amount (${vault.currency})`}
+          value={amount}
+          onChangeText={setAmount}
+          placeholder="0.00"
+          keyboardType="numeric"
+          autoFocus
+        />
 
-          <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
-            {/* Type Switcher */}
-            <SegmentedControl
-              value={type}
-              onChange={setType}
-              options={[
-                {
-                  value: "deposit",
-                  label: "Deposit (Inflow)",
-                  activeColor: theme.colors.success,
-                  icon: (color) => <ArrowDownLeft size={16} color={color} />,
-                },
-                {
-                  value: "withdrawal",
-                  label: "Withdrawal (Spend)",
-                  activeColor: theme.colors.destructive,
-                  icon: (color) => <ArrowUpRight size={16} color={color} />,
-                },
-              ]}
-            />
+        <Input
+          label="Category / tag"
+          value={category}
+          onChangeText={setCategory}
+          placeholder={isDeposit ? "Funding, Contribution..." : "Rent, Groceries, Dinner..."}
+        />
 
-            {/* Amount */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.colors.foreground }]}>
-                Amount ({vault.currency}) *
-              </Text>
-              <Input
-                value={amount}
-                onChangeText={setAmount}
-                placeholder="0.00"
-                keyboardType="numeric"
-                autoFocus
-              />
-            </View>
-
-            {/* Category / Purpose */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.colors.foreground }]}>
-                Category / Tag
-              </Text>
-              <Input
-                value={category}
-                onChangeText={setCategory}
-                placeholder={type === "deposit" ? "Funding, Contribution..." : "Rent, Groceries, Dinner..."}
-              />
-            </View>
-
-            {/* Note */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.colors.foreground }]}>
-                Note / Description
-              </Text>
-              <Input
-                value={note}
-                onChangeText={setNote}
-                placeholder="Optional details..."
-              />
-            </View>
-          </ScrollView>
-
-          {/* Footer */}
-          <View style={[styles.footer, { borderTopColor: theme.colors.border }]}>
-            <Button
-              onPress={handleSave}
-              loading={isSubmitting}
-              disabled={!amount || isSubmitting}
-              style={{ flex: 1 }}
-            >
-              <Text style={{ fontWeight: "800", color: "#FFFFFF" }}>
-                {type === "deposit" ? "Add Deposit" : "Record Withdrawal"}
-              </Text>
-            </Button>
-          </View>
-          <SheetBottomInset />
-        </View>
+        <Input
+          label="Note"
+          value={note}
+          onChangeText={setNote}
+          placeholder="Optional details"
+        />
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "flex-end",
+  content: {
+    gap: 14,
   },
-  sheetContainer: {
-    maxHeight: "85%",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderWidth: 1,
-    paddingTop: 18,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    marginBottom: 14,
-  },
-  titleRow: {
+  intro: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    flex: 1,
   },
-  iconCircle: {
+  iconTile: {
     width: 40,
     height: 40,
     borderRadius: 12,
+    borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
   },
-  title: {
-    fontSize: 17,
-    fontWeight: "800",
-  },
-  subtitle: {
-    fontSize: 12,
-  },
-  closeBtn: {
-    padding: 4,
-  },
-  body: {
-    paddingHorizontal: 20,
-    gap: 16,
-  },
-  inputGroup: {
-    gap: 6,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  footer: {
-    padding: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    marginTop: 10,
+  introText: {
+    flex: 1,
+    fontSize: 13,
   },
 });

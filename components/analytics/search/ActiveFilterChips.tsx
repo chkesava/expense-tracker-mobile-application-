@@ -3,12 +3,11 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { X } from "lucide-react-native";
 
 import {
-  insightAccents,
-  insightSurface,
+  useInsightAccents,
+  useInsightSurface,
 } from "@/components/analytics/insightsTheme";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export interface ActiveFilterChip {
   id: string;
@@ -27,10 +26,9 @@ export function ActiveFilterChips({
   chips,
   onClearAll,
 }: ActiveFilterChipsProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const surface = insightSurface(isDark);
-  const accents = insightAccents(isDark);
+  const { theme } = useTheme();
+  const surface = useInsightSurface();
+  const accents = useInsightAccents();
 
   if (chips.length === 0) return null;
 
@@ -70,7 +68,7 @@ export function ActiveFilterChips({
         accessibilityLabel="Clear all filters"
         style={({ pressed }) => [styles.clearAll, pressed && styles.pressed]}
       >
-        <Text style={[styles.clearAllText, { color: accents.pink }]}>
+        <Text style={[styles.clearAllText, { color: accents.accent }]}>
           Clear all
         </Text>
       </Pressable>

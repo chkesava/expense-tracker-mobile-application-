@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  Switch,
   ScrollView,
   TextInput,
 } from "react-native";
@@ -24,10 +23,9 @@ import {
   Sparkles,
 } from "lucide-react-native";
 
-import { ACCOUNT_GREEN } from "@/components/accounts/accountScreenTheme";
+import { ThemedSwitch } from "@/components/settings/SettingsControls";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces, withAlpha } from "@/theme/surfaces";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 import { useCelebration } from "@/providers/CelebrationProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import {
@@ -53,6 +51,7 @@ import { Amount } from "@/components/common/Amount";
 import type { Account } from "@/shared/types/expense";
 import { getAccountLast4 } from "@/shared/utils/accountIdentity";
 import { haptic } from "@/lib/haptics";
+import { DateField } from "@/components/common/DateField";
 
 // -------------------------------------------------------------
 // Helper Component: Material 3 Collapsible Section
@@ -68,9 +67,8 @@ function CollapsibleSection({
   children: React.ReactNode;
   icon?: React.ComponentType<{ size: number; color: string }>;
 }) {
-  const { theme, themeName } = useTheme();
+  const { theme } = useTheme();
   const surfaces = useSurfaces();
-  const isDark = themeUsesDarkPalette(themeName);
   const [expanded, setExpanded] = useState(true);
 
   const toggleExpand = () => {
@@ -105,13 +103,11 @@ function CollapsibleSection({
               style={[
                 styles.iconContainer,
                 {
-                  backgroundColor: isDark
-                    ? "rgba(74, 222, 128, 0.12)"
-                    : "rgba(22, 163, 74, 0.1)",
+                  backgroundColor: surfaces.wash(theme.colors.primary),
                 },
               ]}
             >
-              <Icon size={18} color={isDark ? ACCOUNT_GREEN : theme.colors.success} />
+              <Icon size={18} color={theme.colors.primary} />
             </View>
           ) : null}
           <View style={{ flex: 1 }}>
@@ -214,11 +210,10 @@ export function DashboardWidgetToggles() {
                   {widget.desc}
                 </Text>
               </View>
-              <Switch
+              <ThemedSwitch
                 value={checked}
                 onValueChange={() => toggleWidget(widget.id as any)}
-                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                thumbColor="#FFFFFF"
+                accessibilityLabel={widget.label}
               />
             </Pressable>
           );
@@ -559,7 +554,7 @@ export function CategoryBudgetsManager() {
                     {b.category} {b.subcategory ? `› ${b.subcategory}` : ""}
                   </Text>
                   <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 3 }}>
-                    {b.month} · <Amount value={b.amount} style={{ fontWeight: "700" }} />
+                    {b.month} · <Amount value={b.amount} style={{ fontWeight: "700" }} ghostable />
                   </Text>
                 </View>
 
@@ -649,12 +644,7 @@ export function FinancialGoalsManager() {
           keyboardType="numeric"
         />
 
-        <Input
-          label="Deadline (optional)"
-          placeholder="YYYY-MM-DD"
-          value={deadline}
-          onChangeText={setDeadline}
-        />
+        <DateField label="Deadline (optional)" value={deadline} onChange={setDeadline} clearable placeholder="No deadline" />
 
         <Button
           onPress={handleAdd}
@@ -696,7 +686,7 @@ export function FinancialGoalsManager() {
                       {g.name}
                     </Text>
                     <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 3 }}>
-                      <Amount value={g.currentAmount} /> / <Amount value={g.targetAmount} /> ({pct}%)
+                      <Amount value={g.currentAmount} ghostable /> / <Amount value={g.targetAmount} ghostable /> ({pct}%)
                       {g.deadline ? ` · ${g.deadline}` : ""}
                     </Text>
 

@@ -146,3 +146,43 @@ export function balanceFromContributions(
       contributions.reduce((sum, c) => sum + c.amountDelta, 0)
   );
 }
+
+/** What a bank-balance write needs to know about one account (SPENDLY-496). */
+export type BalanceAccountContext = {
+  /** Card outstanding is `computeOutstandingCredit`'s, which counts none of the debt flows. */
+  isCreditCard: boolean;
+  /** Rows dated before the effective baseline are already inside `openingBalance`. */
+  balanceAsOfDate?: string | null;
+};
+
+/**
+ * SPENDLY-496 — net bank-balance change per account for replacing `before`
+ * rows with `after` rows: a create is `before = []`, a delete (including a
+ * cascade) is `after = []`, an edit is both. Mirrors `computeBankBalance`:
+ * only non-credit accounts, only rows on or after the account's effective
+ * `balanceAsOfDate`. Accounts that net to zero are dropped.
+ */
+export function netBankBalanceDeltas(
+  before: LedgerRow[],
+  after: LedgerRow[],
+  accountContext: (accountId: string) => BalanceAccountContext | undefined,
+  today: string = todayDateKey()
+): { accountId: string; amountDelta: number }[] {
+  const net = new Map<string, number>();
+  const add = (rows: LedgerRow[], sign: 1 | -1) => {
+    for (const input of rows) {
+      for (const d of ledgerRowAccountDeltas(input)) {
+        const account = accountContext(d.accountId);
+        if (!account || account.isCreditCard) continue;
+        const baseline = effectiveBalanceAsOfDate(account.balanceAsOfDate, [], today);
+        if (baseline && d.date < baseline) continue;
+        net.set(d.accountId, (net.get(d.accountId) ?? 0) + sign * d.amountDelta);
+      }
+    }
+  };
+  add(before, -1);
+  add(after, 1);
+  return [...net.entries()]
+    .map(([accountId, amountDelta]) => ({ accountId, amountDelta: roundMoney(amountDelta) }))
+    .filter((d) => d.amountDelta !== 0);
+}

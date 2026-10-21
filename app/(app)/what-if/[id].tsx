@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
-import { FlaskConical, MoreVertical, Pencil, RefreshCw } from "lucide-react-native";
+import { History, ListChecks, MoreVertical, Pencil, RefreshCw, FlaskConical } from "lucide-react-native";
 
 import { ErrorState } from "@/components/common/ErrorState";
-import { LoadingState } from "@/components/common/LoadingState";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { Pill, Section } from "@/components/dashboard/primitives";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { Modal } from "@/components/common/Modal";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
@@ -26,7 +28,6 @@ import {
   renameWhatIfScenario,
   setWhatIfScenarioArchived,
 } from "@/services/whatIf/whatIfScenarioStore";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { dateLabel } from "@/shared/utils/runwayView";
 import { WHAT_IF_CHANGE_INFO, whatIfChangeGroups } from "@/shared/utils/whatIfDraft";
 import { WHAT_IF_SCENARIO_NAME_MAX, whatIfRecalculationStatus, type WhatIfHistoryAction } from "@/shared/utils/whatIfScenarios";
@@ -68,7 +69,8 @@ export default function WhatIfScenarioScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { uid, baseline, threshold, today, displayCurrency, hasAccounts, loading: baseLoading, error: baseError, retry: baseRetry } = useWhatIfBaseline();
   const { scenarios, loading: listLoading, error: listError, retry: listRetry } = useWhatIfScenarios();
-  const fmt = (n: number) => formatAmount(n, displayCurrency);
+  // SPENDLY-546: ghost-aware; every amount here used to show in ghost mode.
+  const fmt = useGhostMoney(displayCurrency);
   const scenario = scenarios.find((s) => s.id === id) ?? null;
   const [renaming, setRenaming] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -138,22 +140,18 @@ export default function WhatIfScenarioScreen() {
 
   const text = { color: theme.colors.foreground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.sm };
   const muted = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
-  const h2 = { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.md };
-  const card = {
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.border,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: theme.radius.md,
-    padding: theme.space.md,
-    gap: theme.space.sm,
-  };
 
   const error = baseError ?? listError;
   let body;
   if (error) {
     body = <ErrorState title="Couldn't open this scenario" description={error.message} onRetry={error.retryable ? () => { baseRetry(); listRetry(); } : undefined} />;
   } else if (baseLoading || listLoading) {
-    body = <LoadingState variant="list" count={5} />;
+    body = (
+      <View style={{ padding: theme.space.lg, gap: theme.space.md }}>
+        <DashboardSkeleton variant="section" rows={2} />
+        <DashboardSkeleton variant="hero" />
+      </View>
+    );
   } else if (!scenario) {
     body = <ErrorState title="Scenario not found" description="It may have been deleted on another device." onRetry={() => router.replace("/what-if" as Href)} />;
   } else {
@@ -161,11 +159,12 @@ export default function WhatIfScenarioScreen() {
     const calc = scenario.lastCalculated;
     body = (
       <ScrollView contentContainerStyle={{ padding: theme.space.lg, paddingBottom: bottomPadding, gap: theme.space.lg }}>
-        <View style={card}>
-          <Text style={h2} numberOfLines={2}>{scenario.name}</Text>
-          <Text style={muted}>
-            {`Saved with data from ${dateLabel(scenario.reference.asOfDate)} · version ${scenario.version}${scenario.archived ? " · archived" : ""}`}
-          </Text>
+        <Section
+          title={scenario.name}
+          subtitle={`Saved with data from ${dateLabel(scenario.reference.asOfDate)} · version ${scenario.version}`}
+          badge={scenario.archived ? <Pill label="Archived" tone="muted" /> : undefined}
+          contentStyle={{ gap: theme.space.sm }}
+        >
           <Text style={muted}>
             {calc ? `Last calculated ${timeLabel(calc.atMs)} with data from ${dateLabel(calc.asOfDate)} (engine v${calc.engineVersion})` : "Not calculated yet"}
           </Text>
@@ -200,18 +199,17 @@ export default function WhatIfScenarioScreen() {
               <Text style={{ color: theme.colors.primary, fontFamily: theme.fontFamily.semibold }}>Edit scenario</Text>
             </View>
           </Button>
-        </View>
+        </Section>
 
         {!hasAccounts ? (
-          <View style={[card, { backgroundColor: surfaces.tile }]}>
+          <Section>
             <Text style={text}>Add a bank, cash or wallet account so What If has a starting balance.</Text>
-          </View>
+          </Section>
         ) : run ? (
           <WhatIfResults run={run} fmt={fmt} />
         ) : null}
 
-        <View style={card}>
-          <Text style={h2} accessibilityRole="header">Changes and assumptions</Text>
+        <Section title="Changes and assumptions" icon={<ListChecks size={16} color={theme.colors.primary} />} iconTint={surfaces.wash(theme.colors.primary)} contentStyle={{ gap: theme.space.md }}>
           {groups.map((g) => (
             <View key={g.id} style={{ gap: 2 }}>
               <Text style={[text, { fontFamily: theme.fontFamily.semibold }]}>{g.label}</Text>
@@ -223,17 +221,16 @@ export default function WhatIfScenarioScreen() {
               ))}
             </View>
           ))}
-        </View>
+        </Section>
 
         {scenario.history.length ? (
-          <View style={card}>
-            <Text style={h2} accessibilityRole="header">History</Text>
+          <Section title="History" icon={<History size={16} color={theme.colors.mutedForeground} />} contentStyle={{ gap: 4 }}>
             {[...scenario.history].reverse().slice(0, 8).map((h) => (
               <Text key={`${h.version}-${h.atMs}-${h.action}`} style={muted}>
                 {`v${h.version} · ${HISTORY_LABELS[h.action]}${h.fields.length ? ` (${h.fields.join(", ")})` : ""} · ${timeLabel(h.atMs)}`}
               </Text>
             ))}
-          </View>
+          </Section>
         ) : null}
       </ScrollView>
     );

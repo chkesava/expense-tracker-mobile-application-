@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Modal } from "@/components/common/Modal";
-import { Button } from "@/components/ui/Button";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Input } from "@/components/ui/Input";
 import type { CreateSpaceInput } from "@/hooks/useSpaces";
 import { toast } from "@/lib/toast";
@@ -12,6 +12,7 @@ import { isValidDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { DateField } from "@/components/common/DateField";
 
 export interface SpaceFormModalProps {
   visible: boolean;
@@ -74,7 +75,7 @@ export function SpaceFormModal({
       [endDate.trim(), "End date"],
     ] as const) {
       if (value && !isValidDateKey(value)) {
-        toast.error(`${label} must be YYYY-MM-DD`);
+        toast.error(`Pick a valid ${label.toLowerCase()}`);
         return;
       }
     }
@@ -105,14 +106,26 @@ export function SpaceFormModal({
     <Modal
       isOpen={visible}
       onClose={onClose}
-      title={isEditing ? "Edit Space" : "Create Space"}
+      title={isEditing ? "Edit space" : "Create space"}
+      // SPENDLY-549: the 6a form sheet pattern, actions pinned below the body.
+      footer={
+        <SheetActions
+          secondary={{ label: "Cancel", onPress: onClose }}
+          primary={{
+            label: isEditing ? "Save changes" : "Create space",
+            onPress: () => {
+              void handleSave();
+            },
+            disabled: !name.trim() || isSubmitting,
+            loading: isSubmitting,
+          }}
+        />
+      }
     >
       <View style={styles.body}>
         <View style={styles.group}>
-          <Text style={[styles.label, { color: theme.colors.foreground }]}>
-            Space Name *
-          </Text>
           <Input
+            label="Space name"
             value={name}
             onChangeText={setName}
             placeholder="e.g. Brother's Hospital"
@@ -120,10 +133,8 @@ export function SpaceFormModal({
         </View>
 
         <View style={styles.group}>
-          <Text style={[styles.label, { color: theme.colors.foreground }]}>
-            Description (optional)
-          </Text>
           <Input
+            label="Description (optional)"
             value={description}
             onChangeText={setDescription}
             placeholder="What is this space for?"
@@ -154,8 +165,9 @@ export function SpaceFormModal({
                       borderWidth: isActive ? 2 : 0,
                     },
                   ]}
-                  accessibilityLabel={`Colour ${swatch}`}
-                  accessibilityRole="button"
+                  accessibilityLabel={`Colour ${SPACE_COLORS.indexOf(swatch) + 1}`}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: isActive }}
                 />
               );
             })}
@@ -163,53 +175,30 @@ export function SpaceFormModal({
         </View>
 
         <View style={styles.group}>
-          <Text style={[styles.label, { color: theme.colors.foreground }]}>
-            Budget ({displayCurrency}, optional)
-          </Text>
           <Input
+            label={`Budget (${displayCurrency}, optional)`}
             value={budget}
             onChangeText={setBudget}
             placeholder="e.g. 50000"
             keyboardType="decimal-pad"
-          />
-          <Text style={[styles.helper, { color: theme.colors.mutedForeground }]}>
-            Tracked for information only. Spending is never blocked.
-          </Text>
-        </View>
-
-        <View style={styles.group}>
-          <Text style={[styles.label, { color: theme.colors.foreground }]}>
-            Start Date (optional)
-          </Text>
-          <Input
-            value={startDate}
-            onChangeText={setStartDate}
-            placeholder="YYYY-MM-DD"
+            helperText="Tracked for information only. Spending is never blocked."
           />
         </View>
 
         <View style={styles.group}>
           <Text style={[styles.label, { color: theme.colors.foreground }]}>
-            End Date (optional)
+            Start date (optional)
           </Text>
-          <Input
-            value={endDate}
-            onChangeText={setEndDate}
-            placeholder="YYYY-MM-DD"
-          />
+          <DateField value={startDate} onChange={setStartDate} maxDate={endDate || undefined} clearable placeholder="Not set" accessibilityLabel="Start date" />
         </View>
 
-        <Button
-          onPress={handleSave}
-          loading={isSubmitting}
-          disabled={!name.trim() || isSubmitting}
-        >
-          <Text
-            style={{ fontWeight: "800", color: theme.colors.primaryForeground }}
-          >
-            {isEditing ? "Save Changes" : "Create Space"}
+        <View style={styles.group}>
+          <Text style={[styles.label, { color: theme.colors.foreground }]}>
+            End date (optional)
           </Text>
-        </Button>
+          <DateField value={endDate} onChange={setEndDate} minDate={startDate || undefined} clearable placeholder="Not set" accessibilityLabel="End date" />
+        </View>
+
       </View>
     </Modal>
   );
@@ -223,11 +212,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   label: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  helper: {
-    fontSize: 11,
+    fontSize: 16,
   },
   swatchRow: {
     flexDirection: "row",

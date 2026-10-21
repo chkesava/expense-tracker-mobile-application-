@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { RotateCcw, Trash2 } from "lucide-react-native";
 
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { appDialog } from "@/lib/appDialog";
@@ -11,6 +12,7 @@ import type { EpfBackfillRow } from "@/shared/features/epf/types";
 import { computeEpfContribution } from "@/shared/features/epf/utils/contributions";
 import { useTheme } from "@/theme/ThemeProvider";
 import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
+import { DateField } from "@/components/common/DateField";
 
 type Props = {
   isOpen: boolean;
@@ -149,7 +151,20 @@ export function EpfContributionEditSheet({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={monthLabel}>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={monthLabel}
+      // SPENDLY-554: 6a form pattern; same handler, loading, disabled and label.
+      footer={
+        <SheetActions
+          primary={{
+            label: "Apply",
+            onPress: handleApply,
+          }}
+        />
+      }
+    >
       <View style={styles.form}>
         <Input
           label="EPF wage (basic + DA)"
@@ -197,14 +212,7 @@ export function EpfContributionEditSheet({
           error={errors.employerEpfShare}
         />
 
-        <Input
-          label="Credit date (YYYY-MM-DD)"
-          value={creditDate}
-          onChangeText={setCreditDate}
-          placeholder="YYYY-MM-DD"
-          autoCapitalize="none"
-          error={errors.creditDate}
-        />
+        <DateField label="Credit date" value={creditDate} onChange={setCreditDate} clearable placeholder="Not credited yet" error={errors.creditDate} />
         <Input
           label="Reference"
           value={reference}
@@ -234,7 +242,6 @@ export function EpfContributionEditSheet({
           </Text>
         ) : null}
 
-        <Button onPress={handleApply}>Apply</Button>
 
         {row.persisted ? (
           <Pressable onPress={confirmRemove} style={styles.removeRow}>

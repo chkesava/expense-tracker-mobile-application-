@@ -287,7 +287,7 @@ export async function recordCreditBillPayment(
   }
   if (input.toAccountId) {
     // Bill payment: reduces outstanding, but does NOT affect unbilled spend.
-    balanceDeltas.push({ accountId: input.toAccountId, amountDelta: input.amount, isCreditCard: true, isUnbilled: false, oldBalance: accountTypes.get(input.toAccountId)?.oldBalance, oldOutstanding: accountTypes.get(input.toAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(input.toAccountId)?.needsInitialization });
+    balanceDeltas.push({ accountId: input.toAccountId, amountDelta: input.amount, isCreditCard: true, oldBalance: accountTypes.get(input.toAccountId)?.oldBalance, oldOutstanding: accountTypes.get(input.toAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(input.toAccountId)?.needsInitialization });
   }
 
   const { buildAccountBalanceOps } = await import("@/shared/utils/balanceMutations");
@@ -376,7 +376,7 @@ export async function voidCreditBillPayment(
   }
   if (data.toAccountId) {
     // Reversing bill payment: increases outstanding back up, but does NOT affect unbilled spend.
-    balanceDeltas.push({ accountId: data.toAccountId, amountDelta: -Number(data.amount) || 0, isCreditCard: true, isUnbilled: false, oldBalance: accountTypes.get(data.toAccountId)?.oldBalance, oldOutstanding: accountTypes.get(data.toAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(data.toAccountId)?.needsInitialization });
+    balanceDeltas.push({ accountId: data.toAccountId, amountDelta: -Number(data.amount) || 0, isCreditCard: true, oldBalance: accountTypes.get(data.toAccountId)?.oldBalance, oldOutstanding: accountTypes.get(data.toAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(data.toAccountId)?.needsInitialization });
   }
 
   const { buildAccountBalanceOps } = await import("@/shared/utils/balanceMutations");
@@ -609,7 +609,7 @@ export async function editCreditBillPayment(
     balanceDeltas.push({ accountId: before.fromAccountId, amountDelta: Number(before.amount) || 0, isCreditCard: false, oldBalance: accountTypes.get(before.fromAccountId)?.oldBalance, oldOutstanding: accountTypes.get(before.fromAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(before.fromAccountId)?.needsInitialization });
   }
   if (before.toAccountId) {
-    balanceDeltas.push({ accountId: before.toAccountId, amountDelta: -Number(before.amount) || 0, isCreditCard: true, isUnbilled: false, oldBalance: accountTypes.get(before.toAccountId)?.oldBalance, oldOutstanding: accountTypes.get(before.toAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(before.toAccountId)?.needsInitialization });
+    balanceDeltas.push({ accountId: before.toAccountId, amountDelta: -Number(before.amount) || 0, isCreditCard: true, oldBalance: accountTypes.get(before.toAccountId)?.oldBalance, oldOutstanding: accountTypes.get(before.toAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(before.toAccountId)?.needsInitialization });
   }
 
   // Apply after
@@ -617,7 +617,7 @@ export async function editCreditBillPayment(
     balanceDeltas.push({ accountId: fromAccountId, amountDelta: -amount, isCreditCard: false, oldBalance: accountTypes.get(fromAccountId)?.oldBalance, oldOutstanding: accountTypes.get(fromAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(fromAccountId)?.needsInitialization });
   }
   if (before.toAccountId) { // edit doesn't change toAccountId
-    balanceDeltas.push({ accountId: before.toAccountId, amountDelta: amount, isCreditCard: true, isUnbilled: false, oldBalance: accountTypes.get(before.toAccountId)?.oldBalance, oldOutstanding: accountTypes.get(before.toAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(before.toAccountId)?.needsInitialization });
+    balanceDeltas.push({ accountId: before.toAccountId, amountDelta: amount, isCreditCard: true, oldBalance: accountTypes.get(before.toAccountId)?.oldBalance, oldOutstanding: accountTypes.get(before.toAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(before.toAccountId)?.needsInitialization });
   }
 
   const { buildAccountBalanceOps } = await import("@/shared/utils/balanceMutations");

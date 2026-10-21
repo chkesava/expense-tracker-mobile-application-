@@ -10,7 +10,7 @@ import { getPaymentRequestShareUrl } from "@/shared/utils/paymentRequestUrl";
 import { generateUpiLink } from "@/shared/utils/upi";
 import { getQrStyle } from "@/shared/utils/qrStyles";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { logError } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -114,15 +114,15 @@ export function PaymentRequestCard({
             styles.statusBadge,
             {
               backgroundColor: isCancelled
-                ? "rgba(239,68,68,0.12)"
-                : "rgba(34,197,94,0.12)",
+                ? withAlpha(theme.colors.destructive, 0.12)
+                : withAlpha(theme.colors.success, 0.12),
             },
           ]}
         >
           <Text
             style={[
               styles.statusBadgeText,
-              { color: isCancelled ? "#EF4444" : "#22C55E" },
+              { color: isCancelled ? theme.colors.destructive : theme.colors.success },
             ]}
           >
             {isCancelled ? "CANCELLED" : "ACTIVE"}
@@ -188,7 +188,7 @@ export function PaymentRequestCard({
                   pressed && { opacity: 0.8 },
                 ]}
               >
-                <Text style={styles.actionBtnText}>Pay via UPI</Text>
+                <Text style={[styles.actionBtnText, { color: theme.colors.primaryForeground }]}>Pay via UPI</Text>
               </Pressable>
 
               <Pressable
@@ -312,7 +312,6 @@ const styles = StyleSheet.create({
   actionBtnText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#FFFFFF",
   },
   iconBtn: {
     padding: 7,

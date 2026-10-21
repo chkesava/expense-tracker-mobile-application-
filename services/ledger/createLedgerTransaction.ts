@@ -1,4 +1,7 @@
-import { buildDashboardSummaryOps } from "@/shared/utils/dashboardMutations";
+import {
+  computeDashboardExpenseCreateOps,
+  computeDashboardIncomeCreateOps,
+} from "@/shared/utils/dashboardMutations";
 /**
  * Shared Firestore create for expenses and incomes.
  * Used by ExpenseForm and statement import — one write shape, one collection path.
@@ -120,11 +123,8 @@ export async function createExpense(
   ]) : [];
 
   
-  const dashboardOps = buildDashboardSummaryOps(uid, payload.month, {
-    expenseDelta: payload.amount,
-    transactionCountDelta: 1,
-    categoryDeltas: { [payload.category]: payload.amount },
-  });
+  // SPENDLY-495: parent and subcategory keys, the same scheme edits use.
+  const dashboardOps = computeDashboardExpenseCreateOps(uid, payload);
 
   const outcome = await commitMutations(
     uid,
@@ -170,10 +170,7 @@ export async function createIncome(
   ]) : [];
 
   
-  const dashboardOps = buildDashboardSummaryOps(uid, payload.month, {
-    incomeDelta: payload.amount,
-    transactionCountDelta: 1,
-  });
+  const dashboardOps = computeDashboardIncomeCreateOps(uid, payload);
 
   const outcome = await commitMutations(
     uid,

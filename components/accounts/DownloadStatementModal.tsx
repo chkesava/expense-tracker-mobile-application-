@@ -15,10 +15,6 @@ import { Amount } from "@/components/common/Amount";
 import { Input } from "@/components/ui/Input";
 import { Chip } from "@/components/ui/Chip";
 import { Button } from "@/components/ui/Button";
-import {
-  accountAccent,
-  accountAccentBorder,
-} from "@/components/accounts/accountScreenTheme";
 import { haptic } from "@/lib/haptics";
 import {
   isValidStatementPeriod,
@@ -28,9 +24,10 @@ import {
   type StatementPeriod,
   type StatementPreset,
 } from "@/shared/utils/accountStatement";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
+import { DateField } from "@/components/common/DateField";
 
 const PRESET_LABELS: Record<StatementPreset, string> = {
   "this-month": "This month",
@@ -80,15 +77,18 @@ export function DownloadStatementModal({
   exportAllowed,
   emphasis = "pdf",
 }: DownloadStatementModalProps) {
-  const { theme, themeName } = useTheme();
+  const { theme } = useTheme();
+  // SPENDLY-552: an RN Modal portals outside SpendlyUIScope on web; re-apply
+  // the theme variables so its Gluestack controls keep their colours.
+  const scopeVars = useSpendlyScopeVars();
   const surfaces = useSurfaces();
-  const isDark = themeUsesDarkPalette(themeName);
   const insets = useSafeAreaInsets();
-  const accent = accountAccent(isDark);
-  const accentBorder = accountAccentBorder(isDark);
-  const surface = isDark ? "#10141C" : theme.colors.card;
+  // SPENDLY-552: the theme accent, not the fixed account green.
+  const accent = theme.colors.primary;
+  const accentBorder = withAlpha(theme.colors.primary, 0.45);
+  const surface = theme.colors.card;
   const inset = surfaces.tile;
-  const insetBorder = isDark ? "rgba(148,163,184,0.16)" : "rgba(15,23,42,0.09)";
+  const insetBorder = theme.colors.border;
 
   const [preset, setPreset] = useState<StatementPreset>("this-month");
   const [customFrom, setCustomFrom] = useState("");
@@ -160,7 +160,7 @@ export function DownloadStatementModal({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, { backgroundColor: theme.colors.scrim }, scopeVars]}>
         <Pressable
           style={styles.backdropFill}
           onPress={onClose}
@@ -243,12 +243,7 @@ export function DownloadStatementModal({
                     >
                       From
                     </Text>
-                    <Input
-                      value={customFrom}
-                      onChangeText={setCustomFrom}
-                      placeholder="YYYY-MM-DD"
-                      autoCapitalize="none"
-                    />
+                    <DateField value={customFrom} onChange={setCustomFrom} maxDate={customTo || undefined} accessibilityLabel="From" />
                   </View>
                   <View style={styles.inputColumn}>
                     <Text
@@ -259,17 +254,12 @@ export function DownloadStatementModal({
                     >
                       To
                     </Text>
-                    <Input
-                      value={customTo}
-                      onChangeText={setCustomTo}
-                      placeholder="YYYY-MM-DD"
-                      autoCapitalize="none"
-                    />
+                    <DateField value={customTo} onChange={setCustomTo} minDate={customFrom || undefined} accessibilityLabel="To" />
                   </View>
                 </View>
                 {customValid ? null : (
                   <Text style={[styles.error, { color: theme.colors.destructive }]}>
-                    Enter both dates as YYYY-MM-DD, with From on or before To.
+                    Pick both dates, with From on or before To.
                   </Text>
                 )}
               </View>
@@ -325,9 +315,7 @@ export function DownloadStatementModal({
                 {
                   backgroundColor:
                     emphasis === "csv"
-                      ? isDark
-                        ? "rgba(74,222,128,0.16)"
-                        : "rgba(22,163,74,0.12)"
+                      ? withAlpha(theme.colors.primary, 0.14)
                       : inset,
                   borderColor: emphasis === "csv" ? accentBorder : insetBorder,
                   opacity: canExport ? 1 : 0.5,
@@ -369,9 +357,7 @@ export function DownloadStatementModal({
                 {
                   backgroundColor:
                     emphasis === "pdf"
-                      ? isDark
-                        ? "rgba(74,222,128,0.16)"
-                        : "rgba(22,163,74,0.12)"
+                      ? withAlpha(theme.colors.primary, 0.14)
                       : inset,
                   borderColor: emphasis === "pdf" ? accentBorder : insetBorder,
                   opacity: canExport ? 1 : 0.5,
@@ -410,7 +396,6 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.65)",
   },
   backdropFill: {
     flex: 1,
@@ -489,12 +474,15 @@ const styles = StyleSheet.create({
   chipText: {
     fontSize: 13,
   },
+  // SPENDLY-557: wraps so each date field (and its inline picker) gets the full width on phones.
   inputRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 12,
   },
   inputColumn: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 220,
     gap: 6,
   },
   inputLabel: {

@@ -1,4 +1,3 @@
-import { buildInvestmentSummaryOps } from "@/shared/utils/investmentMutations";
 /**
  * Writes to the Investment Cash ledger.
  *
@@ -33,6 +32,7 @@ import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite, type WriteOutcome } from "@/lib/firestoreWrite";
 import { newId } from "@/lib/id";
 import { docAlreadyWritten, fetchAccountTypes } from "@/services/ledger/fetchAccountTypes";
+import { stageMutationOps } from "@/lib/stageMutationOps";
 import type { AccountEntry } from "@/shared/types/expense";
 import type { MutationOp } from "@/shared/types/mutations";
 import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
@@ -129,20 +129,6 @@ function stageStockProfileUpsert(
     stripUndefined({ ...identity, status: "active", updatedAt: serverTimestamp() }),
     { merge: true }
   );
-}
-
-/** Stages {@link MutationOp}s (balance / net-worth) on a raw batch. */
-function stageMutationOps(
-  batch: ReturnType<typeof writeBatch>,
-  db: ReturnType<typeof requireDb>,
-  ops: MutationOp[]
-): void {
-  for (const op of ops) {
-    const ref = doc(db, op.ref.path);
-    if (op.op === "update") batch.update(ref, op.data as Record<string, unknown>);
-    else if (op.op === "set") batch.set(ref, op.data, op.merge ? { merge: true } : {});
-    else batch.delete(ref);
-  }
 }
 
 /**
@@ -272,11 +258,6 @@ export async function recordInvestmentCashEntry(
       { cashBalance: increment(delta), updatedAt: serverTimestamp() },
       { merge: true }
     );
-    if (delta !== 0) {
-      
-      const ops = buildInvestmentSummaryOps(owner, { investmentCashDelta: delta });
-      for (const op of ops) if (op.op === "set" && op.merge) batch.set(doc(db, (op.ref as any).path), op.data, { merge: true });
-    }
     return batch.commit();
   }, { label: "investment cash entry" });
 
@@ -395,11 +376,6 @@ export async function transferInvestmentCashWithBank(
       },
       { merge: true }
     );
-    if (delta !== 0) {
-      
-      const ops = buildInvestmentSummaryOps(owner, { investmentCashDelta: delta });
-      for (const op of ops) if (op.op === "set" && op.merge) batch.set(doc(db, (op.ref as any).path), op.data, { merge: true });
-    }
     stageMutationOps(batch, db, bankBalanceOps);
     return batch.commit();
   }, { label: "investment cash bank transfer" });
@@ -558,8 +534,6 @@ export async function createHoldingWithCash(
     const investedDelta =
       quantity > 0 && price > 0 ? acquisitionCost(quantity, price, fees) : 0;
     
-    const ops = buildInvestmentSummaryOps(owner, { investmentCashDelta: entryId ? -amount : 0, investedValueDelta: investedDelta, holdingCountDelta: 1 });
-    for (const op of ops) if (op.op === "set" && op.merge) batch.set(doc(db, (op.ref as any).path), op.data, { merge: true });
 
     return batch.commit();
   }, { label: "holding" });
@@ -999,8 +973,6 @@ export async function executeMockBuy(
         { merge: true }
       );
       
-      const ops = buildInvestmentSummaryOps(owner, { investmentCashDelta: -cost, investedValueDelta: cost, holdingCountDelta: nextQuantity > 0 && Number(holding.quantity || 0) === 0 ? 1 : 0 });
-      for (const op of ops) if (op.op === "set" && op.merge) batch.set(doc(db, (op.ref as any).path), op.data, { merge: true });
     }
     return batch.commit();
   }, { label: "mock buy" });
@@ -1096,8 +1068,6 @@ export async function executeMockSell(
       { merge: true }
     );
     
-    const ops = buildInvestmentSummaryOps(owner, { investmentCashDelta: proceeds, investedValueDelta: -roundMoney(input.quantity * Number(holding.averageBuyPrice || 0)), holdingCountDelta: nextQuantity === 0 ? -1 : 0 });
-    for (const op of ops) if (op.op === "set" && op.merge) batch.set(doc(db, (op.ref as any).path), op.data, { merge: true });
     return batch.commit();
   }, { label: "mock sell" });
 

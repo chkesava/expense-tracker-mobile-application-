@@ -27,10 +27,10 @@ import {
   type FeeBreakdownRow,
   type FeeDashboardFilters,
 } from "@/shared/utils/feeDashboard";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { monthLabel } from "@/shared/utils/monthLabel";
 import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 
 export interface FeeOverviewProps {
   records: readonly FeeRecord[];
@@ -59,7 +59,7 @@ export function FeeOverview({ records, currency, accountNames, onOpenReview, onO
   const hasAnyFee = dash.options.feeTypes.length > 0 || dash.totals.count > 0 || dash.options.accountIds.length > 0;
   const periodLabel = FEE_PERIODS.find((p) => p.id === filters.period)?.label ?? "";
 
-  const money = (value: number) => formatAmount(value, currency);
+  const money = useGhostMoney(currency);
   const muted = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
 
   if (!hasAnyFee) {
@@ -94,7 +94,7 @@ export function FeeOverview({ records, currency, accountNames, onOpenReview, onO
             <Text numberOfLines={1} style={{ flex: 1, color: theme.colors.foreground, fontFamily: theme.fontFamily.medium, fontSize: theme.typography.sm }}>
               {label(row.key)}
             </Text>
-            <Amount value={row.cost} currency={currency} style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm }} />
+            <Amount ghostable value={row.cost} currency={currency} style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm }} />
           </View>
           <ProgressTrack pct={row.share * 100} color={theme.colors.primary} />
           {row.totals.netTax !== 0 || row.totals.reversedFee !== 0 ? (
@@ -138,7 +138,7 @@ export function FeeOverview({ records, currency, accountNames, onOpenReview, onO
         {/* Hero */}
         <Section title={`Fees paid · ${periodLabel}`} subtitle="Fees and GST on fees, after reversals">
           <View style={{ gap: theme.space.sm }}>
-            <Amount value={dash.cost} currency={currency} style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.bold, fontSize: 30 }} />
+            <Amount ghostable value={dash.cost} currency={currency} style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.bold, fontSize: 30 }} />
             <View style={[styles.wrap, { gap: theme.space.lg }]}>
               <Stat label="Fees" value={money(dash.totals.netFee)} />
               <Stat label="GST on fees" value={money(dash.totals.netTax)} />

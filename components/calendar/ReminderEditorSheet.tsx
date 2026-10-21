@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 
+import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { ChipRow } from "@/components/settings/SettingsControls";
-import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import {
   REMINDER_CATEGORIES,
@@ -16,6 +17,7 @@ import {
 import { REMINDER_CATEGORY_LABELS, REMINDER_RECURRENCE_LABELS, validateReminderDraft, type ReminderDraft } from "@/shared/utils/calendarReminders";
 import { shiftDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
+import { DateField } from "@/components/common/DateField";
 
 const LEAD_LABELS: Record<ReminderLeadDays, string> = { 0: "On the day", 1: "1 day before", 3: "3 days before", 7: "1 week before" };
 
@@ -85,11 +87,34 @@ export function ReminderEditorSheet({
   const hint = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={existing ? "Edit reminder" : "New reminder"} density="compact" maxHeight="92%">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={existing ? "Edit reminder" : "New reminder"}
+      density="compact"
+      maxHeight="92%"
+      // SPENDLY-555: the 6a form pattern; the action is pinned below the body.
+      footer={
+        <SheetActions
+          secondary={{ label: "Cancel", onPress: onClose }}
+          primary={{
+            label: existing ? "Save reminder" : "Add reminder",
+            loading: saving,
+            onPress: () => {
+              if (issues.length) {
+                setShowErrors(true);
+                return;
+              }
+              onSave(draft);
+            },
+          }}
+        />
+      }
+    >
       <View style={{ gap: theme.space.md }}>
         <Text style={hint}>A reminder is a note on your calendar. It never records an expense or income.</Text>
         <Input label="What to remember" value={title} onChangeText={setTitle} placeholder="e.g. Renew car insurance" maxLength={120} />
-        <Input label="Date (YYYY-MM-DD)" value={startDate} onChangeText={setStartDate} autoCapitalize="none" />
+        <DateField label="Date" value={startDate} onChange={setStartDate} />
         <ChipRow<string>
           options={[
             { value: today, label: "Today" },
@@ -100,7 +125,7 @@ export function ReminderEditorSheet({
           onSelect={setStartDate}
         />
         <Input label="Time (optional, HH:mm)" value={time} onChangeText={setTime} placeholder="09:30" autoCapitalize="none" />
-        <Input label="Amount (optional)" value={amount} onChangeText={setAmount} keyboardType="numeric" helperText="Shown on the calendar only — not counted as money." />
+        <Input label="Amount (optional)" value={amount} onChangeText={setAmount} keyboardType="numeric" leadingIcon={<CurrencyPrefix />} helperText="Shown on the calendar only — not counted as money." />
 
         <View style={{ gap: theme.space.xs }}>
           <Text style={label}>Category</Text>
@@ -111,7 +136,7 @@ export function ReminderEditorSheet({
           <Text style={label}>Repeat</Text>
           <ChipRow<ReminderRecurrence> options={REMINDER_RECURRENCES.map((r) => ({ value: r, label: REMINDER_RECURRENCE_LABELS[r] }))} selected={recurrence} onSelect={setRecurrence} />
           {recurrence === "every_n_days" ? <Input label="Every how many days" value={interval} onChangeText={setInterval} keyboardType="numeric" /> : null}
-          {recurrence !== "none" ? <Input label="Until (optional, YYYY-MM-DD)" value={untilDate} onChangeText={setUntilDate} autoCapitalize="none" /> : null}
+          {recurrence !== "none" ? <DateField label="Until (optional)" value={untilDate} onChange={setUntilDate} minDate={startDate || undefined} clearable placeholder="Keeps repeating" /> : null}
         </View>
 
         <View style={{ gap: theme.space.xs }}>
@@ -134,18 +159,6 @@ export function ReminderEditorSheet({
             ))}
           </View>
         ) : null}
-        <Button
-          loading={saving}
-          onPress={() => {
-            if (issues.length) {
-              setShowErrors(true);
-              return;
-            }
-            onSave(draft);
-          }}
-        >
-          {existing ? "Save reminder" : "Add reminder"}
-        </Button>
       </View>
     </Modal>
   );

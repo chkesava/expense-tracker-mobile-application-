@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, Switch, Text, View } from "react-native";
 import { CreditCard } from "lucide-react-native";
 
+import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Chip } from "@/components/ui/Chip";
@@ -19,6 +21,7 @@ import { previewClosedCycleCreditCardBill } from "@/shared/utils/autoCreditCardB
 import { validateCreditCardBillInput } from "@/shared/utils/creditCardBillInput";
 import { todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
+import { DateField } from "@/components/common/DateField";
 
 export type CreateCreditCardBillModalProps = {
   isOpen: boolean;
@@ -191,7 +194,21 @@ export function CreateCreditCardBillModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Add Credit Card Bill">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Add Credit Card Bill"
+      // SPENDLY-553: 6a form pattern; same handler, disabled and label as before.
+      footer={
+        <SheetActions
+          primary={{
+            label: saving ? "Saving…" : "Create Bill",
+            onPress: () => void handleSubmit(),
+            disabled: saving || creditCards.length === 0,
+          }}
+        />
+      }
+    >
       <ScrollView
         contentContainerStyle={{ gap: 16, paddingBottom: 20 }}
         keyboardShouldPersistTaps="handled"
@@ -232,6 +249,7 @@ export function CreateCreditCardBillModal({
         </View>
 
         <Input
+          leadingIcon={<CurrencyPrefix />}
           label="Statement Amount *"
           value={statementAmount}
           onChangeText={setStatementAmount}
@@ -239,39 +257,32 @@ export function CreateCreditCardBillModal({
           placeholder="8450"
         />
         <Input
+          leadingIcon={<CurrencyPrefix />}
           label="Minimum Due *"
           value={minimumDue}
           onChangeText={setMinimumDue}
           keyboardType="decimal-pad"
           placeholder="850"
         />
-        <Input
-          label="Statement Date * (YYYY-MM-DD)"
-          value={statementDate}
-          onChangeText={setStatementDate}
-          placeholder="2026-08-21"
-          autoCapitalize="none"
-        />
-        <Input
-          label="Due Date * (YYYY-MM-DD)"
-          value={dueDate}
-          onChangeText={setDueDate}
-          placeholder="2026-08-26"
-          autoCapitalize="none"
-        />
-        <Input
+        {/* SPENDLY-557: the picker limits mirror validateCreditCardBillInput. */}
+        <DateField label="Statement Date *" value={statementDate} onChange={setStatementDate} maxDate={todayDateKey(settings.timezone)} />
+        <DateField label="Due Date *" value={dueDate} onChange={setDueDate} minDate={statementDate || undefined} />
+        <DateField
           label="Billing Period Start (optional)"
           value={periodStart}
-          onChangeText={setPeriodStart}
-          placeholder="2026-07-21"
-          autoCapitalize="none"
+          onChange={setPeriodStart}
+          maxDate={periodEnd || statementDate || undefined}
+          clearable
+          placeholder="Not set"
         />
-        <Input
+        <DateField
           label="Billing Period End (optional)"
           value={periodEnd}
-          onChangeText={setPeriodEnd}
-          placeholder="2026-08-21"
-          autoCapitalize="none"
+          onChange={setPeriodEnd}
+          minDate={periodStart || undefined}
+          maxDate={statementDate || undefined}
+          clearable
+          placeholder="Not set"
         />
         {cyclePreview ? (
           <Text style={{ color: theme.colors.mutedForeground, fontSize: theme.typography.sm }}>
@@ -308,13 +319,6 @@ export function CreateCreditCardBillModal({
           />
         </View>
 
-        <Button
-          size="lg"
-          onPress={() => void handleSubmit()}
-          disabled={saving || creditCards.length === 0}
-        >
-          {saving ? "Saving…" : "Create Bill"}
-        </Button>
       </ScrollView>
     </Modal>
   );

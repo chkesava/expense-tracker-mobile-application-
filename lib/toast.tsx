@@ -20,6 +20,8 @@ import { Toast as GluestackToast, ToastTitle as GluestackToastTitle } from "@/co
 
 import { useTheme } from "@/theme/ThemeProvider";
 import { haptic } from "@/lib/haptics";
+import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
+import { SPENDLY_DIALOG_MAX_WIDTH } from "@/shared/utils/responsiveLayout";
 
 export type ToastKind = "success" | "error" | "info" | "warning" | "message";
 
@@ -123,6 +125,7 @@ function ToastViewport({
   items: ToastItem[];
   onDismiss: (id: string) => void;
 }) {
+  const { isCompact } = useResponsiveLayout();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
 
@@ -159,7 +162,13 @@ function ToastViewport({
   return (
     <View
       pointerEvents="box-none"
-      style={[styles.viewport, { bottom: Math.max(insets.bottom, 16) + 8 }]}
+      style={[
+        styles.viewport,
+        { bottom: Math.max(insets.bottom, 16) + 8 },
+        // SPENDLY-559: on tablet/desktop web a toast is a centred pill, not a
+        // bar across the browser. Phones and native are unchanged.
+        isCompact ? null : styles.viewportWide,
+      ]}
     >
       {items.map((item) => {
         const Icon = kindIcon(item.kind);
@@ -184,6 +193,10 @@ const styles = StyleSheet.create({
     right: 16,
     zIndex: 9999,
     gap: 8,
+  },
+  viewportWide: {
+    maxWidth: SPENDLY_DIALOG_MAX_WIDTH,
+    marginHorizontal: "auto",
   },
   toast: {
     flexDirection: "row",

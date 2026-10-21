@@ -4,7 +4,9 @@ import { useRouter } from "expo-router";
 import { Hourglass } from "lucide-react-native";
 
 import { ErrorState } from "@/components/common/ErrorState";
-import { LoadingState } from "@/components/common/LoadingState";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
+import { Section } from "@/components/dashboard/primitives";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
@@ -16,9 +18,8 @@ import { writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { setRunwayOverride } from "@/services/runway/runwayOverrideStore";
 import type { RunwayResource } from "@/shared/types/runway";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { isRunwayDefault } from "@/shared/utils/runwayLabels";
-import { useSurfaces } from "@/theme/surfaces";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { useTheme } from "@/theme/ThemeProvider";
 
 /**
@@ -29,10 +30,11 @@ import { useTheme } from "@/theme/ThemeProvider";
  */
 export default function RunwaySourcesScreen() {
   const { theme } = useTheme();
-  const surfaces = useSurfaces();
   const router = useRouter();
   const currency = useDisplayCurrency();
   const bottomPadding = usePageListBottomPadding();
+  // SPENDLY-545: the counted total and its label used to show in ghost mode.
+  const money = useGhostMoney(currency);
   const { uid, sources, loading, error, retry } = useRunwaySources();
   const [busyKey, setBusyKey] = useState<string | null>(null);
 
@@ -66,49 +68,44 @@ export default function RunwaySourcesScreen() {
   );
 
   const muted = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
-  const sectionTitle = { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm, marginTop: theme.space.lg };
 
   const section = (title: string, hint: string, list: RunwayResource[]) =>
     list.length === 0 ? null : (
-      <View>
-        <Text style={sectionTitle} accessibilityRole="header">
-          {title}
-        </Text>
-        <Text style={muted}>{hint}</Text>
-        {list.map((r) => (
+      <Section title={title} subtitle={hint}>
+        {list.map((r, i) => (
           <RunwaySourceRow
             key={`${r.kind}:${r.refId}`}
             resource={r}
             currency={currency}
             busy={busyKey === `${r.kind}:${r.refId}`}
+            divider={i < list.length - 1}
             onToggle={onToggle}
           />
         ))}
-      </View>
+      </Section>
     );
 
   let body;
   if (error) {
     body = <ErrorState title="Couldn't load your runway choices" description={error.message} onRetry={error.retryable ? retry : undefined} />;
   } else if (loading) {
-    body = <LoadingState variant="list" count={5} />;
+    body = (
+      <View style={{ padding: theme.space.lg, gap: theme.space.md }}>
+        <DashboardSkeleton variant="section" rows={1} />
+        <DashboardSkeleton variant="section" rows={4} />
+      </View>
+    );
   } else if (sources.resources.length === 0) {
     body = <ErrorState title="Nothing to show yet" description="Add an account to see what counts toward your runway." retryLabel="Go back" onRetry={() => router.back()} />;
   } else {
     body = (
-      <ScrollView contentContainerStyle={{ paddingHorizontal: theme.space.lg, paddingBottom: bottomPadding }}>
-        <View style={{ backgroundColor: surfaces.tile, borderRadius: theme.radius.md, padding: theme.space.md, gap: 4, marginTop: theme.space.sm }}>
-          <Text style={muted}>Counted toward runway</Text>
-          <Text
-            style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.bold, fontSize: theme.typography.xl }}
-            accessibilityLabel={`Counted toward runway: ${formatAmount(sources.liquidTotal, currency)}`}
-          >
-            {formatAmount(sources.liquidTotal, currency)}
-          </Text>
-          <Text style={muted}>
-            Runway is a planning estimate. These choices only affect runway — your balances and net worth stay the same.
-          </Text>
-        </View>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: theme.space.lg, paddingTop: theme.space.sm, paddingBottom: bottomPadding, gap: theme.space.md }}>
+        <Section title="Counted toward runway" subtitle="Spendable money runway starts from">
+          <View accessible accessibilityLabel={`Counted toward runway: ${money(sources.liquidTotal)}`} style={{ gap: 6 }}>
+            <FinancialAmount value={sources.liquidTotal} currency={currency} size="xl" weight="bold" />
+            <Text style={muted}>Runway is a planning estimate. These choices only affect runway — your balances and net worth stay the same.</Text>
+          </View>
+        </Section>
         {section("Counted", "Spendable money runway starts from.", sources.counted)}
         {section("Not counted", "Money you have that isn't treated as spendable. Switch on near-liquid items you could use.", sources.notCounted)}
         {section("You owe", "Amounts owed are never spendable money.", sources.obligations)}

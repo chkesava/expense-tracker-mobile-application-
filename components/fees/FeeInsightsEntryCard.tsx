@@ -7,10 +7,10 @@ import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useFeeIntelligence } from "@/hooks/useFeeIntelligence";
 import { todayDateKey } from "@/shared/utils/dates";
 import { EMPTY_FEE_DASHBOARD_FILTERS, buildFeeDashboard } from "@/shared/utils/feeDashboard";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { feeCandidateQueue } from "@/shared/utils/feeDetection";
 import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 
 /**
  * Entry point to Fees & charges from Insights (SPENDLY-315): this month's fee
@@ -23,6 +23,7 @@ export function FeeInsightsEntryCard() {
   const router = useRouter();
   const { result, loading, error } = useFeeIntelligence();
   const currency = useDisplayCurrency();
+  const money = useGhostMoney(currency);
   const summary = useMemo(() => {
     if (!result) return null;
     const dash = buildFeeDashboard(result.records, EMPTY_FEE_DASHBOARD_FILTERS, todayDateKey());
@@ -35,7 +36,7 @@ export function FeeInsightsEntryCard() {
     : loading || !summary
     ? "Checking your transactions…"
     : [
-        summary.cost !== 0 ? `${formatAmount(summary.cost, currency)} this month` : null,
+        summary.cost !== 0 ? `${money(summary.cost)} this month` : null,
         toReview > 0 ? `${toReview} to review` : null,
       ].filter(Boolean).join(" · ") || "Bank charges, card fees and GST on fees";
 

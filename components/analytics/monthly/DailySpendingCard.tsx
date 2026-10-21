@@ -3,13 +3,12 @@ import { StyleSheet, Text } from "react-native";
 import { TrendingUp } from "lucide-react-native";
 
 import { AnalyticsCard } from "@/components/analytics/shared/AnalyticsCard";
-import { insightAccents } from "@/components/analytics/insightsTheme";
+import { useInsightAccents } from "@/components/analytics/insightsTheme";
 import {
   SpendingCurveChart,
   type CurvePoint,
 } from "@/components/charts/SpendingCurveChart";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export interface DailySpendingCardProps {
   points: CurvePoint[];
@@ -23,16 +22,15 @@ export function DailySpendingCard({
   monthLabel,
   currency,
 }: DailySpendingCardProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const accents = insightAccents(isDark);
+  const { theme } = useTheme();
+  const accents = useInsightAccents();
 
   const hasSpend = points.some((point) => point.amount > 0);
 
   return (
     <AnalyticsCard
       title="Daily Spending Run-Rate"
-      icon={<TrendingUp size={16} color={accents.pink} strokeWidth={2.4} />}
+      icon={<TrendingUp size={16} color={accents.spend} strokeWidth={2.4} />}
       subtitle={`Daily trajectory and spikes across ${monthLabel}`}
       gap={10}
     >
@@ -41,7 +39,7 @@ export function DailySpendingCard({
           points={points}
           height={186}
           currency={currency}
-          lineColor={accents.pink}
+          lineColor={accents.spend}
           showYAxis
           xTickCount={5}
         />

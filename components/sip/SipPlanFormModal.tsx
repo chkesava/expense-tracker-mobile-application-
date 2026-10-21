@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Modal, ScrollView } from "react-native";
 import { X } from "lucide-react-native";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -11,6 +12,8 @@ import { todayDateKey } from "@/shared/utils/dates";
 
 import { Chip } from "@/components/ui/Chip";
 import { SheetBottomInset } from "@/components/common/SheetBottomInset";
+import { DateField } from "@/components/common/DateField";
+import { useSheetWidthStyle } from "@/hooks/useResponsiveLayout";
 export type SipPlanFormModalProps = {
   visible: boolean;
   onClose: () => void;
@@ -34,6 +37,10 @@ const FREQUENCIES = [
 
 export function SipPlanFormModal({ visible, onClose, onSubmit }: SipPlanFormModalProps) {
   const { theme } = useTheme();
+  // SPENDLY-554: RN Modal portals outside SpendlyUIScope on web; keep the theme vars.
+  const scopeVars = useSpendlyScopeVars();
+  // SPENDLY-559: centred at dialog width on tablet/desktop web.
+  const sheetWidthStyle = useSheetWidthStyle();
 
   const [assetType, setAssetType] = useState<"stock" | "etf" | "mutual_fund" | "crypto">("stock");
   const [symbol, setSymbol] = useState("");
@@ -103,9 +110,9 @@ export function SipPlanFormModal({ visible, onClose, onSubmit }: SipPlanFormModa
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={[styles.overlay]}>
+      <View style={[styles.overlay, { backgroundColor: theme.colors.scrim }, scopeVars]}>
         <ScrollView
-          style={[styles.container, { backgroundColor: theme.colors.background }]}
+          style={[styles.container, { backgroundColor: theme.colors.background }, sheetWidthStyle]}
           contentContainerStyle={styles.content}
         >
           <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
@@ -183,13 +190,7 @@ export function SipPlanFormModal({ visible, onClose, onSubmit }: SipPlanFormModa
           </View>
 
           <View style={styles.inputGroup}>
-            <Input
-              label="Start Date (YYYY-MM-DD)"
-              value={startDate}
-              onChangeText={setStartDate}
-              placeholder="YYYY-MM-DD"
-              error={errors.startDate}
-            />
+            <DateField label="Start Date" value={startDate} onChange={setStartDate} error={errors.startDate} />
           </View>
         </ScrollView>
 
@@ -209,7 +210,6 @@ export function SipPlanFormModal({ visible, onClose, onSubmit }: SipPlanFormModa
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "flex-end",
   },
   container: {

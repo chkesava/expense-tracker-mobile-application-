@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
@@ -12,6 +13,7 @@ import { useSettings } from "@/providers/SettingsProvider";
 import type { CreditCardBill } from "@/shared/types/creditCardBill";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
+import { DateField } from "@/components/common/DateField";
 
 export type MarkBillPaidModalProps = {
   isOpen: boolean;
@@ -114,7 +116,21 @@ export function MarkBillPaidModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Mark Bill as Paid">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Mark Bill as Paid"
+      // SPENDLY-553: 6a form pattern; same handler, disabled and label as before.
+      footer={
+        <SheetActions
+          primary={{
+            label: saving ? "Saving…" : "Confirm Mark as Paid",
+            onPress: () => void handleSubmit(),
+            disabled: saving,
+          }}
+        />
+      }
+    >
       <ScrollView contentContainerStyle={{ gap: 16, paddingBottom: 20 }}>
         <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
           {explanation}
@@ -125,12 +141,7 @@ export function MarkBillPaidModal({
           onChangeText={setAmount}
           keyboardType="decimal-pad"
         />
-        <Input
-          label="Payment Date * (YYYY-MM-DD)"
-          value={paymentDate}
-          onChangeText={setPaymentDate}
-          autoCapitalize="none"
-        />
+        <DateField label="Payment Date *" value={paymentDate} onChange={setPaymentDate} />
         <Button
           variant={recordExternal ? "primary" : "outline"}
           onPress={() => setRecordExternal((v) => !v)}
@@ -138,9 +149,6 @@ export function MarkBillPaidModal({
           {recordExternal
             ? "Also record external payment: ON"
             : "Also record external payment: OFF"}
-        </Button>
-        <Button size="lg" onPress={() => void handleSubmit()} disabled={saving}>
-          {saving ? "Saving…" : "Confirm Mark as Paid"}
         </Button>
       </ScrollView>
     </Modal>

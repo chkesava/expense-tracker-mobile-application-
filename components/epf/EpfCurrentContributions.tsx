@@ -5,11 +5,9 @@ import { AlertTriangle, Pencil } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
-import { SkeletonCard } from "@/components/common/Skeleton";
 import { EpfContributionRow } from "@/components/epf/EpfContributionRow";
 import { EpfCreditSheet } from "@/components/epf/EpfCreditSheet";
 import { EpfWageChangeSheet } from "@/components/epf/EpfWageChangeSheet";
-import { Card } from "@/components/ui/Card";
 import { useSpendlyBottomClearance } from "@/components/layout/useSpendlyBottomClearance";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useEpfContributions } from "@/hooks/useEpfContributions";
@@ -26,9 +24,11 @@ import {
   summariseLifecycle,
 } from "@/shared/features/epf/utils/monthState";
 import { wageForProjection, simulatedMonthsNeedingReview } from "@/shared/features/epf/utils/schedule";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 import { monthLabel } from "@/shared/utils/monthLabel";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { Section } from "@/components/dashboard/primitives";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 
 /** Recent months shown on the Current tab. Older months live under History. */
 const RECENT_MONTHS = 18;
@@ -67,7 +67,8 @@ export function EpfCurrentContributions({
   const [editingMonth, setEditingMonth] = useState<string | null>(null);
   const [changingWage, setChangingWage] = useState(false);
 
-  const money = useCallback((value: number) => formatAmount(value, currency), [currency]);
+  // SPENDLY-544: ghost-aware; EPF ignored ghost mode almost everywhere.
+  const money = useGhostMoney(currency);
 
   // One clock reading per render, shared by the header and every row, so a
   // month can never be summarised against a different day than it is drawn on.
@@ -97,8 +98,8 @@ export function EpfCurrentContributions({
   if (contributionsLoading) {
     return (
       <View style={styles.container}>
-        <SkeletonCard />
-        <SkeletonCard />
+        <DashboardSkeleton variant="section" rows={3} />
+        <DashboardSkeleton variant="section" rows={2} />
       </View>
     );
   }
@@ -137,13 +138,13 @@ export function EpfCurrentContributions({
         extraData={`${contributions.length}-${summary.unreconciled}`}
         ListHeaderComponent={
           <View style={styles.header}>
-            <Card>
+            <Section>
               <View style={styles.summaryHeaderRow}>
-                <View style={styles.flex}>
+                <View style={styles.summaryValueCol}>
                   <Text style={[styles.summaryLabel, { color: theme.colors.mutedForeground }]}>
                     Credited to EPF
                   </Text>
-                  <Text style={[styles.summaryValue, { color: theme.colors.foreground }]}>
+                  <Text style={[styles.summaryValue, { color: theme.colors.foreground }]} numberOfLines={1}>
                     {money(summary.creditedTotal)}
                   </Text>
                 </View>
@@ -170,7 +171,7 @@ export function EpfCurrentContributions({
                   lands.
                 </Text>
               ) : null}
-            </Card>
+            </Section>
 
             {reviewMonths.length > 0 ? (
               <View style={[styles.notice, { borderColor: theme.colors.border }]}>
@@ -264,7 +265,14 @@ const styles = StyleSheet.create({
   container: { gap: 12, padding: 16 },
   listContent: { padding: 16 },
   header: { gap: 12, marginBottom: 12 },
-  summaryHeaderRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  // SPENDLY-544: on 320 dp the button squeezed the total into two lines; it
+  // now wraps below instead.
+  summaryHeaderRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: 12, rowGap: 10 },
+  summaryValueCol: {
+    flexGrow: 1,
+    flexBasis: 150,
+    minWidth: 0,
+  },
   summaryLabel: { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },
   summaryValue: { fontSize: 24, fontWeight: "700", marginTop: 4 },
   summaryHint: { fontSize: 12, marginTop: 6, lineHeight: 18 },

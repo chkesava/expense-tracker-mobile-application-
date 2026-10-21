@@ -1,69 +1,11 @@
 import { FieldValue, Timestamp } from "firebase/firestore";
 
 /**
- * A user-level financial summary document containing net worth and top-level financial totals.
- * Stored at: users/{uid}/financialSummaries/netWorth
+ * SPENDLY-499: `financialSummaries/netWorth` and `financialSummaries/investments`
+ * are retired. Nothing read them, they disagreed with what the app shows, and
+ * net worth has one definition: `composeNetWorth` (shared/utils/netWorth.ts),
+ * computed live. Old docs may remain in Firestore; nothing writes or reads them.
  */
-export interface NetWorthSummary {
-  /** The total net worth (totalAssets - totalLiabilities) */
-  netWorth: number;
-  /** Total assets across bank, FD, investments, EPF, receivables */
-  totalAssets: number;
-  /** Total liabilities across credit cards, overdrafts, and borrowings */
-  totalLiabilities: number;
-
-  /** Total of all positive-balance deposit accounts */
-  bankCashTotal: number;
-  /** Total of all fixed deposits */
-  fixedDepositTotal: number;
-  /** Uninvested cash balance in investment accounts */
-  investmentCash: number;
-  /** Snapshot of current holdings market value */
-  holdingsValue: number;
-  /** Total EPF value */
-  epfValue: number;
-  /** Total receivables */
-  receivableAssets: number;
-
-  /** Credit card outstanding liabilities */
-  creditCardLiabilities: number;
-  /** Bank overdraft liabilities */
-  bankOverdraftLiabilities: number;
-  /** Total borrowings */
-  borrowingLiabilities: number;
-
-  /** The timestamp when the snapshot was generated/reconciled */
-  calculatedAt: string | Timestamp;
-  /** The version of this schema (for future migrations) */
-  summaryVersion: number;
-}
-
-/**
- * Authoritative summary of the user's investment portfolio.
- * Stored at: users/{uid}/financialSummaries/investments
- */
-export interface InvestmentsSummary {
-  /** Uninvested cash balance in the Demat / Stocks portfolio */
-  investmentCash: number;
-  /** Snapshot of current holdings market value */
-  holdingsMarketValue: number;
-  /** Total principal invested across active holdings */
-  investedValue: number;
-  /** Snapshot of unrealised P&L based on market value */
-  unrealisedPnL: number;
-  /** Total realised P&L from closed positions (if supported) */
-  realisedPnL: number;
-  /** Number of active distinct holdings */
-  holdingCount: number;
-
-  /** Total of all Fixed Deposit principal */
-  fdPrincipalTotal: number;
-  /** Total of FD current values (including accrued interest) */
-  fdCurrentValue: number;
-  
-  calculatedAt: string | Timestamp;
-  summaryVersion: number;
-}
 
 /**
  * Authoritative summary of the user's EPF accounts.

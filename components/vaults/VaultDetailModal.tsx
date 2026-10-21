@@ -10,18 +10,22 @@ import {
   Wallet,
 } from "lucide-react-native";
 
-import { Amount } from "@/components/common/Amount";
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
+import { ProgressIndicator } from "@/components/dashboard/ProgressIndicator";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { VaultTransactionModal } from "@/components/vaults/VaultTransactionModal";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { useVaultExpenses } from "@/hooks/useVaultExpenses";
 import { useAuth } from "@/providers/AuthProvider";
-import type { SharedVault } from "@/shared/types/vault";
+import { DEFAULT_VAULT_COLOR, type SharedVault } from "@/shared/types/vault";
 import {
   calculateMemberSpending,
   calculateVaultStats,
 } from "@/shared/utils/vaultMath";
+import { vaultBudgetPresentation } from "@/shared/utils/vaultSpacePresentation";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
@@ -48,6 +52,7 @@ export function VaultDetailModal({
     useVaultExpenses(vaultId);
 
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
+  const money = useGhostMoney(vault?.currency ?? "INR");
 
   const stats = useMemo(() => {
     if (!vault) return null;
@@ -61,7 +66,8 @@ export function VaultDetailModal({
   if (!vault || !stats) return null;
 
   const isOwner = user?.uid === vault.ownerId;
-  const themeColor = vault.themeColor || "#6366F1";
+  const themeColor = vault.themeColor || DEFAULT_VAULT_COLOR;
+  const budget = vaultBudgetPresentation(stats.status);
 
   const handleDelete = () => {
     appDialog.alert(
@@ -85,7 +91,24 @@ export function VaultDetailModal({
 
   return (
     <>
-      <Modal isOpen={visible} onClose={onClose} title={vault.name} maxHeight="90%">
+      <Modal
+        isOpen={visible}
+        onClose={onClose}
+        title={vault.name}
+        maxHeight="90%"
+        // SPENDLY-549: the primary action is pinned (6a form sheet pattern).
+        footer={
+          <SheetActions
+            primary={{
+              label: "Add transaction",
+              onPress: () => {
+                haptic.selection().catch(() => undefined);
+                setIsTxModalOpen(true);
+              },
+            }}
+          />
+        }
+      >
         {/* Identity */}
         <View style={styles.header}>
           <View style={styles.titleRow}>
@@ -122,69 +145,41 @@ export function VaultDetailModal({
           <View style={styles.statRow}>
             <View>
               <Text style={[styles.statLabel, { color: theme.colors.mutedForeground }]}>
-                AVAILABLE BALANCE
+                Available balance
               </Text>
-              <Amount
+              <FinancialAmount
                 value={stats.currentBalance}
                 currency={vault.currency}
-                style={{
-                  fontSize: 22,
-                  fontWeight: "900",
-                  color:
-                    stats.currentBalance >= 0
-                      ? theme.colors.foreground
-                      : theme.colors.destructive,
-                }}
+                size="xl"
+                weight="bold"
+                sign={stats.currentBalance < 0 ? "auto" : "none"}
+                tone={stats.currentBalance < 0 ? "negative" : "default"}
               />
             </View>
 
             <View style={{ alignItems: "flex-end" }}>
               <Text style={[styles.statLabel, { color: theme.colors.mutedForeground }]}>
-                BUDGET LIMIT
+                Budget limit
               </Text>
-              <Amount
-                value={vault.budget}
-                currency={vault.currency}
-                style={{ fontSize: 16, fontWeight: "700", color: theme.colors.foreground }}
-              />
+              <FinancialAmount value={vault.budget} currency={vault.currency} size="md" weight="semibold" />
             </View>
           </View>
 
-          {/* Progress */}
+          {/* Progress: a status word as well as a colour. */}
           {vault.budget > 0 && (
-            <View style={{ gap: 6, marginTop: 4 }}>
-              <View
-                style={[
-                  styles.progressBarBg,
-                  {
-                    backgroundColor: surfaces.track,
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.progressBarFill,
-                    {
-                      width: `${Math.min(100, stats.budgetUsagePercent)}%`,
-                      backgroundColor:
-                        stats.status === "healthy"
-                          ? themeColor
-                          : stats.status === "warning"
-                          ? "#F59E0B"
-                          : "#EF4444",
-                    },
-                  ]}
-                />
-              </View>
-              <View style={styles.progressInfo}>
-                <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
-                  Spent: {vault.currency} {stats.totalWithdrawals.toLocaleString()} ({stats.budgetUsagePercent}%)
+            <ProgressIndicator
+              pct={stats.budgetUsagePercent}
+              status={budget.status}
+              color={budget.status === "good" ? themeColor : undefined}
+              value={
+                <Text style={[styles.progressValue, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium }]}>
+                  {money(stats.totalWithdrawals)} spent
                 </Text>
-                <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
-                  Remaining: {vault.currency} {stats.remainingBudget.toLocaleString()}
-                </Text>
-              </View>
-            </View>
+              }
+              statusLabel={`${budget.label} · ${money(stats.remainingBudget)} left`}
+              trailing={`${stats.budgetUsagePercent}%`}
+              accessibilityLabel={`${stats.budgetUsagePercent} percent of the budget spent, ${budget.label}`}
+            />
           )}
         </Card>
 
@@ -192,7 +187,7 @@ export function VaultDetailModal({
         {memberContributions.length > 0 && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: theme.colors.mutedForeground }]}>
-              MEMBER CONTRIBUTIONS
+              Member contributions
             </Text>
             <Card style={styles.membersCard}>
               {memberContributions.map((m, idx) => (
@@ -211,17 +206,16 @@ export function VaultDetailModal({
                       {m.userName || `Member (${m.userId.slice(0, 5)})`}
                     </Text>
                     <Text style={{ fontSize: 11, color: theme.colors.mutedForeground }}>
-                      Deposited: {vault.currency} {m.totalDeposited.toLocaleString()} • Spent: {vault.currency} {m.totalWithdrawn.toLocaleString()}
+                      Deposited {money(m.totalDeposited)} · Spent {money(m.totalWithdrawn)}
                     </Text>
                   </View>
-                  <Amount
+                  <FinancialAmount
                     value={m.netContribution}
                     currency={vault.currency}
-                    style={{
-                      fontSize: 13,
-                      fontWeight: "800",
-                      color: m.netContribution >= 0 ? "#22C55E" : theme.colors.destructive,
-                    }}
+                    size="sm"
+                    weight="bold"
+                    sign="auto"
+                    tone="auto"
                   />
                 </View>
               ))}
@@ -233,7 +227,7 @@ export function VaultDetailModal({
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.colors.mutedForeground }]}>
-              ACTIVITY & TRANSACTIONS ({expenses.length})
+              Activity ({expenses.length})
             </Text>
           </View>
 
@@ -252,17 +246,16 @@ export function VaultDetailModal({
                       style={[
                         styles.txIconCircle,
                         {
-                          backgroundColor:
-                            e.type === "deposit"
-                              ? "rgba(34,197,94,0.15)"
-                              : "rgba(239,68,68,0.15)",
+                          backgroundColor: surfaces.wash(
+                            e.type === "deposit" ? theme.colors.success : theme.colors.destructive
+                          ),
                         },
                       ]}
                     >
                       {e.type === "deposit" ? (
-                        <ArrowDownLeft size={16} color="#22C55E" />
+                        <ArrowDownLeft size={16} color={theme.colors.success} />
                       ) : (
-                        <ArrowUpRight size={16} color="#EF4444" />
+                        <ArrowUpRight size={16} color={theme.colors.destructive} />
                       )}
                     </View>
 
@@ -277,17 +270,14 @@ export function VaultDetailModal({
                     </View>
 
                     <View style={{ alignItems: "flex-end", gap: 4 }}>
-                      <Amount
-                        value={e.amount}
+                      {/* In or out reads from the sign, not the colour alone. */}
+                      <FinancialAmount
+                        value={e.type === "deposit" ? e.amount : -e.amount}
                         currency={vault.currency}
-                        style={{
-                          fontSize: 14,
-                          fontWeight: "800",
-                          color:
-                            e.type === "deposit"
-                              ? theme.colors.success
-                              : theme.colors.destructive,
-                        }}
+                        size="sm"
+                        weight="bold"
+                        sign="auto"
+                        tone="auto"
                       />
                       {e.id && (isOwner || e.createdBy === user?.uid) ? (
                         <Button
@@ -311,19 +301,6 @@ export function VaultDetailModal({
           )}
         </View>
 
-        {/* Footer Actions */}
-        <Button
-          haptic={false}
-          onPress={() => {
-            haptic.selection().catch(() => undefined);
-            setIsTxModalOpen(true);
-          }}
-        >
-          <Plus size={18} color={theme.colors.primaryForeground} />
-          <Text style={{ marginLeft: 8, fontWeight: "800", color: theme.colors.primaryForeground }}>
-            Add Transaction
-          </Text>
-        </Button>
       </Modal>
 
       {/* Transaction Modal — a sibling, so it stacks above the sheet. */}
@@ -372,24 +349,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  progressValue: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
   statLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  progressBarBg: {
-    height: 6,
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  progressBarFill: {
-    height: "100%",
-    borderRadius: 3,
-  },
-  progressInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    fontSize: 11,
+    fontWeight: "600",
   },
   section: {
     gap: 8,
@@ -401,9 +367,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   sectionTitle: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
+    fontSize: 12,
+    fontWeight: "700",
   },
   membersCard: {
     padding: 12,

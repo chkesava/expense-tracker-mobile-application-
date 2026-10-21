@@ -47,6 +47,8 @@ import { removeLink, addLink, linkFromRouteParams } from "@/shared/utils/decisio
 import { decisionCategoryLabel, newDecisionDraft, transitionDecision } from "@/shared/utils/decisionModel";
 import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
+import { DateField } from "@/components/common/DateField";
+import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
 
 /**
  * Capture / edit a Money Decision (SPENDLY-363). Five short steps; only the
@@ -125,7 +127,7 @@ export default function DecisionEditScreen() {
   // say so instead of showing a loading state that never ends.
   if (!uid) {
     return (
-      <PageShell scrollable={false}>
+      <PageShell scrollable={false} layout="readable">
         {header}
         <ErrorState title="Sign in to record a decision" description="Decisions are saved to your account, so you need to be signed in." onRetry={() => router.back()} retryLabel="Go back" />
       </PageShell>
@@ -133,7 +135,7 @@ export default function DecisionEditScreen() {
   }
   if (error) {
     return (
-      <PageShell scrollable={false}>
+      <PageShell scrollable={false} layout="readable">
         {header}
         <ErrorState title="Couldn't load this decision" description={error.message} onRetry={error.retryable ? retry : undefined} />
       </PageShell>
@@ -141,7 +143,7 @@ export default function DecisionEditScreen() {
   }
   if (!form || !base || (editingId && loading)) {
     return (
-      <PageShell scrollable={false}>
+      <PageShell scrollable={false} layout="readable">
         {header}
         <LoadingState variant="card" count={2} />
       </PageShell>
@@ -149,7 +151,7 @@ export default function DecisionEditScreen() {
   }
   if (editingId && !existing) {
     return (
-      <PageShell scrollable={false}>
+      <PageShell scrollable={false} layout="readable">
         {header}
         <ErrorState title="This decision isn't here any more" description="It may have been deleted on another device." onRetry={() => router.replace("/decisions" as Href)} retryLabel="Back to decisions" />
       </PageShell>
@@ -223,7 +225,7 @@ export default function DecisionEditScreen() {
   );
 
   return (
-    <PageShell scrollable={false} listOwnsBottomInset>
+    <PageShell scrollable={false} listOwnsBottomInset layout="readable">
       {header}
       <View style={[styles.progress, { gap: 4, paddingHorizontal: theme.space.lg }]} accessibilityLabel={`Step ${stepIndex + 1} of ${DECISION_STEPS.length}`}>
         {DECISION_STEPS.map((s, i) => (
@@ -401,9 +403,9 @@ export default function DecisionEditScreen() {
         {step.id === "expected" ? (
           <>
             <Input label="What do you expect to happen? (optional)" value={form.expectedSummary} onChangeText={(expectedSummary) => set({ expectedSummary })} multiline maxLength={DECISION_LIMITS.text} placeholder={template.prompts.expected} />
-            <View style={[styles.row, { gap: theme.space.sm }]}>
-              <Input label="Expected amount, ₹ (optional)" value={form.expectedAmount} onChangeText={(expectedAmount) => set({ expectedAmount })} keyboardType="decimal-pad" placeholder="0" error={fieldError("expectedAmount")} containerStyle={{ flex: 1 }} helperText="Your estimate" />
-              <Input label="By (optional)" value={form.expectedByDate} onChangeText={(expectedByDate) => set({ expectedByDate })} placeholder="YYYY-MM-DD" error={fieldError("expectedByDate")} containerStyle={{ flex: 1 }} />
+            <View style={[styles.row, { gap: theme.space.sm, flexWrap: "wrap", alignItems: "flex-start" }]}>
+              <Input label="Expected amount (optional)" value={form.expectedAmount} onChangeText={(expectedAmount) => set({ expectedAmount })} keyboardType="decimal-pad" placeholder="0" leadingIcon={<CurrencyPrefix />} error={fieldError("expectedAmount")} containerStyle={{ flexGrow: 1, flexBasis: 140 }} helperText="Your estimate" />
+              <DateField label="By (optional)" value={form.expectedByDate} onChange={(expectedByDate) => set({ expectedByDate })} clearable placeholder="Not set" error={fieldError("expectedByDate")} containerStyle={{ flexGrow: 1, flexBasis: 220 }} />
             </View>
             {sectionTitle("When should you look back at this? (optional)")}
             <View style={[styles.wrap, { gap: theme.space.sm }]}>
@@ -411,7 +413,7 @@ export default function DecisionEditScreen() {
                 <Chip key={c.label} label={c.label} size="sm" selected={form.reviewDate === c.date} onPress={() => set({ reviewDate: form.reviewDate === c.date ? "" : c.date })} />
               ))}
             </View>
-            <Input label="Review date" value={form.reviewDate} onChangeText={(reviewDate) => set({ reviewDate })} placeholder="YYYY-MM-DD" error={fieldError("reviewDate")} />
+            <DateField label="Review date" value={form.reviewDate} onChange={(reviewDate) => set({ reviewDate })} clearable placeholder="No review date" error={fieldError("reviewDate")} />
 
             {sectionTitle("Linked Spendly records (optional)")}
             <Text style={muted}>References only — the records themselves are never copied or changed.</Text>

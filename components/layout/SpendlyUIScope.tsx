@@ -1,5 +1,5 @@
-import React, { useMemo, type ReactNode } from "react";
-import { View } from "react-native";
+import React, { createContext, useContext, useMemo, type ReactNode } from "react";
+import { View, type StyleProp, type ViewStyle } from "react-native";
 import { vars } from "nativewind";
 
 import { useTheme } from "@/theme/ThemeProvider";
@@ -17,13 +17,28 @@ import { toGluestackVars } from "@/theme/gluestackVars";
  * inside the app providers. The Spendly shell mounts it inside AppShellInner,
  * still under this View.
  */
+const SpendlyScopeVarsContext = createContext<StyleProp<ViewStyle> | null>(null);
+
+/**
+ * SPENDLY-542: on web an RN Modal portals to the end of <body>, outside this
+ * View, so it lost the Spendly variables and every common/Modal and
+ * common/Dialog drew a light card in dark themes. Those components re-apply
+ * the variables from this context inside their window. Outside the Spendly
+ * shell (Ganesh Seva, Nutrition) the context is null and nothing changes.
+ */
+export function useSpendlyScopeVars(): StyleProp<ViewStyle> | null {
+  return useContext(SpendlyScopeVarsContext);
+}
+
 export function SpendlyUIScope({ children }: { children: ReactNode }) {
   const { theme } = useTheme();
   const scopeStyle = useMemo(() => vars(toGluestackVars(theme)), [theme]);
 
   return (
-    <View style={[{ flex: 1 }, scopeStyle]}>
-      {children}
-    </View>
+    <SpendlyScopeVarsContext.Provider value={scopeStyle}>
+      <View style={[{ flex: 1 }, scopeStyle]}>
+        {children}
+      </View>
+    </SpendlyScopeVarsContext.Provider>
   );
 }

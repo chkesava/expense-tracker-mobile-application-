@@ -14,6 +14,22 @@ export function getAccountKind(typeName: string): AccountKind {
   return "other";
 }
 
+/**
+ * SPENDLY-497 — the one card rule for writes and reads. The account type's
+ * name decides, exactly as every screen does through `getAccountKind`; the
+ * stored `accountTypeId` only decides when the type name is unknown. (Writes
+ * used to also look for "credit" in the account's own name, so an account
+ * could be a card on write and a bank on read.)
+ */
+export function isCreditCardAccount(input: {
+  typeName?: string | null;
+  accountTypeId?: string | null;
+}): boolean {
+  const name = (input.typeName ?? "").trim();
+  if (name) return getAccountKind(name) === "credit";
+  return input.accountTypeId === "credit_card";
+}
+
 export function isCreditAccount(typeName: string): boolean {
   return getAccountKind(typeName) === "credit";
 }

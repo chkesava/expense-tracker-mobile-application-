@@ -22,10 +22,12 @@ import { Input } from "@/components/ui/Input";
 import { useTrips } from "@/hooks/useTrips";
 import type { TripCategoryBudget } from "@/shared/types/trip";
 import { TRIP_BUDGET_CATEGORIES } from "@/shared/utils/tripCalculations";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { DateField } from "@/components/common/DateField";
 
 export interface CreateTripModalProps {
   visible: boolean;
@@ -36,6 +38,9 @@ type WizardStep = 1 | 2 | 3;
 
 export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
   const { theme } = useTheme();
+  // SPENDLY-550: an RN Modal portals outside SpendlyUIScope on web, so its
+  // Gluestack Inputs/Buttons lost the theme variables (dark text on dark).
+  const scopeVars = useSpendlyScopeVars();
   const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
   const { createTrip } = useTrips({ enabled: false });
@@ -75,7 +80,7 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
         return;
       }
       if (!startDate || !endDate) {
-        toast.error("Please enter both start and end dates (YYYY-MM-DD).");
+        toast.error("Please pick both start and end dates.");
         return;
       }
       if (startDate > endDate) {
@@ -143,7 +148,7 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, { backgroundColor: theme.colors.scrim }, scopeVars]}>
         <View
           style={[
             styles.modalCard,
@@ -242,8 +247,9 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
                   />
                 </View>
 
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  <View style={{ flex: 1, gap: 6 }}>
+                {/* SPENDLY-557: wraps so each date picker gets the full width on phones. */}
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+                  <View style={{ flexGrow: 1, flexBasis: 220, gap: 6 }}>
                     <Text
                       style={[
                         styles.fieldLabel,
@@ -252,13 +258,9 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
                     >
                       START DATE *
                     </Text>
-                    <Input
-                      value={startDate}
-                      onChangeText={setStartDate}
-                      placeholder="YYYY-MM-DD"
-                    />
+                    <DateField value={startDate} onChange={setStartDate} maxDate={endDate || undefined} accessibilityLabel="Start date" />
                   </View>
-                  <View style={{ flex: 1, gap: 6 }}>
+                  <View style={{ flexGrow: 1, flexBasis: 220, gap: 6 }}>
                     <Text
                       style={[
                         styles.fieldLabel,
@@ -267,11 +269,7 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
                     >
                       END DATE *
                     </Text>
-                    <Input
-                      value={endDate}
-                      onChangeText={setEndDate}
-                      placeholder="YYYY-MM-DD"
-                    />
+                    <DateField value={endDate} onChange={setEndDate} minDate={startDate || undefined} accessibilityLabel="End date" />
                   </View>
                 </View>
               </>
@@ -512,7 +510,6 @@ export function CreateTripModal({ visible, onClose }: CreateTripModalProps) {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.65)",
     justifyContent: "center",
     alignItems: "center",
     padding: 16,

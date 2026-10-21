@@ -29,6 +29,7 @@ import {
 } from "@/shared/utils/decisionLinks";
 import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useDecisionFormat } from "@/components/decisions/useDecisionFormat";
 
 export type DecisionLinkTab = "transactions" | "accounts" | "loans" | "goals" | "recurring";
 
@@ -62,6 +63,8 @@ export function DecisionLinkPicker({
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const currency = useDisplayCurrency();
+  // SPENDLY-547: record dates in the user's format.
+  const { date } = useDecisionFormat();
   const s = useDecisionLinkSources();
   const [tab, setTab] = useState<DecisionLinkTab>(initialTab);
   const [query, setQuery] = useState("");
@@ -106,13 +109,13 @@ export function DecisionLinkPicker({
     const rows = [
       ...transactions.map(({ kind, row: t }) =>
         kind === "expense"
-          ? row(`e:${t.id}`, t.note?.trim() || (t as { category: string }).category, `${LINK_NATURE_LABELS.spend} · ${t.date}`, t.amount, linked({ kind: "transaction", refId: t.id, refKind: "expense" }), () => pick(linkFromExpense(t as never, newItemId(), now())))
-          : row(`i:${t.id}`, t.note?.trim() || (t as { source: string }).source, `${LINK_NATURE_LABELS[incomeNature(t as never)]} · ${t.date}`, t.amount, linked({ kind: "transaction", refId: t.id, refKind: "income" }), () => pick(linkFromIncome(t as never, newItemId(), now())))
+          ? row(`e:${t.id}`, t.note?.trim() || (t as { category: string }).category, `${LINK_NATURE_LABELS.spend} · ${date(t.date)}`, t.amount, linked({ kind: "transaction", refId: t.id, refKind: "expense" }), () => pick(linkFromExpense(t as never, newItemId(), now())))
+          : row(`i:${t.id}`, t.note?.trim() || (t as { source: string }).source, `${LINK_NATURE_LABELS[incomeNature(t as never)]} · ${date(t.date)}`, t.amount, linked({ kind: "transaction", refId: t.id, refKind: "income" }), () => pick(linkFromIncome(t as never, newItemId(), now())))
       ),
       ...movements.map(({ kind, row: m }) =>
         kind === "payment"
-          ? row(`p:${m.id}`, m.note?.trim() || ((m as { sourceType?: string }).sourceType === "cashback" ? "Cashback" : "Card bill payment"), `${LINK_NATURE_LABELS[(m as { sourceType?: string }).sourceType === "cashback" ? "cashback" : "bill_payment"]} · ${m.date}`, m.amount, linked({ kind: "transaction", refId: m.id, refKind: "payment" }), () => pick(linkFromPayment(m as never, newItemId(), now())))
-          : row(`t:${m.id}`, m.note?.trim() || "Transfer", `${LINK_NATURE_LABELS.transfer} · ${m.date}`, m.amount, linked({ kind: "transaction", refId: m.id, refKind: "transfer" }), () => pick(linkFromTransfer(m as never, newItemId(), now())))
+          ? row(`p:${m.id}`, m.note?.trim() || ((m as { sourceType?: string }).sourceType === "cashback" ? "Cashback" : "Card bill payment"), `${LINK_NATURE_LABELS[(m as { sourceType?: string }).sourceType === "cashback" ? "cashback" : "bill_payment"]} · ${date(m.date)}`, m.amount, linked({ kind: "transaction", refId: m.id, refKind: "payment" }), () => pick(linkFromPayment(m as never, newItemId(), now())))
+          : row(`t:${m.id}`, m.note?.trim() || "Transfer", `${LINK_NATURE_LABELS.transfer} · ${date(m.date)}`, m.amount, linked({ kind: "transaction", refId: m.id, refKind: "transfer" }), () => pick(linkFromTransfer(m as never, newItemId(), now())))
       ),
     ];
     list = rows.length ? rows : empty("No matching transactions.");
@@ -122,13 +125,13 @@ export function DecisionLinkPicker({
       : empty("No accounts yet.");
   } else if (tab === "loans") {
     const rows = [
-      ...s.borrowings.filter((b): b is typeof b & { id: string } => Boolean(b.id)).map((b) => row(`b:${b.id}`, `Loan from ${b.lenderName}`, `${LINK_NATURE_LABELS.loan} · since ${b.borrowedDate}`, b.principalAmount, linked({ kind: "borrowing", refId: b.id }), () => pick(linkFromBorrowing(b, newItemId(), now())))),
-      ...s.receivables.filter((r): r is typeof r & { id: string } => Boolean(r.id)).map((r) => row(`r:${r.id}`, `Lent to ${r.personName}`, `${LINK_NATURE_LABELS.lent} · ${r.lentDate}`, r.originalAmount, linked({ kind: "receivable", refId: r.id }), () => pick(linkFromReceivable(r, newItemId(), now())))),
+      ...s.borrowings.filter((b): b is typeof b & { id: string } => Boolean(b.id)).map((b) => row(`b:${b.id}`, `Loan from ${b.lenderName}`, `${LINK_NATURE_LABELS.loan} · since ${date(b.borrowedDate)}`, b.principalAmount, linked({ kind: "borrowing", refId: b.id }), () => pick(linkFromBorrowing(b, newItemId(), now())))),
+      ...s.receivables.filter((r): r is typeof r & { id: string } => Boolean(r.id)).map((r) => row(`r:${r.id}`, `Lent to ${r.personName}`, `${LINK_NATURE_LABELS.lent} · ${date(r.lentDate)}`, r.originalAmount, linked({ kind: "receivable", refId: r.id }), () => pick(linkFromReceivable(r, newItemId(), now())))),
     ];
     list = rows.length ? rows : empty("No loans or money lent recorded.");
   } else if (tab === "goals") {
     list = s.goals.length
-      ? s.goals.map((g) => row(g.id, g.name, `${LINK_NATURE_LABELS.goal}${g.deadline ? ` · by ${g.deadline}` : ""}`, g.targetAmount, linked({ kind: "goal", refId: g.id }), () => pick(linkFromGoal(g, newItemId(), now()))))
+      ? s.goals.map((g) => row(g.id, g.name, `${LINK_NATURE_LABELS.goal}${g.deadline ? ` · by ${date(g.deadline)}` : ""}`, g.targetAmount, linked({ kind: "goal", refId: g.id }), () => pick(linkFromGoal(g, newItemId(), now()))))
       : empty("No goals yet.");
   } else {
     const subs = s.subscriptions.filter((x): x is typeof x & { id: string } => Boolean(x.id));

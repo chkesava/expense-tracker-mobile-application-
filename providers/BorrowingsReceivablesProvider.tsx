@@ -17,20 +17,23 @@ import {
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
-  setDoc,
-  updateDoc,
   where,
-  writeBatch,
+  type DocumentReference,
 } from "firebase/firestore";
 
 import { logError, logWarning } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
-import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { commitMutations } from "@/lib/commitMutations";
+import { writeSavedMessage } from "@/lib/firestoreWrite";
+import { debtLedgerBalanceOps } from "@/services/ledger/debtBalanceOps";
+import type { MutationOp } from "@/shared/types/mutations";
+import type { LedgerRow } from "@/shared/utils/ledgerAccountDeltas";
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
@@ -64,6 +67,21 @@ import {
   type ReceivableSummary,
 } from "@/shared/utils/receivableMath";
 import { monthFromDateKey, todayDateKey } from "@/shared/utils/dates";
+
+/**
+ * SPENDLY-496: a ledger row the provider's state does not hold yet (a fresh
+ * listener, or a row outside the loaded set), read so a delete can still
+ * reverse its balance effect.
+ */
+async function readLedgerRow<T>(ref: DocumentReference): Promise<T | null> {
+  try {
+    const snap = await getDoc(ref);
+    return snap.exists() ? ({ ...(snap.data() as T), id: snap.id } as T) : null;
+  } catch (err) {
+    logWarning("borrowingsReceivables.readLedgerRow", err);
+    return null;
+  }
+}
 
 export type CreateBorrowingInput = Omit<
   Borrowing,
@@ -508,22 +526,31 @@ export function BorrowingsReceivablesProvider({
       }
       try {
         const ref = doc(collection(db, "users", uid, "borrowings"));
-        const outcome = await commitWrite(
-          () =>
-            setDoc(ref, {
-              ...input,
-              userId: uid,
-              lenderId: input.lenderId ?? null,
-              dueDate: input.dueDate ?? null,
-              creditedAccountId: input.creditedAccountId ?? null,
-              outstandingPrincipal: input.principalAmount,
-              accruedInterest: 0,
-              totalOutstanding: input.principalAmount,
-              status: "ACTIVE",
-              settledDate: null,
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            }),
+        const data = {
+          ...input,
+          userId: uid,
+          lenderId: input.lenderId ?? null,
+          dueDate: input.dueDate ?? null,
+          creditedAccountId: input.creditedAccountId ?? null,
+          outstandingPrincipal: input.principalAmount,
+          accruedInterest: 0,
+          totalOutstanding: input.principalAmount,
+          status: "ACTIVE",
+          settledDate: null,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+        // SPENDLY-496: the credited account's balance moves in the same batch.
+        const balanceOps = await debtLedgerBalanceOps(
+          db,
+          uid,
+          [],
+          [{ kind: "borrowing", row: { ...data, id: ref.id } as unknown as Borrowing }],
+          today
+        );
+        const outcome = await commitMutations(
+          uid,
+          [{ op: "set", ref, data }, ...balanceOps],
           { label: "borrowing" }
         );
         toast.success(writeSavedMessage(outcome, "Borrowing recorded"));
@@ -534,7 +561,7 @@ export function BorrowingsReceivablesProvider({
         return null;
       }
     },
-    [uid]
+    [uid, today]
   );
 
   const updateBorrowing = useCallback(
@@ -563,12 +590,25 @@ export function BorrowingsReceivablesProvider({
         // The edit and its recomputed totals go up as one write: a connection
         // dropping between two separate updates would leave the borrowing
         // showing a new principal against stale outstanding/status fields.
-        const outcome = await commitWrite(
-          () =>
-            updateDoc(doc(db, "users", uid, "borrowings", id), {
-              ...result.fields,
-              updatedAt: serverTimestamp(),
-            }),
+        // SPENDLY-496: an amount, account or date edit moves the balance by
+        // the difference, in the same batch.
+        const balanceOps = await debtLedgerBalanceOps(
+          db,
+          uid,
+          [{ kind: "borrowing", row: existing }],
+          [{ kind: "borrowing", row: { ...existing, ...result.fields } as Borrowing }],
+          today
+        );
+        const outcome = await commitMutations(
+          uid,
+          [
+            {
+              op: "update",
+              ref: doc(db, "users", uid, "borrowings", id),
+              data: { ...result.fields, updatedAt: serverTimestamp() },
+            },
+            ...balanceOps,
+          ],
           { label: "borrowing" }
         );
         toast.success(writeSavedMessage(outcome, "Borrowing updated"));
@@ -603,10 +643,28 @@ export function BorrowingsReceivablesProvider({
           return false;
         }
 
-        const batch = writeBatch(db);
-        linked.docs.forEach((repaymentDoc) => batch.delete(repaymentDoc.ref));
-        batch.delete(doc(db, "users", uid, "borrowings", id));
-        const outcome = await commitWrite(() => batch.commit(), {
+        const borrowingRef = doc(db, "users", uid, "borrowings", id);
+        const parent =
+          borrowings.find((b) => b.id === id) ??
+          (await readLedgerRow<Borrowing>(borrowingRef));
+        // SPENDLY-496: the cascade reverses the parent and every repayment.
+        const before: LedgerRow[] = [
+          ...(parent ? [{ kind: "borrowing", row: parent } as LedgerRow] : []),
+          ...linked.docs.map(
+            (d) =>
+              ({
+                kind: "borrowingRepayment",
+                row: { ...(d.data() as BorrowingRepayment), id: d.id },
+              }) as LedgerRow
+          ),
+        ];
+        const balanceOps = await debtLedgerBalanceOps(db, uid, before, [], today);
+        const ops: MutationOp[] = [
+          ...linked.docs.map((d): MutationOp => ({ op: "delete", ref: d.ref })),
+          { op: "delete", ref: borrowingRef },
+          ...balanceOps,
+        ];
+        const outcome = await commitMutations(uid, ops, {
           label: "borrowing deletion",
         });
 
@@ -618,7 +676,7 @@ export function BorrowingsReceivablesProvider({
         return false;
       }
     },
-    [uid]
+    [uid, borrowings, today]
   );
 
   const addBorrowingRepayment = useCallback(
@@ -664,8 +722,7 @@ export function BorrowingsReceivablesProvider({
         // Repayment + recomputed parent totals commit atomically. Two separate
         // writes could leave a repayment recorded against a borrowing that
         // still shows the full amount outstanding if the link drops between.
-        const batch = writeBatch(db);
-        batch.set(ref, {
+        const repayment = {
           borrowingId: input.borrowingId,
           amount: input.amount,
           principalComponent: allocation.principalComponent,
@@ -675,14 +732,28 @@ export function BorrowingsReceivablesProvider({
           month: monthFromDateKey(input.date),
           note: input.note ?? "",
           createdAt: serverTimestamp(),
-        });
-        batch.update(
-          doc(db, "users", uid, "borrowings", input.borrowingId),
-          denormalizedBorrowingFields(nextSummary)
+        };
+        // SPENDLY-496: the paying account's balance drops in the same batch.
+        const balanceOps = await debtLedgerBalanceOps(
+          db,
+          uid,
+          [],
+          [{ kind: "borrowingRepayment", row: { ...repayment, id: ref.id } as unknown as BorrowingRepayment }],
+          today
         );
-        const outcome = await commitWrite(() => batch.commit(), {
-          label: "repayment",
-        });
+        const outcome = await commitMutations(
+          uid,
+          [
+            { op: "set", ref, data: repayment },
+            {
+              op: "update",
+              ref: doc(db, "users", uid, "borrowings", input.borrowingId),
+              data: denormalizedBorrowingFields(nextSummary),
+            },
+            ...balanceOps,
+          ],
+          { label: "repayment" }
+        );
 
         toast.success(
           writeSavedMessage(
@@ -708,8 +779,8 @@ export function BorrowingsReceivablesProvider({
       if (!uid || !db) return false;
       const borrowing = borrowings.find((b) => b.id === borrowingId);
       try {
-        const batch = writeBatch(db);
-        batch.delete(doc(db, "users", uid, "borrowingRepayments", repaymentId));
+        const repaymentRef = doc(db, "users", uid, "borrowingRepayments", repaymentId);
+        const ops: MutationOp[] = [{ op: "delete", ref: repaymentRef }];
 
         if (borrowing) {
           const nextSummary = summarizeBorrowing(
@@ -717,13 +788,30 @@ export function BorrowingsReceivablesProvider({
             borrowingRepayments.filter((r) => r.id !== repaymentId),
             today
           );
-          batch.update(
-            doc(db, "users", uid, "borrowings", borrowingId),
-            denormalizedBorrowingFields(nextSummary)
+          ops.push({
+            op: "update",
+            ref: doc(db, "users", uid, "borrowings", borrowingId),
+            data: denormalizedBorrowingFields(nextSummary),
+          });
+        }
+
+        // SPENDLY-496: give the money back to the paying account.
+        const removed =
+          borrowingRepayments.find((r) => r.id === repaymentId) ??
+          (await readLedgerRow<BorrowingRepayment>(repaymentRef));
+        if (removed) {
+          ops.push(
+            ...(await debtLedgerBalanceOps(
+              db,
+              uid,
+              [{ kind: "borrowingRepayment", row: removed }],
+              [],
+              today
+            ))
           );
         }
 
-        const outcome = await commitWrite(() => batch.commit(), {
+        const outcome = await commitMutations(uid, ops, {
           label: "repayment deletion",
         });
 
@@ -800,30 +888,39 @@ export function BorrowingsReceivablesProvider({
       }
       try {
         const ref = doc(collection(db, "users", uid, "receivables"));
-        const outcome = await commitWrite(
-          () =>
-            setDoc(ref, {
-              ...input,
-              userId: uid,
-              personId: input.personId ?? null,
-              dueDate: input.dueDate ?? null,
-              purpose: input.purpose ?? "",
-              note: input.note ?? "",
-              ...(input.spaceId ? { spaceId: input.spaceId } : {}),
-              interestRate: input.interestRate ?? 0,
-              interestType: input.interestType ?? "NONE",
-              interestFrequency: input.interestFrequency ?? "NONE",
-              interestBasis: input.interestBasis ?? "OUTSTANDING_PRINCIPAL",
-              interestStoppedDate: null,
-              waivedInterest: 0,
-              totalReceived: 0,
-              outstandingAmount: input.originalAmount,
-              accruedInterest: 0,
-              status: "ACTIVE",
-              settledDate: null,
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            }),
+        const data = {
+          ...input,
+          userId: uid,
+          personId: input.personId ?? null,
+          dueDate: input.dueDate ?? null,
+          purpose: input.purpose ?? "",
+          note: input.note ?? "",
+          ...(input.spaceId ? { spaceId: input.spaceId } : {}),
+          interestRate: input.interestRate ?? 0,
+          interestType: input.interestType ?? "NONE",
+          interestFrequency: input.interestFrequency ?? "NONE",
+          interestBasis: input.interestBasis ?? "OUTSTANDING_PRINCIPAL",
+          interestStoppedDate: null,
+          waivedInterest: 0,
+          totalReceived: 0,
+          outstandingAmount: input.originalAmount,
+          accruedInterest: 0,
+          status: "ACTIVE",
+          settledDate: null,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+        // SPENDLY-496: the source account's balance drops in the same batch.
+        const balanceOps = await debtLedgerBalanceOps(
+          db,
+          uid,
+          [],
+          [{ kind: "receivable", row: { ...data, id: ref.id } as unknown as Receivable }],
+          today
+        );
+        const outcome = await commitMutations(
+          uid,
+          [{ op: "set", ref, data }, ...balanceOps],
           { label: "receivable" }
         );
         toast.success(writeSavedMessage(outcome, "Money lent recorded"));
@@ -834,7 +931,7 @@ export function BorrowingsReceivablesProvider({
         return null;
       }
     },
-    [uid]
+    [uid, today]
   );
 
   const updateReceivable = useCallback(
@@ -874,8 +971,23 @@ export function BorrowingsReceivablesProvider({
           Object.assign(payload, built.fields);
         }
 
-        const outcome = await commitWrite(
-          () => updateDoc(doc(db, "users", uid, "receivables", id), payload),
+        // SPENDLY-496: an amount, account or date edit moves the balance by
+        // the difference, in the same batch.
+        const balanceOps = existing
+          ? await debtLedgerBalanceOps(
+              db,
+              uid,
+              [{ kind: "receivable", row: existing }],
+              [{ kind: "receivable", row: { ...existing, ...payload } as Receivable }],
+              today
+            )
+          : [];
+        const outcome = await commitMutations(
+          uid,
+          [
+            { op: "update", ref: doc(db, "users", uid, "receivables", id), data: payload },
+            ...balanceOps,
+          ],
           { label: "receivable" }
         );
 
@@ -911,10 +1023,28 @@ export function BorrowingsReceivablesProvider({
           return false;
         }
 
-        const batch = writeBatch(db);
-        linked.docs.forEach((repaymentDoc) => batch.delete(repaymentDoc.ref));
-        batch.delete(doc(db, "users", uid, "receivables", id));
-        const outcome = await commitWrite(() => batch.commit(), {
+        const receivableRef = doc(db, "users", uid, "receivables", id);
+        const parent =
+          receivables.find((r) => r.id === id) ??
+          (await readLedgerRow<Receivable>(receivableRef));
+        // SPENDLY-496: the cascade reverses the lend and every collection.
+        const before: LedgerRow[] = [
+          ...(parent ? [{ kind: "receivable", row: parent } as LedgerRow] : []),
+          ...linked.docs.map(
+            (d) =>
+              ({
+                kind: "receivableRepayment",
+                row: { ...(d.data() as ReceivableRepayment), id: d.id },
+              }) as LedgerRow
+          ),
+        ];
+        const balanceOps = await debtLedgerBalanceOps(db, uid, before, [], today);
+        const ops: MutationOp[] = [
+          ...linked.docs.map((d): MutationOp => ({ op: "delete", ref: d.ref })),
+          { op: "delete", ref: receivableRef },
+          ...balanceOps,
+        ];
+        const outcome = await commitMutations(uid, ops, {
           label: "receivable deletion",
         });
 
@@ -926,7 +1056,7 @@ export function BorrowingsReceivablesProvider({
         return false;
       }
     },
-    [uid]
+    [uid, receivables, today]
   );
 
   const addReceivableRepayment = useCallback(
@@ -987,8 +1117,7 @@ export function BorrowingsReceivablesProvider({
         // Repayment + recomputed parent totals commit atomically. Two separate
         // writes could leave money recorded as received while the receivable
         // still shows the full amount outstanding if the link drops between.
-        const batch = writeBatch(db);
-        batch.set(ref, {
+        const repayment = {
           receivableId: input.receivableId,
           amount: input.amount,
           principalComponent: allocation.principalComponent,
@@ -998,14 +1127,28 @@ export function BorrowingsReceivablesProvider({
           month: monthFromDateKey(input.date),
           note: input.note ?? "",
           createdAt: serverTimestamp(),
-        });
-        batch.update(
-          doc(db, "users", uid, "receivables", input.receivableId),
-          denormalizedReceivableFields(nextSummary)
+        };
+        // SPENDLY-496: the receiving account's balance rises in the same batch.
+        const balanceOps = await debtLedgerBalanceOps(
+          db,
+          uid,
+          [],
+          [{ kind: "receivableRepayment", row: { ...repayment, id: ref.id } as unknown as ReceivableRepayment }],
+          today
         );
-        const outcome = await commitWrite(() => batch.commit(), {
-          label: "repayment",
-        });
+        const outcome = await commitMutations(
+          uid,
+          [
+            { op: "set", ref, data: repayment },
+            {
+              op: "update",
+              ref: doc(db, "users", uid, "receivables", input.receivableId),
+              data: denormalizedReceivableFields(nextSummary),
+            },
+            ...balanceOps,
+          ],
+          { label: "repayment" }
+        );
 
         toast.success(
           writeSavedMessage(
@@ -1031,8 +1174,8 @@ export function BorrowingsReceivablesProvider({
       if (!uid || !db) return false;
       const receivable = receivables.find((r) => r.id === receivableId);
       try {
-        const batch = writeBatch(db);
-        batch.delete(doc(db, "users", uid, "receivableRepayments", repaymentId));
+        const repaymentRef = doc(db, "users", uid, "receivableRepayments", repaymentId);
+        const ops: MutationOp[] = [{ op: "delete", ref: repaymentRef }];
 
         if (receivable) {
           const nextSummary = summarizeReceivable(
@@ -1040,13 +1183,30 @@ export function BorrowingsReceivablesProvider({
             receivableRepayments.filter((r) => r.id !== repaymentId),
             today
           );
-          batch.update(
-            doc(db, "users", uid, "receivables", receivableId),
-            denormalizedReceivableFields(nextSummary)
+          ops.push({
+            op: "update",
+            ref: doc(db, "users", uid, "receivables", receivableId),
+            data: denormalizedReceivableFields(nextSummary),
+          });
+        }
+
+        // SPENDLY-496: take the collected money back out of the account.
+        const removed =
+          receivableRepayments.find((r) => r.id === repaymentId) ??
+          (await readLedgerRow<ReceivableRepayment>(repaymentRef));
+        if (removed) {
+          ops.push(
+            ...(await debtLedgerBalanceOps(
+              db,
+              uid,
+              [{ kind: "receivableRepayment", row: removed }],
+              [],
+              today
+            ))
           );
         }
 
-        const outcome = await commitWrite(() => batch.commit(), {
+        const outcome = await commitMutations(uid, ops, {
           label: "repayment deletion",
         });
 

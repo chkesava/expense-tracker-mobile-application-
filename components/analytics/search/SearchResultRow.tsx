@@ -4,12 +4,15 @@ import { ArrowDownLeft, ArrowUpRight, ChevronRight } from "lucide-react-native";
 
 import { HighlightedText } from "@/components/analytics/search/HighlightedText";
 import {
-  insightAccents,
-  insightSurface,
+  useInsightAccents,
+  useInsightSurface,
 } from "@/components/analytics/insightsTheme";
 import { Amount } from "@/components/common/Amount";
 import { haptic } from "@/lib/haptics";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { useTheme } from "@/theme/ThemeProvider";
+import { withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export interface SearchResultRowProps {
@@ -38,12 +41,14 @@ export function SearchResultRow({
 }: SearchResultRowProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const surface = insightSurface(isDark);
-  const accents = insightAccents(isDark);
+  const surface = useInsightSurface();
+  const accents = useInsightAccents();
 
   const isExpense = type === "expense";
-  const accent = isExpense ? accents.pink : accents.green;
-  const tintRgb = isExpense ? "244, 63, 94" : "74, 222, 128";
+  const { settings } = useSettings();
+  const displayDate = formatDisplayDate(date, settings?.dateFormat);
+  // SPENDLY-540: spending is info, not red.
+  const accent = isExpense ? accents.spend : accents.positive;
 
   const highlight = { color: accent, fontWeight: "800" as const };
 
@@ -53,8 +58,8 @@ export function SearchResultRow({
         style={[
           styles.iconBox,
           {
-            backgroundColor: `rgba(${tintRgb}, ${isDark ? 0.13 : 0.08})`,
-            borderColor: `rgba(${tintRgb}, ${isDark ? 0.26 : 0.16})`,
+            backgroundColor: withAlpha(accent, isDark ? 0.13 : 0.08),
+            borderColor: withAlpha(accent, isDark ? 0.26 : 0.16),
           },
         ]}
       >
@@ -78,7 +83,7 @@ export function SearchResultRow({
             style={[styles.meta, { color: theme.colors.mutedForeground }]}
             numberOfLines={1}
           >
-            {date} ·{" "}
+            {displayDate} ·{" "}
           </Text>
           <HighlightedText
             text={category}
@@ -93,7 +98,7 @@ export function SearchResultRow({
             text={accountName}
             query={query}
             numberOfLines={1}
-            style={[styles.account, { color: accent }]}
+            style={[styles.account, { color: theme.colors.mutedForeground }]}
             highlightStyle={styles.accountHighlight}
           />
         ) : null}
@@ -108,7 +113,7 @@ export function SearchResultRow({
           numberOfLines={1}
           style={[
             styles.amount,
-            { color: isExpense ? theme.colors.foreground : accents.green },
+            { color: isExpense ? theme.colors.foreground : accents.positive },
           ]}
         />
         {onPress ? (
@@ -134,7 +139,7 @@ export function SearchResultRow({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${title}, ${date}, ${category}`}
+      accessibilityLabel={`${title}, ${displayDate}, ${category}`}
       onPress={() => {
         void haptic.selection();
         onPress();

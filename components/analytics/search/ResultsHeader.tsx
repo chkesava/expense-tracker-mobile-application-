@@ -3,12 +3,11 @@ import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { Check, ChevronDown } from "lucide-react-native";
 
 import {
-  insightAccents,
-  insightSurface,
+  useInsightAccents,
+  useInsightSurface,
 } from "@/components/analytics/insightsTheme";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 
 /** Client-side orderings over the already-loaded result set. */
 export type SearchSort = "latest" | "oldest" | "highest" | "lowest";
@@ -31,10 +30,9 @@ export function ResultsHeader({
   sort,
   onSortChange,
 }: ResultsHeaderProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const surface = insightSurface(isDark);
-  const accents = insightAccents(isDark);
+  const { theme } = useTheme();
+  const surface = useInsightSurface();
+  const accents = useInsightAccents();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const activeLabel =
@@ -65,10 +63,10 @@ export function ResultsHeader({
         <Text style={[styles.sortLabel, { color: theme.colors.mutedForeground }]}>
           Sort:
         </Text>
-        <Text style={[styles.sortValue, { color: accents.green }]}>
+        <Text style={[styles.sortValue, { color: accents.accent }]}>
           {activeLabel}
         </Text>
-        <ChevronDown size={14} color={accents.green} strokeWidth={2.4} />
+        <ChevronDown size={14} color={accents.accent} strokeWidth={2.4} />
       </Pressable>
 
       <Modal
@@ -105,7 +103,7 @@ export function ResultsHeader({
                   accessibilityState={{ selected: isActive }}
                   style={({ pressed }) => [
                     styles.menuItem,
-                    isActive && { backgroundColor: accents.greenDim },
+                    isActive && { backgroundColor: accents.accentDim },
                     pressed && styles.pressed,
                   ]}
                 >
@@ -113,7 +111,7 @@ export function ResultsHeader({
                     style={[
                       styles.menuItemText,
                       {
-                        color: isActive ? accents.green : theme.colors.foreground,
+                        color: isActive ? accents.accent : theme.colors.foreground,
                         fontWeight: isActive ? "700" : "500",
                       },
                     ]}
@@ -121,7 +119,7 @@ export function ResultsHeader({
                     {option.label}
                   </Text>
                   {isActive ? (
-                    <Check size={16} color={accents.green} strokeWidth={2.6} />
+                    <Check size={16} color={accents.accent} strokeWidth={2.6} />
                   ) : null}
                 </Pressable>
               );

@@ -32,7 +32,6 @@ import { writeSavedMessage } from "@/lib/firestoreWrite";
 import { useAuth } from "@/providers/AuthProvider";
 import { createExpense } from "@/services/ledger/createLedgerTransaction";
 import type { CreditCardBill } from "@/shared/types/creditCardBill";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { roundMoney } from "@/shared/utils/accountBalance";
 import {
   matchStatementLines,
@@ -51,6 +50,8 @@ import { planStatementImport } from "@/shared/utils/statementImport";
 
 import { validateCashbackInput } from "@/shared/utils/cashbackValidate";
 import { todayDateKey } from "@/shared/utils/dates";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useTheme } from "@/theme/ThemeProvider";
 
 type ReviewRow =
@@ -192,6 +193,9 @@ export function ReconcileStatementModal({
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
   const { settings } = useSettings();
+  // SPENDLY-553: confirmation text is masked in ghost mode, like every amount.
+  const money = useGhostMoney(currency);
+  const scopeVars = useSpendlyScopeVars();
   const { bills, updateBill } = useCreditCardBills();
 
   const [pasteText, setPasteText] = useState("");
@@ -517,7 +521,7 @@ export function ReconcileStatementModal({
       }
       appDialog.alert(
         "Record as cashback?",
-        `Add ${formatAmount(amount, currency)} as cashback on ${accountName}. This reduces what the card owes. It is not a bill payment and no purchase is changed.`,
+        `Add ${money(amount)} as cashback on ${accountName}. This reduces what the card owes. It is not a bill payment and no purchase is changed.`,
         [
           { text: "Not now", style: "cancel" },
           {
@@ -562,7 +566,7 @@ export function ReconcileStatementModal({
     if (!openBill) return;
     appDialog.alert(
       "Update statement amount?",
-      `Replace the open bill with the app total ${formatAmount(appCycleTotal, currency)}? This does not add expenses.`,
+      `Replace the open bill with the app total ${money(appCycleTotal)}? This does not add expenses.`,
       [
         { text: "Not now", style: "cancel" },
         {
@@ -814,6 +818,9 @@ export function ReconcileStatementModal({
             paddingTop: Platform.OS === "ios" ? 16 : insets.top + 8,
             paddingBottom: Math.max(insets.bottom, 16),
           },
+          // SPENDLY-553: an RN Modal portals outside SpendlyUIScope on web;
+          // re-apply the theme variables so its Inputs/Buttons keep their colours.
+          scopeVars,
         ]}
       >
         <View style={styles.titleRow}>

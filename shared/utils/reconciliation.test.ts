@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calculateDashboardSummaries, calculateAccountBalances } from "./reconciliation";
+import { calculateDashboardSummaries, calculateAccountBalances, planDashboardSummaryRepair, strayDottedCategoryFields } from "./reconciliation";
 import { borrowingsCreditedTo, repaymentsPaidFrom, receivablesPaidFrom, receivableRepaymentsInto } from "./accountBalance";
 import type { Expense, Income, Account } from "../types/expense";
 import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
@@ -143,5 +143,71 @@ describe("reconciliation", () => {
 
     // +5000 borrowed in, -1000 repaid, -2000 lent out, +500 collected back.
     expect(res.currentBalance).toBe(2500);
+  });
+});
+
+describe("planDashboardSummaryRepair (SPENDLY-495)", () => {
+  const recalculated = calculateDashboardSummaries(
+    [
+      { id: "e1", amount: 100, category: "Food", subcategory: "Dining", month: "2026-10", date: "2026-10-01" } as Expense,
+      { id: "e2", amount: 40, category: "Travel", month: "2026-10", date: "2026-10-02" } as Expense,
+    ],
+    [{ id: "i1", amount: 500, month: "2026-10", date: "2026-10-03" } as Income]
+  );
+
+  it("finds the literal dotted fields the old writes left", () => {
+    expect(strayDottedCategoryFields({ totalExpenses: 1, "categoryTotals.Food": 5, categoryTotals: {} })).toEqual([
+      "categoryTotals.Food",
+    ]);
+  });
+
+  it("reports nothing to change when the stored doc already matches", () => {
+    const [plan] = planDashboardSummaryRepair(
+      [{ id: "dashboard_2026-10", data: { ...recalculated.get("2026-10") } }],
+      recalculated
+    );
+    expect(plan.variances).toEqual([]);
+    expect(plan.strayFields).toEqual([]);
+  });
+
+  it("lists totals, category keys and stray fields that differ", () => {
+    const [plan] = planDashboardSummaryRepair(
+      [
+        {
+          id: "dashboard_2026-10",
+          data: {
+            totalExpenses: 140,
+            totalIncome: 500,
+            transactionCount: 3,
+            categoryTotals: { Food: 100, "Food::Snacks": -20 },
+            "categoryTotals.Food": 100,
+          },
+        },
+      ],
+      recalculated
+    );
+    expect(plan.strayFields).toEqual(["categoryTotals.Food"]);
+    expect(plan.variances).toEqual([
+      "categoryTotals[Food::Dining]: 0 → 100",
+      "categoryTotals[Food::Snacks]: -20 → 0",
+      "categoryTotals[Travel]: 0 → 40",
+    ]);
+    expect(plan.next.categoryTotals).toEqual({ Food: 100, "Food::Dining": 100, Travel: 40 });
+  });
+
+  it("plans a stored month with no rows left back to zero", () => {
+    const plans = planDashboardSummaryRepair(
+      [{ id: "dashboard_2026-08", data: { totalExpenses: 75, transactionCount: 1, categoryTotals: { Food: 75 } } }],
+      recalculated
+    );
+    const aug = plans.find((p) => p.period === "2026-08")!;
+    expect(aug.next).toEqual({ period: "2026-08", totalExpenses: 0, totalIncome: 0, transactionCount: 0, categoryTotals: {} });
+    expect(aug.variances).toContain("totalExpenses: 75 → 0");
+    expect(plans.find((p) => p.period === "2026-10")!.variances).toContain("missing summary doc");
+  });
+
+  it("ignores summary docs that are not dashboard months", () => {
+    const plans = planDashboardSummaryRepair([{ id: "netWorth", data: { netWorth: 1 } }], new Map());
+    expect(plans).toEqual([]);
   });
 });

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
@@ -12,9 +13,10 @@ import {
   validateReconciliation,
   type EpfReconciliationInput,
 } from "@/shared/features/epf/utils/reconciliation";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 import { fieldErrorsFromIssues } from "@/shared/utils/fieldErrors";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { DateField } from "@/components/common/DateField";
 
 type Props = {
   isOpen: boolean;
@@ -58,7 +60,8 @@ export function EpfReconcileSheet({
     setErrors({});
   }, [isOpen]);
 
-  const money = (value: number) => formatAmount(value, currency);
+  // SPENDLY-544: ghost-aware; EPF ignored ghost mode almost everywhere.
+  const money = useGhostMoney(currency);
   const parsed = Number(actualBalance);
   const hasAmount = actualBalance !== "" && Number.isFinite(parsed);
   const variance = useMemo(
@@ -103,7 +106,22 @@ export function EpfReconcileSheet({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Reconcile with EPFO">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Reconcile with EPFO"
+      // SPENDLY-554: 6a form pattern; same handler, loading, disabled and label.
+      footer={
+        <SheetActions
+          primary={{
+            label: "Record balance",
+            onPress: handleSubmit,
+            loading: saving,
+            disabled: !hasAmount,
+          }}
+        />
+      }
+    >
       <View style={styles.form}>
         <View style={[styles.compare, { backgroundColor: theme.colors.muted }]}>
           <Text style={[styles.compareLabel, { color: theme.colors.mutedForeground }]}>
@@ -159,14 +177,7 @@ export function EpfReconcileSheet({
           </View>
         ) : null}
 
-        <Input
-          label="Date observed (YYYY-MM-DD)"
-          value={date}
-          onChangeText={setDate}
-          placeholder="YYYY-MM-DD"
-          autoCapitalize="none"
-          error={errors.date}
-        />
+        <DateField label="Date observed" value={date} onChange={setDate} maxDate={epfTodayKey()} error={errors.date} />
 
         <Input
           label="Reference"
@@ -185,9 +196,6 @@ export function EpfReconcileSheet({
           multiline
         />
 
-        <Button onPress={handleSubmit} loading={saving} disabled={!hasAmount}>
-          Record balance
-        </Button>
       </View>
     </Modal>
   );

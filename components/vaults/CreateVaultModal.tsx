@@ -1,24 +1,17 @@
 import React, { useState } from "react";
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import { Check, Plus, Shield, Users, X } from "lucide-react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Check, Users } from "lucide-react-native";
 
-import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Input } from "@/components/ui/Input";
 import { toast } from "@/lib/toast";
 import { useCelebration } from "@/providers/CelebrationProvider";
-import type { SharedVault } from "@/shared/types/vault";
+import { VAULT_COLORS, VAULT_COLOR_INK } from "@/shared/types/vault";
 import { useTheme } from "@/theme/ThemeProvider";
+import { withAlpha } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
-import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 
 export interface CreateVaultModalProps {
   visible: boolean;
@@ -32,17 +25,10 @@ export interface CreateVaultModalProps {
   }) => Promise<any>;
 }
 
-const THEME_COLORS = [
-  "#6366F1", // Indigo
-  "#3B82F6", // Blue
-  "#10B981", // Emerald
-  "#F59E0B", // Amber
-  "#EC4899", // Pink
-  "#8B5CF6", // Purple
-  "#06B6D4", // Cyan
-  "#F97316", // Orange
-];
-
+/**
+ * New shared vault. SPENDLY-549: on the 6a form sheet pattern (common/Modal,
+ * labelled Inputs, pinned SheetActions). What it submits is unchanged.
+ */
 export function CreateVaultModal({
   visible,
   onClose,
@@ -55,7 +41,7 @@ export function CreateVaultModal({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [budget, setBudget] = useState("");
-  const [themeColor, setThemeColor] = useState(THEME_COLORS[0]);
+  const [themeColor, setThemeColor] = useState<string>(VAULT_COLORS[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSave = async () => {
@@ -90,132 +76,100 @@ export function CreateVaultModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
-        <View
-          style={[
-            styles.sheetContainer,
-            {
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.border,
+    <Modal
+      isOpen={visible}
+      onClose={onClose}
+      title="Create shared vault"
+      footer={
+        <SheetActions
+          secondary={{ label: "Cancel", onPress: onClose }}
+          primary={{
+            label: "Create vault",
+            onPress: () => {
+              void handleSave();
             },
-          ]}
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.titleRow}>
-              <View
-                style={[
-                  styles.iconCircle,
-                  { backgroundColor: `${themeColor}20` },
-                ]}
-              >
-                <Users size={20} color={themeColor} />
-              </View>
-              <View>
-                <Text style={[styles.title, { color: theme.colors.foreground }]}>
-                  Create Shared Vault
-                </Text>
-                <Text style={[styles.subtitle, { color: theme.colors.mutedForeground }]}>
-                  Group space for joint budgets and expenses
-                </Text>
-              </View>
-            </View>
-
-            <Button
-              variant="ghost"
-              size="icon"
-              onPress={onClose}
-              hitSlop={12}
-              accessibilityLabel="Close"
-              style={styles.closeBtn}
-            >
-              <X size={20} color={theme.colors.mutedForeground} />
-            </Button>
+            disabled: !name.trim() || isSubmitting,
+            loading: isSubmitting,
+          }}
+        />
+      }
+    >
+      <View style={styles.content}>
+        <View style={styles.intro}>
+          <View style={[styles.iconTile, { backgroundColor: withAlpha(themeColor, 0.14) }]}>
+            <Users size={20} color={themeColor} />
           </View>
+          <Text
+            style={[
+              styles.introText,
+              { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular },
+            ]}
+          >
+            A group space for joint budgets and expenses.
+          </Text>
+        </View>
 
-          <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
-            {/* Vault Name */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.colors.foreground }]}>
-                Vault Name *
-              </Text>
-              <Input
-                value={name}
-                onChangeText={setName}
-                placeholder="e.g. Apartment Expenses, Japan Trip"
-                autoFocus
-              />
-            </View>
+        <Input
+          label="Vault name"
+          value={name}
+          onChangeText={setName}
+          placeholder="e.g. Apartment Expenses, Japan Trip"
+          autoFocus
+        />
 
-            {/* Description */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.colors.foreground }]}>
-                Description
-              </Text>
-              <Input
-                value={description}
-                onChangeText={setDescription}
-                placeholder="Optional notes or purpose..."
-              />
-            </View>
+        <Input
+          label="Description"
+          value={description}
+          onChangeText={setDescription}
+          placeholder="Optional notes or purpose"
+        />
 
-            {/* Target Budget */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.colors.foreground }]}>
-                Monthly Budget Limit ({displayCurrency})
-              </Text>
-              <Input
-                value={budget}
-                onChangeText={setBudget}
-                placeholder="e.g. 25000"
-                keyboardType="numeric"
-              />
-            </View>
+        <Input
+          label={`Monthly budget limit (${displayCurrency})`}
+          value={budget}
+          onChangeText={setBudget}
+          placeholder="e.g. 25000"
+          keyboardType="numeric"
+        />
 
-            {/* Theme Color Selector */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.colors.foreground }]}>
-                Accent Color
-              </Text>
-              <View style={styles.colorsRow}>
-                {THEME_COLORS.map((c) => {
-                  const isSelected = themeColor === c;
-                  return (
-                    <Pressable
-                      key={c}
-                      onPress={() => {
-                        haptic.selection().catch(() => undefined);
-                        setThemeColor(c);
-                      }}
-                      style={[
-                        styles.colorCircle,
-                        { backgroundColor: c },
-                        isSelected && styles.colorCircleSelected,
-                      ]}
-                    >
-                      {isSelected && <Check size={14} color="#FFFFFF" />}
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          </ScrollView>
-
-          {/* Footer */}
-          <View style={[styles.footer, { borderTopColor: theme.colors.border }]}>
-            <Button
-              onPress={handleSave}
-              loading={isSubmitting}
-              disabled={!name.trim() || isSubmitting}
-              style={{ flex: 1 }}
-            >
-              <Text style={{ fontWeight: "800", color: "#FFFFFF" }}>
-                Create Vault
-              </Text>
-            </Button>
+        <View style={styles.colorGroup}>
+          <Text
+            style={[
+              styles.colorLabel,
+              { color: theme.colors.foreground, fontFamily: theme.fontFamily.medium },
+            ]}
+          >
+            Accent colour
+          </Text>
+          <View style={styles.colorsRow} accessibilityRole="radiogroup">
+            {VAULT_COLORS.map((c) => {
+              const isSelected = themeColor === c;
+              return (
+                <Pressable
+                  key={c}
+                  onPress={() => {
+                    haptic.selection().catch(() => undefined);
+                    setThemeColor(c);
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: isSelected }}
+                  accessibilityLabel={`Accent colour ${VAULT_COLORS.indexOf(c) + 1}`}
+                  style={[
+                    styles.colorCircle,
+                    { backgroundColor: c },
+                    isSelected && {
+                      borderWidth: 3,
+                      borderColor: theme.colors.card,
+                      outlineColor: c,
+                    },
+                    isSelected && styles.colorCircleSelected,
+                  ]}
+                >
+                  {isSelected ? <Check size={14} color={VAULT_COLOR_INK} /> : null}
+                </Pressable>
+              );
+            })}
           </View>
-          <SheetBottomInset />
         </View>
       </View>
     </Modal>
@@ -223,83 +177,46 @@ export function CreateVaultModal({
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "flex-end",
+  content: {
+    gap: 14,
   },
-  sheetContainer: {
-    maxHeight: "85%",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderWidth: 1,
-    paddingTop: 18,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    marginBottom: 14,
-  },
-  titleRow: {
+  intro: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    flex: 1,
   },
-  iconCircle: {
+  iconTile: {
     width: 40,
     height: 40,
     borderRadius: 12,
+    borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
   },
-  title: {
-    fontSize: 17,
-    fontWeight: "800",
+  introText: {
+    flex: 1,
+    fontSize: 13,
   },
-  subtitle: {
-    fontSize: 12,
+  colorGroup: {
+    gap: 8,
   },
-  closeBtn: {
-    padding: 4,
-  },
-  body: {
-    paddingHorizontal: 20,
-    gap: 16,
-  },
-  inputGroup: {
-    gap: 6,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: "700",
+  colorLabel: {
+    fontSize: 16,
   },
   colorsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
-    marginTop: 4,
   },
   colorCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
   },
   colorCircleSelected: {
-    borderWidth: 3,
-    borderColor: "#FFFFFF",
-    shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  footer: {
-    padding: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    marginTop: 10,
+    outlineWidth: 2,
+    outlineStyle: "solid",
   },
 });

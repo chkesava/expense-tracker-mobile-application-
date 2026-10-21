@@ -20,11 +20,6 @@ import { Amount } from "@/components/common/Amount";
 import { Input } from "@/components/ui/Input";
 import { Chip } from "@/components/ui/Chip";
 import { Button } from "@/components/ui/Button";
-import {
-  accountAccent,
-  accountAccentBorder,
-  ACCOUNT_RED,
-} from "@/components/accounts/accountScreenTheme";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { toast } from "@/lib/toast";
@@ -42,10 +37,11 @@ import {
   type AccountReconciliationResult,
 } from "@/shared/utils/accountReconciliation";
 import { parseStatementLines, type StatementLine } from "@/shared/utils/statementParse";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import type { FilterableAccountActivity } from "@/shared/utils/accountActivityFilters";
+import { DateField } from "@/components/common/DateField";
 
 const PRESET_LABELS: Record<StatementPreset, string> = {
   "this-month": "This month",
@@ -106,15 +102,18 @@ export function ReconcileAccountModal({
   onSave,
   onRecordAdjustment,
 }: ReconcileAccountModalProps) {
-  const { theme, themeName } = useTheme();
+  const { theme } = useTheme();
+  // SPENDLY-552: an RN Modal portals outside SpendlyUIScope on web; re-apply
+  // the theme variables so its Gluestack controls keep their colours.
+  const scopeVars = useSpendlyScopeVars();
   const surfaces = useSurfaces();
-  const isDark = themeUsesDarkPalette(themeName);
   const insets = useSafeAreaInsets();
-  const accent = accountAccent(isDark);
-  const accentBorder = accountAccentBorder(isDark);
-  const surface = isDark ? "#10141C" : theme.colors.card;
+  // SPENDLY-552: the theme accent, not the fixed account green.
+  const accent = theme.colors.primary;
+  const accentBorder = withAlpha(theme.colors.primary, 0.45);
+  const surface = theme.colors.card;
   const inset = surfaces.tile;
-  const insetBorder = isDark ? "rgba(148,163,184,0.16)" : "rgba(15,23,42,0.09)";
+  const insetBorder = theme.colors.border;
 
   const [preset, setPreset] = useState<StatementPreset>("last-month");
   const [customFrom, setCustomFrom] = useState("");
@@ -327,7 +326,7 @@ export function ReconcileAccountModal({
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
       >
-        <View style={styles.backdrop}>
+        <View style={[styles.backdrop, { backgroundColor: theme.colors.scrim }, scopeVars]}>
           <Pressable
             style={styles.backdropFill}
             onPress={onClose}
@@ -404,12 +403,7 @@ export function ReconcileAccountModal({
                       >
                         From
                       </Text>
-                      <Input
-                        value={customFrom}
-                        onChangeText={setCustomFrom}
-                        placeholder="YYYY-MM-DD"
-                        autoCapitalize="none"
-                      />
+                      <DateField value={customFrom} onChange={setCustomFrom} maxDate={customTo || undefined} accessibilityLabel="From" />
                     </View>
                     <View style={styles.inputColumn}>
                       <Text
@@ -417,18 +411,13 @@ export function ReconcileAccountModal({
                       >
                         To
                       </Text>
-                      <Input
-                        value={customTo}
-                        onChangeText={setCustomTo}
-                        placeholder="YYYY-MM-DD"
-                        autoCapitalize="none"
-                      />
+                      <DateField value={customTo} onChange={setCustomTo} minDate={customFrom || undefined} accessibilityLabel="To" />
                     </View>
                   </View>
                 ) : null}
                 {customValid ? null : (
                   <Text style={[styles.error, { color: theme.colors.destructive }]}>
-                    Enter both dates as YYYY-MM-DD, with From on or before To.
+                    Pick both dates, with From on or before To.
                   </Text>
                 )}
               </View>
@@ -474,29 +463,25 @@ export function ReconcileAccountModal({
                     {
                       backgroundColor:
                         result.status === "balanced"
-                          ? isDark
-                            ? "rgba(74,222,128,0.12)"
-                            : "rgba(22,163,74,0.08)"
-                          : isDark
-                            ? "rgba(248,113,113,0.12)"
-                            : "rgba(239,68,68,0.08)",
+                          ? withAlpha(theme.colors.success, 0.1)
+                          : withAlpha(theme.colors.destructive, 0.1),
                       borderColor:
-                        result.status === "balanced" ? accentBorder : ACCOUNT_RED,
+                        result.status === "balanced" ? withAlpha(theme.colors.success, 0.45) : theme.colors.destructive,
                     },
                   ]}
                 >
                   <View style={styles.varianceHead}>
                     {result.status === "balanced" ? (
-                      <Check size={16} color={accent} />
+                      <Check size={16} color={theme.colors.success} />
                     ) : (
-                      <TriangleAlert size={16} color={ACCOUNT_RED} />
+                      <TriangleAlert size={16} color={theme.colors.destructive} />
                     )}
                     <Text
                       style={[
                         styles.panelTitle,
                         {
                           color:
-                            result.status === "balanced" ? accent : ACCOUNT_RED,
+                            result.status === "balanced" ? theme.colors.success : theme.colors.destructive,
                         },
                       ]}
                     >
@@ -508,7 +493,7 @@ export function ReconcileAccountModal({
                   {balanceRow(
                     "Variance (statement − Spendly)",
                     result.variance,
-                    result.status === "balanced" ? accent : ACCOUNT_RED
+                    result.status === "balanced" ? theme.colors.success : theme.colors.destructive
                   )}
                   {result.status === "balanced" ? (
                     <Text style={[styles.note, { color: theme.colors.mutedForeground }]}>
@@ -647,9 +632,7 @@ export function ReconcileAccountModal({
                 style={({ pressed }) => [
                   styles.footerButton,
                   {
-                    backgroundColor: isDark
-                      ? "rgba(74,222,128,0.16)"
-                      : "rgba(22,163,74,0.12)",
+                    backgroundColor: withAlpha(theme.colors.primary, 0.14),
                     borderColor: accentBorder,
                     opacity: canSave ? 1 : 0.5,
                   },
@@ -674,7 +657,6 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.65)",
   },
   backdropFill: { flex: 1 },
   sheet: {
@@ -724,8 +706,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   chipText: { fontSize: 13 },
-  inputRow: { flexDirection: "row", gap: 12 },
-  inputColumn: { flex: 1, gap: 6 },
+  // SPENDLY-557: wraps so each date field (and its inline picker) gets the full width on phones.
+  inputRow: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  inputColumn: { flexGrow: 1, flexBasis: 220, gap: 6 },
   inputLabel: { fontSize: 11, fontWeight: "600" },
   input: {
     minHeight: 44,

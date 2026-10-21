@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, Text, Modal, ScrollView, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
+import { useGhostMoney } from '@/hooks/useGhostMoney';
 import { useTheme } from '@/theme/ThemeProvider';
 import { X } from 'lucide-react-native';
 import { Amount } from '@/components/common/Amount';
@@ -71,6 +73,10 @@ export function AddHoldingModal({
   onAddCash,
 }: AddHoldingModalProps) {
   const { theme } = useTheme();
+  // SPENDLY-554: the symbol, not the bare code, and masked in ghost mode.
+  const money = useGhostMoney(currency);
+  // SPENDLY-554: RN Modal portals outside SpendlyUIScope on web; keep the theme vars.
+  const scopeVars = useSpendlyScopeVars();
 
   const [instrument, setInstrument] = useState<InstrumentType>('stock');
   const [exchange, setExchange] = useState<Exchange>('NSE');
@@ -178,7 +184,7 @@ export function AddHoldingModal({
               : normalizedSymbol;
       if (fundingSource === 'investment_cash' && !affordability.ok) {
         setError(
-          `Not enough investment cash — you are short ${currency}${affordability.shortfall.toLocaleString('en-IN')}. Add cash from a bank account, or record this as a holding you already own.`
+          `Not enough investment cash — you are short ${money(affordability.shortfall)}. Add cash from a bank account, or record this as a holding you already own.`
         );
         return;
       }
@@ -225,7 +231,7 @@ export function AddHoldingModal({
   return (
     <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={handleClose}>
       <KeyboardAvoidingView
-        style={styles.modalOverlay}
+        style={[styles.modalOverlay, { backgroundColor: theme.colors.scrim }, scopeVars]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -352,7 +358,7 @@ export function AddHoldingModal({
                   <Text style={[styles.fundingLabel, { color: theme.colors.mutedForeground }]}>
                     Investment cash available
                   </Text>
-                  <Amount
+                  <Amount ghostable
                     value={availableCash}
                     currency={currency}
                     style={[styles.fundingValue, textStyle]}
@@ -362,7 +368,7 @@ export function AddHoldingModal({
                   <Text style={[styles.fundingLabel, { color: theme.colors.mutedForeground }]}>
                     {feesValue > 0 ? 'This purchase (incl. charges)' : 'This purchase'}
                   </Text>
-                  <Amount
+                  <Amount ghostable
                     value={purchaseAmount}
                     currency={currency}
                     style={[styles.fundingValue, textStyle]}
@@ -393,7 +399,7 @@ export function AddHoldingModal({
                     <Text style={[styles.fundingLabel, { color: theme.colors.mutedForeground }]}>
                       Cash after this purchase
                     </Text>
-                    <Amount
+                    <Amount ghostable
                       value={cashAfter}
                       currency={currency}
                       style={[styles.fundingValue, textStyle]}
@@ -409,8 +415,7 @@ export function AddHoldingModal({
                 {!affordability.ok && purchaseAmount > 0 ? (
                   <View style={styles.fundingShortfall}>
                     <Text style={[styles.fundingHint, { color: theme.colors.mutedForeground }]}>
-                      Short by {currency}
-                      {affordability.shortfall.toLocaleString('en-IN')} to fund this from investment
+                      Short by {money(affordability.shortfall)} to fund this from investment
                       cash.
                     </Text>
                     {onAddCash ? (
@@ -427,7 +432,7 @@ export function AddHoldingModal({
                 ) : null}
               </View>
 
-              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+              {error ? <Text style={[styles.errorText, { color: theme.colors.destructive }]}>{error}</Text> : null}
 
               <Button
                 onPress={handleSubmit}
@@ -501,7 +506,6 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   modalContent: {
     borderTopLeftRadius: 24,
@@ -556,7 +560,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   errorText: {
-    color: '#ef4444',
     marginBottom: 16,
     textAlign: 'center',
   },

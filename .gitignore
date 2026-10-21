@@ -87,3 +87,4 @@ netlify/functions-dist/
 
 # Local agent/plugin scratch config (not part of the app)
 .agents/
+docs/private/

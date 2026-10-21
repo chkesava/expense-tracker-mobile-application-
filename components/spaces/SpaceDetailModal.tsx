@@ -9,8 +9,11 @@ import {
 } from "react-native";
 import { Pencil, Trash2, X } from "lucide-react-native";
 
-import { Amount } from "@/components/common/Amount";
 import { Modal } from "@/components/common/Modal";
+import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
+import { ProgressIndicator } from "@/components/dashboard/ProgressIndicator";
+import { Chip } from "@/components/ui/Chip";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { SearchBar } from "@/components/common/SearchBar";
 import { Button } from "@/components/ui/Button";
 import { useReceivables } from "@/hooks/useReceivables";
@@ -26,19 +29,10 @@ import {
   buildSpaceCategoryBreakdown,
   expensesInSpace,
   summarizeSpace,
-  type BudgetProgressTier,
 } from "@/shared/utils/spaceMath";
+import { spaceBudgetLeftText, spaceBudgetPresentation } from "@/shared/utils/vaultSpacePresentation";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
-import { haptic } from "@/lib/haptics";
-
-const TIER_COLORS: Record<BudgetProgressTier, string> = {
-  none: "#6B7280",
-  safe: "#10B981",
-  warning: "#F59E0B",
-  danger: "#F97316",
-  over: "#EF4444",
-};
+import { useSurfaces } from "@/theme/surfaces";
 
 type SortMode = "dateDesc" | "dateAsc" | "amountDesc" | "amountAsc";
 
@@ -72,8 +66,9 @@ export function SpaceDetailModal({
   onArchiveToggle,
   onRemoveExpense,
 }: SpaceDetailModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
+  const money = useGhostMoney(currency ?? "INR");
 
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -148,10 +143,7 @@ export function SpaceDetailModal({
   }
 
   const accent = space.color ?? SPACE_COLORS[0];
-  const tierColor = TIER_COLORS[summary.tier];
-  const progress = summary.hasBudget
-    ? Math.min(1, summary.percentUsed / 100)
-    : 0;
+  const budget = spaceBudgetPresentation(summary.tier);
 
   const confirmDelete = () => {
     if (!space.id) return;
@@ -171,20 +163,6 @@ export function SpaceDetailModal({
     );
   };
 
-  const pillStyle = (isActive: boolean) => ({
-    backgroundColor: isActive
-      ? theme.colors.primary
-      : isDark
-        ? "rgba(255,255,255,0.06)"
-        : "rgba(0,0,0,0.04)",
-    borderColor: isActive ? theme.colors.primary : theme.colors.border,
-  });
-
-  const pillTextStyle = (isActive: boolean) => ({
-    color: isActive ? theme.colors.primaryForeground : theme.colors.foreground,
-    fontWeight: isActive ? ("700" as const) : ("500" as const),
-  });
-
   return (
     <Modal isOpen={visible} onClose={onClose} title={space.name}>
       <View style={styles.body}>
@@ -197,22 +175,14 @@ export function SpaceDetailModal({
         <View style={styles.statRow}>
           <View style={styles.statCell}>
             <Text style={[styles.statLabel, { color: theme.colors.mutedForeground }]}>
-              TOTAL SPENT
+              Total spent
             </Text>
-            <Amount
-              value={summary.totalSpent}
-              currency={currency}
-              style={{
-                fontSize: 20,
-                fontWeight: "900",
-                color: theme.colors.foreground,
-              }}
-            />
+            <FinancialAmount value={summary.totalSpent} currency={currency ?? "INR"} size="lg" weight="bold" />
           </View>
 
           <View style={styles.statCell}>
             <Text style={[styles.statLabel, { color: theme.colors.mutedForeground }]}>
-              EXPENSES
+              Expenses
             </Text>
             <Text style={[styles.statValue, { color: theme.colors.foreground }]}>
               {summary.expenseCount}
@@ -221,35 +191,18 @@ export function SpaceDetailModal({
         </View>
 
         {summary.hasBudget ? (
-          <View style={styles.budgetBlock}>
-            <View
-              style={[
-                styles.track,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.08)"
-                    : "rgba(0,0,0,0.06)",
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.fill,
-                  { width: `${progress * 100}%`, backgroundColor: tierColor },
-                ]}
-              />
-            </View>
-            <View style={styles.footerRow}>
-              <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
-                Budget {summary.budget} · {summary.percentUsed}% used
+          <ProgressIndicator
+            pct={summary.percentUsed}
+            status={budget.status}
+            value={
+              <Text style={[styles.progressValue, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium }]}>
+                Budget {money(summary.budget)}
               </Text>
-              <Text style={[styles.remaining, { color: tierColor }]}>
-                {summary.budgetRemaining >= 0
-                  ? `${summary.budgetRemaining} left`
-                  : `${Math.abs(summary.budgetRemaining)} over`}
-              </Text>
-            </View>
-          </View>
+            }
+            statusLabel={`${budget.label} · ${spaceBudgetLeftText(summary.budgetRemaining, money)}`}
+            trailing={`${summary.percentUsed}% used`}
+            accessibilityLabel={`${summary.percentUsed} percent of the budget used, ${budget.label}`}
+          />
         ) : null}
 
         {breakdown.length > 0 ? (
@@ -270,9 +223,7 @@ export function SpaceDetailModal({
                     style={[
                       styles.miniTrack,
                       {
-                        backgroundColor: isDark
-                          ? "rgba(255,255,255,0.08)"
-                          : "rgba(0,0,0,0.06)",
+                        backgroundColor: surfaces.track,
                       },
                     ]}
                   >
@@ -288,15 +239,7 @@ export function SpaceDetailModal({
                   </View>
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
-                  <Amount
-                    value={slice.total}
-                    currency={currency}
-                    style={{
-                      fontSize: 13,
-                      fontWeight: "800",
-                      color: theme.colors.foreground,
-                    }}
-                  />
+                  <FinancialAmount value={slice.total} currency={currency ?? "INR"} size="sm" weight="bold" />
                   <Text
                     style={[styles.meta, { color: theme.colors.mutedForeground }]}
                   >
@@ -318,7 +261,7 @@ export function SpaceDetailModal({
                 <Text
                   style={[styles.statLabel, { color: theme.colors.mutedForeground }]}
                 >
-                  LOANS
+                  Loans
                 </Text>
                 <Text style={[styles.statValue, { color: theme.colors.foreground }]}>
                   {spaceReceivables.length}
@@ -329,33 +272,23 @@ export function SpaceDetailModal({
                 <Text
                   style={[styles.statLabel, { color: theme.colors.mutedForeground }]}
                 >
-                  TOTAL LENT
+                  Total lent
                 </Text>
-                <Amount
-                  value={moneyLentSummary.totalLent}
-                  currency={currency}
-                  style={{
-                    fontSize: 20,
-                    fontWeight: "900",
-                    color: theme.colors.foreground,
-                  }}
-                />
+                <FinancialAmount value={moneyLentSummary.totalLent} currency={currency ?? "INR"} size="lg" weight="bold" />
               </View>
 
               <View style={styles.statCell}>
                 <Text
                   style={[styles.statLabel, { color: theme.colors.mutedForeground }]}
                 >
-                  OUTSTANDING
+                  Outstanding
                 </Text>
-                <Amount
+                <FinancialAmount
                   value={moneyLentSummary.totalOutstanding}
-                  currency={currency}
-                  style={{
-                    fontSize: 20,
-                    fontWeight: "900",
-                    color: "#EF4444",
-                  }}
+                  currency={currency ?? "INR"}
+                  size="lg"
+                  weight="bold"
+                  tone="negative"
                 />
               </View>
             </View>
@@ -386,23 +319,16 @@ export function SpaceDetailModal({
                     id: slice.category,
                     label: slice.category,
                   })),
-                ].map((filter) => {
-                  const isActive = categoryFilter === filter.id;
-                  return (
-                    <Pressable
-                      key={filter.id}
-                      onPress={() => {
-                        haptic.selection().catch(() => undefined);
-                        setCategoryFilter(filter.id);
-                      }}
-                      style={[styles.pill, pillStyle(isActive)]}
-                    >
-                      <Text style={[styles.pillText, pillTextStyle(isActive)]}>
-                        {filter.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+                ].map((filter) => (
+                  <Chip
+                    key={filter.id}
+                    label={filter.label}
+                    selected={categoryFilter === filter.id}
+                    appearance="outline"
+                    haptic={categoryFilter !== filter.id}
+                    onPress={() => setCategoryFilter(filter.id)}
+                  />
+                ))}
               </ScrollView>
 
               <ScrollView
@@ -410,23 +336,16 @@ export function SpaceDetailModal({
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.pillRow}
               >
-                {SORT_MODES.map((mode) => {
-                  const isActive = sortMode === mode.id;
-                  return (
-                    <Pressable
-                      key={mode.id}
-                      onPress={() => {
-                        haptic.selection().catch(() => undefined);
-                        setSortMode(mode.id);
-                      }}
-                      style={[styles.pill, pillStyle(isActive)]}
-                    >
-                      <Text style={[styles.pillText, pillTextStyle(isActive)]}>
-                        {mode.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+                {SORT_MODES.map((mode) => (
+                  <Chip
+                    key={mode.id}
+                    label={mode.label}
+                    selected={sortMode === mode.id}
+                    appearance="outline"
+                    haptic={sortMode !== mode.id}
+                    onPress={() => setSortMode(mode.id)}
+                  />
+                ))}
               </ScrollView>
 
               {summary.firstExpenseDate ? (
@@ -437,20 +356,16 @@ export function SpaceDetailModal({
                       id: summary.lastExpenseDate?.slice(0, 7) + "-01",
                       label: "Latest month",
                     },
-                  ].map((filter) => {
-                    const isActive = fromDate === filter.id;
-                    return (
-                      <Pressable
-                        key={filter.label}
-                        onPress={() => setFromDate(filter.id)}
-                        style={[styles.pill, pillStyle(isActive)]}
-                      >
-                        <Text style={[styles.pillText, pillTextStyle(isActive)]}>
-                          {filter.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
+                  ].map((filter) => (
+                    <Chip
+                      key={filter.label}
+                      label={filter.label}
+                      selected={fromDate === filter.id}
+                      appearance="outline"
+                      haptic={fromDate !== filter.id}
+                      onPress={() => setFromDate(filter.id)}
+                    />
+                  ))}
                 </View>
               ) : null}
             </>
@@ -484,15 +399,7 @@ export function SpaceDetailModal({
                     </Text>
                   </View>
 
-                  <Amount
-                    value={expense.amount}
-                    currency={currency}
-                    style={{
-                      fontSize: 14,
-                      fontWeight: "800",
-                      color: theme.colors.foreground,
-                    }}
-                  />
+                  <FinancialAmount value={expense.amount} currency={currency ?? "INR"} size="sm" weight="bold" />
 
                   <Pressable
                     onPress={() => {
@@ -547,6 +454,10 @@ export function SpaceDetailModal({
 }
 
 const styles = StyleSheet.create({
+  progressValue: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
   body: {
     gap: 18,
   },
@@ -570,15 +481,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "900",
   },
-  budgetBlock: {
-    gap: 8,
-  },
-  track: {
-    height: 8,
-    borderRadius: 4,
-    borderCurve: "continuous",
-    overflow: "hidden",
-  },
   miniTrack: {
     height: 4,
     borderRadius: 2,
@@ -589,15 +491,6 @@ const styles = StyleSheet.create({
   fill: {
     height: "100%",
     borderRadius: 4,
-  },
-  footerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  remaining: {
-    fontSize: 11,
-    fontWeight: "800",
   },
   section: {
     gap: 10,
@@ -631,15 +524,5 @@ const styles = StyleSheet.create({
   pillRow: {
     flexDirection: "row",
     gap: 8,
-  },
-  pill: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderCurve: "continuous",
-    borderWidth: 1,
-  },
-  pillText: {
-    fontSize: 12,
   },
 });

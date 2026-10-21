@@ -8,6 +8,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  runTransaction,
   updateDoc,
 } from "firebase/firestore";
 import {
@@ -25,7 +26,7 @@ import { AppState } from "react-native";
 import { getFirestoreDb } from "@/lib/firebase";
 import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
-import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { friendlyErrorMessage, logError, logWarning } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useAccounts } from "@/hooks/useAccounts";
@@ -59,6 +60,7 @@ import {
   type SettledBillRecalculation,
 } from "@/shared/utils/autoCreditCardBills";
 import {
+  billAllocationBasisUnchanged,
   collectCreditBillAllocationPatches,
   collectCreditBillDuplicateResolutions,
 } from "@/shared/utils/creditCardLedger";
@@ -680,24 +682,33 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           remainingAmount: derived.remainingAmount,
         });
         try {
-          await commitWrite(
-            () =>
-              updateDoc(
-                doc(db, "users", user.uid, "creditCardBills", allocation.billId),
-                {
-                  amountPaid: allocation.amountPaid,
-                  paymentIds: allocation.paymentIds,
-                  paymentDate: allocation.paymentDate ?? null,
-                  status: derived.status,
-                  remainingAmount: derived.remainingAmount,
-                  nextReminderAt: derived.nextReminderAt ?? null,
-                  updatedAt: serverTimestamp(),
-                }
-              ),
-            { label: "credit card bill" }
-          );
+          // SPENDLY-497: compare-and-set. A payment recorded since this pass
+          // read the bill (increment + arrayUnion) must not be overwritten by
+          // the absolute value computed here; skip and let the next pass
+          // recompute. Transactions need the server, so offline this throws
+          // and the pass simply retries later.
+          const billRef = doc(db, "users", user.uid, "creditCardBills", allocation.billId);
+          const applied = await runTransaction(db, async (tx) => {
+            const snap = await tx.get(billRef);
+            if (!billAllocationBasisUnchanged(snap.data(), existing)) return false;
+            tx.update(billRef, {
+              amountPaid: allocation.amountPaid,
+              paymentIds: allocation.paymentIds,
+              paymentDate: allocation.paymentDate ?? null,
+              status: derived.status,
+              remainingAmount: derived.remainingAmount,
+              nextReminderAt: derived.nextReminderAt ?? null,
+              updatedAt: serverTimestamp(),
+            });
+            return true;
+          });
+          if (!applied) {
+            // Keep the in-memory view on the stored doc, not the skipped patch.
+            patchedBills.set(allocation.billId, existing);
+          }
         } catch (err) {
-          logError("creditCardBills.allocatePayments", err);
+          patchedBills.set(allocation.billId, existing);
+          logWarning("creditCardBills.allocatePayments", err);
         }
       }
 

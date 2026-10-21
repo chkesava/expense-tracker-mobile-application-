@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 
+import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { ChipRow } from "@/components/settings/SettingsControls";
-import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { shiftDateKey } from "@/shared/utils/dates";
@@ -16,6 +17,7 @@ import {
   type WhatIfChangeType,
 } from "@/shared/utils/whatIfDraft";
 import { useTheme } from "@/theme/ThemeProvider";
+import { DateField } from "@/components/common/DateField";
 
 const MONTHLY_TYPES: WhatIfChangeType[] = ["income_change", "expense_change", "savings"];
 
@@ -92,7 +94,27 @@ export function WhatIfChangeSheet({
   const monthly = MONTHLY_TYPES.includes(type);
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Add a change" density="compact">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Add a change"
+      density="compact"
+      // SPENDLY-555: the 6a form pattern; the action is pinned below the body.
+      footer={
+        <SheetActions
+          secondary={{ label: "Cancel", onPress: onClose }}
+          primary={{
+            label: "Add change",
+            accessibilityLabel: `Add ${label || "change"}`,
+            onPress: () => {
+              setTried(true);
+              if (issues.length) return;
+              onAdd(form);
+            },
+          }}
+        />
+      }
+    >
       <View style={{ gap: theme.space.md }}>
         <View style={{ gap: theme.space.xs }}>
           <ChipRow<WhatIfChangeType> options={WHAT_IF_CHANGE_TYPES.map((t) => ({ value: t, label: WHAT_IF_CHANGE_INFO[t].title }))} selected={type} onSelect={changeType} />
@@ -112,10 +134,10 @@ export function WhatIfChangeSheet({
           />
         ) : null}
 
-        <Input label={info.amountLabel} value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="0" />
+        <Input label={info.amountLabel} value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="0" leadingIcon={<CurrencyPrefix />} />
 
         <View style={{ gap: theme.space.xs }}>
-          <Input label={`${info.dateLabel} (YYYY-MM-DD)`} value={startDate} onChangeText={setStartDate} autoCapitalize="none" />
+          <DateField label={info.dateLabel} value={startDate} onChange={setStartDate} minDate={today} />
           <ChipRow<string>
             options={[
               { value: today, label: "Today" },
@@ -129,18 +151,18 @@ export function WhatIfChangeSheet({
         </View>
 
         {monthly ? (
-          <Input label="Until (optional, YYYY-MM-DD)" value={untilDate} onChangeText={setUntilDate} autoCapitalize="none" helperText="Leave empty to keep it going." />
+          <DateField label="Until (optional)" value={untilDate} onChange={setUntilDate} minDate={startDate || today} clearable placeholder="Keeps going" helperText="Leave empty to keep it going." />
         ) : null}
 
         {type === "loan" ? (
           <View style={{ gap: theme.space.md }}>
-            <View style={{ flexDirection: "row", gap: theme.space.sm }}>
+            <View style={{ flexDirection: "row", alignItems: "flex-end", gap: theme.space.sm }}>
               <Input label="Interest (% a year)" value={rate} onChangeText={setRate} keyboardType="numeric" containerStyle={{ flex: 1 }} />
               <Input label="Tenure (months)" value={tenure} onChangeText={setTenure} keyboardType="numeric" containerStyle={{ flex: 1 }} />
             </View>
-            <View style={{ flexDirection: "row", gap: theme.space.sm }}>
-              <Input label="Down payment" value={downPayment} onChangeText={setDownPayment} keyboardType="numeric" placeholder="Optional" containerStyle={{ flex: 1 }} />
-              <Input label="Fees" value={fees} onChangeText={setFees} keyboardType="numeric" placeholder="Optional" containerStyle={{ flex: 1 }} />
+            <View style={{ flexDirection: "row", alignItems: "flex-end", gap: theme.space.sm }}>
+              <Input label="Down payment" value={downPayment} onChangeText={setDownPayment} keyboardType="numeric" placeholder="Optional" leadingIcon={<CurrencyPrefix />} containerStyle={{ flex: 1 }} />
+              <Input label="Fees" value={fees} onChangeText={setFees} keyboardType="numeric" placeholder="Optional" leadingIcon={<CurrencyPrefix />} containerStyle={{ flex: 1 }} />
             </View>
             <Text style={muted}>The EMI is worked out with a reducing-balance loan at a fixed rate.</Text>
           </View>
@@ -156,16 +178,6 @@ export function WhatIfChangeSheet({
           </View>
         ) : null}
 
-        <Button
-          onPress={() => {
-            setTried(true);
-            if (issues.length) return;
-            onAdd(form);
-          }}
-          accessibilityLabel={`Add ${label || "change"}`}
-        >
-          Add change
-        </Button>
       </View>
     </Modal>
   );

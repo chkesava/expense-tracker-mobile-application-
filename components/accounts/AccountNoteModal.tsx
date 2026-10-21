@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Pin } from "lucide-react-native";
 
 import { Modal } from "@/components/common/Modal";
-import { Button } from "@/components/ui/Button";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Input } from "@/components/ui/Input";
-import { accountAccent } from "@/components/accounts/accountScreenTheme";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
-import { themeUsesDarkPalette } from "@/theme/tokens";
 import type { AccountNote } from "@/shared/types/expense";
 import {
   ACCOUNT_NOTE_BODY_MAX,
@@ -41,10 +39,10 @@ export function AccountNoteModal({
   onClose: () => void;
   onSave: (draft: AccountNoteDraft) => Promise<void>;
 }) {
-  const { theme, themeName } = useTheme();
+  const { theme } = useTheme();
   const surfaces = useSurfaces();
-  const isDark = themeUsesDarkPalette(themeName);
-  const accent = accountAccent(isDark);
+  // SPENDLY-552: the theme accent, not the fixed account green.
+  const accent = theme.colors.primary;
 
   const [draft, setDraft] = useState<AccountNoteDraft>(createEmptyAccountNoteDraft);
   const [saving, setSaving] = useState(false);
@@ -85,11 +83,23 @@ export function AccountNoteModal({
       isOpen={isOpen}
       onClose={onClose}
       title={note ? "Edit note" : "Add note"}
+      // SPENDLY-548: the reference form sheet. The body is the sheet's own
+      // scroller (no nested ScrollView), and the actions are pinned below it.
+      footer={
+        <SheetActions
+          secondary={{ label: "Cancel", onPress: onClose }}
+          primary={{
+            label: note ? "Save" : "Add note",
+            onPress: () => {
+              void handleSave();
+            },
+            disabled: !canSave,
+            loading: saving,
+          }}
+        />
+      }
     >
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.content}
-      >
+      <View style={styles.content}>
         <Input
           label="Title"
           placeholder="Optional"
@@ -128,9 +138,7 @@ export function AccountNoteModal({
                 : surfaces.tile,
               borderColor: draft.pinned
                 ? accent
-                : isDark
-                  ? "rgba(148,163,184,0.16)"
-                  : "rgba(15,23,42,0.08)",
+                : theme.colors.border,
             },
           ]}
         >
@@ -150,23 +158,7 @@ export function AccountNoteModal({
             Pin to top
           </Text>
         </Pressable>
-
-        <View style={styles.actions}>
-          <Button variant="ghost" onPress={onClose} style={styles.action}>
-            Cancel
-          </Button>
-          <Button
-            onPress={() => {
-              void handleSave();
-            }}
-            disabled={!canSave}
-            loading={saving}
-            style={styles.action}
-          >
-            {note ? "Save" : "Add note"}
-          </Button>
-        </View>
-      </ScrollView>
+      </View>
     </Modal>
   );
 }
@@ -174,7 +166,6 @@ export function AccountNoteModal({
 const styles = StyleSheet.create({
   content: {
     gap: 14,
-    paddingBottom: 8,
   },
   bodyInput: {
     minHeight: 110,
@@ -192,13 +183,5 @@ const styles = StyleSheet.create({
   },
   pinLabel: {
     fontSize: 14,
-  },
-  actions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 4,
-  },
-  action: {
-    flex: 1,
   },
 });

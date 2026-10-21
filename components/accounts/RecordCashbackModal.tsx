@@ -3,7 +3,9 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { CreditCard, Gift, Receipt } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Chip } from "@/components/ui/Chip";
@@ -31,6 +33,7 @@ import { formatDateKey, todayDateKey } from "@/shared/utils/dates";
 import { roundMoney } from "@/shared/utils/money";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces, withAlpha } from "@/theme/surfaces";
+import { DateField } from "@/components/common/DateField";
 
 /** How many recent card purchases to offer as link targets. */
 const LINKABLE_PURCHASE_LIMIT = 25;
@@ -286,7 +289,22 @@ export function RecordCashbackModal({
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Record Cashback">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Record Cashback"
+      // SPENDLY-552: 6a form pattern, the submit is pinned below the body.
+      // Same handler, same disabled condition, same label as before.
+      footer={
+        <SheetActions
+          primary={{
+            label: saving ? "Saving..." : "Record Cashback",
+            onPress: () => void handleSubmit(),
+            disabled: saving,
+          }}
+        />
+      }
+    >
       <ScrollView
         contentContainerStyle={{ gap: 16, paddingBottom: 20 }}
         keyboardShouldPersistTaps="handled"
@@ -355,6 +373,7 @@ export function RecordCashbackModal({
               <Amount
                 value={usageInfo.totalOutstanding}
                 currency={displayCurrency}
+                ghostable
                 style={{
                   color: theme.colors.foreground,
                   fontSize: theme.typography.lg,
@@ -389,6 +408,7 @@ export function RecordCashbackModal({
         ) : null}
 
         <Input
+          leadingIcon={<CurrencyPrefix />}
           label="Cashback Amount *"
           value={amount}
           onChangeText={setAmount}
@@ -396,13 +416,7 @@ export function RecordCashbackModal({
           placeholder="0.00"
         />
 
-        <Input
-          label="Cashback Date * (YYYY-MM-DD)"
-          value={date}
-          onChangeText={setDate}
-          autoCapitalize="none"
-          placeholder="2026-01-31"
-        />
+        <DateField label="Cashback Date *" value={date} onChange={setDate} />
 
         {/* Kind */}
         <View style={{ gap: 6 }}>
@@ -539,14 +553,6 @@ export function RecordCashbackModal({
           placeholder="e.g. 100% cashback on recharge"
         />
 
-        <Button
-          onPress={() => void handleSubmit()}
-          disabled={saving}
-          size="lg"
-          style={{ marginTop: 8 }}
-        >
-          {saving ? "Saving..." : "Record Cashback"}
-        </Button>
       </ScrollView>
     </Modal>
   );

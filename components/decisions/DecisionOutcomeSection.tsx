@@ -22,9 +22,11 @@ import {
   varianceSentence,
   type OutcomeDraft,
 } from "@/shared/utils/decisionOutcome";
-import { formatAmount } from "@/shared/utils/formatCurrency";
+import { currencySymbol } from "@/shared/utils/formatCurrency";
 import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useDecisionFormat } from "@/components/decisions/useDecisionFormat";
+import { DateField } from "@/components/common/DateField";
 
 /**
  * Expected vs actual for one decision (SPENDLY-369). Expected and actual are
@@ -43,16 +45,17 @@ export function DecisionOutcomeSection({
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const [open, setOpen] = useState(false);
+  // SPENDLY-547: was hardcoded INR, ignored ghost mode and showed raw ISO dates.
+  const { money, date } = useDecisionFormat();
   const exp = expectedForReview(decision);
   const outcome = decision.outcome;
   const variance = outcome ? outcomeVariance(exp.expected, outcome) : null;
-  const money = (n: number) => formatAmount(n, "INR");
   const body = { color: theme.colors.foreground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.sm };
   const muted = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
   const label = (t: string) => <Text style={{ color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.semibold, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.6 }}>{t}</Text>;
 
   if (!canRecordOutcome(decision) && !outcome) return null;
-  const decidedOn = decision.decidedAtMs ? new Date(decision.decidedAtMs).toISOString().slice(0, 10) : null;
+  const decidedOn = decision.decidedAtMs ? date(decision.decidedAtMs) : null;
 
   return (
     <Section title="Expected vs what happened" subtitle="Your own record — Spendly doesn't judge the result">
@@ -67,7 +70,7 @@ export function DecisionOutcomeSection({
             <>
               {exp.expected.summary ? <Text style={body}>{exp.expected.summary}</Text> : null}
               {exp.expected.amount !== undefined ? <Text style={body}>{money(exp.expected.amount)} (your estimate)</Text> : null}
-              {exp.expected.byDate ? <Text style={muted}>By {exp.expected.byDate}</Text> : null}
+              {exp.expected.byDate ? <Text style={muted}>By {date(exp.expected.byDate)}</Text> : null}
             </>
           ) : (
             <Text style={muted}>You didn't write down an expectation.</Text>
@@ -92,8 +95,8 @@ export function DecisionOutcomeSection({
               {outcome.lessons ? <Text style={body}>Lessons: {outcome.lessons}</Text> : null}
               {outcome.reviewNotes ? <Text style={muted}>Notes: {outcome.reviewNotes}</Text> : null}
               <Text style={muted}>
-                Recorded {new Date(outcome.recordedAtMs).toISOString().slice(0, 10)}
-                {outcome.outcomeDate ? ` · as of ${outcome.outcomeDate}` : ""}
+                Recorded {date(outcome.recordedAtMs)}
+                {outcome.outcomeDate ? ` · as of ${date(outcome.outcomeDate)}` : ""}
               </Text>
             </>
           ) : (
@@ -142,6 +145,7 @@ function OutcomeSheet({
 }) {
   const { theme } = useTheme();
   const [draft, setDraft] = useState<OutcomeDraft>(outcomeToDraft(decision.outcome));
+  const { currency } = useDecisionFormat();
   const [complete, setComplete] = useState(true);
   const [showIssues, setShowIssues] = useState(false);
   useEffect(() => {
@@ -161,9 +165,9 @@ function OutcomeSheet({
     <Modal isOpen={isOpen} onClose={onClose} title="What happened?" density="compact">
       <View style={{ gap: theme.space.md }}>
         <Input label="In your words" value={draft.summary} onChangeText={(summary) => setDraft({ ...draft, summary })} multiline maxLength={DECISION_LIMITS.text} placeholder="e.g. Closed the loan 10 months early" error={showIssues && issues.includes("summary_required") ? "A sentence is enough." : undefined} />
-        <View style={[styles.row, { gap: theme.space.sm }]}>
-          <Input label="Amount, ₹ (optional)" value={draft.amount} onChangeText={(amount) => setDraft({ ...draft, amount })} keyboardType="numbers-and-punctuation" placeholder="0" containerStyle={{ flex: 1 }} helperText="What actually happened" error={showIssues && issues.includes("invalid_amount") ? "Enter a number like 11000" : undefined} />
-          <Input label="As of (optional)" value={draft.outcomeDate} onChangeText={(outcomeDate) => setDraft({ ...draft, outcomeDate })} placeholder="YYYY-MM-DD" containerStyle={{ flex: 1 }} error={showIssues && issues.includes("invalid_date") ? "Use a date like 2027-03-31" : undefined} />
+        <View style={[styles.row, { gap: theme.space.sm, flexWrap: "wrap", alignItems: "flex-start" }]}>
+          <Input label={`Amount, ${currencySymbol(currency)} (optional)`} value={draft.amount} onChangeText={(amount) => setDraft({ ...draft, amount })} keyboardType="numbers-and-punctuation" placeholder="0" containerStyle={{ flexGrow: 1, flexBasis: 140 }} helperText="What actually happened" error={showIssues && issues.includes("invalid_amount") ? "Enter a number like 11000" : undefined} />
+          <DateField label="As of (optional)" value={draft.outcomeDate} onChange={(outcomeDate) => setDraft({ ...draft, outcomeDate })} clearable placeholder="Not set" containerStyle={{ flexGrow: 1, flexBasis: 220 }} error={showIssues && issues.includes("invalid_date") ? "Pick a valid date." : undefined} />
         </View>
         <Chip label="Today" size="sm" appearance="outline" selected={draft.outcomeDate === todayDateKey()} onPress={() => setDraft({ ...draft, outcomeDate: todayDateKey() })} />
         <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm }}>How did it turn out for you? (optional)</Text>

@@ -1,10 +1,12 @@
 import { View, Text, StyleSheet, Modal, Pressable, FlatList } from "react-native";
 import { AppNotification } from "@/shared/features/sip/types";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button } from "@/components/ui/Button";
 import { withAlpha } from "@/theme/surfaces";
 import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 import { X, CheckCircle, AlertCircle, Info } from "lucide-react-native";
+import { useSheetWidthStyle } from "@/hooks/useResponsiveLayout";
 
 export type SipNotificationsModalProps = {
   visible: boolean;
@@ -22,6 +24,10 @@ export function SipNotificationsModal({
   onClearAll,
 }: SipNotificationsModalProps) {
   const { theme } = useTheme();
+  // SPENDLY-554: RN Modal portals outside SpendlyUIScope on web; keep the theme vars.
+  const scopeVars = useSpendlyScopeVars();
+  // SPENDLY-559: centred at dialog width on tablet/desktop web.
+  const sheetWidthStyle = useSheetWidthStyle();
 
   const getIcon = (type: AppNotification["type"]) => {
     switch (type) {
@@ -70,8 +76,8 @@ export function SipNotificationsModal({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={[styles.overlay, { backgroundColor: "rgba(0,0,0,0.5)" }]}>
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View style={[styles.overlay, { backgroundColor: theme.colors.scrim }, scopeVars]}>
+        <View style={[styles.container, { backgroundColor: theme.colors.background }, sheetWidthStyle]}>
           <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
             <Text style={[styles.headerTitle, { color: theme.colors.foreground }]}>Notifications</Text>
             <Button

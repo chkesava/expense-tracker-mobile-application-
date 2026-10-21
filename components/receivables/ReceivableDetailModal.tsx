@@ -32,6 +32,8 @@ import {
 } from "@/shared/utils/receivableMath";
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
+import { withAlpha } from "@/theme/surfaces";
+import { DateField } from "@/components/common/DateField";
 
 export interface ReceivableDetailModalProps {
   visible: boolean;
@@ -180,7 +182,7 @@ export function ReceivableDetailModal({
     if (!receivable.id) return;
 
     if (!isValidDateKey(repaymentDate)) {
-      toast.error("Repayment date must be YYYY-MM-DD");
+      toast.error("Pick a valid repayment date");
       return;
     }
 
@@ -229,7 +231,7 @@ export function ReceivableDetailModal({
     }
 
     if (editDueDate.trim() && !isValidDateKey(editDueDate.trim())) {
-      toast.error("Due date must be YYYY-MM-DD");
+      toast.error("Pick a valid due date");
       return;
     }
 
@@ -390,11 +392,11 @@ export function ReceivableDetailModal({
 
         {summary.status === "FULLY_SETTLED" ? (
           <View
-            style={[styles.settledBanner, { backgroundColor: "rgba(16,185,129,0.14)" }]}
+            style={[styles.settledBanner, { backgroundColor: withAlpha(theme.colors.success, 0.14) }]}
           >
-            <CheckCircle2 size={18} color="#10B981" />
+            <CheckCircle2 size={18} color={theme.colors.success} />
             <View>
-              <Text style={[styles.settledTitle, { color: "#10B981" }]}>
+              <Text style={[styles.settledTitle, { color: theme.colors.success }]}>
                 Fully settled
               </Text>
               {summary.settledDate ? (
@@ -408,11 +410,11 @@ export function ReceivableDetailModal({
 
         {summary.status === "CANCELLED" ? (
           <View
-            style={[styles.settledBanner, { backgroundColor: "rgba(107,114,128,0.14)" }]}
+            style={[styles.settledBanner, { backgroundColor: withAlpha(theme.colors.mutedForeground, 0.14) }]}
           >
-            <Ban size={18} color="#6B7280" />
+            <Ban size={18} color={theme.colors.mutedForeground} />
             <View>
-              <Text style={[styles.settledTitle, { color: "#6B7280" }]}>
+              <Text style={[styles.settledTitle, { color: theme.colors.mutedForeground }]}>
                 Cancelled
               </Text>
             </View>
@@ -427,7 +429,7 @@ export function ReceivableDetailModal({
               >
                 {row.label}
               </Text>
-              <Amount
+              <Amount ghostable
                 value={row.value}
                 currency={currency}
                 style={{
@@ -445,7 +447,7 @@ export function ReceivableDetailModal({
             <Text style={[styles.totalLabel, { color: theme.colors.foreground }]}>
               Outstanding
             </Text>
-            <Amount
+            <Amount ghostable
               value={summary.outstandingAmount}
               currency={currency}
               style={{
@@ -485,7 +487,7 @@ export function ReceivableDetailModal({
                 placeholder={`Min ${summary.principalReceived}`}
               />
               {!canEditAmount ? (
-                <Text style={[styles.meta, { color: "#EF4444" }]}>
+                <Text style={[styles.meta, { color: theme.colors.destructive }]}>
                   Cannot be less than {summary.principalReceived} already received
                 </Text>
               ) : null}
@@ -502,11 +504,7 @@ export function ReceivableDetailModal({
               <Text style={[styles.label, { color: theme.colors.foreground }]}>
                 Due Date (optional)
               </Text>
-              <Input
-                value={editDueDate}
-                onChangeText={setEditDueDate}
-                placeholder="YYYY-MM-DD"
-              />
+              <DateField value={editDueDate} onChange={setEditDueDate} accessibilityLabel="Due date" clearable placeholder="No due date" />
             </View>
 
             <View style={styles.group}>
@@ -631,11 +629,7 @@ export function ReceivableDetailModal({
               <Text style={[styles.label, { color: theme.colors.foreground }]}>
                 Date
               </Text>
-              <Input
-                value={repaymentDate}
-                onChangeText={setRepaymentDate}
-                placeholder="YYYY-MM-DD"
-              />
+              <DateField value={repaymentDate} onChange={setRepaymentDate} accessibilityLabel="Repayment date" />
             </View>
 
             <View style={styles.group}>
@@ -722,8 +716,8 @@ export function ReceivableDetailModal({
               if (receivable.id) void onMarkSettled(receivable.id);
             }}
           >
-            <CheckCircle2 size={16} color="#10B981" />
-            <Text style={{ fontWeight: "700", color: "#10B981" }}>
+            <CheckCircle2 size={16} color={theme.colors.success} />
+            <Text style={{ fontWeight: "700", color: theme.colors.success }}>
               Mark Settled
             </Text>
           </Button>
@@ -749,7 +743,7 @@ export function ReceivableDetailModal({
                   ]}
                 >
                   <View style={{ flex: 1 }}>
-                    <Amount
+                    <Amount ghostable
                       value={repayment.amount}
                       currency={currency}
                       style={{

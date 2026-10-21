@@ -22,11 +22,13 @@ import {
 } from "@/shared/features/portfolio/utils/investmentCash";
 import type { InvestmentCashEntryType } from "@/shared/features/portfolio/types";
 import { formatActivityDateLabel } from "@/shared/utils/activityDisplay";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useTheme } from "@/theme/ThemeProvider";
-import { useSurfaces } from "@/theme/surfaces";
+import { useSurfaces, withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { SheetBottomInset } from "@/components/common/SheetBottomInset";
+import { useSheetWidthStyle } from "@/hooks/useResponsiveLayout";
 
 interface InvestmentCashHistoryModalProps {
   visible: boolean;
@@ -66,6 +68,10 @@ export function InvestmentCashHistoryModal({
   currency,
 }: InvestmentCashHistoryModalProps) {
   const { theme, themeName } = useTheme();
+  // SPENDLY-554: RN Modal portals outside SpendlyUIScope on web; keep the theme vars.
+  const scopeVars = useSpendlyScopeVars();
+  // SPENDLY-559: centred at dialog width on tablet/desktop web.
+  const sheetWidthStyle = useSheetWidthStyle();
   const surfaces = useSurfaces();
   const isDark = themeUsesDarkPalette(themeName);
   const { settings, cashEntries, cashBalance } = usePortfolio();
@@ -87,11 +93,12 @@ export function InvestmentCashHistoryModal({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, { backgroundColor: theme.colors.scrim }, scopeVars]}>
         <Card
           style={[
             styles.contentCard,
             { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+            sheetWidthStyle,
           ]}
         >
           <View style={styles.headerRow}>
@@ -134,8 +141,8 @@ export function InvestmentCashHistoryModal({
               styles.balanceBanner,
               {
                 backgroundColor: isDark
-                  ? "rgba(99, 102, 241, 0.12)"
-                  : "rgba(99, 102, 241, 0.08)",
+                  ? withAlpha(theme.colors.primary, 0.12)
+                  : withAlpha(theme.colors.primary, 0.08),
                 borderColor: theme.colors.primary,
               },
             ]}
@@ -149,7 +156,7 @@ export function InvestmentCashHistoryModal({
             >
               Current Cash Balance
             </Text>
-            <Amount
+            <Amount ghostable
               value={cashBalance}
               currency={currency}
               style={{ fontSize: 22, fontWeight: "800", color: theme.colors.foreground }}
@@ -274,7 +281,7 @@ export function InvestmentCashHistoryModal({
                     </View>
 
                     <View style={styles.activityAmounts}>
-                      <Amount
+                      <Amount ghostable
                         value={Math.abs(row.delta)}
                         currency={currency}
                         prefix={isCredit ? "+" : "−"}
@@ -284,7 +291,7 @@ export function InvestmentCashHistoryModal({
                           color: isCredit ? theme.colors.success : theme.colors.foreground,
                         }}
                       />
-                      <Amount
+                      <Amount ghostable
                         value={row.runningBalance}
                         currency={currency}
                         style={{
@@ -326,7 +333,6 @@ export function InvestmentCashHistoryModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "flex-end",
   },
   contentCard: {

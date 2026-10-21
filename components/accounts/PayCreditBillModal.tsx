@@ -3,13 +3,16 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { CreditCard, Landmark, Wallet } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
+import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Chip } from "@/components/ui/Chip";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
+import { useCreditCardLiveUsage } from "@/hooks/useCreditCardLiveUsage";
 import { useExpenses } from "@/hooks/useExpenses";
 import { appDialog } from "@/lib/appDialog";
 import { logError } from "@/lib/errors";
@@ -22,11 +25,12 @@ import type { Account, AccountPayment, AccountType } from "@/shared/types/expens
 import { getAccountKind } from "@/shared/utils/accountKind";
 import { earliestOpenCreditCardBill } from "@/shared/utils/creditCardBillStatus";
 import { formatDateKey, todayDateKey } from "@/shared/utils/dates";
-import { formatAmount } from "@/shared/utils/formatCurrency";
 import { roundMoney } from "@/shared/utils/money";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { DateField } from "@/components/common/DateField";
 
 export interface PayCreditBillModalProps {
   isOpen: boolean;
@@ -67,6 +71,7 @@ export function PayCreditBillModal({
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const displayCurrency = useDisplayCurrency();
+  const money = useGhostMoney(displayCurrency);
   const { settings } = useSettings();
   const { payments } = useAccountPayments();
   const { expenses } = useExpenses();
@@ -112,16 +117,20 @@ export function PayCreditBillModal({
     return creditCards.find((c) => c.id === toCardId);
   }, [creditCards, toCardId]);
 
+  // SPENDLY-497: cycle numbers derived live; only the total is stored.
+  const selectedCards = useMemo(() => (selectedCard ? [selectedCard] : []), [selectedCard]);
+  const live = useCreditCardLiveUsage(selectedCards).get(selectedCard?.id ?? "");
+
   const usageInfo = useMemo(() => {
     if (!selectedCard) return null;
     return {
-      unbilledSpend: selectedCard.unbilledSpend ?? 0,
-      statementDue: selectedCard.statementDue ?? 0,
+      unbilledSpend: live?.unbilledSpend ?? 0,
+      statementDue: live?.statementDue ?? 0,
       outstanding: selectedCard.currentOutstanding ?? 0,
-      oldestOpenRemaining: selectedCard.oldestOpenRemaining ?? 0,
-      oldestOpenBillId: selectedCard.oldestOpenBillId,
+      oldestOpenRemaining: live?.oldestOpenRemaining ?? 0,
+      oldestOpenBillId: live?.oldestOpenBillId,
     };
-  }, [selectedCard]);
+  }, [selectedCard, live]);
 
   // Sync default credit card
   useEffect(() => {
@@ -305,7 +314,8 @@ export function PayCreditBillModal({
       void runEdit(payment, parsedAmount);
       return;
     }
-    const fmt = (value: number) => formatAmount(value, displayCurrency);
+    // SPENDLY-552: masked in ghost mode, like every other amount on screen.
+    const fmt = money;
     const lines: string[] = [];
     if (!wasExternal) {
       lines.push(`${accountName(payment.fromAccountId)} gets ${fmt(payment.amount)} back.`);
@@ -355,6 +365,23 @@ export function PayCreditBillModal({
       isOpen={isOpen}
       onClose={onClose}
       title={isEdit ? "Edit Bill Payment" : "Pay Credit Card Bill"}
+      // SPENDLY-552: 6a form pattern, the submit is pinned below the body.
+      // Same handler, same disabled condition, same label as before.
+      footer={
+        <SheetActions
+          primary={{
+            label: saving
+              ? isEdit
+                ? "Saving…"
+                : "Processing..."
+              : isEdit
+                ? "Save changes"
+                : "Record Bill Payment",
+            onPress: handleSubmit,
+            disabled: saving,
+          }}
+        />
+      }
     >
       <ScrollView
         contentContainerStyle={{ gap: 16, paddingBottom: 20 }}
@@ -415,6 +442,7 @@ export function PayCreditBillModal({
               <Amount
                 value={usageInfo.outstanding}
                 currency={displayCurrency}
+                ghostable
                 style={{
                   fontSize: theme.typography.md,
                   fontWeight: "700",
@@ -549,6 +577,7 @@ export function PayCreditBillModal({
             Payment Amount *
           </Text>
           <Input
+            leadingIcon={<CurrencyPrefix />}
             value={amount}
             onChangeText={setAmount}
             keyboardType="decimal-pad"
@@ -564,13 +593,9 @@ export function PayCreditBillModal({
               { color: theme.colors.foreground, fontSize: theme.typography.sm },
             ]}
           >
-            Date (YYYY-MM-DD) *
+            Date *
           </Text>
-          <Input
-            value={date}
-            onChangeText={setDate}
-            placeholder="YYYY-MM-DD"
-          />
+          <DateField value={date} onChange={setDate} accessibilityLabel="Date" />
         </View>
 
         {/* Note */}
@@ -590,21 +615,6 @@ export function PayCreditBillModal({
           />
         </View>
 
-        {/* Submit */}
-        <Button
-          onPress={handleSubmit}
-          disabled={saving}
-          size="lg"
-          style={{ marginTop: 8 }}
-        >
-          {saving
-            ? isEdit
-              ? "Saving…"
-              : "Processing..."
-            : isEdit
-              ? "Save changes"
-              : "Record Bill Payment"}
-        </Button>
       </ScrollView>
     </Modal>
   );

@@ -98,6 +98,7 @@ export function PersonalizationPreviewCard() {
             <Amount
               value={48500}
               currency={settings.currency}
+              ghostable
               style={{
                 fontSize: theme.typography.xl,
                 fontWeight: "700",
@@ -131,6 +132,7 @@ export function PersonalizationPreviewCard() {
             <Amount
               value={24500}
               currency={settings.currency}
+              ghostable
               style={{
                 fontSize: theme.typography.xs,
                 color: theme.colors.mutedForeground,

@@ -355,8 +355,17 @@ function RootNavigator() {
           from Metro, so it must be excluded here too, or these would
           register screens for route files that don't exist in that bundle.
         */}
+        {/*
+          SPENDLY-559: Spendly opts out of the shared 480 web cap the same way
+          Ganesh does below. Its shell lays out its own responsive layout
+          (sidebar at ≥1024, capped page content in PageShell); on phones and
+          native nothing changes, since the cap only ever applied to web.
+        */}
         {!IS_LANDING_BUILD && (ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "expense") && (
-          <Stack.Screen name="(app)" />
+          <Stack.Screen
+            name="(app)"
+            options={{ contentStyle: { backgroundColor: theme.colors.background } }}
+          />
         )}
         {!IS_LANDING_BUILD && (ACTIVE_PRODUCT === null || ACTIVE_PRODUCT === "nutrition") && (
           <Stack.Screen name="(nutrition)" options={{ animation: "slide_from_right" }} />

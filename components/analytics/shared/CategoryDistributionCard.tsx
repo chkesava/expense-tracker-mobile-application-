@@ -13,8 +13,8 @@ import {
   AnalyticsCardMeta,
 } from "@/components/analytics/shared/AnalyticsCard";
 import {
-  insightAccents,
-  insightSurface,
+  useInsightAccents,
+  useInsightSurface,
 } from "@/components/analytics/insightsTheme";
 import { Amount } from "@/components/common/Amount";
 import { DonutChart, type DonutSegment } from "@/components/charts/DonutChart";
@@ -50,8 +50,8 @@ export function CategoryDistributionCard({
 }: CategoryDistributionCardProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const surface = insightSurface(isDark);
-  const accents = insightAccents(isDark);
+  const surface = useInsightSurface();
+  const accents = useInsightAccents();
 
   const [expanded, setExpanded] = useState(false);
   const [contentWidth, setContentWidth] = useState(0);
@@ -83,7 +83,7 @@ export function CategoryDistributionCard({
         id: "__others__",
         label: `Others (${tail.length})`,
         value: tailTotal,
-        color: isDark ? "#64748B" : "#94A3B8",
+        color: theme.colors.mutedForeground,
         isOthers: true,
       },
     ];
@@ -95,7 +95,7 @@ export function CategoryDistributionCard({
     return (
       <AnalyticsCard
         title={title}
-        icon={<PieChart size={16} color={accents.pink} strokeWidth={2.4} />}
+        icon={<PieChart size={16} color={accents.spend} strokeWidth={2.4} />}
       >
         <Text style={[styles.empty, { color: theme.colors.mutedForeground }]}>
           {emptyMessage}
@@ -158,13 +158,13 @@ export function CategoryDistributionCard({
             pressed && styles.pressed,
           ]}
         >
-          <Text style={[styles.expandText, { color: accents.green }]}>
+          <Text style={[styles.expandText, { color: accents.positive }]}>
             {expanded ? "Show top 5" : `View all ${data.length} categories`}
           </Text>
           {expanded ? (
-            <ChevronUp size={14} color={accents.green} strokeWidth={2.4} />
+            <ChevronUp size={14} color={accents.positive} strokeWidth={2.4} />
           ) : (
-            <ChevronDown size={14} color={accents.green} strokeWidth={2.4} />
+            <ChevronDown size={14} color={accents.positive} strokeWidth={2.4} />
           )}
         </Pressable>
       ) : null}
@@ -174,7 +174,7 @@ export function CategoryDistributionCard({
   return (
     <AnalyticsCard
       title={title}
-      icon={<PieChart size={16} color={accents.pink} strokeWidth={2.4} />}
+      icon={<PieChart size={16} color={accents.spend} strokeWidth={2.4} />}
       right={<AnalyticsCardMeta>{data.length} categories</AnalyticsCardMeta>}
     >
       <View

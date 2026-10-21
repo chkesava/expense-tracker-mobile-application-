@@ -36,6 +36,8 @@ import {
 } from "@/shared/utils/borrowingMath";
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
+import { withAlpha } from "@/theme/surfaces";
+import { DateField } from "@/components/common/DateField";
 
 export interface BorrowingDetailModalProps {
   visible: boolean;
@@ -156,7 +158,7 @@ export function BorrowingDetailModal({
     if (!borrowing.id) return;
 
     if (!isValidDateKey(date)) {
-      toast.error("Repayment date must be YYYY-MM-DD");
+      toast.error("Pick a valid repayment date");
       return;
     }
 
@@ -215,7 +217,7 @@ export function BorrowingDetailModal({
     }
 
     if (editDueDate.trim() && !isValidDateKey(editDueDate.trim())) {
-      toast.error("Due date must be YYYY-MM-DD");
+      toast.error("Pick a valid due date");
       return;
     }
 
@@ -326,11 +328,11 @@ export function BorrowingDetailModal({
 
         {isSettled ? (
           <View
-            style={[styles.settledBanner, { backgroundColor: "rgba(16,185,129,0.14)" }]}
+            style={[styles.settledBanner, { backgroundColor: withAlpha(theme.colors.success, 0.14) }]}
           >
-            <CheckCircle2 size={18} color="#10B981" />
+            <CheckCircle2 size={18} color={theme.colors.success} />
             <View>
-              <Text style={[styles.settledTitle, { color: "#10B981" }]}>
+              <Text style={[styles.settledTitle, { color: theme.colors.success }]}>
                 Borrowing settled
               </Text>
               {summary.settledDate ? (
@@ -350,7 +352,7 @@ export function BorrowingDetailModal({
               >
                 {row.label}
               </Text>
-              <Amount
+              <Amount ghostable
                 value={row.value}
                 currency={currency}
                 style={{
@@ -368,7 +370,7 @@ export function BorrowingDetailModal({
             <Text style={[styles.totalLabel, { color: theme.colors.foreground }]}>
               Total outstanding
             </Text>
-            <Amount
+            <Amount ghostable
               value={summary.totalOutstanding}
               currency={currency}
               style={{
@@ -427,7 +429,7 @@ export function BorrowingDetailModal({
                 placeholder={`Min ${summary.principalPaid}`}
               />
               {editPrincipal !== "" && Number(editPrincipal) < summary.principalPaid ? (
-                <Text style={[styles.meta, { color: "#EF4444" }]}>
+                <Text style={[styles.meta, { color: theme.colors.destructive }]}>
                   Cannot be less than {summary.principalPaid} already repaid
                 </Text>
               ) : null}
@@ -437,11 +439,7 @@ export function BorrowingDetailModal({
               <Text style={[styles.label, { color: theme.colors.foreground }]}>
                 Due Date (optional)
               </Text>
-              <Input
-                value={editDueDate}
-                onChangeText={setEditDueDate}
-                placeholder="YYYY-MM-DD"
-              />
+              <DateField value={editDueDate} onChange={setEditDueDate} accessibilityLabel="Due date" clearable placeholder="No due date" />
             </View>
 
             <View style={styles.group}>
@@ -533,7 +531,7 @@ export function BorrowingDetailModal({
               <Text style={[styles.label, { color: theme.colors.foreground }]}>
                 Date
               </Text>
-              <Input value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" />
+              <DateField value={date} onChange={setDate} accessibilityLabel="Repayment date" />
             </View>
 
             <View style={styles.group}>
@@ -600,8 +598,8 @@ export function BorrowingDetailModal({
         */}
         {!isEditing && !isSettled ? (
           <Button variant="outline" onPress={confirmCloseBorrowing}>
-            <CheckCircle2 size={16} color="#10B981" />
-            <Text style={{ fontWeight: "700", color: "#10B981" }}>
+            <CheckCircle2 size={16} color={theme.colors.success} />
+            <Text style={{ fontWeight: "700", color: theme.colors.success }}>
               Mark Completed
             </Text>
           </Button>
@@ -627,7 +625,7 @@ export function BorrowingDetailModal({
                   ]}
                 >
                   <View style={{ flex: 1 }}>
-                    <Amount
+                    <Amount ghostable
                       value={repayment.amount}
                       currency={currency}
                       style={{

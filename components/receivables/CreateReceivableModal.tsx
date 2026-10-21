@@ -2,6 +2,8 @@ import React, { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Modal } from "@/components/common/Modal";
+import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
+import { SheetActions } from "@/components/common/SheetActions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Chip } from "@/components/ui/Chip";
@@ -23,6 +25,7 @@ import {
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { DateField } from "@/components/common/DateField";
 
 export interface CreateReceivableModalProps {
   visible: boolean;
@@ -97,12 +100,12 @@ export function CreateReceivableModal({
     }
 
     if (!isValidDateKey(lentDate)) {
-      toast.error("Lent date must be YYYY-MM-DD");
+      toast.error("Pick a valid lent date");
       return;
     }
 
     if (dueDate.trim() && !isValidDateKey(dueDate.trim())) {
-      toast.error("Due date must be YYYY-MM-DD");
+      toast.error("Pick a valid due date");
       return;
     }
 
@@ -137,7 +140,25 @@ export function CreateReceivableModal({
   };
 
   return (
-    <Modal isOpen={visible} onClose={onClose} title="Record Money Lent">
+    <Modal
+      isOpen={visible}
+      onClose={onClose}
+      title="Record Money Lent"
+      // SPENDLY-553: 6a form pattern; same handler, disabled and label as before.
+      footer={
+        <SheetActions
+          primary={{
+            label: "Record Money Lent",
+            onPress: handleSave,
+            disabled: !personName.trim() ||
+              !originalAmount ||
+              !sourceAccountId ||
+              isSubmitting,
+            loading: isSubmitting,
+          }}
+        />
+      }
+    >
       <View style={styles.body}>
         <View style={styles.group}>
           <Text style={[styles.label, { color: theme.colors.foreground }]}>
@@ -174,6 +195,7 @@ export function CreateReceivableModal({
             Amount Lent ({displayCurrency}) *
           </Text>
           <Input
+            leadingIcon={<CurrencyPrefix />}
             value={originalAmount}
             onChangeText={setOriginalAmount}
             placeholder="e.g. 5000"
@@ -219,22 +241,14 @@ export function CreateReceivableModal({
           <Text style={[styles.label, { color: theme.colors.foreground }]}>
             Lent Date
           </Text>
-          <Input
-            value={lentDate}
-            onChangeText={setLentDate}
-            placeholder="YYYY-MM-DD"
-          />
+          <DateField value={lentDate} onChange={setLentDate} accessibilityLabel="Lent date" />
         </View>
 
         <View style={styles.group}>
           <Text style={[styles.label, { color: theme.colors.foreground }]}>
             Due Date (optional)
           </Text>
-          <Input
-            value={dueDate}
-            onChangeText={setDueDate}
-            placeholder="YYYY-MM-DD"
-          />
+          <DateField value={dueDate} onChange={setDueDate} accessibilityLabel="Due date" clearable placeholder="No due date" />
         </View>
 
         <View style={styles.group}>
@@ -352,20 +366,6 @@ export function CreateReceivableModal({
           </View>
         ) : null}
 
-        <Button
-          onPress={handleSave}
-          loading={isSubmitting}
-          disabled={
-            !personName.trim() ||
-            !originalAmount ||
-            !sourceAccountId ||
-            isSubmitting
-          }
-        >
-          <Text style={{ fontWeight: "800", color: theme.colors.primaryForeground }}>
-            Record Money Lent
-          </Text>
-        </Button>
       </View>
     </Modal>
   );

@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 
+import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
 import { Modal } from "@/components/common/Modal";
+import { SheetActions } from "@/components/common/SheetActions";
 import { ChipRow, RowSwitch } from "@/components/settings/SettingsControls";
-import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import type { GoalPlanInput, GoalSnapshot } from "@/shared/types/goalFunding";
 import { validateGoalPlanInput } from "@/shared/utils/goalFundingModel";
 import { useTheme } from "@/theme/ThemeProvider";
+import { DateField } from "@/components/common/DateField";
 
 const num = (s: string): number | undefined => {
   const t = s.replace(/,/g, "").trim();
@@ -87,7 +89,15 @@ export function GoalPlanInputsSheet({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`Plan for ${goal.name}`} density="compact" maxHeight="92%">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`Plan for ${goal.name}`}
+      density="compact"
+      maxHeight="92%"
+      // SPENDLY-555: the 6a form pattern; the action is pinned below the body.
+      footer={<SheetActions secondary={{ label: "Cancel", onPress: onClose }} primary={{ label: "Use these settings", onPress: save }} />}
+    >
       <View style={{ gap: theme.space.md }}>
         <Text style={hint}>These settings belong to this plan only. Your goal stays exactly as it is.</Text>
         <View style={{ gap: theme.space.xs }}>
@@ -95,10 +105,10 @@ export function GoalPlanInputsSheet({
           <ChipRow<string> options={priorityOptions} selected={priority} onSelect={setPriority} />
           <Text style={hint}>Only you decide what comes first. Goals without a priority are treated equally.</Text>
         </View>
-        <Input label="What you put in each month now (optional)" value={current} onChangeText={setCurrent} keyboardType="numeric" helperText="Leave blank if you don't know — it won't be treated as zero." />
-        <Input label="Minimum each month (optional)" value={min} onChangeText={setMin} keyboardType="numeric" />
-        <Input label="One-time top-up amount (optional)" value={oneTimeAmount} onChangeText={setOneTimeAmount} keyboardType="numeric" />
-        {oneTimeAmount.trim() ? <Input label="Top-up date (YYYY-MM-DD)" value={oneTimeDate} onChangeText={setOneTimeDate} autoCapitalize="none" /> : null}
+        <Input label="What you put in each month now (optional)" value={current} onChangeText={setCurrent} keyboardType="numeric" leadingIcon={<CurrencyPrefix />} helperText="Leave blank if you don't know — it won't be treated as zero." />
+        <Input label="Minimum each month (optional)" value={min} onChangeText={setMin} keyboardType="numeric" leadingIcon={<CurrencyPrefix />} />
+        <Input label="One-time top-up amount (optional)" value={oneTimeAmount} onChangeText={setOneTimeAmount} keyboardType="numeric" leadingIcon={<CurrencyPrefix />} />
+        {oneTimeAmount.trim() ? <DateField label="Top-up date" value={oneTimeDate} onChange={setOneTimeDate} /> : null}
         <Input
           label="Yearly growth % (optional, investment-linked goals)"
           value={growth}
@@ -116,7 +126,6 @@ export function GoalPlanInputsSheet({
             ))}
           </View>
         ) : null}
-        <Button onPress={save}>Use these settings</Button>
       </View>
     </Modal>
   );

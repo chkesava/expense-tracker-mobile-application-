@@ -269,7 +269,9 @@ describe("createHoldingWithCash", () => {
     expect(result.entryId).toBeNull();
     expect(pathsUnder("investmentCashTransactions")).toHaveLength(0);
     expect(writes.filter((w) => w.path.includes("/portfolioSettings/"))).toHaveLength(0);
-    expect(writes).toHaveLength(4);
+    // Holding, profile and BUY row; the retired investments summary is gone (SPENDLY-499).
+    expect(writes).toHaveLength(3);
+    expect(writes.some((w) => w.path.includes("financialSummaries/"))).toBe(false);
 
     const txWrite = pathsUnder("portfolioTransactions")[0];
     expect(txWrite.path).toBe(`users/u1/portfolioTransactions/${result.transactionId}`);
@@ -731,8 +733,8 @@ describe("transferInvestmentCashWithBank", () => {
     expect(commits).toBe(1);
     const account = writes.find((w) => w.path === "users/u1/accounts/bank-1");
     expect(account?.data.currentBalance).toEqual({ __increment: -20000 });
-    const netWorth = writes.find((w) => w.path.includes("financialSummaries/netWorth"));
-    expect(netWorth).toBeDefined();
+    // SPENDLY-499: the netWorth summary doc is retired; nothing writes it.
+    expect(writes.some((w) => w.path.includes("financialSummaries/netWorth"))).toBe(false);
   });
 
   it("credits the bank's currentBalance for a Demat → bank withdrawal", async () => {

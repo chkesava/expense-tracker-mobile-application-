@@ -4,11 +4,12 @@ import { LinearGradient } from "expo-linear-gradient";
 import { LineChart, Receipt, Sigma } from "lucide-react-native";
 
 import {
-  insightAccents,
-  insightSurface,
+  useInsightAccents,
+  useInsightSurface,
 } from "@/components/analytics/insightsTheme";
 import { Amount } from "@/components/common/Amount";
 import { useTheme } from "@/theme/ThemeProvider";
+import { withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export interface SearchSummaryCardProps {
@@ -27,13 +28,13 @@ export function SearchSummaryCard({
 }: SearchSummaryCardProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const surface = insightSurface(isDark);
-  const accents = insightAccents(isDark);
+  const surface = useInsightSurface();
+  const accents = useInsightAccents();
 
   const column = (
     label: string,
     icon: React.ReactNode,
-    tintRgb: string,
+    tint: string,
     value: React.ReactNode,
     caption: string
   ) => (
@@ -44,8 +45,8 @@ export function SearchSummaryCard({
         style={[
           styles.iconBox,
           {
-            backgroundColor: `rgba(${tintRgb}, ${isDark ? 0.15 : 0.09})`,
-            borderColor: `rgba(${tintRgb}, ${isDark ? 0.3 : 0.18})`,
+            backgroundColor: withAlpha(tint, isDark ? 0.15 : 0.09),
+            borderColor: withAlpha(tint, isDark ? 0.3 : 0.18),
           },
         ]}
       >
@@ -85,8 +86,8 @@ export function SearchSummaryCard({
       <View style={styles.row}>
         {column(
           "Matched",
-          <Receipt size={14} color={accents.pink} strokeWidth={2.4} />,
-          "244, 63, 94",
+          <Receipt size={14} color={accents.accent} strokeWidth={2.4} />,
+          accents.accent,
           <Text
             style={[styles.value, { color: theme.colors.foreground }]}
             numberOfLines={1}
@@ -102,8 +103,8 @@ export function SearchSummaryCard({
 
         {column(
           "Total Sum",
-          <Sigma size={14} color={accents.green} strokeWidth={2.4} />,
-          "74, 222, 128",
+          <Sigma size={14} color={accents.spend} strokeWidth={2.4} />,
+          accents.spend,
           <Amount
             value={totalSum}
             currency={currency}
@@ -120,8 +121,8 @@ export function SearchSummaryCard({
 
         {column(
           "Average",
-          <LineChart size={14} color={accents.violet} strokeWidth={2.4} />,
-          "139, 92, 246",
+          <LineChart size={14} color={accents.highlight} strokeWidth={2.4} />,
+          accents.highlight,
           average === null ? (
             <Text style={[styles.value, { color: theme.colors.mutedForeground }]}>
               —

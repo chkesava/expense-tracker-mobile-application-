@@ -7,9 +7,11 @@ import { Card } from "@/components/ui/Card";
 import { SheetBottomInset } from "@/components/common/SheetBottomInset";
 import { usePortfolioReconciliation } from "@/hooks/usePortfolioReconciliation";
 import type { ReconciliationFinding } from "@/shared/features/portfolio/utils/portfolioReconciliation";
+import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
+import { useSheetWidthStyle } from "@/hooks/useResponsiveLayout";
 
 interface PortfolioRecalibrationModalProps {
   visible: boolean;
@@ -42,6 +44,10 @@ export function PortfolioRecalibrationModal({
   onClose,
 }: PortfolioRecalibrationModalProps) {
   const { theme } = useTheme();
+  // SPENDLY-554: RN Modal portals outside SpendlyUIScope on web; keep the theme vars.
+  const scopeVars = useSpendlyScopeVars();
+  // SPENDLY-559: centred at dialog width on tablet/desktop web.
+  const sheetWidthStyle = useSheetWidthStyle();
   const surfaces = useSurfaces();
   const { stage, report, scan, repair, reset } = usePortfolioReconciliation();
 
@@ -99,11 +105,12 @@ export function PortfolioRecalibrationModal({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, { backgroundColor: theme.colors.scrim }, scopeVars]}>
         <Card
           style={[
             styles.contentCard,
             { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+            sheetWidthStyle,
           ]}
         >
           <View style={styles.headerRow}>
@@ -213,7 +220,6 @@ export function PortfolioRecalibrationModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "flex-end",
   },
   contentCard: {
