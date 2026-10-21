@@ -34,29 +34,68 @@ begin
 end
 $$;
 
--- 3. anon and authenticated hold no table privileges in public.
+-- 3. anon holds no table privileges in public; authenticated holds SELECT
+--    only, and only on the user-data tables plus sync_status (SPENDLY-505).
 do $$
 declare
   grants text;
 begin
   select string_agg(format('%s:%s:%s', grantee, table_name, privilege_type), ', ') into grants
   from information_schema.role_table_grants
-  where table_schema = 'public' and grantee in ('anon', 'authenticated');
+  where table_schema = 'public'
+    and (
+      grantee = 'anon'
+      or (grantee = 'authenticated' and (
+        privilege_type <> 'SELECT'
+        or table_name not in (
+          'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
+          'account_transfers', 'account_entries', 'account_payments',
+          'credit_card_bills', 'categories', 'sync_status'
+        )
+      ))
+    );
   if grants is not null then
-    raise exception 'client roles still hold grants: %', grants;
+    raise exception 'client roles hold unexpected grants: %', grants;
   end if;
 end
 $$;
 
--- 4. No policies yet: identity and read policies arrive with SPENDLY-505.
+-- 4. Exactly one owner-read policy per readable table: SELECT, for
+--    authenticated, keyed on readmodel_auth.uid(). No write policies at all.
 do $$
 declare
-  policies text;
+  bad text;
+  n integer;
 begin
-  select string_agg(format('%s.%s', tablename, policyname), ', ') into policies
-  from pg_policies where schemaname = 'public';
-  if policies is not null then
-    raise exception 'unexpected policies before SPENDLY-505: %', policies;
+  select string_agg(format('%s.%s', tablename, policyname), ', ') into bad
+  from pg_policies
+  where schemaname = 'public'
+    and (cmd <> 'SELECT' or roles <> array['authenticated']::name[]
+         or qual not like '%readmodel_auth.uid()%');
+  if bad is not null then
+    raise exception 'unexpected policies: %', bad;
+  end if;
+  select count(*) into n from pg_policies where schemaname = 'public';
+  if n <> 11 then
+    raise exception 'expected 11 owner-read policies, found %', n;
+  end if;
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename in ('sync_runs', 'sync_checkpoints', 'sync_failures')
+  ) then
+    raise exception 'sync bookkeeping must stay server-only';
+  end if;
+end
+$$;
+
+-- 4b. The identity helper is not callable by anon or by PUBLIC.
+do $$
+begin
+  if has_function_privilege('anon', 'readmodel_auth.uid()', 'execute') then
+    raise exception 'anon can execute readmodel_auth.uid()';
+  end if;
+  if not has_function_privilege('authenticated', 'readmodel_auth.uid()', 'execute') then
+    raise exception 'authenticated cannot execute readmodel_auth.uid()';
   end if;
 end
 $$;

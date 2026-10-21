@@ -37,12 +37,30 @@ describe("read-model secrets (SPENDLY-504)", () => {
     for (const name of READMODEL_SECRET_NAMES) expect(appSource).not.toContain(name);
   });
 
-  it("never exposes a read-model secret as an EXPO_PUBLIC_ variable", () => {
+  it("exposes only the publishable read-model values as EXPO_PUBLIC_ variables", () => {
     const envFiles = [".env.example", "lib/env.ts", "app.config.ts", "app.config.js"]
       .map((rel) => path.join(root, rel))
       .filter(existsSync)
       .map((file) => readFileSync(file, "utf8"))
       .join("\n");
-    expect(envFiles).not.toMatch(/EXPO_PUBLIC_[A-Z_]*(READMODEL|SERVICE_ROLE)/);
+    // SPENDLY-505: the URL and publishable key are public by design (RLS and
+    // the user's Firebase token do the authorising). Nothing else may be.
+    const allowed = ["EXPO_PUBLIC_READMODEL_SUPABASE_URL", "EXPO_PUBLIC_READMODEL_SUPABASE_PUBLISHABLE_KEY"];
+    for (const name of envFiles.match(/EXPO_PUBLIC_[A-Z0-9_]*READMODEL[A-Z0-9_]*/g) ?? []) {
+      expect(allowed).toContain(name);
+    }
+    expect(envFiles).not.toMatch(/EXPO_PUBLIC_[A-Z0-9_]*(SERVICE_ROLE|SECRET|DB_URL|SERVICE_ACCOUNT)/);
+  });
+
+  it("contains no Supabase secret or service-role key literal (SPENDLY-505)", () => {
+    const scanned = [appSource, ...[".env.example"].map((rel) => path.join(root, rel)).filter(existsSync).map((f) => readFileSync(f, "utf8"))].join("\n");
+    // New-style secret keys.
+    expect(scanned).not.toMatch(/sb_secret_[A-Za-z0-9_-]{8,}/);
+    // Legacy JWT keys: decode every JWT-shaped literal and check its role.
+    for (const [, payload] of scanned.matchAll(/eyJ[A-Za-z0-9_-]+\.([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]+/g)) {
+      expect(Buffer.from(payload, "base64url").toString("utf8")).not.toContain("service_role");
+    }
+    // A service-role client option in app code.
+    expect(scanned).not.toMatch(/serviceRole\s*:/);
   });
 });

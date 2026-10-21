@@ -19,3 +19,20 @@ $$;
 -- The migration must undo this, and assert_security.sql proves it did.
 grant usage on schema public to anon, authenticated, service_role;
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+
+-- SPENDLY-505: Supabase's auth.jwt(), as Supabase defines it. PostgREST puts
+-- the verified token's claims in request.jwt.claims; the behaviour tests set
+-- that setting by hand to impersonate a token.
+create schema if not exists auth;
+create or replace function auth.jwt()
+returns jsonb
+language sql
+stable
+as $$
+  select coalesce(
+    nullif(current_setting('request.jwt.claim', true), ''),
+    nullif(current_setting('request.jwt.claims', true), '')
+  )::jsonb
+$$;
+grant usage on schema auth to anon, authenticated, service_role;
+grant execute on function auth.jwt() to anon, authenticated, service_role;
