@@ -8,8 +8,12 @@ import {
   computeTopCategories,
   DEFAULT_DASHBOARD_ORDER,
   getOrderedDashboardWidgets,
+  budgetProgressSummary,
+  getMoreDashboardWidgets,
   KNOWN_DASHBOARD_WIDGETS,
+  spendingBreakdown,
   topCategoryShares,
+  type CategoryBudgetAlertItem,
 } from "./dashboardWidgets";
 
 describe("dashboardWidgets utilities", () => {
@@ -283,6 +287,81 @@ describe("dashboardWidgets utilities", () => {
 
     it("returns nothing for a missing summary", () => {
       expect(topCategoryShares(null)).toEqual({ categories: [], totalSpent: 0 });
+    });
+  });
+  describe("spendingBreakdown (SPENDLY-566)", () => {
+    const totals = {
+      Food: 400,
+      "Food::Dining": 300,
+      Shopping: 300,
+      Bills: 150,
+      Transport: 100,
+      Health: 30,
+      Gifts: 20,
+    };
+
+    it("keeps the top categories and folds the rest into Others", () => {
+      const { categories, totalSpent } = spendingBreakdown(totals, 4);
+      expect(totalSpent).toBe(1000);
+      expect(categories.map((c) => c.category)).toEqual([
+        "Food",
+        "Shopping",
+        "Bills",
+        "Transport",
+        "Others",
+      ]);
+      expect(categories[4]).toEqual({ category: "Others", amount: 50, percentage: 5 });
+      expect(categories.reduce((sum, c) => sum + c.amount, 0)).toBe(totalSpent);
+    });
+
+    it("does not make an Others slice for a single leftover category", () => {
+      const { categories } = spendingBreakdown({ A: 3, B: 2, C: 1 }, 2);
+      expect(categories.map((c) => c.category)).toEqual(["A", "B", "C"]);
+    });
+
+    it("returns nothing for a missing summary", () => {
+      expect(spendingBreakdown(null)).toEqual({ categories: [], totalSpent: 0 });
+    });
+  });
+
+  describe("budgetProgressSummary (SPENDLY-566)", () => {
+    const item = (isOver: boolean, isWarning = false): CategoryBudgetAlertItem => ({
+      id: String(Math.random()),
+      category: "Food",
+      amount: 100,
+      spent: 0,
+      pct: 0,
+      isOver,
+      isWarning,
+    });
+
+    it("counts every budget that is not over as on track", () => {
+      expect(budgetProgressSummary([item(false), item(false, true), item(true)])).toEqual({
+        total: 3,
+        onTrack: 2,
+      });
+    });
+
+    it("is empty with no budgets", () => {
+      expect(budgetProgressSummary([])).toEqual({ total: 0, onTrack: 0 });
+    });
+  });
+
+  describe("getMoreDashboardWidgets (SPENDLY-566)", () => {
+    it("drops the pinned widgets and keeps the user's order", () => {
+      const more = getMoreDashboardWidgets(
+        ["recentActivity", "gamification", "overview", "focus", "topCategories", "quickAdd"],
+        undefined,
+        false
+      );
+      expect(more).toEqual(["gamification", "focus"]);
+    });
+
+    it("honours the visibility toggles", () => {
+      const more = getMoreDashboardWidgets(undefined, { ...SETTINGS_DEFAULTS.dashboardWidgets, focus: false }, false);
+      expect(more).not.toContain("focus");
+      expect(more).not.toContain("overview");
+      expect(more).toContain("budgetAlerts");
     });
   });
 });

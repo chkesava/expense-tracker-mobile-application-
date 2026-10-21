@@ -1,4 +1,4 @@
-import { memo, useMemo, type ComponentType } from "react";
+import { memo, useMemo, type ComponentType, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
 import {
@@ -18,6 +18,7 @@ import {
 import { Amount } from "@/components/common/Amount";
 import { Skeleton } from "@/components/common/Skeleton";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { PrivacyToggle } from "@/components/dashboard/PrivacyToggle";
 import {
   DASH_RADIUS,
   DASH_TYPE,
@@ -28,10 +29,7 @@ import {
   useSurfaces,
 } from "@/components/dashboard/primitives";
 import { useInvestmentsEnabled } from "@/hooks/useInvestmentsEnabled";
-import {
-  useUnifiedNetWorth,
-  type UnifiedNetWorthSummary,
-} from "@/hooks/useUnifiedNetWorth";
+import type { UnifiedNetWorthSummary } from "@/hooks/useUnifiedNetWorth";
 import { haptic } from "@/lib/haptics";
 import {
   dashboardAccountCards,
@@ -42,34 +40,46 @@ import { signedCurrencyPrefix } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export interface NetWorthWidgetProps {
+  /** The screen's one `useUnifiedNetWorth` summary (SPENDLY-566). */
+  netWorth: UnifiedNetWorthSummary;
   currency: string;
 }
 
 /**
- * The dashboard's hero (SPENDLY-532): net worth, then one card per kind of
- * money the user actually holds. Every figure is a field of the one
- * `useUnifiedNetWorth` summary — nothing here adds, nets or projects values.
+ * The dashboard's net-worth card (SPENDLY-532, Visual First since
+ * SPENDLY-566): net worth with the privacy switch beside it, then assets and
+ * liabilities. Every figure is a field of the one `useUnifiedNetWorth` summary
+ * — nothing here adds, nets or projects values. No trend or change figure is
+ * shown because no net-worth history exists to draw one from.
  */
-export const NetWorthWidget = memo(function NetWorthWidget({ currency }: NetWorthWidgetProps) {
-  const netWorth = useUnifiedNetWorth({ progressive: true });
-
-  // First load: placeholders shaped like the hero and two account cards, so
-  // nothing jumps when the totals land (SPENDLY-533).
+export const NetWorthWidget = memo(function NetWorthWidget({ netWorth, currency }: NetWorthWidgetProps) {
+  // First load: a placeholder shaped like the card, so nothing jumps when the
+  // totals land (SPENDLY-533).
   if (netWorth.loading) {
-    return (
-      <View style={styles.stack}>
-        <DashboardSkeleton variant="hero" />
-        <DashboardSkeleton variant="cards" />
-      </View>
-    );
+    return <DashboardSkeleton variant="hero" />;
   }
 
   return (
-    <View style={styles.stack}>
-      <NetWorthHeroCard netWorth={netWorth} currency={currency} />
-      <AccountSummaryCards netWorth={netWorth} currency={currency} />
-    </View>
+    <NetWorthHeroCard
+      netWorth={netWorth}
+      currency={currency}
+      showAccountsLink={false}
+      action={<PrivacyToggle />}
+    />
   );
+});
+
+/**
+ * One card per kind of money the user holds (SPENDLY-532). It sat under the
+ * net-worth card; the Visual First layout (SPENDLY-566) shows it with the
+ * dashboard's "More" cards, from the same summary.
+ */
+export const AccountSummaryWidget = memo(function AccountSummaryWidget({
+  netWorth,
+  currency,
+}: NetWorthWidgetProps) {
+  if (netWorth.loading) return <DashboardSkeleton variant="cards" />;
+  return <AccountSummaryCards netWorth={netWorth} currency={currency} />;
 });
 
 /* ------------------------------------------------------------- Hero card */
@@ -83,10 +93,13 @@ export function NetWorthHeroCard({
   netWorth,
   currency,
   showAccountsLink = true,
+  action,
 }: {
   netWorth: UnifiedNetWorthSummary;
   currency: string;
   showAccountsLink?: boolean;
+  /** Replaces the Accounts link, e.g. the dashboard's privacy switch. */
+  action?: ReactNode;
 }) {
   const router = useRouter();
   const { theme } = useTheme();
@@ -102,13 +115,13 @@ export function NetWorthHeroCard({
       subtitle={netWorth.secondaryLoading ? "Updating valuations…" : "Assets minus liabilities"}
       icon={<Scale size={16} color={theme.colors.primary} strokeWidth={2.3} />}
       action={
-        showAccountsLink ? (
+        action ?? (showAccountsLink ? (
           <SectionAction
             label="Accounts"
             onPress={() => router.push("/ledger?tab=accounts" as Href)}
             accessibilityLabel="Open accounts"
           />
-        ) : undefined
+        ) : undefined)
       }
     >
       {netWorth.loading ? (

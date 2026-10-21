@@ -63,6 +63,6 @@ After a test build, `android/` is the test variant. To build a real local releas
 - `lib/firebase.ts`: uses the demo config and connects Auth, Firestore and Storage to the emulator.
 - `lib/networkGuard.ts`: blocks non-emulator HTTP in test mode.
 - `app.config.js`: `applyLocalTestBuild()` switches to the "Spendly Test" app ID, name and scheme, and drops `google-services.json`.
-- `components/Header.tsx`: the TEST DATA pill.
+- `components/layout/AppBarBrand.tsx`: the TEST DATA pill (shown by `Header` and the dashboard hero).
 - `scripts/emulators-local.js`, `scripts/seed-emulator.js`, `scripts/build-test-apk.js`.
 - `firebase.json`: Auth emulator on 9099, Firestore on 8080, Storage on 9199.

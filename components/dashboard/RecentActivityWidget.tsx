@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { StyleSheet, Text } from "react-native";
-import { ArrowDownLeft, Receipt } from "lucide-react-native";
+import { ArrowDownLeft } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
@@ -55,18 +55,15 @@ export const RecentActivityWidget = memo(function RecentActivityWidget({
 
   return (
     <Section
-      title="Recent activity"
-      // SPENDLY-413: the feed is a recent-first page, not the lifetime ledger,
-      // so the subtitle never asserts a count.
-      subtitle="Latest money in and out"
-      icon={<Receipt size={16} color={theme.colors.primary} strokeWidth={2.3} />}
-      iconTint={surfaces.wash(theme.colors.primary)}
+      // SPENDLY-566: Visual First header. SPENDLY-413 still holds: the feed is
+      // a recent-first page, not the lifetime ledger, so nothing asserts a count.
+      title="Recent Transactions"
       action={
         // A limit-N feed can't tell whether older rows exist; the full ledger
         // is always one tap away once there is any activity.
         items.length > 0 ? (
           <SectionAction
-            label="View all"
+            label="See all"
             onPress={onViewAll}
             accessibilityLabel="View all transactions"
           />
@@ -126,7 +123,7 @@ export const RecentActivityWidget = memo(function RecentActivityWidget({
                   currency={currency}
                   size="sm"
                   sign={isIncome ? "plus" : "minus"}
-                  tone={isIncome ? "positive" : "default"}
+                  tone={isIncome ? "positive" : "negative"}
                   fit={false}
                 />
               }

@@ -31,6 +31,7 @@ import { useSettings } from "@/providers/SettingsProvider";
 import {
   DEFAULT_DASHBOARD_ORDER,
   KNOWN_DASHBOARD_WIDGETS,
+  PINNED_DASHBOARD_WIDGETS,
   SKIP_WIDGETS,
 } from "@/shared/utils/dashboardWidgets";
 import { useCategorizationRules } from "@/hooks/useCategorizationRules";
@@ -254,13 +255,22 @@ export function DashboardWidgetOrder() {
     return [...saved, ...missing];
   }, [settings.dashboardOrder]);
 
+  // SPENDLY-566: net worth, quick actions, spending and recent transactions
+  // have fixed places now; only the cards below them can move. The pinned ids
+  // stay in the saved order (at the end) so nothing is lost from settings.
+  const movable = useMemo(
+    () => order.filter((id) => !PINNED_DASHBOARD_WIDGETS.has(id as never)),
+    [order]
+  );
+
   const move = (index: number, direction: -1 | 1) => {
     const target = index + direction;
-    if (target < 0 || target >= order.length) return;
+    if (target < 0 || target >= movable.length) return;
     void haptic.selection();
-    const next = [...order];
+    const next = [...movable];
     [next[index], next[target]] = [next[target], next[index]];
-    setDashboardOrder(next);
+    const pinned = order.filter((id) => PINNED_DASHBOARD_WIDGETS.has(id as never));
+    setDashboardOrder([...next, ...pinned]);
   };
 
   return (
@@ -270,12 +280,12 @@ export function DashboardWidgetOrder() {
           Dashboard Order
         </Text>
         <Text style={{ color: theme.colors.mutedForeground, fontSize: 13, marginTop: 2 }}>
-          Reorder the sections on your home dashboard.
+          Reorder the cards below your dashboard's main sections.
         </Text>
       </View>
 
       <View style={{ gap: 8, marginTop: 4 }}>
-        {order.map((id, index) => (
+        {movable.map((id, index) => (
           <View
             key={id}
             style={[
@@ -320,12 +330,12 @@ export function DashboardWidgetOrder() {
             </Pressable>
             <Pressable
               onPress={() => move(index, 1)}
-              disabled={index === order.length - 1}
+              disabled={index === movable.length - 1}
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel={`Move ${WIDGET_ORDER_LABELS[id] || id} down`}
-              accessibilityState={{ disabled: index === order.length - 1 }}
-              style={{ padding: 6, opacity: index === order.length - 1 ? 0.3 : 1 }}
+              accessibilityState={{ disabled: index === movable.length - 1 }}
+              style={{ padding: 6, opacity: index === movable.length - 1 ? 0.3 : 1 }}
             >
               <ChevronDown size={18} color={theme.colors.foreground} />
             </Pressable>
