@@ -72,8 +72,24 @@ These paths change spending without updating the month's dashboard summary, so t
 3. Dry-run 2, from `main` after the release.
 4. The user approves item by item, especially SBI, Hand Cash and Axis.
 5. `--apply`, one script at a time.
-6. Dry-run 3, which must show zero variance (Axis is left flagged unless resolved).
+6. ~~Dry-run 3~~: done 2026-10-21 (below).
 7. Comment on SPENDLY-436, 417 and 419.
+
+## Dry-run 3: 2026-10-21 (production, read-only, after the apply)
+
+24 users, 0 blocked:
+
+| | Dry-run 2 | Dry-run 3 |
+|---|---|---|
+| `[OK]` (accounts, dashboards) | 15 | **25** |
+| `[Variance]` | 34 | **1** (Axis) |
+| `[Excluded]` | 1 (Axis) | 0 (no exclusion passed) |
+
+- All 24 dashboard month docs are now right.
+- EPF is unchanged at ₹45,671.11.
+- **The only remaining difference is the Axis card**: ₹146 stored vs ₹0 recomputed, plus two stale derived fields. It is left as is until the user says whether one of the two ₹299 payments (2 and 3 Sep) is a duplicate.
+
+The SPENDLY-503 baseline was re-run after the apply (`docs/SPENDLY-503-baseline-summary-production-2026-10-21.md`): 26 accounts, 25 match, 1 variance (Axis). This is the same as before the apply, as expected, because the apply changed no balances.
 
 ## Rollback
 
