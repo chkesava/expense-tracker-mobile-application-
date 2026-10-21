@@ -5,7 +5,9 @@ import {
   LEDGER_HUB_TAB_IDS,
   LEDGER_SECTIONS,
   isAccountDetailRoute,
+  isDashboardRoute,
   isNavItemActive,
+  ownsAppBar,
   resolveAndroidBackAction,
   resolveLegacyLedgerTabRoute,
   resolvePrimaryTabId,
@@ -150,6 +152,18 @@ describe("isAccountDetailRoute", () => {
     expect(isAccountDetailRoute("/(app)/accounts/abc123")).toBe(true);
     expect(isAccountDetailRoute("/accounts")).toBe(false);
     expect(isAccountDetailRoute("/ledger")).toBe(false);
+  });
+});
+
+describe("ownsAppBar (SPENDLY-566)", () => {
+  it("covers the dashboard and account detail, nothing else", () => {
+    expect(isDashboardRoute("/dashboard")).toBe(true);
+    expect(isDashboardRoute("/(app)/dashboard")).toBe(true);
+    expect(isDashboardRoute("/ledger")).toBe(false);
+    expect(ownsAppBar("/dashboard")).toBe(true);
+    expect(ownsAppBar("/accounts/abc123")).toBe(true);
+    expect(ownsAppBar("/accounts")).toBe(false);
+    expect(ownsAppBar("/insights")).toBe(false);
   });
 });
 

@@ -11,13 +11,20 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
-export function AppBarActions({ onOpenProfile }: { onOpenProfile: () => void }) {
+export function AppBarActions({
+  onOpenProfile,
+  ink,
+}: {
+  onOpenProfile: () => void;
+  /** Icon colour override for a bar drawn over an image (SPENDLY-566). */
+  ink?: string;
+}) {
   const { push } = useRouter();
   const { user } = useAuth();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
-  const iconColor = theme.colors.foreground;
-  const ripple = isDark ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.08)";
+  const iconColor = ink ?? theme.colors.foreground;
+  const ripple = isDark || ink ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.08)";
 
   const handleSearch = () => {
     void haptic.navigation();
