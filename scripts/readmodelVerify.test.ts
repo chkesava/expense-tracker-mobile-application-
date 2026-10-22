@@ -4,7 +4,7 @@ import { countReads, renderVerifySummary, runVerify, type VerifyRecord, type Ver
 
 const T0 = Date.UTC(2026, 9, 23, 21, 0);
 
-function setup(firestore: Record<string, Record<string, number>>, model: { uid: string; collection: string; live: number }[], reads24h = 0) {
+function setup(firestore: Record<string, Record<string, number>>, model: { uid: string; collection: string; live: number }[], reads24h = 0, purged: string[] = []) {
   const recorded: { uid: string; collection: string; sourceCount: number; modelCount: number }[] = [];
   const runs: VerifyRecord[] = [];
   const counted: string[] = [];
@@ -24,6 +24,9 @@ function setup(firestore: Record<string, Record<string, number>>, model: { uid: 
     async liveCounts() {
       return model;
     },
+    async purgedUids(uids) {
+      return new Set(uids.filter((uid) => purged.includes(uid)));
+    },
     async recordCounts(uid, collection, sourceCount, modelCount) {
       recorded.push({ uid, collection, sourceCount, modelCount });
     },
@@ -40,6 +43,15 @@ function setup(firestore: Record<string, Record<string, number>>, model: { uid: 
 const opts = { maxReads: 1000, maxReadsPerDay: 12_000, now: () => T0 };
 
 describe("read-model count parity (SPENDLY-509)", () => {
+  it("skips an erased account whose Firestore documents still exist: no reads, no mismatch (SPENDLY-520)", async () => {
+    const s = setup({ alice: { expenses: 1 }, bob: { expenses: 5 } }, [{ uid: "alice", collection: "expenses", live: 1 }], 0, ["bob"]);
+    const r = await runVerify(s.source, s.sink, opts);
+    expect(r.status).toBe("succeeded");
+    expect(r.mismatches).toBe(0);
+    expect(r.notes.purgedSkipped).toBe(1);
+    expect(s.counted.some((c) => c.startsWith("bob/"))).toBe(false);
+  });
+
   it("passes when every (user, collection) count matches, and records both counts", async () => {
     const s = setup(
       { alice: { expenses: 3, categories: 2 }, bob: { expenses: 1 } },

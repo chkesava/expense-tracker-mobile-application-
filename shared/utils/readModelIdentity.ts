@@ -36,7 +36,8 @@ export function claimsWithReadModelRole(
 ): Record<string, unknown> | null {
   if (hasReadModelRole(existing)) return null;
   const next = { ...(existing ?? {}), role: READ_MODEL_ROLE };
-  if (JSON.stringify(next).length > MAX_CUSTOM_CLAIMS_BYTES) {
+  // Firebase's limit is bytes of the serialized JSON, not UTF-16 characters.
+  if (new TextEncoder().encode(JSON.stringify(next)).length > MAX_CUSTOM_CLAIMS_BYTES) {
     throw new Error("Custom claims would exceed Firebase's 1000-byte limit.");
   }
   return next;

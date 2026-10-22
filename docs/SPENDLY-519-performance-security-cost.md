@@ -14,25 +14,26 @@
 - Each query runs once to warm, then 30 times, with results serialised as JSON (`doc` detoasted, as for the HTTP response).
 - **Budget:** p95 < 300 ms, and no sequential scan of a user-data table.
 
-Local Postgres 18 (Windows laptop), 2026-10-22:
+Local Postgres 18 (Windows laptop), 2026-10-22. Re-measured after the PR #234 review: the first version timed `count(*)` over the serialised rows, which let the planner skip the JSON work. The timed query now sums the serialised rows' byte lengths, so every row's `doc` is really built.
 
 | Query (source) | p50 ms | p95 ms | Rows | Index used |
 |---|---|---|---|---|
-| Journal month (`journalMonthSource`) | 0.61 | 0.82 | 475 | `expenses_uid_date_idx` |
-| Journal page, newest (`journalHistorySource`) | 0.27 | 0.30 | 50 | `expenses_uid_date_idx` |
-| Journal page, deep keyset (2022) | 1.46 | 1.75 | 50 | `expenses_uid_date_idx` |
-| Journal undated page | 0.70 | 0.82 | 50 | `expenses_uid_date_idx` |
-| Filter match, narrow (`backend.matching`) | 1.06 | 1.37 | 56 | `expenses_uid_account_date_idx` |
-| Filter match, whole history, first 1,000 | 14.48 | **15.46** | 1000 | `expenses_uid_month_idx` |
-| Insights month, expenses (`supabaseByMonthKey`) | 0.53 | 0.63 | 475 | `expenses_uid_month_idx` |
-| Insights month, incomes | 0.20 | 0.22 | 48 | `incomes_uid_month_idx` |
-| Cash-flow history, 4 months (`v_cash_flow_by_month`) | 1.94 | 2.26 | 4 | `expenses_uid_month_idx`, `incomes_uid_month_idx` |
-| Audit, one transaction with 300 events | 0.29 | 0.32 | 100 | `ledger_events_uid_target_idx` |
-| Audit trail, deep keyset | 4.63 | 5.02 | 100 | `ledger_events_uid_created_idx` |
-| Linked purchases by id, 20 ids (`supabaseByIds`) | 0.37 | 0.40 | 20 | `expenses_pkey` |
-| Freshness (`sync_status`) | 0.12 | 0.17 | 2 | (8-row table) |
+| Journal month (`journalMonthSource`) | 2.54 | 3.44 | 475 | `expenses_uid_date_idx` |
+| Journal page, newest (`journalHistorySource`) | 0.54 | 0.74 | 50 | `expenses_uid_date_idx` |
+| Journal page, deep keyset (2022) | 3.39 | 5.27 | 50 | `expenses_uid_date_idx` |
+| Journal undated page | 1.17 | 1.73 | 50 | `expenses_uid_date_idx` |
+| Filter match, narrow (`backend.matching`) | 1.68 | 2.38 | 56 | `expenses_uid_account_date_idx` |
+| Filter match, whole history, first 1,000 | 29.23 | **39.41** | 1000 | `expenses_uid_month_idx` |
+| Insights month, expenses (`supabaseByMonthKey`) | 3.36 | 4.26 | 475 | `expenses_uid_month_idx` |
+| Insights month, incomes | 0.56 | 0.80 | 48 | `incomes_uid_month_idx` |
+| Cash-flow history, 4 months (`v_cash_flow_by_month`) | 3.75 | 5.23 | 4 | `expenses_uid_month_idx`, `incomes_uid_month_idx` |
+| Audit, one transaction with 300 events | 0.61 | 0.76 | 100 | `ledger_events_uid_target_idx` |
+| Audit trail, deep keyset | 7.06 | 10.38 | 100 | `ledger_events_uid_created_idx` |
+| Linked purchases by id, 20 ids (`supabaseByIds`) | 0.91 | 1.29 | 20 | `expenses_pkey` |
+| Freshness (`sync_status`) | 0.33 | 0.51 | 2 | (8-row table) |
 
-**Result: every query passes, the slowest p95 is 15.5 ms (20× under budget), and there are no sequential scans.**
+**Result: every query passes with no sequential scans.**
+- The slowest is the whole-history filter match: p95 39 ms in this run and 70 ms in the run before it on the same laptop. Either way that's at least 4× under the 300 ms budget.
 - The cash-flow view's month filter is pushed through the `GROUP BY` and the `UNION ALL` into both month indexes, so the view never aggregates a user's whole history.
 - Server time doesn't include the network round trip from India to the project's region. That is measured in production (§5).
 

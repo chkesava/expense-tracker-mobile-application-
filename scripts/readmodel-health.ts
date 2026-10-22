@@ -9,17 +9,9 @@
 import { appendFileSync } from "node:fs";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import { all } from "./lib/supabasePaging";
 import { evaluateHealth, renderHealthSummary, THRESHOLDS, type HealthInput, type HealthRun } from "./lib/readmodelHealth";
 
-async function all<T>(label: string, page: (from: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {
-  const out: T[] = [];
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await page(from);
-    if (error) throw new Error(`${label}: ${error.message}`);
-    out.push(...(data ?? []));
-    if ((data ?? []).length < 1000) return out;
-  }
-}
 
 export async function loadHealthInput(client: SupabaseClient, now: number): Promise<HealthInput> {
   try {

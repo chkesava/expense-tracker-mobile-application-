@@ -24,6 +24,9 @@ describe("read-model identity (SPENDLY-505)", () => {
 
   it("refuses claims over Firebase's 1000-byte limit", () => {
     expect(() => claimsWithReadModelRole({ blob: "x".repeat(1000) })).toThrow(/1000-byte/);
+    // Bytes, not characters: 400 Devanagari letters are 400 UTF-16 units but 1,200 UTF-8 bytes.
+    expect(() => claimsWithReadModelRole({ name: "क".repeat(400) })).toThrow(/1000-byte/);
+    expect(claimsWithReadModelRole({ name: "क".repeat(100) })).toMatchObject({ role: "authenticated" });
   });
 
   it("recognises only the exact role value", () => {

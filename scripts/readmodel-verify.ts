@@ -13,6 +13,7 @@ import { applicationDefault, cert, initializeApp } from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import { all } from "./lib/supabasePaging";
 import { renderVerifySummary, runVerify, type VerifyRecord, type VerifySink, type VerifySource } from "./lib/readmodelVerifyCore";
 
 /** Read-only Firestore port: lists users and runs count() aggregations. */
@@ -41,8 +42,18 @@ function supabaseVerifySink(client: SupabaseClient): VerifySink {
       return rows.reduce((s, r) => s + (r.reads_used ?? 0), 0);
     },
     async liveCounts() {
-      const rows = (await must("readmodel_live_counts", client.rpc("readmodel_live_counts"))) as { uid: string; collection: string; live: number }[];
+      // Paged: one row per (uid, collection), so 100+ users pass PostgREST's 1,000-row cap.
+      const rows = await all<{ uid: string; collection: string; live: number }>("readmodel_live_counts", (from, to) =>
+        client.rpc("readmodel_live_counts").order("uid").order("collection").range(from, to)
+      );
       return rows.map((r) => ({ uid: r.uid, collection: r.collection, live: Number(r.live) }));
+    },
+    async purgedUids(uids) {
+      const out = new Set<string>();
+      for (const uid of uids) {
+        if ((await must("readmodel_is_purged", client.rpc("readmodel_is_purged", { p_uid: uid }))) === true) out.add(uid);
+      }
+      return out;
     },
     async recordCounts(uid, collection, sourceCount, modelCount) {
       await must("sync_status", client.from("sync_status").upsert(

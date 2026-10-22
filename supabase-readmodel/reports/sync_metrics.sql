@@ -10,7 +10,8 @@ with runs as (
          extract(epoch from (finished_at - started_at)) as seconds,
          started_at
   from public.sync_runs
-  where started_at >= now() - interval '30 days' and mode in ('sync', 'backfill')
+  -- The modes readmodel-sync.ts records (dry runs, verify and parity excluded).
+  where started_at >= now() - interval '30 days' and mode in ('incremental', 'full')
 )
 select
   'runs (30 d)' as metric,

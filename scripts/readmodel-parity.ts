@@ -13,6 +13,7 @@
 import { appendFileSync } from "node:fs";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import { all } from "./lib/supabasePaging";
 import { parityGate, renderParityReport, summarizeFindings, type Finding } from "./lib/readmodelParity";
 import type { HealthRun } from "./lib/readmodelHealth";
 
@@ -23,8 +24,13 @@ async function must<T>(label: string, result: PromiseLike<{ data: T; error: { me
 }
 
 async function recordFindings(client: SupabaseClient): Promise<string> {
-  const findings = (await must("readmodel_invariants", client.rpc("readmodel_invariants"))) as Finding[];
-  const quality = (await must("v_data_quality", client.from("v_data_quality").select("uid, collection, problem"))) as { uid: string; collection: string; problem: string }[];
+  // Paged with a stable order: PostgREST cuts a response at 1,000 rows without an error.
+  const findings = await all<Finding>("readmodel_invariants", (from, to) =>
+    client.rpc("readmodel_invariants").order("uid").order("check_name").order("doc_id").range(from, to)
+  );
+  const quality = await all<{ uid: string; collection: string; problem: string }>("v_data_quality", (from, to) =>
+    client.from("v_data_quality").select("uid, collection, problem").order("uid").order("collection").order("problem").range(from, to)
+  );
   const summary = summarizeFindings(findings, quality);
   const run = (await must("sync_runs", client.from("sync_runs").insert({ mode: "parity", read_budget: 0 }).select("id").single())) as { id: number };
   await must("sync_runs", client.from("sync_runs").update({

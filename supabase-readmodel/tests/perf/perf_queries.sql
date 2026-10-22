@@ -28,7 +28,8 @@ begin
   execute format('select count(*) from (select row_to_json(x)::text from (%s) x) y', q) into n;
   for i in 1..runs loop
     t := clock_timestamp();
-    execute format('select count(*) from (select row_to_json(x)::text from (%s) x) y', q);
+    -- sum(octet_length(...)) uses every serialised row, so the planner can't skip the JSON work.
+    execute format('select sum(octet_length(row_to_json(x)::text)) from (%s) x', q);
     times := times || (extract(epoch from clock_timestamp() - t) * 1000)::numeric;
   end loop;
   execute 'explain (format json) ' || q into plan;

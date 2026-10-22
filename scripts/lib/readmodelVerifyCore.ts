@@ -21,6 +21,8 @@ export type VerifySource = {
 export type VerifySink = {
   readsUsedSince(isoTime: string): Promise<number>;
   liveCounts(): Promise<{ uid: string; collection: string; live: number }[]>;
+  /** Accounts erased by the purge (SPENDLY-508); skipped like the sync skips them (SPENDLY-520). */
+  purgedUids(uids: string[]): Promise<Set<string>>;
   recordCounts(uid: string, collection: string, sourceCount: number, modelCount: number): Promise<void>;
   startRun(readBudget: number): Promise<number | null>;
   finishRun(runId: number | null, record: VerifyRecord): Promise<void>;
@@ -50,8 +52,16 @@ export async function runVerify(
   const runId = await sink.startRun(budget);
 
   try {
-    const uids = (await source.listUserIds()).filter((uid) => !isDuressUid(uid)).sort();
-    record.readsUsed += Math.max(1, uids.length);
+    const listed = (await source.listUserIds()).filter((uid) => !isDuressUid(uid)).sort();
+    record.readsUsed += Math.max(1, listed.length);
+    // An erased account whose Firestore documents still exist has no rows
+    // here by design: counting it would report a mismatch every night.
+    const purged = await sink.purgedUids(listed);
+    const uids = listed.filter((uid) => !purged.has(uid));
+    if (purged.size > 0) {
+      record.notes.purgedSkipped = purged.size;
+      log(`[PURGED] skipped ${purged.size} erased account(s) that still have Firestore documents`);
+    }
     const model = new Map((await sink.liveCounts()).map((c) => [`${c.uid}/${c.collection}`, c.live]));
     const totals = new Map(READ_MODEL_TABLES.map((t) => [t.collection, { collection: t.collection, firestore: 0, model: 0, mismatchedUsers: 0 }]));
 

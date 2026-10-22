@@ -82,6 +82,7 @@ describe("read-model sync against the Firestore emulator (SPENDLY-506)", () => {
 
     const verifySink = (): VerifySink => ({
       readsUsedSince: async () => 0,
+      purgedUids: async () => new Set<string>(),
       async liveCounts() {
         const counts = new Map<string, number>();
         const collectionOf: Record<string, string> = { expenses: "expenses", accounts: "accounts", categories: "categories" };
