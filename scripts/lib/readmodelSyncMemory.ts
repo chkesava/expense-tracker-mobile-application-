@@ -73,6 +73,20 @@ export function memorySink(initial: { reads24h?: number; lastNotes?: Record<stri
       if (failures.some((f) => !f.resolved && f.uid === failure.uid && f.collection === failure.collection && f.docId === failure.docId)) return;
       failures.push({ ...failure });
     },
+    async fetchRows(name, uid, ids) {
+      return ids.map((id) => table(name).get(`${uid}/${id}`)).filter((r): r is MemoryRow => !!r).map((r) => ({ ...r }));
+    },
+    async repair(name, rows) {
+      let n = 0;
+      for (const row of rows) {
+        const key = `${row.uid}/${row.doc_id}`;
+        const existing = table(name).get(key);
+        if (existing && row.source_update_time < existing.source_update_time) continue;
+        table(name).set(key, { ...row, source_deleted: false, deleted_at: null });
+        n += 1;
+      }
+      return n;
+    },
     async modelUids() {
       return [...new Set([...status.values()].map((s) => s.uid))];
     },

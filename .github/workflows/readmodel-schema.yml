@@ -87,6 +87,14 @@ jobs:
       - name: Count parity function (SPENDLY-509)
         run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/verify.sql
 
+      - name: Reporting views — missing data, invariants, repair, access (SPENDLY-510)
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/views.sql
+
+      - name: Golden — every view equals the TypeScript reference (SPENDLY-510)
+        # Generated from the SPENDLY-503 fixture by scripts/readmodel-golden.ts;
+        # scripts/readmodelGolden.test.ts keeps the file in step with the TypeScript.
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/golden.sql
+
       - name: Migrations are idempotent to re-check
         # A second assertion run must still pass (the probe table is dropped).
         run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/assert_security.sql

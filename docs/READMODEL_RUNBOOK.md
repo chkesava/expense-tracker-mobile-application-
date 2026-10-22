@@ -39,6 +39,17 @@ The first copy is just a full sync. Production data may only be written after an
 
 **Health:** "Count parity failed: …" means the latest verify found a (user, collection) whose counts differ. Usually a write landed between the sync and the verify, so re-run `mode=verify`. If it persists, run `mode=full` (`dry_run=false`), which restores missing rows and tombstones extra ones, then verify again.
 
+## Parity (SPENDLY-510)
+
+Every nightly full run also checks **field parity**: each stored row must equal what the mapper builds from its Firestore document.
+- **A diverged row** (for example, edited by hand in Postgres) is rewritten from Firestore and recorded as a `parity` failure. The run shows `parityMismatches`.
+- **Count parity** (verify) then confirms the totals.
+- **Record parity findings** stores tonight's data findings: orphans, duplicate cashback, overpaid bills, balances the Wave 1 rows don't explain, missing amounts. These describe the data as Firestore has it, so they are reported, not failed on. The fix is in the app's data.
+
+**The 14-day gate:** Actions → Read-model sync → `mode=report` prints it. The health summary shows the streak, "Parity gate: N of 14 clean days". A clean day means a full run with no field divergence, a passing verify, and no failed run.
+
+When the gate passes, paste the report into `docs/` for sign-off. That is the Phase 2 exit evidence; screens move to Supabase only after it.
+
 ## Replay and recovery
 
 There is no separate replay step. Every run re-reads the **current** Firestore document, and the upsert is version-guarded. So:

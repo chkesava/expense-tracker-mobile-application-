@@ -5,6 +5,8 @@
  * hourly and goes red when this says so. No Firestore reads, no uids out.
  */
 
+import { GATE_DAYS, parityGate } from "./readmodelParity";
+
 export type HealthRun = {
   mode: string;
   status: string;
@@ -50,6 +52,8 @@ export type HealthReport = {
     lagP95Hours: number | null;
     lagMaxHours: number | null;
     statusRows: number;
+    /** SPENDLY-510: consecutive clean days toward the 14-day gate. */
+    parityStreakDays: number;
   };
 };
 
@@ -74,7 +78,7 @@ export function evaluateHealth(input: HealthInput, now: number, thresholds = THR
       warnings,
       metrics: {
         runs24h: 0, reads24h: 0, lastSyncAgeHours: null, lastFullAgeHours: null, openFailures: 0,
-        lagP50Hours: null, lagP95Hours: null, lagMaxHours: null, statusRows: 0,
+        lagP50Hours: null, lagP95Hours: null, lagMaxHours: null, statusRows: 0, parityStreakDays: 0,
       },
     };
   }
@@ -91,14 +95,14 @@ export function evaluateHealth(input: HealthInput, now: number, thresholds = THR
   if (lastSyncAge === null || lastSyncAge > thresholds.maxSyncGapHours) {
     problems.push(
       lastSyncAge === null
-        ? "No sync run recorded in the last 48 h. Is the schedule enabled (READMODEL_SYNC_ENABLED) and not disabled by GitHub?"
+        ? "No sync run recorded. Is the schedule enabled (READMODEL_SYNC_ENABLED) and not disabled by GitHub?"
         : `No sync run for ${round1(lastSyncAge)} h (limit ${thresholds.maxSyncGapHours} h). Check the Read-model sync workflow is enabled.`
     );
   }
   if (lastFullAge === null || lastFullAge > thresholds.maxFullGapHours) {
     problems.push(
       lastFullAge === null
-        ? "No full sync run in the last 48 h: deletes and unstamped edits are not being caught."
+        ? "No full sync run recorded: deletes and unstamped edits are not being caught."
         : `No full sync run for ${round1(lastFullAge)} h (limit ${thresholds.maxFullGapHours} h).`
     );
   }
@@ -171,6 +175,7 @@ export function evaluateHealth(input: HealthInput, now: number, thresholds = THR
       lagP95Hours: round1(p95),
       lagMaxHours: round1(lags.length ? lags[lags.length - 1] : null),
       statusRows: lags.length,
+      parityStreakDays: parityGate(input.runs, now).streak,
     },
   };
 }
@@ -190,6 +195,7 @@ export function renderHealthSummary(report: HealthReport, recent: HealthRun[]): 
     `| Last sync run | ${m.lastSyncAgeHours ?? "—"} h ago |`,
     `| Last full run | ${m.lastFullAgeHours ?? "—"} h ago |`,
     `| Open failures | ${m.openFailures} |`,
+    `| Parity gate (SPENDLY-510) | ${m.parityStreakDays} of ${GATE_DAYS} clean days |`,
     `| Copy age p50 / p95 / max | ${m.lagP50Hours ?? "—"} / ${m.lagP95Hours ?? "—"} / ${m.lagMaxHours ?? "—"} h (${m.statusRows} user-collections) |`,
     "",
     "| Started (UTC) | Mode | Status | Reads | Failures | Unmapped |",
