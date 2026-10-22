@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { isLocalTestMode } from "@/lib/env";
 import { logWarning } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
-import { resolveJournalBackend } from "@/lib/readModel/journalReadPath";
+import { readModelPath, resolveReadModelBackend } from "@/lib/readModel/screenReadPath";
 import { useAuth } from "@/providers/AuthProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
@@ -17,7 +17,10 @@ import { configuredReadModelMode, type ReadModelScreen } from "@/shared/utils/re
  * `readModel.loopbackLagMinutes` in the emulator's system settings.
  *
  * Returns null whenever the screen reads Firestore (the default, duress,
- * offline, no read model), so nothing is shown and nothing is fetched.
+ * offline, no read model), so nothing is shown and nothing is fetched. If the
+ * screen fell back to Firestore this session, it says so (SPENDLY-513); the
+ * fallback always sets the screen's data, so the screen re-renders and this
+ * is read again.
  */
 const timeLabel = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
@@ -44,7 +47,7 @@ export function useReadModelFreshness(
     let cancelled = false;
     void (async () => {
       try {
-        const { mode, backend } = await resolveJournalBackend({
+        const { mode, backend } = await resolveReadModelBackend(screen, {
           db,
           user,
           conditions: { setting, online: isOnline, duress: isDuress, localTestMode: isLocalTestMode() },
@@ -59,8 +62,10 @@ export function useReadModelFreshness(
     return () => {
       cancelled = true;
     };
-  }, [active, user, key, setting, isOnline, isDuress]);
+  }, [active, screen, user, key, setting, isOnline, isDuress]);
 
-  if (!active || lastSyncedAtMs === undefined) return null;
-  return readModelFreshness({ lastSyncedAtMs, newestLocalWriteMs, nowMs: Date.now(), formatTime: timeLabel });
+  if (!active) return null;
+  const fellBack = readModelPath().fellBack(screen);
+  if (!fellBack && lastSyncedAtMs === undefined) return null;
+  return readModelFreshness({ fellBack, lastSyncedAtMs: lastSyncedAtMs ?? null, newestLocalWriteMs, nowMs: Date.now(), formatTime: timeLabel });
 }

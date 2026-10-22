@@ -53,3 +53,20 @@ function millis(value: unknown): number {
   }
   return 0;
 }
+
+/**
+ * SPENDLY-513 — how the audit trail is read for a read-model mode.
+ * - `listener`: the bounded realtime listener (and Firestore cursor pages).
+ * - `readModelPages`: one transaction in `supabase` mode: pages from the read
+ *   model and **no listener**.
+ * - `listenerThenReadModel`: the whole trail in `supabase` mode: the newest
+ *   window stays a realtime listener; older pages come from the read model.
+ * - `pending`: the mode is still being resolved; nothing is read yet.
+ */
+export type AuditStrategy = "listener" | "readModelPages" | "listenerThenReadModel" | "pending";
+
+export function auditStrategy(mode: "firestore" | "shadow" | "supabase" | null, docId: string | undefined): AuditStrategy {
+  if (mode === null) return "pending";
+  if (mode !== "supabase") return "listener";
+  return docId ? "readModelPages" : "listenerThenReadModel";
+}

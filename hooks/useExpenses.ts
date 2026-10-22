@@ -16,6 +16,7 @@ export function useExpenses() {
     expenseMonthsLoaded,
     loadExpensesForMonth,
     loadMatchingExpenses,
+    readModelSession,
     removeExpense,
     updateExpense,
   } = useExpensesContext();
@@ -47,6 +48,8 @@ export function useExpenses() {
     loadMonth: loadExpensesForMonth,
     /** SPENDLY-512: read-model `supabase` mode only; loads every row matching a filter. */
     loadMatching: loadMatchingExpenses,
+    /** SPENDLY-513: read conditions and locally removed ids, for read-model screens. */
+    readModelSession,
     removeExpense,
     updateExpense,
   };

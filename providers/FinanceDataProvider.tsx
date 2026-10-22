@@ -40,6 +40,7 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import type { ReadModelReadConditions } from "@/lib/readModel/screenReadPath";
 import { readJournalMatches, readJournalMonth, readJournalPage, shadowCompareJournalHistory } from "@/lib/readModel/journalReadPath";
 import type { JournalMatch } from "@/lib/readModel/backend";
 import { isLocalTestMode } from "@/lib/env";
@@ -96,7 +97,12 @@ function noteServerSync(fromCache: boolean): void {
 
 // ─── Granular Context Types ───────────────────────────────────────────────────
 
-export type ExpensesContextType = {
+export type ReadModelSession = {
+  conditions: () => ReadModelReadConditions;
+  locallyRemovedIds: Set<string>;
+};
+
+type ExpensesContextType = {
   expenses: Expense[];
   expensesLoading: boolean;
   /**
@@ -136,6 +142,12 @@ export type ExpensesContextType = {
    * without paging all history. A no-op in `firestore` (default) and `shadow`.
    */
   loadMatchingExpenses: (match: JournalMatch) => Promise<void>;
+  /**
+   * SPENDLY-513: what read-model screens outside the provider need: the
+   * current read conditions, and the ids removed on this device this session
+   * (the read model may still hold them until the next sync). Stable.
+   */
+  readModelSession: ReadModelSession;
   /** Local ledger mutation helper for optimistic updates. */
   removeExpense: (id: string) => void;
   updateExpense: (id: string, updates: Partial<Expense>) => void;
@@ -267,6 +279,10 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   readModelRef.current = { setting: systemSettings.readModel, online: isOnline, duress: isDuress, localTestMode: isLocalTestMode() };
   /** Ids removed on this device this session; a not-yet-synced copy must not bring them back. */
   const locallyRemovedIdsRef = useRef(new Set<string>());
+  const readModelSession = useMemo<ReadModelSession>(
+    () => ({ conditions: () => readModelRef.current, locallyRemovedIds: locallyRemovedIdsRef.current }),
+    []
+  );
   /** SPENDLY-512: where read-model history paging resumes (Firestore keeps its own cursor). */
   const supabaseExpenseCursorRef = useRef<SupabaseCursor>(null);
   const supabaseIncomeCursorRef = useRef<SupabaseCursor>(null);
@@ -1868,6 +1884,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       expenseMonthsLoaded,
       loadExpensesForMonth,
       loadMatchingExpenses,
+      readModelSession,
       removeExpense,
       updateExpense,
     }),
@@ -1886,6 +1903,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       expenseMonthsLoaded,
       loadExpensesForMonth,
       loadMatchingExpenses,
+      readModelSession,
       removeExpense,
       updateExpense,
     ]

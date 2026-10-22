@@ -18,8 +18,15 @@
 export const READ_MODEL_MODES = ["firestore", "shadow", "supabase"] as const;
 export type ReadModelMode = (typeof READ_MODEL_MODES)[number];
 
-/** Screens that have a read-model path. Phase 3 stories add theirs. */
-export const READ_MODEL_SCREENS = ["journal"] as const;
+/**
+ * Screens that have a read-model path, each with its own kill switch.
+ * - `journal` (SPENDLY-511/512): month loads, older pages, filter matches.
+ * - `insights` (SPENDLY-513): the Insights month.
+ * - `cashFlow` (SPENDLY-513): the dashboard chart's older months.
+ * - `audit` (SPENDLY-513): ledger audit history.
+ * - `cashback` (SPENDLY-513): cashback history's linked purchases.
+ */
+export const READ_MODEL_SCREENS = ["journal", "insights", "cashFlow", "audit", "cashback"] as const;
 export type ReadModelScreen = (typeof READ_MODEL_SCREENS)[number];
 
 /** The configured mode for a screen; anything missing or unknown is `firestore`. */

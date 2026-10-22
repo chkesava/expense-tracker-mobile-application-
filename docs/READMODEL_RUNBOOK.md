@@ -52,13 +52,23 @@ When the gate passes, paste the report into `docs/` for sign-off. That is the Ph
 
 ## Flipping a screen (SPENDLY-511)
 
-Each screen's source is `system_settings/global.readModel.<screen>`. Today the only screen is `journal`, which covers the Journal's month loads (SPENDLY-511) and older-history pages past the live 300-row window (SPENDLY-512). Reports and export are built from the same rows. The live window always stays on Firestore. Clients can only read that document; the app follows changes live and applies them on the next load, so no release is needed.
+Each screen's source is `system_settings/global.readModel.<screen>`, and each screen has its own switch and its own fallback (one failing screen never moves another back to Firestore). Clients can only read that document; the app follows changes live and applies them on the next load, so no release is needed.
+
+| Screen key | What moves to the read model | What stays on Firestore |
+|---|---|---|
+| `journal` (511/512) | Month loads, older-history pages past the live 300-row window, filter matches. Reports and export are built from the same rows | The live window |
+| `insights` (513) | The Insights month's expenses and incomes, by month key | Nothing else changes; the helpers are the same |
+| `cashFlow` (513) | The dashboard chart's months before the last two (`v_cash_flow_by_month`) | The current and previous month (the tiles), until Phase 4 |
+| `audit` (513) | One transaction's history (no listener at all), and older pages of the whole audit trail | The whole trail's newest 100 events (realtime) |
+| `cashback` (513) | The purchases a cashback links to, when older than the loaded window (their notes) | The cashback rows and totals (already complete on the device) |
+
+The `cashFlow` screen needs migration `20261027000000_readmodel_phase3_reads.sql`, which grants `authenticated` SELECT on `v_cash_flow_by_month` and the two `v_active_*` views it reads through. RLS still applies through them (`security_invoker`).
 
 | Mode | What the screen does | When |
 |---|---|---|
 | `firestore` (unset = this) | Today's queries, unchanged. Nothing touches Supabase | Default, and the **kill switch** |
 | `shadow` | Serves Firestore, fetches the same data from Supabase in the background, and logs any difference (`readModel.shadow.journal`, at most once per 10 min) | Any time after the sync is live, to prove a screen |
-| `supabase` | Serves the read model, with a "last synced" badge when stale and "Updating…" when this device has newer writes. On an error or a 4 s timeout, Firestore serves the rest of the session (logged once, no toast) | **Only after the SPENDLY-510 14-day report is signed off** |
+| `supabase` | Serves the read model, with a "last synced" badge when stale and "Updating…" when this device has newer writes. On an error or a 4 s timeout, Firestore serves the rest of the session (logged once, no toast), and the screen shows "History copy unavailable — showing live data" | **Only after the SPENDLY-510 14-day report is signed off** |
 
 **Duress sessions, offline devices and builds without the read model always read Firestore, whatever the mode.**
 

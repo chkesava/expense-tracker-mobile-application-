@@ -196,6 +196,43 @@ begin
 end
 $$;
 
+-- ─── 4b. SPENDLY-513: the cash-flow view only totals the caller's rows ──────
+reset role;
+insert into public.expenses (uid, doc_id, doc, source_path, source_update_time, source_deleted, amount, month) values
+  ('user-a', 'cf-a1', '{}', 'users/user-a/expenses/cf-a1', now(), false, 100.25, '2026-01'),
+  ('user-a', 'cf-a2', '{}', 'users/user-a/expenses/cf-a2', now(), true, 999.00, '2026-01'),
+  ('user-b', 'cf-b1', '{}', 'users/user-b/expenses/cf-b1', now(), false, 555.00, '2026-01');
+insert into public.incomes (uid, doc_id, doc, source_path, source_update_time, source_deleted, amount, month) values
+  ('user-a', 'cf-a3', '{}', 'users/user-a/incomes/cf-a3', now(), false, 40.00, '2026-01');
+set local role authenticated;
+do $$ begin perform set_config('request.jwt.claims', rls_test.claims(), true); end $$;
+do $$
+declare
+  r record;
+  n integer;
+begin
+  select count(*) into n from public.v_cash_flow_by_month where uid <> 'user-a';
+  if n <> 0 then
+    raise exception 'user A saw another user''s cash flow';
+  end if;
+  select * into r from public.v_cash_flow_by_month where month = '2026-01';
+  if r.total_expenses is distinct from 100.25 or r.total_income is distinct from 40.00 or r.transaction_count <> 2 then
+    raise exception 'user A cash flow for 2026-01 is wrong: % / % / %', r.total_expenses, r.total_income, r.transaction_count;
+  end if;
+end
+$$;
+-- Other views stay closed to clients.
+do $$
+begin
+  begin
+    perform 1 from public.v_period_totals limit 1;
+    raise exception 'authenticated could read v_period_totals';
+  exception when insufficient_privilege then
+    null;
+  end;
+end
+$$;
+
 -- ─── 5. anon reads nothing, even holding a valid user's claims ──────────────
 reset role;
 set local role anon;
@@ -208,7 +245,8 @@ begin
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories',
-    'sync_runs', 'sync_status', 'sync_checkpoints', 'sync_failures'
+    'sync_runs', 'sync_status', 'sync_checkpoints', 'sync_failures',
+    'v_cash_flow_by_month'
   ] loop
     begin
       execute format('select 1 from public.%I limit 1', t);

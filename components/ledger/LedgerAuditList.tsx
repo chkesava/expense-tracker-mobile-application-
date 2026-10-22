@@ -9,6 +9,8 @@ import { Skeleton } from "@/components/common/Skeleton";
 import { PageListStateScroll } from "@/components/layout/PageListStateScroll";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { useLedgerEvents } from "@/hooks/useLedgerEvents";
+import { useReadModelFreshness } from "@/hooks/useReadModelFreshness";
+import { ReadModelFreshnessBadge } from "@/components/common/ReadModelFreshnessBadge";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
@@ -62,6 +64,8 @@ export function LedgerAuditList() {
   const isDark = themeUsesDarkPalette(themeName);
   const displayCurrency = useDisplayCurrency();
   const { events, loading, error, retry, hasMore, loadingMore, loadMore } = useLedgerEvents();
+  // SPENDLY-513: older pages may come from the read model; null otherwise.
+  const auditFreshness = useReadModelFreshness("audit", ["ledgerEvents"], null);
   const listBottomPadding = usePageListBottomPadding();
   const { user } = useAuth();
   const { settings } = useSettings();
@@ -292,6 +296,7 @@ export function LedgerAuditList() {
     <FlashList
       style={styles.list}
       data={events}
+      ListHeaderComponent={<ReadModelFreshnessBadge freshness={auditFreshness} />}
       keyExtractor={(item) => item.id}
       renderItem={renderItem}
       showsVerticalScrollIndicator={false}
