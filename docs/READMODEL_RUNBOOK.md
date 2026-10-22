@@ -146,3 +146,10 @@ update public.sync_failures set resolved_at = now()
 | `READMODEL_SUPABASE_URL`, `READMODEL_SUPABASE_SERVICE_ROLE_KEY` | **Netlify site** environment variables | `delete-account`: the `readmodel` purge phase (SPENDLY-508) |
 
 None of these may appear in app code or as an `EXPO_PUBLIC_` variable. `scripts/readmodelSecrets.test.ts` enforces that.
+
+## Performance and security checks (SPENDLY-519)
+
+- **Query budget:** `PGHOST=localhost PGPORT=55432 PGUSER=postgres bash supabase-readmodel/tests/perf/run_perf.sh`. It loads a 30K-transaction user into a throwaway local database and fails if any app query's p95 reaches 300 ms or scans a user table sequentially. It also runs in CI.
+- **Bundle secret scan:** `npx expo export --platform web --output-dir dist-web`, then `npx tsx scripts/scan-bundle-secrets.ts dist-web`. Run it before a release that touches env or the read model.
+- **Sync health over 30 days:** paste `supabase-readmodel/reports/sync_metrics.sql` into the read-model project's SQL editor. It is read-only and selects no uids.
+- **Scheduled workflows run only from `main`.** The sync and health jobs can't run, scheduled or by hand, until their workflow files are on the default branch.

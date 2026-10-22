@@ -98,3 +98,9 @@ jobs:
       - name: Migrations are idempotent to re-check
         # A second assertion run must still pass (the probe table is dropped).
         run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/assert_security.sql
+
+      - name: Performance budget (SPENDLY-519)
+        # Every app source query, as the signed-in user under RLS, against a
+        # synthetic 30K-transaction user among 49 others in a separate
+        # database: p95 < 300 ms and no sequential scan of a user table.
+        run: bash supabase-readmodel/tests/perf/run_perf.sh
