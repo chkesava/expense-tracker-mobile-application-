@@ -39,6 +39,9 @@ export const DELETE_PHASES = [
   "ganesh",
   "user-tree",
   "duress-tree",
+  // SPENDLY-508: the Supabase read-model copy. Before `auth`, so a failed
+  // purge is retried by a still-signed-in user rather than orphaned.
+  "readmodel",
   "auth",
   "complete",
 ] as const;
@@ -73,6 +76,8 @@ export type DeleteCounts = {
   vaults: number;
   userCollections: number;
   memberships: number;
+  /** Rows erased from the Supabase read model (SPENDLY-508). */
+  readModelRows: number;
 };
 
 export type DeleteAccountResponse = {
@@ -97,6 +102,7 @@ export const EMPTY_DELETE_COUNTS: DeleteCounts = {
   vaults: 0,
   userCollections: 0,
   memberships: 0,
+  readModelRows: 0,
 };
 
 export function deleteAccountFunctionUrl(origin: string): string {
@@ -177,6 +183,8 @@ export function deletePhaseLabel(phase: DeletePhase): string {
       return "Deleting your data…";
     case "duress-tree":
       return "Deleting hidden data…";
+    case "readmodel":
+      return "Deleting your reporting copy…";
     case "auth":
       return "Closing your account…";
     case "complete":

@@ -19,6 +19,7 @@ import {
 } from "../../shared/utils/deleteAccountRemote";
 import { planMembershipRemoval } from "../../shared/utils/ganeshAccountRemoval";
 import { duressUid, isDuressUid } from "../../shared/utils/duress";
+import { purgeReadModel, readModelPurgeEnv } from "./_readmodelPurge";
 
 type NetlifyEvent = {
   httpMethod?: string;
@@ -382,6 +383,14 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       case "duress-tree":
         finished = await runTreePhase(db, `users/${duressUid(uid)}`, startedAt, state);
         break;
+      case "readmodel": {
+        // SPENDLY-508. Throws on failure, so the client retries this phase and
+        // never reaches `auth` with the read-model copy still there.
+        const purged = await purgeReadModel(uid, readModelPurgeEnv());
+        if (purged.configured) state.deleted.readModelRows += purged.rows;
+        finished = true;
+        break;
+      }
       case "auth":
         try {
           await getAuth().deleteUser(uid);

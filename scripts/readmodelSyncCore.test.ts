@@ -328,6 +328,55 @@ describe("sync failures are recorded and resolve themselves (SPENDLY-507)", () =
   });
 });
 
+describe("account lifecycle (SPENDLY-508)", () => {
+  it("a full run flags, once, an account the read model holds but Firestore no longer has", async () => {
+    const fs = world();
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    // bob deleted their account, but the read-model purge never ran.
+    delete fs.users.bob;
+    const lines: string[] = [];
+    const run = await runSync(fs.source, m.sink, { ...opts("full", T0 + H), log: (l) => lines.push(l) });
+    expect(run.notes.orphans).toBe(1);
+    expect(await m.sink.openFailures()).toEqual([{ uid: "bob", collection: "*", docId: "*", errorClass: "orphan_uid" }]);
+    expect(lines.join("\n")).not.toContain("bob");
+    await runSync(fs.source, m.sink, opts("full", T0 + 2 * H));
+    expect(m.failures.filter((f) => f.errorClass === "orphan_uid")).toHaveLength(1);
+  });
+
+  it("incremental and dry runs don't run the orphan check", async () => {
+    const fs = world();
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    delete fs.users.bob;
+    await runSync(fs.source, m.sink, opts("incremental", T0 + H));
+    await runSync(fs.source, m.sink, { ...opts("full", T0 + H), dryRun: true });
+    expect(m.failures).toEqual([]);
+  });
+
+  it("only ever requests the Wave 1 collections, and never a duress tree", async () => {
+    const fs = world();
+    const requested: string[] = [];
+    const watched: SourcePort = {
+      listUserIds: fs.source.listUserIds,
+      async readPage(uid, collection, request) {
+        requested.push(`${uid}/${collection}`);
+        return fs.source.readPage(uid, collection, request);
+      },
+    };
+    await runSync(watched, memorySink().sink, opts("full", T0));
+    const collections = new Set(requested.map((r) => r.split("/")[1]));
+    expect([...collections].sort()).toEqual([
+      "accountEntries", "accountPayments", "accountTransfers", "accountTypes", "accounts",
+      "categories", "creditCardBills", "expenses", "incomes", "ledgerEvents",
+    ]);
+    for (const excluded of ["meta", "stats", "notifications", "financialSummaries", "daily_logs", "weight_history", "pandalMemberships"]) {
+      expect(collections.has(excluded)).toBe(false);
+    }
+    expect(requested.some((r) => r.startsWith("alice_duress/"))).toBe(false);
+  });
+});
+
 describe("readmodel-sync never writes Firestore", () => {
   const FIRESTORE_WRITES = /\.(set|update|delete|create)\(|\.batch\(|runTransaction|bulkWriter|recursiveDelete/;
 
