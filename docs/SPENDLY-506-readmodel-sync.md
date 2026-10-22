@@ -114,4 +114,4 @@ Any one of these is enough:
 
 - Setup steps 1–5, and the 7-day DoD run.
 - **The optional Cloud Monitoring check** (skip incremental runs when the app's own daily reads are already high) isn't built. The fixed 12K/day allowance is the guard for now.
-- **Wired by later stories:** alerting on failures and missing runs (SPENDLY-507), purging on account deletion (SPENDLY-508), and the parity report (SPENDLY-509/510).
+- **Wired by later stories:** alerting on failures and missing runs (SPENDLY-507, `readmodel-health.yml`), purging on account deletion (SPENDLY-508), and the parity report (SPENDLY-509/510).

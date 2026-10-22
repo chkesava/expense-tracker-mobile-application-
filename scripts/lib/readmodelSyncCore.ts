@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { isDuressUid } from "../../shared/utils/duress";
-import { mapDocument, READ_MODEL_TABLES, type ReadModelRow, type SourceDoc, type TableSpec } from "../../shared/utils/readModel/mapping";
+import { mapDocumentWithReason, READ_MODEL_TABLES, type ReadModelRow, type SourceDoc, type TableSpec } from "../../shared/utils/readModel/mapping";
 
 /**
  * SPENDLY-506 — the read-model sync, as a pure function of its ports
@@ -25,6 +25,13 @@ import { mapDocument, READ_MODEL_TABLES, type ReadModelRow, type SourceDoc, type
  *   table (when more than 20), in case of a bad read; that is reported instead.
  * - Duress trees (`{uid}_duress`) are never read.
  * - Logs and failures carry hashed uids only.
+ *
+ * Failures (SPENDLY-507) are recorded in sync_failures and resolved by the
+ * sync itself, never by hand-replaying a payload: a document that didn't map
+ * is resolved when a later pass maps it; a (uid, collection) failure or
+ * mass-tombstone guard is resolved when that pair next completes cleanly.
+ * Every pass re-reads the current Firestore document, so there is no stale
+ * payload to replay.
  */
 
 export type SyncMode = "incremental" | "full";
@@ -66,6 +73,8 @@ export type RunRecord = {
   notes: Record<string, unknown>;
 };
 
+export type OpenFailure = { uid: string; collection: string; docId: string; errorClass: string };
+
 export type SinkPort = {
   readsUsedSince(isoTime: string): Promise<number>;
   lastRunNotes(mode: SyncMode): Promise<Record<string, unknown> | null>;
@@ -77,6 +86,10 @@ export type SinkPort = {
   setCheckpoint(uid: string, collection: string, highWaterMs: number, runId: number | null): Promise<void>;
   setStatus(update: StatusUpdate): Promise<void>;
   recordFailure(failure: { uid: string; collection: string; docId: string; errorClass: string; message: string; runId: number | null }): Promise<void>;
+  /** Unresolved failures, so the run knows what a clean pass may resolve. */
+  openFailures(): Promise<OpenFailure[]>;
+  /** Marks open failures for these doc ids ("*" = the pair itself) resolved. */
+  resolveFailures(uid: string, collection: string, docIds: string[]): Promise<number>;
   finishRun(runId: number | null, record: RunRecord): Promise<void>;
 };
 
@@ -129,12 +142,16 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
   };
   const remaining = () => budget - record.readsUsed;
   let highWater = new Map<string, number | null>();
+  const open: Record<string, Set<string>> = {};
 
   try {
     const allUids = await source.listUserIds();
     spend(Math.max(1, allUids.length));
     const uids = allUids.filter((uid) => !isDuressUid(uid)).sort();
     highWater = new Map((await sink.checkpoints()).map((c) => [`${c.uid}/${c.collection}`, c.highWaterMs]));
+    for (const f of options.dryRun ? [] : await sink.openFailures()) {
+      (open[`${f.uid}/${f.collection}`] ??= new Set()).add(f.docId);
+    }
 
     // Fairness: resume where the last stopped run of this mode stopped.
     const pairs = uids.flatMap((uid) => tables.map((spec) => ({ uid, spec })));
@@ -171,7 +188,8 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
   return record;
 
   /** Reads every page of one query, mapping and upserting as it goes. */
-  async function drain(uid: string, spec: TableSpec, request: PageRequest, seen: Set<string>, maxUpdate: { ms: number }) {
+  async function drain(uid: string, spec: TableSpec, request: PageRequest, seen: Set<string>, maxUpdate: { ms: number }, resolved: string[]) {
+    const openHere = open[`${uid}/${spec.collection}`];
     let after: unknown;
     for (;;) {
       if (remaining() < 1) throw new BudgetExhausted();
@@ -182,8 +200,15 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
       for (const doc of page.docs) {
         if (seen.has(doc.id)) continue;
         seen.add(doc.id);
-        const row = mapDocument(spec, uid, doc);
-        if (row.mapping_status === "unmapped") record.unmapped += 1;
+        const { row, reason } = mapDocumentWithReason(spec, uid, doc);
+        if (row.mapping_status === "unmapped") {
+          record.unmapped += 1;
+          if (!options.dryRun && !openHere?.has(doc.id)) {
+            await sink.recordFailure({ uid, collection: spec.collection, docId: doc.id, errorClass: "mapping", message: reason ?? "did not map", runId });
+          }
+        } else if (openHere?.has(doc.id)) {
+          resolved.push(doc.id);
+        }
         maxUpdate.ms = Math.max(maxUpdate.ms, Date.parse(row.source_update_time));
         rows.push(row);
       }
@@ -200,13 +225,16 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
     const full = options.mode === "full" || ALWAYS_FULL.has(spec.collection) || hw === null;
     const seen = new Set<string>();
     const maxUpdate = { ms: 0 };
+    const resolved: string[] = [];
+    let guarded = false;
 
     if (full) {
-      await drain(uid, spec, { kind: "all", limit: PAGE_SIZE }, seen, maxUpdate);
+      await drain(uid, spec, { kind: "all", limit: PAGE_SIZE }, seen, maxUpdate, resolved);
       // The pass is complete: anything live in the model but not seen is gone.
       const live = options.dryRun ? [] : await sink.liveIds(spec.table, uid);
       const missing = live.filter((id) => !seen.has(id));
       if (missing.length > MASS_TOMBSTONE_MIN && missing.length > live.length / 2) {
+        guarded = true;
         record.failures += 1;
         record.status = "partial";
         log(`[GUARD] ${hashUid(uid)}/${spec.collection}: ${missing.length} of ${live.length} rows would be tombstoned; skipped`);
@@ -222,13 +250,17 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
     } else {
       const sinceMs = hw - OVERLAP_MS;
       for (const field of ["createdAt", "updatedAt"] as const) {
-        await drain(uid, spec, { kind: "since", field, sinceMs, limit: PAGE_SIZE }, seen, maxUpdate);
+        await drain(uid, spec, { kind: "since", field, sinceMs, limit: PAGE_SIZE }, seen, maxUpdate, resolved);
       }
     }
 
     // Both queries (or the full pass) finished: advance the high-water mark to
     // this run's start. Writes committed after that are caught next run.
     if (!options.dryRun) {
+      // The pair completed: its own failures are resolved (unless the guard
+      // just fired), and so are documents that map now.
+      if (!guarded && open[`${uid}/${spec.collection}`]?.has("*")) resolved.push("*");
+      if (resolved.length) await sink.resolveFailures(uid, spec.collection, resolved);
       await sink.setCheckpoint(uid, spec.collection, startedMs, runId);
       const nowIso = new Date(options.now()).toISOString();
       await sink.setStatus({

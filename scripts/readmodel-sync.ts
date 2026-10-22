@@ -154,6 +154,27 @@ function supabaseSink(client: SupabaseClient): SinkPort {
         throw new Error(`sync_failures: ${error.message}`);
       }
     },
+    async openFailures() {
+      const out: { uid: string; collection: string; docId: string; errorClass: string }[] = [];
+      for (let from = 0; ; from += 1000) {
+        const rows = (await must("sync_failures", client.from("sync_failures")
+          .select("uid, collection, doc_id, error_class").is("resolved_at", null).order("id").range(from, from + 999))) as
+          { uid: string; collection: string; doc_id: string; error_class: string }[];
+        out.push(...rows.map((r) => ({ uid: r.uid, collection: r.collection, docId: r.doc_id, errorClass: r.error_class })));
+        if (rows.length < 1000) return out;
+      }
+    },
+    async resolveFailures(uid, collection, docIds) {
+      let n = 0;
+      for (let i = 0; i < docIds.length; i += 200) {
+        const rows = (await must("sync_failures", client.from("sync_failures")
+          .update({ resolved_at: new Date().toISOString() })
+          .eq("uid", uid).eq("collection", collection).in("doc_id", docIds.slice(i, i + 200)).is("resolved_at", null)
+          .select("id"))) as { id: number }[];
+        n += rows.length;
+      }
+      return n;
+    },
     async finishRun(runId, record: RunRecord) {
       if (runId === null) return;
       await must("sync_runs", client.from("sync_runs").update({
