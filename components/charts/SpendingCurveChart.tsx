@@ -38,6 +38,17 @@ export interface SpendingCurveChartProps {
    */
   autoDomain?: boolean;
   /**
+   * With `autoDomain`, fit the scale to the data alone instead of always
+   * including zero, so small moves in a large series (net worth) stay visible
+   * (SPENDLY-568).
+   */
+  tightDomain?: boolean;
+  /**
+   * `ends` draws only the first, last and selected dots — for long, dense
+   * series such as a year of net worth (SPENDLY-568). Default `all`.
+   */
+  dots?: "all" | "ends";
+  /**
    * @deprecated No-op since SPENDLY-489. Dots are static; the chart fades in
    * as one view. Per-dot Reanimated props failed on unmounted SVG nodes.
    */
@@ -53,6 +64,8 @@ export function SpendingCurveChart({
   showYAxis = false,
   xTickCount = 3,
   autoDomain = false,
+  tightDomain = false,
+  dots = "all",
 }: SpendingCurveChartProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -85,12 +98,15 @@ export function SpendingCurveChart({
       const max = Math.max(...values, 0);
       return { minY: 0, maxY: max > 0 ? max * 1.15 : 100 };
     }
-    const rawMin = Math.min(...values, 0);
-    const rawMax = Math.max(...values, 0);
-    if (rawMax === rawMin) return { minY: rawMin - 100, maxY: rawMax + 100 };
+    const rawMin = tightDomain ? Math.min(...values) : Math.min(...values, 0);
+    const rawMax = tightDomain ? Math.max(...values) : Math.max(...values, 0);
+    if (rawMax === rawMin) {
+      const pad = tightDomain ? Math.max(1, Math.abs(rawMax) * 0.01) : 100;
+      return { minY: rawMin - pad, maxY: rawMax + pad };
+    }
     const padding = (rawMax - rawMin) * 0.15;
     return { minY: rawMin - padding, maxY: rawMax + padding };
-  }, [autoDomain, processedData]);
+  }, [autoDomain, tightDomain, processedData]);
 
   const maxPointAmount = useMemo(
     () => Math.max(...processedData.map((p) => p.amount), 0),
@@ -225,6 +241,8 @@ export function SpendingCurveChart({
             value={selectedPoint.amount}
             currency={currency}
             animated
+            // Ghost mode hides chart read-outs too (SPENDLY-568).
+            ghostable
             style={{ fontSize: 13, fontWeight: "800", color: activeLineColor }}
           />
         </Animated.View>
@@ -294,6 +312,9 @@ export function SpendingCurveChart({
               pt.amount === maxPointAmount;
 
             const targetRadius = isSelected ? 6 : isKeyPoint ? 3.5 : 2;
+            if (dots === "ends" && !isSelected && i !== 0 && i !== coordinates.length - 1) {
+              return null;
+            }
 
             return (
               <Circle

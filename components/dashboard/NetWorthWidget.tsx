@@ -18,6 +18,7 @@ import {
 import { Amount } from "@/components/common/Amount";
 import { Skeleton } from "@/components/common/Skeleton";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { NetWorthTrend } from "@/components/dashboard/NetWorthTrend";
 import { PrivacyToggle } from "@/components/dashboard/PrivacyToggle";
 import {
   DASH_RADIUS,
@@ -29,6 +30,8 @@ import {
   useSurfaces,
 } from "@/components/dashboard/primitives";
 import { useInvestmentsEnabled } from "@/hooks/useInvestmentsEnabled";
+import { useNetWorthHistory } from "@/hooks/useNetWorthHistory";
+import { useNetWorthSnapshotRecorder } from "@/hooks/useNetWorthSnapshotRecorder";
 import type { UnifiedNetWorthSummary } from "@/hooks/useUnifiedNetWorth";
 import { haptic } from "@/lib/haptics";
 import {
@@ -36,6 +39,8 @@ import {
   type DashboardAccountCard,
   type DashboardAccountCardKey,
 } from "@/shared/utils/dashboardAccountCards";
+import { useSettings } from "@/providers/SettingsProvider";
+import { todayDateKey } from "@/shared/utils/dates";
 import { signedCurrencyPrefix } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -53,6 +58,13 @@ export interface NetWorthWidgetProps {
  * shown because no net-worth history exists to draw one from.
  */
 export const NetWorthWidget = memo(function NetWorthWidget({ netWorth, currency }: NetWorthWidgetProps) {
+  const { settings } = useSettings();
+  const todayKey = todayDateKey(settings.timezone);
+  // SPENDLY-568: history is read only here, where the trend renders, and
+  // today's point is recorded from this same summary once it is complete.
+  const history = useNetWorthHistory(todayKey);
+  useNetWorthSnapshotRecorder({ summary: netWorth, todayKey, history });
+
   // First load: a placeholder shaped like the card, so nothing jumps when the
   // totals land (SPENDLY-533).
   if (netWorth.loading) {
@@ -65,6 +77,15 @@ export const NetWorthWidget = memo(function NetWorthWidget({ netWorth, currency 
       currency={currency}
       showAccountsLink={false}
       action={<PrivacyToggle />}
+      trend={
+        <NetWorthTrend
+          points={history.points}
+          todayKey={todayKey}
+          currency={currency}
+          loading={history.loading}
+          failed={Boolean(history.error)}
+        />
+      }
     />
   );
 });
@@ -94,12 +115,15 @@ export function NetWorthHeroCard({
   currency,
   showAccountsLink = true,
   action,
+  trend,
 }: {
   netWorth: UnifiedNetWorthSummary;
   currency: string;
   showAccountsLink?: boolean;
   /** Replaces the Accounts link, e.g. the dashboard's privacy switch. */
   action?: ReactNode;
+  /** Drawn under the figure, e.g. the dashboard's trend (SPENDLY-568). */
+  trend?: ReactNode;
 }) {
   const router = useRouter();
   const { theme } = useTheme();
@@ -166,6 +190,8 @@ export function NetWorthHeroCard({
           long-running accounts for full accuracy.
         </MetaLabel>
       ) : null}
+
+      {trend}
 
       <View style={[styles.splitRow, { borderTopColor: surfaces.divider }]}>
         <HeroFigure
