@@ -57,8 +57,20 @@ describe("read-model migrations (SPENDLY-504)", () => {
     expect(sql).toMatch(/alter default privileges in schema public revoke all on tables\s+from anon, authenticated/i);
   });
 
-  it("creates no policies (read policies belong to SPENDLY-505)", () => {
-    expect(sql.replace(/--.*$/gm, "")).not.toMatch(/create policy/i);
+  it("creates only owner-read SELECT policies for authenticated (SPENDLY-505)", () => {
+    const code = sql.replace(/--.*$/gm, "");
+    const policies = [...code.matchAll(/create policy[\s\S]*?;/gi)].map((m) => m[0]);
+    expect(policies.length).toBeGreaterThan(0);
+    for (const policy of policies) {
+      expect(policy).toMatch(/for select to authenticated/i);
+      expect(policy).toMatch(/readmodel_auth\.uid\(\)/);
+    }
+  });
+
+  it("never grants writes to client roles, or anything to anon (SPENDLY-505)", () => {
+    const code = sql.replace(/--.*$/gm, "");
+    expect(code).not.toMatch(/grant\s+[^;]*\b(insert|update|delete|truncate|all)\b[^;]*\bto\s+[^;]*\b(anon|authenticated)\b/i);
+    expect(code).not.toMatch(/grant\s+[^;]*\bto\s+[^;]*\banon\b/i);
   });
 
   it("never uses floating point for any column", () => {

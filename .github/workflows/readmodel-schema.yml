@@ -2,8 +2,9 @@ name: Read-model schema
 
 # SPENDLY-504: applies the Spendly read-model migrations to a throwaway
 # Postgres 17 (the Supabase Free major version) and runs the security
-# assertions: every table exists, RLS is on everywhere, and the client roles
-# (anon, authenticated) hold no grants, including on tables added later.
+# assertions: every table exists, RLS is on everywhere, anon holds no grants,
+# authenticated holds owner-only SELECT (SPENDLY-505), including on tables
+# added later.
 #
 # Quality gate only. It never connects to a Supabase project and holds no
 # secrets; production migrations are applied by hand
@@ -66,6 +67,12 @@ jobs:
 
       - name: Security assertions
         run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/assert_security.sql
+
+      - name: RLS behaviour (SPENDLY-505)
+        # Impersonates PostgREST requests: own rows only, tombstones hidden,
+        # other projects / expired / duress / anon claims see nothing, and
+        # every write is denied. Rolled back at the end.
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/rls_behaviour.sql
 
       - name: Migrations are idempotent to re-check
         # A second assertion run must still pass (the probe table is dropped).
