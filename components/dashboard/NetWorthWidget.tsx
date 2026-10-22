@@ -1,4 +1,4 @@
-import { memo, useMemo, type ComponentType } from "react";
+import { memo, useMemo, type ComponentType, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
 import {
@@ -18,6 +18,7 @@ import {
 import { Amount } from "@/components/common/Amount";
 import { Skeleton } from "@/components/common/Skeleton";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { NetWorthGlassCard } from "@/components/dashboard/NetWorthGlassCard";
 import {
   DASH_RADIUS,
   DASH_TYPE,
@@ -28,48 +29,72 @@ import {
   useSurfaces,
 } from "@/components/dashboard/primitives";
 import { useInvestmentsEnabled } from "@/hooks/useInvestmentsEnabled";
-import {
-  useUnifiedNetWorth,
-  type UnifiedNetWorthSummary,
-} from "@/hooks/useUnifiedNetWorth";
+import { useNetWorthHistory } from "@/hooks/useNetWorthHistory";
+import { useNetWorthSnapshotRecorder } from "@/hooks/useNetWorthSnapshotRecorder";
+import type { UnifiedNetWorthSummary } from "@/hooks/useUnifiedNetWorth";
 import { haptic } from "@/lib/haptics";
 import {
   dashboardAccountCards,
   type DashboardAccountCard,
   type DashboardAccountCardKey,
 } from "@/shared/utils/dashboardAccountCards";
+import { useSettings } from "@/providers/SettingsProvider";
+import { todayDateKey } from "@/shared/utils/dates";
 import { signedCurrencyPrefix } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export interface NetWorthWidgetProps {
+  /** The screen's one `useUnifiedNetWorth` summary (SPENDLY-566). */
+  netWorth: UnifiedNetWorthSummary;
   currency: string;
 }
 
 /**
- * The dashboard's hero (SPENDLY-532): net worth, then one card per kind of
- * money the user actually holds. Every figure is a field of the one
- * `useUnifiedNetWorth` summary — nothing here adds, nets or projects values.
+ * The dashboard's net-worth card (SPENDLY-532, Visual First since
+ * SPENDLY-566): net worth with the privacy switch beside it, then assets and
+ * liabilities. Every figure is a field of the one `useUnifiedNetWorth` summary
+ * — nothing here adds, nets or projects values. No trend or change figure is
+ * shown because no net-worth history exists to draw one from.
  */
-export const NetWorthWidget = memo(function NetWorthWidget({ currency }: NetWorthWidgetProps) {
-  const netWorth = useUnifiedNetWorth({ progressive: true });
+export const NetWorthWidget = memo(function NetWorthWidget({ netWorth, currency }: NetWorthWidgetProps) {
+  const { settings } = useSettings();
+  const todayKey = todayDateKey(settings.timezone);
+  // SPENDLY-568: history is read only here, where the trend renders, and
+  // today's point is recorded from this same summary once it is complete.
+  const history = useNetWorthHistory(todayKey);
+  useNetWorthSnapshotRecorder({ summary: netWorth, todayKey, history });
 
-  // First load: placeholders shaped like the hero and two account cards, so
-  // nothing jumps when the totals land (SPENDLY-533).
+  // First load: a placeholder shaped like the card, so nothing jumps when the
+  // totals land (SPENDLY-533).
   if (netWorth.loading) {
-    return (
-      <View style={styles.stack}>
-        <DashboardSkeleton variant="hero" />
-        <DashboardSkeleton variant="cards" />
-      </View>
-    );
+    return <DashboardSkeleton variant="hero" />;
   }
 
+  // SPENDLY-572: the dashboard's own glass card; the Money hub keeps
+  // `NetWorthHeroCard`.
   return (
-    <View style={styles.stack}>
-      <NetWorthHeroCard netWorth={netWorth} currency={currency} />
-      <AccountSummaryCards netWorth={netWorth} currency={currency} />
-    </View>
+    <NetWorthGlassCard
+      netWorth={netWorth}
+      currency={currency}
+      points={history.points}
+      todayKey={todayKey}
+      historyLoading={history.loading}
+      historyFailed={Boolean(history.error)}
+    />
   );
+});
+
+/**
+ * One card per kind of money the user holds (SPENDLY-532). It sat under the
+ * net-worth card; the Visual First layout (SPENDLY-566) shows it with the
+ * dashboard's "More" cards, from the same summary.
+ */
+export const AccountSummaryWidget = memo(function AccountSummaryWidget({
+  netWorth,
+  currency,
+}: NetWorthWidgetProps) {
+  if (netWorth.loading) return <DashboardSkeleton variant="cards" />;
+  return <AccountSummaryCards netWorth={netWorth} currency={currency} />;
 });
 
 /* ------------------------------------------------------------- Hero card */
@@ -83,10 +108,16 @@ export function NetWorthHeroCard({
   netWorth,
   currency,
   showAccountsLink = true,
+  action,
+  trend,
 }: {
   netWorth: UnifiedNetWorthSummary;
   currency: string;
   showAccountsLink?: boolean;
+  /** Replaces the Accounts link, e.g. the dashboard's privacy switch. */
+  action?: ReactNode;
+  /** Drawn under the figure, e.g. the dashboard's trend (SPENDLY-568). */
+  trend?: ReactNode;
 }) {
   const router = useRouter();
   const { theme } = useTheme();
@@ -102,13 +133,13 @@ export function NetWorthHeroCard({
       subtitle={netWorth.secondaryLoading ? "Updating valuations…" : "Assets minus liabilities"}
       icon={<Scale size={16} color={theme.colors.primary} strokeWidth={2.3} />}
       action={
-        showAccountsLink ? (
+        action ?? (showAccountsLink ? (
           <SectionAction
             label="Accounts"
             onPress={() => router.push("/ledger?tab=accounts" as Href)}
             accessibilityLabel="Open accounts"
           />
-        ) : undefined
+        ) : undefined)
       }
     >
       {netWorth.loading ? (
@@ -153,6 +184,8 @@ export function NetWorthHeroCard({
           long-running accounts for full accuracy.
         </MetaLabel>
       ) : null}
+
+      {trend}
 
       <View style={[styles.splitRow, { borderTopColor: surfaces.divider }]}>
         <HeroFigure

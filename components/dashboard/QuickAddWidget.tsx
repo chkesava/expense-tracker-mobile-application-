@@ -2,26 +2,22 @@ import { memo, useMemo, type ComponentType } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
 import {
+  ArrowDownToLine,
   ArrowLeftRight,
   CreditCard,
   LayoutGrid,
-  MinusCircle,
-  PlusCircle,
+  Plus,
   Repeat,
+  SquarePen,
   Users,
 } from "lucide-react-native";
 
 import { Chip } from "@/components/ui/Chip";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
-import { DASH_RADIUS, useSurfaces } from "@/components/dashboard/primitives";
+import { mixColors, Section, withAlpha } from "@/components/dashboard/primitives";
 import { haptic } from "@/lib/haptics";
 import { useModalActions } from "@/providers/ModalProvider";
 import { useTheme } from "@/theme/ThemeProvider";
-
-export interface QuickAddWidgetProps {
-  /** Opens the full add sheet (every add action, ordered for this screen). */
-  onAddExpense: () => void;
-}
 
 type IconType = ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
 
@@ -29,33 +25,35 @@ type Action = {
   id: string;
   label: string;
   icon: IconType;
-  primary?: boolean;
+  color: string;
+  accessibilityLabel: string;
   onPress: () => void;
 };
 
 /**
- * Quick actions (SPENDLY-532). Each tile opens the same form the add sheet
- * does — no new write path — and the shortcut rail keeps the two dashboard
- * links that are not already bottom-nav tabs.
+ * Data-viz violet for the Budget orb: no theme token carries a fourth hue, and
+ * like `categoryRamp`'s tail it has no positive/negative meaning.
  */
-export const QuickAddWidget = memo(function QuickAddWidget({ onAddExpense }: QuickAddWidgetProps) {
+const BUDGET_ORB = "#B07CFF";
+
+/**
+ * Quick actions (SPENDLY-532; round orbs since SPENDLY-566). Each orb opens
+ * the same form the add sheet does — no new write path. Budget opens the
+ * money settings, where the monthly and category budgets are set.
+ */
+export const QuickAddWidget = memo(function QuickAddWidget() {
   const router = useRouter();
   const { theme } = useTheme();
-  const surfaces = useSurfaces();
-  const {
-    setAddTransactionKind,
-    setIsAddExpenseOpen,
-    setIsTransferOpen,
-    setIsDebtPaymentOpen,
-  } = useModalActions();
+  const { setAddTransactionKind, setIsAddExpenseOpen, setIsTransferOpen } = useModalActions();
 
   const actions = useMemo<Action[]>(
     () => [
       {
         id: "expense",
         label: "Expense",
-        icon: MinusCircle,
-        primary: true,
+        icon: Plus,
+        color: theme.colors.destructive,
+        accessibilityLabel: "Add expense",
         onPress: () => {
           setAddTransactionKind("expense");
           setIsAddExpenseOpen(true);
@@ -64,7 +62,9 @@ export const QuickAddWidget = memo(function QuickAddWidget({ onAddExpense }: Qui
       {
         id: "income",
         label: "Income",
-        icon: PlusCircle,
+        icon: ArrowDownToLine,
+        color: theme.colors.success,
+        accessibilityLabel: "Add income",
         onPress: () => {
           setAddTransactionKind("income");
           setIsAddExpenseOpen(true);
@@ -74,21 +74,84 @@ export const QuickAddWidget = memo(function QuickAddWidget({ onAddExpense }: Qui
         id: "transfer",
         label: "Transfer",
         icon: ArrowLeftRight,
+        color: theme.colors.info,
+        accessibilityLabel: "Add transfer",
         onPress: () => setIsTransferOpen(true),
       },
       {
-        id: "cardBill",
-        label: "Pay card",
-        icon: CreditCard,
-        onPress: () => setIsDebtPaymentOpen(true),
+        id: "budget",
+        label: "Budget",
+        icon: SquarePen,
+        color: BUDGET_ORB,
+        accessibilityLabel: "Set budgets",
+        onPress: () => router.push("/settings/money" as Href),
       },
     ],
-    [setAddTransactionKind, setIsAddExpenseOpen, setIsTransferOpen, setIsDebtPaymentOpen]
+    [theme.colors, router, setAddTransactionKind, setIsAddExpenseOpen, setIsTransferOpen]
   );
+
+  return (
+    <View style={styles.grid}>
+      {actions.map((action) => {
+        const Icon = action.icon;
+        return (
+          <Pressable
+            key={action.id}
+            onPress={() => {
+              void (action.id === "expense" ? haptic.impact() : haptic.selection());
+              action.onPress();
+            }}
+            style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel={action.accessibilityLabel}
+          >
+            <View
+              style={[
+                styles.orb,
+                {
+                  // SPENDLY-572: a deep, opaque tint of the hue with a bright
+                  // ring, as in the reference — not a pale wash.
+                  backgroundColor: mixColors(theme.colors.background, action.color, 0.2),
+                  borderColor: withAlpha(action.color, 0.8),
+                  boxShadow: `0 6px 18px ${withAlpha(action.color, 0.18)}`,
+                },
+              ]}
+            >
+              <Icon size={27} color={action.color} strokeWidth={2.4} />
+            </View>
+            <Text
+              style={[styles.label, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
+              numberOfLines={1}
+            >
+              {action.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+});
+
+export interface QuickShortcutsWidgetProps {
+  /** Opens the full add sheet (every add action, ordered for this screen). */
+  onOpenAddSheet: () => void;
+}
+
+/**
+ * The quick-action shortcut rail (SPENDLY-532). SPENDLY-566 moves it under the
+ * dashboard's main sections and adds Pay card, which gave its orb to Budget.
+ */
+export const QuickShortcutsWidget = memo(function QuickShortcutsWidget({
+  onOpenAddSheet,
+}: QuickShortcutsWidgetProps) {
+  const router = useRouter();
+  const { theme } = useTheme();
+  const { setIsDebtPaymentOpen } = useModalActions();
 
   const shortcuts = useMemo(
     () => [
-      { id: "more", label: "All actions", icon: LayoutGrid, onPress: onAddExpense },
+      { id: "more", label: "All actions", icon: LayoutGrid, onPress: onOpenAddSheet },
+      { id: "cardBill", label: "Pay card", icon: CreditCard, onPress: () => setIsDebtPaymentOpen(true) },
       {
         id: "splits",
         label: "Split bills",
@@ -102,57 +165,11 @@ export const QuickAddWidget = memo(function QuickAddWidget({ onAddExpense }: Qui
         onPress: () => router.push("/ledger?tab=subscriptions" as Href),
       },
     ],
-    [router, onAddExpense]
+    [router, onOpenAddSheet, setIsDebtPaymentOpen]
   );
 
   return (
-    <View style={styles.wrap}>
-      <View style={styles.grid}>
-        {actions.map((action) => {
-          const Icon = action.icon;
-          const fg = action.primary ? theme.colors.primaryForeground : theme.colors.primary;
-          return (
-            <Pressable
-              key={action.id}
-              onPress={() => {
-                void (action.primary ? haptic.impact() : haptic.selection());
-                action.onPress();
-              }}
-              android_ripple={{ color: surfaces.control, borderless: false }}
-              style={({ pressed }) => [
-                styles.tile,
-                {
-                  backgroundColor: theme.colors.card,
-                  borderColor: theme.colors.border,
-                },
-                pressed && styles.tilePressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={action.id === "cardBill" ? "Pay a credit card bill" : `Add ${action.label.toLowerCase()}`}
-            >
-              <View
-                style={[
-                  styles.tileGlyph,
-                  {
-                    backgroundColor: action.primary
-                      ? theme.colors.primary
-                      : surfaces.wash(theme.colors.primary),
-                  },
-                ]}
-              >
-                <Icon size={19} color={fg} strokeWidth={2.3} />
-              </View>
-              <Text
-                style={[styles.tileLabel, { color: theme.colors.foreground, fontFamily: theme.fontFamily.medium }]}
-                numberOfLines={1}
-              >
-                {action.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
+    <Section title="Shortcuts" contentStyle={styles.shortcutsBody}>
       <HorizontalSwipeBoundary>
         <ScrollView
           horizontal
@@ -175,45 +192,40 @@ export const QuickAddWidget = memo(function QuickAddWidget({ onAddExpense }: Qui
           })}
         </ScrollView>
       </HorizontalSwipeBoundary>
-    </View>
+    </Section>
   );
 });
 
 const styles = StyleSheet.create({
-  wrap: {
-    gap: 10,
-  },
   grid: {
     flexDirection: "row",
-    gap: 8,
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
   },
-  tile: {
+  action: {
     flex: 1,
     minWidth: 0,
-    minHeight: 80,
     alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: DASH_RADIUS.tile + 2,
-    borderCurve: "continuous",
-    overflow: "hidden",
+    gap: 8,
+    paddingVertical: 4,
   },
-  tilePressed: {
-    opacity: 0.86,
-    transform: [{ scale: 0.97 }],
+  pressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.96 }],
   },
-  tileGlyph: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+  orb: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 1.5,
     alignItems: "center",
     justifyContent: "center",
   },
-  tileLabel: {
-    fontSize: 12,
+  label: {
+    fontSize: 14,
+  },
+  shortcutsBody: {
+    marginTop: 2,
   },
   rail: {
     flexDirection: "row",

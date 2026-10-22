@@ -246,6 +246,19 @@ export function isAccountDetailRoute(pathname: string): boolean {
 }
 
 /**
+ * SPENDLY-566: the Visual First dashboard draws its own app bar over the
+ * mountain hero, so the shared app bar steps aside there.
+ */
+export function isDashboardRoute(pathname: string): boolean {
+  return normalizePathname(pathname).split("?")[0] === "/dashboard";
+}
+
+/** Routes that render their own app bar instead of the shared `Header`. */
+export function ownsAppBar(pathname: string): boolean {
+  return isAccountDetailRoute(pathname) || isDashboardRoute(pathname);
+}
+
+/**
  * What the Android hardware back button should do from a given route, once any
  * open modal has been ruled out.
  *
@@ -272,7 +285,7 @@ const SUB_SCREEN_PREFIXES = [
   "/what-if/",
 ];
 
-const SUB_SCREEN_ROUTES = ["/settings", "/decisions", "/fees", "/app-selector", "/add", "/runway", "/calendar", "/what-if"];
+const SUB_SCREEN_ROUTES = ["/settings", "/decisions", "/fees", "/app-selector", "/add", "/runway", "/calendar", "/what-if", "/inbox"];
 
 const SECONDARY_TAB_PREFIXES = ["/ledger", "/vaults", "/investments", "/insights"];
 

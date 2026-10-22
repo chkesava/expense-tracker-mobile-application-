@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -57,6 +57,12 @@ import {
   nowTimeHm,
   todayDateKey,
 } from "@/shared/utils/dates";
+import {
+  nextWizardStep,
+  openingWizardStep,
+  previousWizardStep,
+  shouldSeedWizard,
+} from "@/shared/utils/setupWizard";
 
 const CURRENCIES = [
   { code: "INR", symbol: "₹", label: "Indian Rupee" },
@@ -88,6 +94,7 @@ function wizardAccountTypeId(key: string): CanonicalAccountTypeId {
   return "other";
 }
 
+// Keep the length equal to SETUP_WIZARD_STEP_COUNT (shared/utils/setupWizard.ts).
 const WIZARD_STEPS = [
   { title: "Profile", subtitle: "Personalize your account", icon: User },
   { title: "Currency", subtitle: "Select your primary currency", icon: DollarSign },
@@ -140,9 +147,15 @@ export function SetupWizardModal() {
   const [expenseCategory] = useState("Food & Groceries");
   const [expenseNote, setExpenseNote] = useState("Coffee & snacks");
 
+  // SPENDLY-564: seed the step and form once, when the wizard opens. Each
+  // step's save changes `settings` or the user doc; re-seeding on those reset
+  // the step, so Currency could never be passed.
+  const wasOpenRef = useRef(false);
   useEffect(() => {
-    if (isSetupWizardOpen) {
-      setCurrentStep(setupWizardInitialStep || 0);
+    const opening = shouldSeedWizard(wasOpenRef.current, isSetupWizardOpen);
+    wasOpenRef.current = isSetupWizardOpen;
+    if (opening) {
+      setCurrentStep(openingWizardStep(setupWizardInitialStep));
       setUsername(userDoc?.username || user?.displayName || "");
       setSelectedCurrency(settings.currency || systemSettings.defaultCurrency || "INR");
       if (settings.monthlyBudget > 0) {
@@ -255,8 +268,9 @@ export function SetupWizardModal() {
       }
 
       haptic.selection().catch(() => undefined);
-      if (currentStep < WIZARD_STEPS.length - 1) {
-        setCurrentStep((prev) => prev + 1);
+      const next = nextWizardStep(currentStep);
+      if (!next.done) {
+        setCurrentStep(next.step);
       } else {
         celebrate({
           title: "Setup Completed!",
@@ -276,14 +290,15 @@ export function SetupWizardModal() {
   const handleBack = () => {
     if (currentStep > 0) {
       haptic.selection().catch(() => undefined);
-      setCurrentStep((prev) => prev - 1);
+      setCurrentStep(previousWizardStep(currentStep));
     }
   };
 
   const handleSkip = () => {
     haptic.selection().catch(() => undefined);
-    if (currentStep < WIZARD_STEPS.length - 1) {
-      setCurrentStep((prev) => prev + 1);
+    const next = nextWizardStep(currentStep);
+    if (!next.done) {
+      setCurrentStep(next.step);
     } else {
       setIsSetupWizardOpen(false);
     }

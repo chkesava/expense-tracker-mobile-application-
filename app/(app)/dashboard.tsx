@@ -4,17 +4,17 @@ import { useRouter } from "expo-router";
 import { ShieldAlert, Sparkles } from "lucide-react-native";
 
 import { BudgetAlertsWidget } from "@/components/dashboard/BudgetAlertsWidget";
-import { DashboardWelcome } from "@/components/dashboard/DashboardWelcome";
 import { FinancialGoalsWidget } from "@/components/dashboard/FinancialGoalsWidget";
 import { GamificationWidget } from "@/components/dashboard/GamificationWidget";
-import { NetWorthWidget } from "@/components/dashboard/NetWorthWidget";
-import { QuickAddWidget } from "@/components/dashboard/QuickAddWidget";
+import { DashboardHero } from "@/components/dashboard/hero/DashboardHero";
+import { AccountSummaryWidget, NetWorthWidget } from "@/components/dashboard/NetWorthWidget";
+import { QuickAddWidget, QuickShortcutsWidget } from "@/components/dashboard/QuickAddWidget";
 import { QuickInsightsWidget } from "@/components/dashboard/QuickInsightsWidget";
 import { SafeToSpendWidget } from "@/components/dashboard/SafeToSpendWidget";
 import { SmartInsightsWidget } from "@/components/dashboard/SmartInsightsWidget";
 import { RecentActivityWidget } from "@/components/dashboard/RecentActivityWidget";
 import { SubscriptionsWidget } from "@/components/dashboard/SubscriptionsWidget";
-import { TopCategoriesWidget } from "@/components/dashboard/TopCategoriesWidget";
+import { SpendingOverviewCard } from "@/components/dashboard/SpendingOverviewCard";
 import { SetupChecklistWidget } from "@/components/dashboard/SetupChecklistWidget";
 import {
   DASH_RADIUS,
@@ -34,18 +34,15 @@ import { ReadModelFreshnessBadge } from "@/components/common/ReadModelFreshnessB
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
+import { useUnifiedNetWorth } from "@/hooks/useUnifiedNetWorth";
 import { useAuth } from "@/providers/AuthProvider";
 import { useGlobalMonth, useModalActions } from "@/providers/ModalProvider";
 import { useInvestmentsEnabled } from "@/hooks/useInvestmentsEnabled";
 import { useSettings } from "@/providers/SettingsProvider";
-import {
-  formatMonthLabel,
-  type DateFormatOption,
-} from "@/shared/utils/dateDisplay";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Expense, Income } from "@/shared/types/expense";
 import {
-  getOrderedDashboardWidgets,
+  getMoreDashboardWidgets,
   type DashboardWidgetId,
 } from "@/shared/utils/dashboardWidgets";
 import { currentMonthKey, formatDateKey } from "@/shared/utils/dates";
@@ -55,22 +52,20 @@ import {
   remainingCommittedThisMonth,
 } from "@/shared/utils/spendlyBudget";
 import { getNextRenewalDate } from "@/shared/utils/subscriptionProcessor";
-import { useTheme } from "@/theme/ThemeProvider";
+import { ThemeOverride, useTheme } from "@/theme/ThemeProvider";
+import { SpendlyUIScope } from "@/components/layout/SpendlyUIScope";
+import { SideDrawer } from "@/components/SideDrawer";
+import { dashboardMonthLabel } from "@/shared/utils/dashboardLabels";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { GridItem, ResponsiveGrid } from "@/components/layout/ResponsiveGrid";
 
 /**
- * SPENDLY-532 — first-viewport widgets, pinned ahead of the user's order when
- * enabled: the net-worth hero (with its account cards), then quick actions.
- * Income & expenses follows them; everything else keeps the user's order.
+ * SPENDLY-566 — the Visual First dashboard draws the hero, net worth, quick
+ * actions, Spending Overview and Recent Transactions in fixed places (see
+ * `PINNED_DASHBOARD_WIDGETS`). The "More" cards below them keep the user's
+ * saved order and toggles; these extra ids slot in around them.
  */
-const HERO_WIDGETS: DashboardWidgetId[] = ["overview", "quickAdd"];
-
-const ABOVE_FOLD_WIDGETS: DashboardWidgetId[] = [
-  "overview",
-  "quickAdd",
-  "focus",
-];
+type MoreCardId = DashboardWidgetId | "cashFlow" | "accounts" | "shortcuts";
 
 function getPreviousMonthKey(month: string): string {
   const [yearRaw, monthRaw] = month.split("-");
@@ -83,12 +78,6 @@ function getPreviousMonthKey(month: string): string {
   return `${y}-${m}`;
 }
 
-function formatMonthChipLabel(
-  month: string,
-  dateFormat: DateFormatOption
-): string {
-  return formatMonthLabel(month, dateFormat) || "This Month";
-}
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -215,20 +204,19 @@ export default function DashboardScreen() {
     return result;
   }, [cashFlowChartMonths, activeMonth]);
 
-  const orderedWidgetIds = useMemo(() => {
-    return getOrderedDashboardWidgets(
+  // SPENDLY-566: one net-worth summary for the card and the account cards.
+  // It reads providers the app already holds; no listener of its own.
+  const netWorth = useUnifiedNetWorth({ progressive: true });
+
+  /** "More" cards: user order and toggles, then the cards this layout moved down. */
+  const moreCardIds = useMemo<MoreCardId[]>(() => {
+    const more = getMoreDashboardWidgets(
       settings.dashboardOrder,
       settings.dashboardWidgets,
       investmentsEnabled
     );
+    return ["cashFlow", ...more, "accounts", "shortcuts"];
   }, [settings.dashboardOrder, settings.dashboardWidgets, investmentsEnabled]);
-
-  /** Hero widgets first (when enabled), then remaining widgets in user order. */
-  const { displayWidgetIds, heroCount } = useMemo(() => {
-    const hero = HERO_WIDGETS.filter((id) => orderedWidgetIds.includes(id));
-    const rest = orderedWidgetIds.filter((id) => !HERO_WIDGETS.includes(id));
-    return { displayWidgetIds: [...hero, ...rest], heroCount: hero.length };
-  }, [orderedWidgetIds]);
 
   const accountNames = useMemo(
     () => new Map(accounts.map((account) => [account.id, account.name])),
@@ -258,170 +246,120 @@ export default function DashboardScreen() {
     router.push("/ledger");
   }, [router]);
 
+  // SPENDLY-572: "This month" / "Sep 2026", whatever the date-format pref.
   const activeMonthChipLabel = useMemo(
-    () => formatMonthChipLabel(activeMonth, settings.dateFormat),
-    [activeMonth, settings.dateFormat]
+    () => dashboardMonthLabel(activeMonth, currentMonthKey(settings.timezone)),
+    [activeMonth, settings.timezone]
   );
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const openProfile = useCallback(() => setIsProfileOpen(true), []);
 
-  const renderWidget = (widgetId: DashboardWidgetId, index: number) => {
-    const node = (() => {
-      switch (widgetId) {
-        case "overview":
-          return (
-            <NetWorthWidget key="overview" currency={displayCurrency} />
-          );
+  const summaryUnavailable = financeError
+    ? ("error" as const)
+    : !activeLoading && !activeSummary
+      ? ("missing" as const)
+      : null;
 
-        case "quickAdd":
-          return (
-            <QuickAddWidget
-              key="quickAdd"
-              onAddExpense={handleOpenAddSheet}
-            />
-          );
+  const renderMoreCard = (id: MoreCardId) => {
+    switch (id) {
+      case "cashFlow":
+        return (
+          <>
+          {/* SPENDLY-513: says so when the chart's older months are stale or fell back (read-model only). */}
+          <ReadModelFreshnessBadge freshness={cashFlowFreshness} />
+          <QuickInsightsWidget
+            monthlySpent={monthlySpent}
+            monthlyIncome={monthlyIncome}
+            previousSpent={previousSpent}
+            previousIncome={previousIncome}
+            cashFlow={cashFlow}
+            currency={displayCurrency}
+            loading={activeLoading && monthlySpent === 0 && monthlyIncome === 0}
+            unavailable={summaryUnavailable}
+            monthLabel={activeMonthChipLabel}
+            onOpenMonthPicker={handleOpenMonthPicker}
+          />
+          </>
+        );
 
-        case "budgetAlerts":
-          return (
-            <BudgetAlertsWidget
-              key="budgetAlerts"
-              monthlyBudget={settings.monthlyBudget}
-              monthlySpent={monthlySpent}
-              currency={displayCurrency}
-              categoryTotals={activeSummary?.categoryTotals || {}}
-              activeMonth={activeMonth}
-              budget={monthBudget}
-            />
-          );
+      case "budgetAlerts":
+        return (
+          <BudgetAlertsWidget
+            monthlyBudget={settings.monthlyBudget}
+            monthlySpent={monthlySpent}
+            currency={displayCurrency}
+            categoryTotals={activeSummary?.categoryTotals || {}}
+            activeMonth={activeMonth}
+            budget={monthBudget}
+          />
+        );
 
-        case "topCategories":
-          return (
-            <TopCategoriesWidget
-              key="topCategories"
-              categoryTotals={activeSummary?.categoryTotals || null}
-              currency={displayCurrency}
-              activeMonth={activeMonth}
-            />
-          );
+      case "financialGoals":
+        return <FinancialGoalsWidget currency={displayCurrency} />;
 
-        case "recentActivity":
-          return (
-            <RecentActivityWidget
-              key="recentActivity"
-              items={recentActivity}
-              currency={displayCurrency}
-              loading={recentLoading && recentActivity.length === 0}
-              accountNames={accountNames}
-              onEditExpense={handleEditExpense}
-              onEditIncome={handleEditIncome}
-              onViewAll={handleViewLedger}
-            />
-          );
+      case "subscriptions":
+        return <SubscriptionsWidget currency={displayCurrency} />;
 
-        case "financialGoals":
-          return (
-            <FinancialGoalsWidget
-              key="financialGoals"
-              currency={displayCurrency}
-            />
-          );
+      case "focus":
+        return (
+          <SafeToSpendWidget
+            budget={monthBudget}
+            currency={displayCurrency}
+            loading={activeLoading && accountsLoading && accounts.length === 0}
+          />
+        );
 
-        case "insight":
-        case "investments":
-          return null;
+      case "gamification":
+        return <GamificationWidget />;
 
-        case "subscriptions":
-          return (
-            <SubscriptionsWidget
-              key="subscriptions"
-              currency={displayCurrency}
-            />
-          );
+      case "accounts":
+        return <AccountSummaryWidget netWorth={netWorth} currency={displayCurrency} />;
 
-        case "focus":
-          return (
-            <SafeToSpendWidget
-              key="focus"
-              budget={monthBudget}
-              currency={displayCurrency}
-              loading={activeLoading && accountsLoading && accounts.length === 0}
-            />
-          );
+      case "shortcuts":
+        return <QuickShortcutsWidget onOpenAddSheet={handleOpenAddSheet} />;
 
-        case "gamification":
-          return (
-            <GamificationWidget
-              key="gamification"
-            />
-          );
-
-        default:
-          return null;
-      }
-    })();
-
-    if (!node) return null;
-
-    // SPENDLY-533: one short entrance per card, staggered by position. It runs
-    // when the card mounts, so data updates never replay it.
-    const card = <DashboardEntrance index={index}>{node}</DashboardEntrance>;
-
-    if (ABOVE_FOLD_WIDGETS.includes(widgetId)) {
-      return card;
+      default:
+        return null;
     }
-
-    const delayMs = 40 + Math.max(0, index) * 40;
-    const isLastWidget = index === displayWidgetIds.length - 1;
-    return (
-      <LazyMount
-        key={widgetId}
-        delayMs={delayMs}
-        minHeight={120}
-        onMount={
-          isLastWidget
-            ? () => {
-                if (!hydratedEmittedRef.current) {
-                  hydratedEmittedRef.current = true;
-                  perfMark("dashboard_hydrated");
-                }
-              }
-            : undefined
-        }
-      >
-        {card}
-      </LazyMount>
-    );
   };
 
-  const insertInsightsAfter = displayWidgetIds.findIndex((id) => id === "budgetAlerts");
-
-  const cashFlowOverview = (
-    <DashboardEntrance index={heroCount}>
-    <ReadModelFreshnessBadge freshness={cashFlowFreshness} />
-    <QuickInsightsWidget
-      monthlySpent={monthlySpent}
-      monthlyIncome={monthlyIncome}
-      previousSpent={previousSpent}
-      previousIncome={previousIncome}
-      cashFlow={cashFlow}
-      currency={displayCurrency}
-      loading={activeLoading && monthlySpent === 0 && monthlyIncome === 0}
-      unavailable={financeError ? "error" : !activeLoading && !activeSummary ? "missing" : null}
-      monthLabel={activeMonthChipLabel}
-      onOpenMonthPicker={handleOpenMonthPicker}
-    />
-    </DashboardEntrance>
+  const smartInsights = (
+    <GridItem key="smartInsights">
+      <LazyMount delayMs={120}>
+        <SmartInsightsWidget
+          expenses={recentExpenses}
+          monthlyBudget={settings.monthlyBudget}
+          currency={displayCurrency}
+          todayKey={todayKey}
+        />
+      </LazyMount>
+    </GridItem>
   );
+  const insertInsightsAfter = Math.max(0, moreCardIds.indexOf("budgetAlerts"));
 
+  // SPENDLY-572: the Visual First dashboard is always a dark scene (Midnight
+  // Emerald), whatever the app theme; the profile drawer and every modal stay
+  // on the user's theme because they render outside this override.
   return (
+    <>
+    <ThemeOverride themeName="midnight-emerald">
+    <SpendlyUIScope>
     <PageShell
       refreshing={refreshing}
       onRefresh={handleRefresh}
       contentContainerStyle={styles.container}
       onScrollBeginDrag={() => sampleScrollFps("dashboard")}
+      // SPENDLY-566: the hero carries the app bar and runs under the status bar.
+      hideHeaderOffset
+      // SPENDLY-572: the scene is the backdrop; no decorative aura blobs.
+      withAura={false}
     >
-      <DashboardWelcome
-        monthLabel={activeMonthChipLabel}
-        onOpenMonthPicker={handleOpenMonthPicker}
-      />
+      <DashboardHero onOpenProfile={openProfile} />
+
+      {/* Rides up over the hero's fade (DASHBOARD_HERO_OVERLAP). */}
+      <DashboardEntrance index={0}>
+        <NetWorthWidget netWorth={netWorth} currency={displayCurrency} />
+      </DashboardEntrance>
 
       {isDuress ? (
         <View
@@ -490,61 +428,90 @@ export default function DashboardScreen() {
           description={financeError.message}
         />
       ) : (
-        // SPENDLY-559: one column on phones (same 12 gap as before), two on
-        // tablet web, three on desktop web. The hero widgets and the cash-flow
-        // overview keep a full row; order and slot positions are unchanged.
-        <ResponsiveGrid gap={12}>
-          {heroCount === 0 ? (
-            <GridItem key="cashFlowOverview" span="full">{cashFlowOverview}</GridItem>
-          ) : null}
-          {displayWidgetIds.flatMap((widgetId, index) => {
+        // SPENDLY-559: one column on phones, two on tablet web, three on
+        // desktop web. The Visual First sections keep a full row; the "More"
+        // cards share columns.
+        <ResponsiveGrid gap={14} style={styles.grid}>
+          <GridItem key="quickAdd" span="full">
+            <DashboardEntrance index={1}>
+              <QuickAddWidget />
+            </DashboardEntrance>
+          </GridItem>
+
+          <GridItem key="spendingOverview" span="full">
+            <DashboardEntrance index={2}>
+              <SpendingOverviewCard
+                categoryTotals={activeSummary?.categoryTotals || null}
+                currency={displayCurrency}
+                activeMonth={activeMonth}
+                monthLabel={activeMonthChipLabel}
+                onOpenMonthPicker={handleOpenMonthPicker}
+                loading={activeLoading && !activeSummary && !financeError}
+                unavailable={summaryUnavailable}
+                monthlyBudget={settings.monthlyBudget}
+                budget={monthBudget}
+              />
+            </DashboardEntrance>
+          </GridItem>
+
+          <GridItem key="recentActivity" span="full">
+            <DashboardEntrance index={3}>
+              <RecentActivityWidget
+                items={recentActivity}
+                currency={displayCurrency}
+                loading={recentLoading && recentActivity.length === 0}
+                accountNames={accountNames}
+                onEditExpense={handleEditExpense}
+                onEditIncome={handleEditIncome}
+                onViewAll={handleViewLedger}
+              />
+            </DashboardEntrance>
+          </GridItem>
+
+          {moreCardIds.flatMap((id, index) => {
+            const node = renderMoreCard(id);
+            if (!node) return [];
+            const isLast = index === moreCardIds.length - 1;
             const items = [
-              <GridItem key={widgetId} span={HERO_WIDGETS.includes(widgetId) ? "full" : 1}>
-                {renderWidget(widgetId, index)}
+              <GridItem key={id}>
+                <LazyMount
+                  delayMs={40 + index * 40}
+                  minHeight={120}
+                  onMount={
+                    isLast
+                      ? () => {
+                          if (!hydratedEmittedRef.current) {
+                            hydratedEmittedRef.current = true;
+                            perfMark("dashboard_hydrated");
+                          }
+                        }
+                      : undefined
+                  }
+                >
+                  {/* SPENDLY-533: one short entrance per card, on mount only. */}
+                  <DashboardEntrance index={4 + index}>{node}</DashboardEntrance>
+                </LazyMount>
               </GridItem>,
             ];
-            if (index === heroCount - 1) {
-              items.push(
-                <GridItem key="cashFlowOverview" span="full">{cashFlowOverview}</GridItem>
-              );
-            }
-            if (index === insertInsightsAfter || (insertInsightsAfter < 0 && index === 0)) {
-              items.push(
-                <GridItem key="smartInsights">
-                  <LazyMount delayMs={120}>
-                    <SmartInsightsWidget
-                      expenses={recentExpenses}
-                      monthlyBudget={settings.monthlyBudget}
-                      currency={displayCurrency}
-                      todayKey={todayKey}
-                    />
-                  </LazyMount>
-                </GridItem>
-              );
-            }
+            if (index === insertInsightsAfter) items.push(smartInsights);
             return items;
           })}
-          {displayWidgetIds.length === 0 ? (
-            <GridItem key="smartInsights">
-              <LazyMount delayMs={120}>
-                <SmartInsightsWidget
-                  expenses={recentExpenses}
-                  monthlyBudget={settings.monthlyBudget}
-                  currency={displayCurrency}
-                  todayKey={todayKey}
-                />
-              </LazyMount>
-            </GridItem>
-          ) : null}
         </ResponsiveGrid>
       )}
     </PageShell>
+    </SpendlyUIScope>
+    </ThemeOverride>
+    <SideDrawer isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     paddingBottom: 24,
+  },
+  grid: {
+    marginTop: 18,
   },
   alertBanner: {
     flexDirection: "row",
@@ -554,7 +521,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: DASH_RADIUS.tile,
     borderCurve: "continuous",
-    marginBottom: 12,
+    marginTop: 12,
   },
   alertTextCol: {
     flex: 1,

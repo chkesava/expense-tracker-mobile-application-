@@ -265,6 +265,21 @@ function themeUsesOppositeToggle(name: ThemeName): ThemeName {
   return themeUsesDarkPalette(name) ? "light" : "dark";
 }
 
+/**
+ * SPENDLY-572: renders a subtree in a fixed palette (the Visual First
+ * dashboard is always Midnight Emerald) without touching the user's saved
+ * theme. Setters pass through, so a theme change inside still updates the
+ * app; `themeName` and `theme` are the override's for everything below.
+ */
+export function ThemeOverride({ themeName, children }: { themeName: ThemeName; children: ReactNode }) {
+  const parent = useTheme();
+  const value = useMemo<ThemeContextValue>(
+    () => ({ ...parent, theme: createTheme(themeName, parent.accentColor), themeName }),
+    [parent, themeName]
+  );
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+}
+
 export function useTheme() {
   const ctx = useContext(ThemeContext);
   if (!ctx) {

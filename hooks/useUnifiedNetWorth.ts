@@ -15,7 +15,7 @@ import { usePortfolio } from "@/hooks/usePortfolio";
 import { useReceivables } from "@/hooks/useReceivables";
 import { useSettings } from "@/providers/SettingsProvider";
 import { todayDateKey } from "@/shared/utils/dates";
-import { composeNetWorth } from "@/shared/utils/netWorth";
+import { composeNetWorth, holdingsMissingQuote } from "@/shared/utils/netWorth";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 
 export interface UnifiedNetWorthSummary {
@@ -64,6 +64,11 @@ export interface UnifiedNetWorthSummary {
    * flag only; the totals themselves are unchanged.
    */
   liquidBalanceMayBePartial: boolean;
+  /**
+   * SPENDLY-568: holdings priced at cost because their live quote is missing.
+   * Transparency flag only; net-worth history skips a snapshot while it is > 0.
+   */
+  holdingsMissingQuote: number;
 }
 
 export interface UseUnifiedNetWorthOptions {
@@ -228,9 +233,12 @@ export function useUnifiedNetWorth(
 
   const loading = isProgressive ? coreLoading : coreLoading || secondaryLoading;
 
+  const missingQuotes = useMemo(() => holdingsMissingQuote(holdings, quotes), [holdings, quotes]);
+
   return {
     ...summary,
     loading,
     secondaryLoading,
+    holdingsMissingQuote: missingQuotes,
   };
 }

@@ -1,0 +1,276 @@
+/**
+ * SPENDLY-568 — net-worth history.
+ *
+ * One document per month at `users/{uid}/netWorthHistory/{YYYY-MM}`, holding a
+ * map of daily points keyed by day of month ("01".."31"). A month bucket keeps
+ * a 12-month chart to at most 12 document reads instead of ~365.
+ *
+ * A point is a copy of the `useUnifiedNetWorth` totals on that day — never a
+ * new calculation. Points are append-only (firestore.rules refuses to change
+ * or remove a recorded day), so a day is recorded once and replays of the same
+ * write are no-ops.
+ *
+ * Snapshot rule: a point is only written when the valuation is complete — see
+ * `snapshotBlockers`. A day with no complete valuation simply has no point.
+ */
+
+import { parseLocalDate } from "./dates";
+
+export const NET_WORTH_HISTORY_COLLECTION = "netWorthHistory";
+export const NET_WORTH_HISTORY_SCHEMA_VERSION = 1;
+/** How many months the dashboard reads (and the longest period it offers). */
+export const NET_WORTH_HISTORY_MONTHS = 12;
+/** Magnitude bound shared with firestore.rules. */
+export const NET_WORTH_VALUE_LIMIT = 1_000_000_000_000;
+/** Below this many recorded days the card shows the empty state instead of a line. */
+export const MIN_POINTS_FOR_TREND = 3;
+/** Most points the card draws; longer series are thinned evenly. */
+export const MAX_CHART_POINTS = 60;
+
+/** Fields of the month document, in rules order (contract-tested). */
+export const NET_WORTH_HISTORY_DOC_FIELDS = [
+  "month",
+  "points",
+  "schemaVersion",
+  "createdAtMs",
+  "updatedAtMs",
+] as const;
+
+/** Fields of one stored daily point. */
+export const NET_WORTH_POINT_FIELDS = ["netWorth", "assets", "liabilities", "recordedAtMs"] as const;
+
+export type StoredNetWorthPoint = {
+  netWorth: number;
+  assets: number;
+  liabilities: number;
+  recordedAtMs: number;
+};
+
+export type NetWorthHistoryDoc = {
+  month: string;
+  points: Record<string, StoredNetWorthPoint>;
+  schemaVersion: number;
+  createdAtMs: number;
+  updatedAtMs: number;
+};
+
+/** A recorded day, flattened for charts. */
+export type NetWorthPoint = {
+  date: string;
+  netWorth: number;
+  assets: number;
+  liabilities: number;
+};
+
+const MONTH_RE = /^\d{4}-\d{2}$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const DAY_RE = /^(0[1-9]|[12]\d|3[01])$/;
+
+export function monthKeyOf(dateKey: string): string {
+  return dateKey.slice(0, 7);
+}
+
+export function dayKeyOf(dateKey: string): string {
+  return dateKey.slice(8, 10);
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function toKey(date: Date): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+/** `dateKey` moved back by whole months, clamped to the end of a shorter month. */
+export function monthsBefore(dateKey: string, months: number): string {
+  const d = parseLocalDate(dateKey);
+  const day = d.getDate();
+  const target = new Date(d.getFullYear(), d.getMonth() - months, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(day, lastDay));
+  return toKey(target);
+}
+
+/** First month the dashboard reads: `months` calendar months ending with today's. */
+export function historyStartMonth(todayKey: string, months = NET_WORTH_HISTORY_MONTHS): string {
+  return monthKeyOf(monthsBefore(`${monthKeyOf(todayKey)}-01`, Math.max(0, months - 1)));
+}
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function boundedFinite(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && Math.abs(value) < NET_WORTH_VALUE_LIMIT;
+}
+
+/* --------------------------------------------------------- snapshot rule */
+
+export type NetWorthSnapshotBlocker =
+  | "duress"
+  | "offline"
+  | "loading"
+  | "valuationsLoading"
+  | "missingQuotes"
+  | "partialLedger"
+  | "invalidValues";
+
+export type SnapshotReadiness = {
+  isDuress: boolean;
+  isOnline: boolean;
+  loading: boolean;
+  secondaryLoading?: boolean;
+  /** Holdings valued at their average buy price because no live quote arrived. */
+  holdingsMissingQuote: number;
+  /** SPENDLY-413: the liquid total may be off while the ledger is still a staged page. */
+  liquidBalanceMayBePartial: boolean;
+  totalNetWorth: number;
+  totalAssets: number;
+  totalLiabilities: number;
+};
+
+/**
+ * Why a snapshot must not be recorded right now (empty = record it). A
+ * snapshot is never taken from a partial valuation: while any source is still
+ * loading, a holding is priced from its cost instead of the market, the cash
+ * ledger may be incomplete, the device is offline (cached data may be stale),
+ * or the session is the duress decoy.
+ */
+export function snapshotBlockers(input: SnapshotReadiness): NetWorthSnapshotBlocker[] {
+  const blockers: NetWorthSnapshotBlocker[] = [];
+  if (input.isDuress) blockers.push("duress");
+  if (!input.isOnline) blockers.push("offline");
+  if (input.loading) blockers.push("loading");
+  if (input.secondaryLoading) blockers.push("valuationsLoading");
+  if (input.holdingsMissingQuote > 0) blockers.push("missingQuotes");
+  if (input.liquidBalanceMayBePartial) blockers.push("partialLedger");
+  if (
+    !boundedFinite(input.totalNetWorth) ||
+    !boundedFinite(input.totalAssets) ||
+    !boundedFinite(input.totalLiabilities)
+  ) {
+    blockers.push("invalidValues");
+  }
+  return blockers;
+}
+
+/**
+ * The merge-write that records today's point. `createdAtMs` is only sent when
+ * the month document does not exist yet: the rules pin it after creation.
+ */
+export function netWorthSnapshotWrite(input: {
+  todayKey: string;
+  totalNetWorth: number;
+  totalAssets: number;
+  totalLiabilities: number;
+  nowMs: number;
+  monthDocExists: boolean;
+}): { monthKey: string; data: Partial<NetWorthHistoryDoc> & Pick<NetWorthHistoryDoc, "month" | "points"> } {
+  if (!DATE_RE.test(input.todayKey)) throw new Error(`Invalid date key: ${input.todayKey}`);
+  const monthKey = monthKeyOf(input.todayKey);
+  const point: StoredNetWorthPoint = {
+    netWorth: roundMoney(input.totalNetWorth),
+    assets: roundMoney(input.totalAssets),
+    liabilities: roundMoney(input.totalLiabilities),
+    recordedAtMs: input.nowMs,
+  };
+  return {
+    monthKey,
+    data: {
+      month: monthKey,
+      points: { [dayKeyOf(input.todayKey)]: point },
+      schemaVersion: NET_WORTH_HISTORY_SCHEMA_VERSION,
+      updatedAtMs: input.nowMs,
+      ...(input.monthDocExists ? {} : { createdAtMs: input.nowMs }),
+    },
+  };
+}
+
+/* --------------------------------------------------------------- reading */
+
+/**
+ * Month documents → recorded days, oldest first. Malformed entries (bad keys,
+ * impossible days, non-numeric values) are skipped, never guessed at.
+ */
+export function flattenNetWorthHistory(
+  docs: readonly { id: string; data: Partial<NetWorthHistoryDoc> }[]
+): NetWorthPoint[] {
+  const out: NetWorthPoint[] = [];
+  for (const { id, data } of docs) {
+    if (!MONTH_RE.test(id)) continue;
+    const points = data.points;
+    if (!points || typeof points !== "object") continue;
+    const [y, m] = id.split("-").map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    for (const [day, p] of Object.entries(points)) {
+      if (!DAY_RE.test(day) || Number(day) > daysInMonth) continue;
+      if (!p || !boundedFinite(p.netWorth) || !boundedFinite(p.assets) || !boundedFinite(p.liabilities)) continue;
+      out.push({ date: `${id}-${day}`, netWorth: p.netWorth, assets: p.assets, liabilities: p.liabilities });
+    }
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
+export function hasPointOn(points: readonly NetWorthPoint[], dateKey: string): boolean {
+  return points.some((p) => p.date === dateKey);
+}
+
+export type NetWorthPeriod = "1M" | "3M" | "6M" | "1Y";
+export const NET_WORTH_PERIODS: readonly NetWorthPeriod[] = ["1M", "3M", "6M", "1Y"];
+const PERIOD_MONTHS: Record<NetWorthPeriod, number> = { "1M": 1, "3M": 3, "6M": 6, "1Y": 12 };
+
+export type NetWorthTrend = {
+  /** Points to draw: the baseline, then every recorded day after it, thinned to `MAX_CHART_POINTS`. */
+  series: NetWorthPoint[];
+  /** The day the change is measured from. */
+  baseline: NetWorthPoint | null;
+  latest: NetWorthPoint | null;
+  /** latest − baseline; null without two distinct days. */
+  change: number | null;
+  /** change ÷ |baseline|, as a percentage; null when the baseline is zero. */
+  changePct: number | null;
+  /** False when history starts after the period's start ("since <baseline date>"). */
+  coversFullPeriod: boolean;
+};
+
+/**
+ * The change over `period`, measured from the last recorded day on or before
+ * the period's start (or, with shorter history, the first recorded day in it)
+ * to the latest recorded day. Gaps are not filled: the line joins the days
+ * that were actually recorded.
+ */
+export function netWorthTrend(
+  points: readonly NetWorthPoint[],
+  period: NetWorthPeriod,
+  todayKey: string
+): NetWorthTrend {
+  const start = monthsBefore(todayKey, PERIOD_MONTHS[period]);
+  const upToToday = points.filter((p) => p.date <= todayKey);
+  const before = upToToday.filter((p) => p.date <= start);
+  const inside = upToToday.filter((p) => p.date > start);
+  const anchor = before.length > 0 ? before[before.length - 1] : null;
+  const series = anchor ? [anchor, ...inside] : inside;
+  const baseline = series[0] ?? null;
+  const latest = series.length > 0 ? series[series.length - 1] : null;
+  const change = baseline && latest && latest.date !== baseline.date ? roundMoney(latest.netWorth - baseline.netWorth) : null;
+  const changePct =
+    change !== null && baseline && baseline.netWorth !== 0 ? (change / Math.abs(baseline.netWorth)) * 100 : null;
+  return {
+    series: downsampleSeries(series, MAX_CHART_POINTS),
+    baseline,
+    latest,
+    change,
+    changePct,
+    coversFullPeriod: anchor !== null,
+  };
+}
+
+/** Evenly thins a series to at most `max` points, always keeping the first and last. */
+export function downsampleSeries<T>(series: readonly T[], max: number): T[] {
+  if (max < 2 || series.length <= max) return [...series];
+  const out: T[] = [];
+  const step = (series.length - 1) / (max - 1);
+  for (let i = 0; i < max; i++) out.push(series[Math.round(i * step)]);
+  return out;
+}

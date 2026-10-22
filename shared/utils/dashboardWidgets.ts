@@ -219,6 +219,67 @@ export function topCategoryShares(
 }
 
 /**
+ * SPENDLY-566 — the Spending Overview donut: the top `limit` parent categories
+ * from `topCategoryShares`, with everything else folded into one "Others"
+ * slice so the slices always add up to the month's total.
+ */
+export function spendingBreakdown(
+  categoryTotals: Record<string, number> | null | undefined,
+  limit = 4
+): { categories: CategoryShare[]; totalSpent: number } {
+  const { categories: all, totalSpent } = topCategoryShares(categoryTotals, Number.MAX_SAFE_INTEGER);
+  const keep = Math.max(0, limit);
+  if (all.length <= keep + 1) return { categories: all, totalSpent };
+  const rest = all.slice(keep).reduce((sum, c) => sum + c.amount, 0);
+  return {
+    categories: [
+      ...all.slice(0, keep),
+      {
+        category: "Others",
+        amount: rest,
+        percentage: totalSpent > 0 ? (rest / totalSpent) * 100 : 0,
+      },
+    ],
+    totalSpent,
+  };
+}
+
+/**
+ * SPENDLY-566 — "X of Y on track" for the Spending Overview's budget row. A
+ * budget is on track until it is over (`isOver`, from
+ * `computeActiveCategoryBudgets`); nothing is recomputed here.
+ */
+export function budgetProgressSummary(items: readonly CategoryBudgetAlertItem[]): {
+  total: number;
+  onTrack: number;
+} {
+  return { total: items.length, onTrack: items.filter((b) => !b.isOver).length };
+}
+
+/**
+ * SPENDLY-566 — widgets the Visual First dashboard draws in fixed places
+ * (net worth, quick actions, the Spending Overview that replaces Top
+ * Categories, and Recent Transactions). Every other widget is a "More" card.
+ */
+export const PINNED_DASHBOARD_WIDGETS = new Set<DashboardWidgetId>([
+  "overview",
+  "quickAdd",
+  "topCategories",
+  "recentActivity",
+]);
+
+/** The "More" cards, in the user's saved order and honouring their toggles. */
+export function getMoreDashboardWidgets(
+  order: string[] | undefined,
+  widgetsConfig: DashboardWidgets | undefined,
+  enableInvestments: boolean
+): DashboardWidgetId[] {
+  return getOrderedDashboardWidgets(order, widgetsConfig, enableInvestments).filter(
+    (id) => !PINNED_DASHBOARD_WIDGETS.has(id)
+  );
+}
+
+/**
  * Derives progress and alert thresholds for category/subcategory budgets in a given month.
  */
 export function computeActiveCategoryBudgets(
