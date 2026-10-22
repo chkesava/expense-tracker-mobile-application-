@@ -154,6 +154,14 @@ function supabaseSink(client: SupabaseClient): SinkPort {
         throw new Error(`sync_failures: ${error.message}`);
       }
     },
+    async modelUids() {
+      const uids = new Set<string>();
+      for (let from = 0; ; from += 1000) {
+        const rows = (await must("sync_status", client.from("sync_status").select("uid").order("uid").range(from, from + 999))) as { uid: string }[];
+        for (const r of rows) uids.add(r.uid);
+        if (rows.length < 1000) return [...uids];
+      }
+    },
     async openFailures() {
       const out: { uid: string; collection: string; docId: string; errorClass: string }[] = [];
       for (let from = 0; ; from += 1000) {

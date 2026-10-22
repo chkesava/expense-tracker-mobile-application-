@@ -79,6 +79,11 @@ jobs:
         # tombstone and un-tombstone, unknown tables refused, no client execute.
         run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/sync_functions.sql
 
+      - name: Account purge (SPENDLY-508)
+        # Deletes every row and all sync bookkeeping for the uid and its duress
+        # twin; idempotent; a late sync cannot resurrect it; client roles can't call it.
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/purge.sql
+
       - name: Migrations are idempotent to re-check
         # A second assertion run must still pass (the probe table is dropped).
         run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/assert_security.sql

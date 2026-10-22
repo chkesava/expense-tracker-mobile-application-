@@ -153,4 +153,5 @@ The ordering rules:
 | Track A (495–500, 503, 563, 567) | Done on `main`; synced into the epic 2026-10-22 | — | the per-story docs | Production at zero variance (26/26) |
 | SPENDLY-514–518 | Closed (`wont-do`): option C | — | — | ADR §0 |
 | SPENDLY-506 | Merged into the epic (`627b1d5e`); Done when the epic reaches main and 7 days of scheduled runs pass | `feature/SPENDLY-506-readmodel-sync` | `docs/SPENDLY-506-readmodel-sync.md` | User setup: migrations, Actions secrets, first full run, then enable the schedule |
-| SPENDLY-507 | In Progress: failure tracking + hourly health check + runbook built; waiting for review + merge | `feature/SPENDLY-507-sync-monitoring` | `docs/SPENDLY-507-sync-monitoring.md`, `docs/READMODEL_RUNBOOK.md` | Re-scoped for option C (no trigger, no replay function) |
+| SPENDLY-507 | Merged into the epic (`47c54ba2`); Done when the epic reaches main | `feature/SPENDLY-507-sync-monitoring` | `docs/SPENDLY-507-sync-monitoring.md`, `docs/READMODEL_RUNBOOK.md` | Re-scoped for option C (no trigger, no replay function) |
+| SPENDLY-508 | In Progress: purge function + deletion phase + resurrection guards + orphan check built; waiting for review + merge | `feature/SPENDLY-508-readmodel-purge` | `docs/SPENDLY-508-readmodel-purge.md` | Needs the read-model env on the Netlify site; must be live before the first real full sync |

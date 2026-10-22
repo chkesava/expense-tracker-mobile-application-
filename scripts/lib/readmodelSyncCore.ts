@@ -90,6 +90,8 @@ export type SinkPort = {
   openFailures(): Promise<OpenFailure[]>;
   /** Marks open failures for these doc ids ("*" = the pair itself) resolved. */
   resolveFailures(uid: string, collection: string, docIds: string[]): Promise<number>;
+  /** Uids the read model holds sync state for (SPENDLY-508 orphan check). */
+  modelUids(): Promise<string[]>;
   finishRun(runId: number | null, record: RunRecord): Promise<void>;
 };
 
@@ -151,6 +153,24 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
     highWater = new Map((await sink.checkpoints()).map((c) => [`${c.uid}/${c.collection}`, c.highWaterMs]));
     for (const f of options.dryRun ? [] : await sink.openFailures()) {
       (open[`${f.uid}/${f.collection}`] ??= new Set()).add(f.docId);
+    }
+
+    // SPENDLY-508 orphan check (full runs): an account the read model still
+    // holds but Firestore no longer has was deleted without its read-model
+    // purge. Flag it once; the health check goes red until it is purged.
+    if (options.mode === "full" && !options.dryRun) {
+      const live = new Set(allUids);
+      for (const uid of await sink.modelUids()) {
+        if (live.has(uid)) continue;
+        record.notes.orphans = ((record.notes.orphans as number | undefined) ?? 0) + 1;
+        log(`[ORPHAN] ${hashUid(uid)} has read-model data but no Firestore account`);
+        if (!open[`${uid}/*`]?.has("*")) {
+          await sink.recordFailure({
+            uid, collection: "*", docId: "*", errorClass: "orphan_uid",
+            message: "account no longer exists in Firestore; run readmodel_purge_user", runId,
+          });
+        }
+      }
     }
 
     // Fairness: resume where the last stopped run of this mode stopped.

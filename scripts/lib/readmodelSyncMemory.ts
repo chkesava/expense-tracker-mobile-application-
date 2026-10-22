@@ -73,6 +73,9 @@ export function memorySink(initial: { reads24h?: number; lastNotes?: Record<stri
       if (failures.some((f) => !f.resolved && f.uid === failure.uid && f.collection === failure.collection && f.docId === failure.docId)) return;
       failures.push({ ...failure });
     },
+    async modelUids() {
+      return [...new Set([...status.values()].map((s) => s.uid))];
+    },
     async openFailures() {
       return failures.filter((f) => !f.resolved).map(({ uid, collection, docId, errorClass }) => ({ uid, collection, docId, errorClass }));
     },
