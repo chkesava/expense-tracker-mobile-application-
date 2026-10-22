@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { composeNetWorth, type NetWorthInputs } from "@/shared/utils/netWorth";
+import { composeNetWorth, holdingsMissingQuote, type NetWorthInputs } from "@/shared/utils/netWorth";
 
 /**
  * Regression cover for the dashboard's headline number — KAN-73.
@@ -334,5 +334,19 @@ describe("borrowings and receivables sit on opposite sides", () => {
       inputs({ borrowingOutstanding: 10_000, receivableOutstanding: 10_000 })
     );
     expect(result.totalNetWorth).toBe(0);
+  });
+});
+
+describe("holdingsMissingQuote (SPENDLY-568)", () => {
+  it("counts held positions that fall back to cost, ignoring sold-out ones", () => {
+    const quotes = new Map([["A.NS", { currentPrice: 10 }], ["B.NS", { currentPrice: null }]]);
+    const holdings = [
+      { yahooSymbol: "A.NS", quantity: 5 },
+      { yahooSymbol: "B.NS", quantity: 1 },
+      { yahooSymbol: "C.NS", quantity: 2 },
+      { yahooSymbol: "D.NS", quantity: 0 },
+    ];
+    expect(holdingsMissingQuote(holdings, quotes)).toBe(2);
+    expect(holdingsMissingQuote([], quotes)).toBe(0);
   });
 });

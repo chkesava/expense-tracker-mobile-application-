@@ -38,7 +38,7 @@ service cloud.firestore {
     //   receivableRepayments, receivables, calendarReminders, goalFundingPlans, runwayOverrides, runwaySettings, spaces,
     //   stats, subscriptions, recurringDismissals, trips, watchlist,
     //   whatIfScenarios,
-    //   merchantOverrides
+    //   merchantOverrides, netWorthHistory
     //
     // The recursive match keeps a new collection from silently becoming
     // unreadable the moment it ships, while still confining everything to the
@@ -972,6 +972,87 @@ service cloud.firestore {
         allow update: if isOwner(uid)
           && merchantOverrideWellFormed()
           && merchantOverrideUpdateStable();
+      }
+
+      // SPENDLY-568. Net-worth history: one document per month, a map of
+      // daily points keyed "01".."31". A point is a copy of the app's
+      // net-worth totals on that day, not a ledger record, and it is
+      // append-only: a recorded day can never be changed or removed, so the
+      // trend can't be rewritten after the fact. Each newly added point is
+      // validated (rules can't loop, so the 31 days are spelled out).
+      // Field lists and bounds mirror shared/utils/netWorthHistory.ts
+      // (netWorthHistory.rules.contract.test.ts).
+      function netWorthPointOk(p) {
+        return p is map
+          && p.keys().hasOnly(['netWorth', 'assets', 'liabilities', 'recordedAtMs'])
+          && p.keys().hasAll(['netWorth', 'assets', 'liabilities', 'recordedAtMs'])
+          && p.netWorth is number && p.netWorth > -1000000000000 && p.netWorth < 1000000000000
+          && p.assets is number && p.assets > -1000000000000 && p.assets < 1000000000000
+          && p.liabilities is number && p.liabilities > -1000000000000 && p.liabilities < 1000000000000
+          && p.recordedAtMs is number && p.recordedAtMs >= 0 && p.recordedAtMs < 10000000000000;
+      }
+
+      function netWorthAddedPointsOk(points, added) {
+        return true
+          && (!('01' in added) || netWorthPointOk(points.get('01', null)))
+          && (!('02' in added) || netWorthPointOk(points.get('02', null)))
+          && (!('03' in added) || netWorthPointOk(points.get('03', null)))
+          && (!('04' in added) || netWorthPointOk(points.get('04', null)))
+          && (!('05' in added) || netWorthPointOk(points.get('05', null)))
+          && (!('06' in added) || netWorthPointOk(points.get('06', null)))
+          && (!('07' in added) || netWorthPointOk(points.get('07', null)))
+          && (!('08' in added) || netWorthPointOk(points.get('08', null)))
+          && (!('09' in added) || netWorthPointOk(points.get('09', null)))
+          && (!('10' in added) || netWorthPointOk(points.get('10', null)))
+          && (!('11' in added) || netWorthPointOk(points.get('11', null)))
+          && (!('12' in added) || netWorthPointOk(points.get('12', null)))
+          && (!('13' in added) || netWorthPointOk(points.get('13', null)))
+          && (!('14' in added) || netWorthPointOk(points.get('14', null)))
+          && (!('15' in added) || netWorthPointOk(points.get('15', null)))
+          && (!('16' in added) || netWorthPointOk(points.get('16', null)))
+          && (!('17' in added) || netWorthPointOk(points.get('17', null)))
+          && (!('18' in added) || netWorthPointOk(points.get('18', null)))
+          && (!('19' in added) || netWorthPointOk(points.get('19', null)))
+          && (!('20' in added) || netWorthPointOk(points.get('20', null)))
+          && (!('21' in added) || netWorthPointOk(points.get('21', null)))
+          && (!('22' in added) || netWorthPointOk(points.get('22', null)))
+          && (!('23' in added) || netWorthPointOk(points.get('23', null)))
+          && (!('24' in added) || netWorthPointOk(points.get('24', null)))
+          && (!('25' in added) || netWorthPointOk(points.get('25', null)))
+          && (!('26' in added) || netWorthPointOk(points.get('26', null)))
+          && (!('27' in added) || netWorthPointOk(points.get('27', null)))
+          && (!('28' in added) || netWorthPointOk(points.get('28', null)))
+          && (!('29' in added) || netWorthPointOk(points.get('29', null)))
+          && (!('30' in added) || netWorthPointOk(points.get('30', null)))
+          && (!('31' in added) || netWorthPointOk(points.get('31', null)));
+      }
+
+      function netWorthHistoryWellFormed(month) {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['month', 'points', 'schemaVersion', 'createdAtMs', 'updatedAtMs'])
+          && d.keys().hasAll(['month', 'points', 'schemaVersion', 'createdAtMs', 'updatedAtMs'])
+          && month.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')
+          && d.month == month
+          && d.schemaVersion == 1
+          && d.points is map && d.points.size() >= 1 && d.points.size() <= 31
+          && d.points.keys().hasOnly(['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31'])
+          && d.createdAtMs is number && d.createdAtMs >= 0 && d.createdAtMs < 10000000000000
+          && d.updatedAtMs is number && d.updatedAtMs >= 0 && d.updatedAtMs < 10000000000000;
+      }
+
+      match /netWorthHistory/{month} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && netWorthHistoryWellFormed(month)
+          && netWorthAddedPointsOk(request.resource.data.points, request.resource.data.points.keys());
+        allow update: if isOwner(uid)
+          && netWorthHistoryWellFormed(month)
+          && request.resource.data.createdAtMs == resource.data.createdAtMs
+          && request.resource.data.points.diff(resource.data.points).changedKeys().size() == 0
+          && request.resource.data.points.diff(resource.data.points).removedKeys().size() == 0
+          && netWorthAddedPointsOk(request.resource.data.points,
+                                   request.resource.data.points.diff(resource.data.points).addedKeys());
+        allow delete: if false;
       }
 
       // `collection` is only bound inside this match. Helpers declared on

@@ -104,6 +104,20 @@ export interface NetWorthTotals {
   liquidBalanceMayBePartial: boolean;
 }
 
+/**
+ * SPENDLY-568: holdings that `composeNetWorth` values at their average buy
+ * price because no live quote arrived. Same fallback test as the roll-up, so
+ * a non-zero count means the stocks total is cost-based, not market-based.
+ */
+export function holdingsMissingQuote(
+  holdings: readonly { yahooSymbol: string; quantity: number }[],
+  quotes: ReadonlyMap<string, { currentPrice?: number | null }>
+): number {
+  return holdings.filter(
+    (h) => h.quantity > 0 && quotes.get(h.yahooSymbol)?.currentPrice == null
+  ).length;
+}
+
 export function composeNetWorth(inputs: NetWorthInputs): NetWorthTotals {
   const {
     accounts,
