@@ -74,6 +74,11 @@ jobs:
         # every write is denied. Rolled back at the end.
         run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/rls_behaviour.sql
 
+      - name: Sync write functions (SPENDLY-506)
+        # Version-guarded upsert (replay and older versions are no-ops),
+        # tombstone and un-tombstone, unknown tables refused, no client execute.
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/sync_functions.sql
+
       - name: Migrations are idempotent to re-check
         # A second assertion run must still pass (the probe table is dropped).
         run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/assert_security.sql
