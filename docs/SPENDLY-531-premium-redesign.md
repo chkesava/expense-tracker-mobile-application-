@@ -49,6 +49,7 @@ Epic branch: `feature/SPENDLY-531-premium-redesign`, cut from `main`. Phase 1 (t
 | SPENDLY-549 | Phase 6b: Vaults and Spaces (tokens, foundations, ghost mode, 6a forms) | `feature/SPENDLY-549-vaults-spaces` | Done. On `main` via `7f238132` (2026-10-20) ([doc](SPENDLY-549-vaults-spaces.md)) |
 | SPENDLY-566 | Visual First dashboard: time-of-day mountain hero, net-worth card, quick-action orbs, Spending Overview donut, Recent Transactions | `feature/SPENDLY-566-visual-first-dashboard` | Done. Merged straight to `main` via `dd0f6743` (2026-10-22, at the user's request), skipping the epic branch. Android device QA open ([doc](SPENDLY-566-visual-first-dashboard.md)) |
 | SPENDLY-568 | Net-worth history: append-only monthly snapshots, trend line and period change on the dashboard card | `feature/SPENDLY-568-net-worth-history` | Merged into the epic via `0ad380e0` (2026-10-22); not on `main` yet. Needs a Firestore rules deploy before the app ships ([doc](SPENDLY-568-net-worth-history.md)) |
+| SPENDLY-570 | Merchant monogram tiles in Recent Transactions (SPENDLY-186 resolver; confident or user-named merchants only) | `feature/SPENDLY-570-merchant-logos` | Built and tested on the story branch; awaiting approval to merge into the epic ([doc](SPENDLY-570-merchant-logos.md)) |
 
 ## Phase 4 plan: Investments (2026-10-17)
 The Investments hub is `app/(app)/investments.tsx`, with four tabs: Investments (deposits), Stocks, Virtual SIPs and EPF. There is also the EPF establishment screen `app/(app)/epf/[establishmentId].tsx`. Together that is about 13.5k lines.
