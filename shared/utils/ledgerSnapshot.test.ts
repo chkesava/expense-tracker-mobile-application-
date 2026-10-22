@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   foldLedgerSnapshot,
+  unseenRows,
   FINANCE_SNAPSHOT_LISTEN_OPTIONS,
   isMetadataOnlySnapshot,
   isStagedPageComplete,
@@ -124,5 +125,24 @@ describe("sortLedgerByDateDesc", () => {
     const input = [{ date: "2026-01-01" }, { date: "2026-02-01" }];
     sortLedgerByDateDesc(input);
     expect(input.map((row) => row.date)).toEqual(["2026-01-01", "2026-02-01"]);
+  });
+});
+
+describe("unseenRows: the live-window boundary (SPENDLY-512)", () => {
+  const live = [{ id: "a", v: "live" }, { id: "b", v: "live" }];
+  const prev = [{ id: "c", v: "page1" }];
+
+  it("never re-adds a row already in the live window or an earlier page", () => {
+    const page = [{ id: "b", v: "page2" }, { id: "c", v: "page2" }, { id: "d", v: "page2" }];
+    expect(unseenRows(prev, live, page)).toEqual([{ id: "d", v: "page2" }]);
+  });
+
+  it("keeps the page's order and drops rows without an id", () => {
+    expect(unseenRows([], [], [{ id: "y" }, { id: "x" }, {}])).toEqual([{ id: "y" }, { id: "x" }]);
+  });
+
+  it("the row on screen keeps its local version (an older synced copy never replaces it)", () => {
+    const merged = [...prev, ...unseenRows(prev, live, [{ id: "c", v: "stale copy" }])];
+    expect(merged).toEqual([{ id: "c", v: "page1" }]);
   });
 });

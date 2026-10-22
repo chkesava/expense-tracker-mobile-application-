@@ -5,6 +5,8 @@ import { logDirectRead } from "@/lib/firestoreReadDebug";
 import { resolveJournalDateScope } from "@/shared/utils/journalDateScope";
 import { foldLedgerSnapshot } from "@/shared/utils/ledgerSnapshot";
 
+import { fromReadModelDoc } from "./readModelDoc";
+
 /**
  * SPENDLY-511 — the template read-model data need: one month of Journal
  * history (expenses or incomes), as `FinanceDataProvider.loadExpensesForMonth`
@@ -71,7 +73,7 @@ export async function supabaseJournalMonth<T extends { id?: string }>(
       .range(from, from + PAGE - 1);
     if (error) throw new Error(`read model ${collectionName}: ${error.message}`);
     const rows = (data ?? []) as { doc_id: string; doc: Record<string, unknown> }[];
-    for (const row of rows) out.push({ ...(row.doc ?? {}), id: row.doc_id } as unknown as T);
+    for (const row of rows) out.push(fromReadModelDoc<T>(row.doc_id, row.doc));
     if (rows.length < PAGE) return out;
   }
 }

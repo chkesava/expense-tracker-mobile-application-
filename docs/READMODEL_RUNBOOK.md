@@ -52,7 +52,7 @@ When the gate passes, paste the report into `docs/` for sign-off. That is the Ph
 
 ## Flipping a screen (SPENDLY-511)
 
-Each screen's source is `system_settings/global.readModel.<screen>`. Today the only screen is `journal`, which covers its month loads. Clients can only read that document; the app follows changes live and applies them on the next load, so no release is needed.
+Each screen's source is `system_settings/global.readModel.<screen>`. Today the only screen is `journal`, which covers the Journal's month loads (SPENDLY-511) and older-history pages past the live 300-row window (SPENDLY-512). Reports and export are built from the same rows. The live window always stays on Firestore. Clients can only read that document; the app follows changes live and applies them on the next load, so no release is needed.
 
 | Mode | What the screen does | When |
 |---|---|---|
@@ -61,6 +61,11 @@ Each screen's source is `system_settings/global.readModel.<screen>`. Today the o
 | `supabase` | Serves the read model, with a "last synced" badge when stale and "Updating…" when this device has newer writes. On an error or a 4 s timeout, Firestore serves the rest of the session (logged once, no toast) | **Only after the SPENDLY-510 14-day report is signed off** |
 
 **Duress sessions, offline devices and builds without the read model always read Firestore, whatever the mode.**
+
+**Journal flip order (SPENDLY-512):**
+1. `shadow`: month loads are compared per load. Once Firestore has loaded a user's whole history, that history is compared whole (`readModel.shadow.journal.history`).
+2. Wait for **7 days with zero shadow differences**.
+3. `supabase`. Then 7 more days with zero incidents complete the ticket.
 
 ```
 npx tsx scripts/readmodel-set-mode.ts --screen=journal --mode=shadow            # dry run

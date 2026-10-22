@@ -7,7 +7,6 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  startAfter,
   where,
   type QueryDocumentSnapshot,
   type QuerySnapshot,
@@ -41,7 +40,9 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
-import { readJournalMonth } from "@/lib/readModel/journalReadPath";
+import { readJournalMonth, readJournalPage, shadowCompareJournalHistory } from "@/lib/readModel/journalReadPath";
+import type { SupabaseCursor } from "@/lib/readModel/journalHistorySource";
+import { configuredReadModelMode } from "@/shared/utils/readModelMode";
 import type {
   Account,
   AccountEntry,
@@ -72,10 +73,10 @@ import {
   FINANCE_SNAPSHOT_LISTEN_OPTIONS,
   foldLedgerSnapshot,
   isStagedPageComplete,
-  LEDGER_PAGE_SIZE,
   LEDGER_STAGED_LIMIT,
   shouldApplySnapshotDocs,
   sortLedgerByDateDesc,
+  unseenRows,
 } from "@/shared/utils/ledgerSnapshot";
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
 import {
@@ -256,6 +257,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   readModelRef.current = { setting: systemSettings.readModel, online: isOnline, duress: isDuress };
   /** Ids removed on this device this session; a not-yet-synced copy must not bring them back. */
   const locallyRemovedIdsRef = useRef(new Set<string>());
+  /** SPENDLY-512: where read-model history paging resumes (Firestore keeps its own cursor). */
+  const supabaseExpenseCursorRef = useRef<SupabaseCursor>(null);
+  const supabaseIncomeCursorRef = useRef<SupabaseCursor>(null);
 
   const {
     error: financeError,
@@ -1591,44 +1595,41 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     fetchingMoreExpensesRef.current = true;
     setIsFetchingMoreExpenses(true);
     try {
-      const expensesCol = collection(database, "users", u.uid, "expenses");
-      const q = query(
-        expensesCol,
-        orderBy("createdAt", "desc"),
-        startAfter(cursor),
-        limit(LEDGER_PAGE_SIZE)
-      );
-      const snap = await getDocs(q);
-      logDirectRead(
-        `users/${u.uid}/expenses`,
-        snap.docs.length,
-        snap.metadata.fromCache ? "cache" : "server",
-        {
-          feature: "ledger_pagination",
-          queryShape: `startAfter limit=${LEDGER_PAGE_SIZE}`,
-        }
-      );
-
-      if (snap.docs.length > 0) {
-        lastExpenseDocRef.current = snap.docs[snap.docs.length - 1];
+      // SPENDLY-512: the previous cursor query in `firestore` mode (default).
+      const page = await readJournalPage<Expense>({
+        db: database,
+        user: u,
+        collectionName: "expenses",
+        firestoreCursor: cursor,
+        supabaseCursor: supabaseExpenseCursorRef.current,
+        conditions: readModelRef.current,
+        locallyRemovedIds: locallyRemovedIdsRef.current,
+      });
+      if (!page) return;
+      if (page.servedBy === "firestore") {
+        if (page.lastDoc) lastExpenseDocRef.current = page.lastDoc;
+      } else {
+        supabaseExpenseCursorRef.current = page.next;
       }
-      if (snap.docs.length < LEDGER_PAGE_SIZE) {
+      if (page.exhausted) {
         setHasMoreExpenses(false);
         setExpensesComplete(true);
+        if (configuredReadModelMode(readModelRef.current.setting, "journal") === "shadow") {
+          void shadowCompareJournalHistory({
+            user: u,
+            collectionName: "expenses",
+            loaded: [
+              ...realtimeExpensesRef.current,
+              ...paginatedExpensesRef.current,
+              ...unseenRows(paginatedExpensesRef.current, realtimeExpensesRef.current, page.items),
+            ],
+            conditions: readModelRef.current,
+          });
+        }
       }
 
-      const { items: newItems } = foldLedgerSnapshot<Expense>(snap.docs, {
-        activeOnly: true,
-      });
-
-      setPaginatedExpenses((prev) => {
-        const existingIds = new Set([
-          ...realtimeExpensesRef.current.map((e) => e.id),
-          ...prev.map((e) => e.id),
-        ]);
-        const toAdd = newItems.filter((e) => e.id && !existingIds.has(e.id));
-        return [...prev, ...toAdd];
-      });
+      const newItems = page.items;
+      setPaginatedExpenses((prev) => [...prev, ...unseenRows(prev, realtimeExpensesRef.current, newItems)]);
     } catch (err) {
       logError("financeProvider.loadMoreExpenses", err);
       toast.error(friendlyErrorMessage(err, "Failed to load older expenses"));
@@ -1668,11 +1669,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         locallyRemovedIds: locallyRemovedIdsRef.current,
       });
       setPaginatedExpenses((prev) => {
-        const existingIds = new Set([
-          ...realtimeExpensesRef.current.map((e) => e.id),
-          ...prev.map((e) => e.id),
-        ]);
-        const toAdd = newItems.filter((e) => e.id && !existingIds.has(e.id));
+        const toAdd = unseenRows(prev, realtimeExpensesRef.current, newItems);
         return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
       });
       setExpenseMonthsLoaded(new Set(expenseMonthsLoadedRef.current));
@@ -1708,44 +1705,41 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     fetchingMoreIncomesRef.current = true;
     setIsFetchingMoreIncomes(true);
     try {
-      const incomesCol = collection(database, "users", u.uid, "incomes");
-      const q = query(
-        incomesCol,
-        orderBy("createdAt", "desc"),
-        startAfter(cursor),
-        limit(LEDGER_PAGE_SIZE)
-      );
-      const snap = await getDocs(q);
-      logDirectRead(
-        `users/${u.uid}/incomes`,
-        snap.docs.length,
-        snap.metadata.fromCache ? "cache" : "server",
-        {
-          feature: "ledger_pagination",
-          queryShape: `startAfter limit=${LEDGER_PAGE_SIZE}`,
-        }
-      );
-
-      if (snap.docs.length > 0) {
-        lastIncomeDocRef.current = snap.docs[snap.docs.length - 1];
+      // SPENDLY-512: the previous cursor query in `firestore` mode (default).
+      const page = await readJournalPage<Income>({
+        db: database,
+        user: u,
+        collectionName: "incomes",
+        firestoreCursor: cursor,
+        supabaseCursor: supabaseIncomeCursorRef.current,
+        conditions: readModelRef.current,
+        locallyRemovedIds: locallyRemovedIdsRef.current,
+      });
+      if (!page) return;
+      if (page.servedBy === "firestore") {
+        if (page.lastDoc) lastIncomeDocRef.current = page.lastDoc;
+      } else {
+        supabaseIncomeCursorRef.current = page.next;
       }
-      if (snap.docs.length < LEDGER_PAGE_SIZE) {
+      if (page.exhausted) {
         setHasMoreIncomes(false);
         setIncomesComplete(true);
+        if (configuredReadModelMode(readModelRef.current.setting, "journal") === "shadow") {
+          void shadowCompareJournalHistory({
+            user: u,
+            collectionName: "incomes",
+            loaded: [
+              ...realtimeIncomesRef.current,
+              ...paginatedIncomesRef.current,
+              ...unseenRows(paginatedIncomesRef.current, realtimeIncomesRef.current, page.items),
+            ],
+            conditions: readModelRef.current,
+          });
+        }
       }
 
-      const { items: newItems } = foldLedgerSnapshot<Income>(snap.docs, {
-        activeOnly: true,
-      });
-
-      setPaginatedIncomes((prev) => {
-        const existingIds = new Set([
-          ...realtimeIncomesRef.current.map((i) => i.id),
-          ...prev.map((i) => i.id),
-        ]);
-        const toAdd = newItems.filter((i) => i.id && !existingIds.has(i.id));
-        return [...prev, ...toAdd];
-      });
+      const newItems = page.items;
+      setPaginatedIncomes((prev) => [...prev, ...unseenRows(prev, realtimeIncomesRef.current, newItems)]);
     } catch (err) {
       logError("financeProvider.loadMoreIncomes", err);
       toast.error(friendlyErrorMessage(err, "Failed to load older incomes"));
@@ -1780,11 +1774,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         locallyRemovedIds: locallyRemovedIdsRef.current,
       });
       setPaginatedIncomes((prev) => {
-        const existingIds = new Set([
-          ...realtimeIncomesRef.current.map((i) => i.id),
-          ...prev.map((i) => i.id),
-        ]);
-        const toAdd = newItems.filter((i) => i.id && !existingIds.has(i.id));
+        const toAdd = unseenRows(prev, realtimeIncomesRef.current, newItems);
         return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
       });
       setIncomeMonthsLoaded(new Set(incomeMonthsLoadedRef.current));
