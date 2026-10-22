@@ -26,6 +26,7 @@ import { ExpenseList } from "@/components/ExpenseList";
 import { ReadModelFreshnessBadge } from "@/components/common/ReadModelFreshnessBadge";
 import { useReadModelFreshness } from "@/hooks/useReadModelFreshness";
 import { versionMillis } from "@/shared/utils/readModelOverlay";
+import { journalMatchFromFilters } from "@/shared/utils/journalReadModelMatch";
 import { JournalPeriodSummary } from "@/components/ledger/JournalPeriodSummary";
 import { LedgerAuditList } from "@/components/ledger/LedgerAuditList";
 import { LedgerHealthReport } from "@/components/ledger/LedgerHealthReport";
@@ -129,6 +130,7 @@ export default function LedgerScreen() {
     retry: retryExpenses,
     monthsLoaded: expenseMonthsLoaded,
     loadMonth: loadExpensesForMonth,
+    loadMatching: loadMatchingExpenses,
   } = useExpenses();
   const {
     incomes,
@@ -138,6 +140,7 @@ export default function LedgerScreen() {
     retry: retryIncomes,
     monthsLoaded: incomeMonthsLoaded,
     loadMonth: loadIncomesForMonth,
+    loadMatching: loadMatchingIncomes,
   } = useIncomes();
   // SPENDLY-511: null (renders nothing) unless the Journal reads the read model.
   const newestLocalWriteMs = useMemo(() => {
@@ -339,6 +342,29 @@ export default function LedgerScreen() {
     loadIncomesForMonth,
     loadExpensesForMonth,
   ]);
+
+  // SPENDLY-512: with the Journal on the read model (`supabase` mode), a
+  // category / account / amount filter fetches every matching row, so the
+  // filtered list is complete without paging all history. In `firestore`
+  // mode (the default) the loaders are no-ops and nothing changes.
+  const filterMatch = useMemo(
+    () =>
+      journalMatchFromFilters(
+        journalFilters,
+        { fromDate: journal.dateScope.fromDate, toDate: journal.dateScope.toDate },
+        accounts
+      ),
+    [journalFilters, journal.dateScope.fromDate, journal.dateScope.toDate, accounts]
+  );
+  useEffect(() => {
+    if (ledgerComplete || periodSummaryComplete || !filterMatch) return;
+    const timer = setTimeout(() => {
+      if (expensesTab !== "income") void loadMatchingExpenses(filterMatch);
+      // Incomes have no category: a category filter never shows one.
+      if (!filterMatch.categories) void loadMatchingIncomes(filterMatch);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [ledgerComplete, periodSummaryComplete, filterMatch, expensesTab, loadMatchingExpenses, loadMatchingIncomes]);
 
   const hasNarrowedView =
     journal.activeFilterCount > 0 || debouncedQuery.trim().length > 0;

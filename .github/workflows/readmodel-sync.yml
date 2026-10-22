@@ -14,7 +14,9 @@ name: Read-model sync
 # reviewed). Manual runs work regardless.
 #
 # Secrets (Actions secrets, never in the app):
-#   READMODEL_FIREBASE_SERVICE_ACCOUNT   service account JSON
+#   READMODEL_FIREBASE_SERVICE_ACCOUNT   optional read-only service account JSON;
+#                                        falls back to FIREBASE_SERVICE_ACCOUNT
+#                                        (the user's choice, 2026-10-22)
 #   READMODEL_SUPABASE_SERVICE_ROLE_KEY  read-model project service-role key
 # Variables:
 #   READMODEL_SUPABASE_URL               https://<ref>.supabase.co
@@ -74,7 +76,7 @@ jobs:
       - name: Sync
         if: github.event_name != 'workflow_dispatch' || (inputs.mode != 'verify' && inputs.mode != 'report')
         env:
-          READMODEL_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.READMODEL_FIREBASE_SERVICE_ACCOUNT }}
+          READMODEL_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.READMODEL_FIREBASE_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
           READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
           READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
           READMODEL_MAX_READS_PER_DAY: ${{ vars.READMODEL_MAX_READS_PER_DAY || '12000' }}
@@ -98,7 +100,7 @@ jobs:
           github.event.schedule == '30 20 * * *' ||
           (github.event_name == 'workflow_dispatch' && (inputs.mode == 'verify' || (inputs.mode == 'full' && !inputs.dry_run)))
         env:
-          READMODEL_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.READMODEL_FIREBASE_SERVICE_ACCOUNT }}
+          READMODEL_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.READMODEL_FIREBASE_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
           READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
           READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
           READMODEL_MAX_READS_PER_DAY: ${{ vars.READMODEL_MAX_READS_PER_DAY || '12000' }}

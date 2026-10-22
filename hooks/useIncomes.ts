@@ -13,6 +13,7 @@ export function useIncomes() {
     loadAllIncomes,
     incomeMonthsLoaded,
     loadIncomesForMonth,
+    loadMatchingIncomes,
     removeIncome,
     updateIncome,
   } = useIncomesContext();
@@ -35,6 +36,8 @@ export function useIncomes() {
     monthsLoaded: incomeMonthsLoaded,
     /** Fetches every income dated within `monthKey` directly, once. */
     loadMonth: loadIncomesForMonth,
+    /** SPENDLY-512: read-model `supabase` mode only; loads every row matching a filter. */
+    loadMatching: loadMatchingIncomes,
     removeIncome,
     updateIncome,
   };

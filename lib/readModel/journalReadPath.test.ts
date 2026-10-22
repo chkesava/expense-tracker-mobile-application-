@@ -7,6 +7,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 const calls: unknown[][] = [];
 vi.mock("firebase/firestore", () => ({
+  Timestamp: { fromMillis: (ms: number) => ({ __ts: ms }) },
+  orderBy: (...args: unknown[]) => ({ orderBy: args }),
+  startAfter: (...args: unknown[]) => ({ startAfter: args }),
+  limit: (n: number) => ({ limit: n }),
   collection: (...args: unknown[]) => {
     calls.push(["collection", ...args.slice(1)]);
     return { path: args.slice(1).join("/") };
