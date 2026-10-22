@@ -18,6 +18,14 @@ describe("readmodel-set-mode (SPENDLY-511)", () => {
   });
 
   it("writes only readModel.<screen>, merged", () => {
-    expect(setModePatch("journal", "supabase")).toEqual({ readModel: { journal: "supabase" } });
+    expect(setModePatch({ screen: "journal", mode: "supabase" })).toEqual({ readModel: { journal: "supabase" } });
+  });
+
+  it("loopback knobs are for the emulator only (SPENDLY-512)", () => {
+    expect(() => parseSetModeArgs(["--screen=journal", "--mode=supabase", "--loopback-fail=true"])).toThrow(/emulator/);
+    const args = parseSetModeArgs(["--screen=journal", "--mode=supabase", "--loopback-fail=true", "--loopback-lag=240", "--apply"], true);
+    expect(setModePatch(args)).toEqual({ readModel: { journal: "supabase", loopbackFail: true, loopbackLagMinutes: 240 } });
+    expect(() => parseSetModeArgs(["--screen=journal", "--mode=supabase", "--loopback-fail=yes"], true)).toThrow(/true or false/);
+    expect(() => parseSetModeArgs(["--screen=journal", "--mode=supabase", "--loopback-lag=-5"], true)).toThrow(/minutes/);
   });
 });

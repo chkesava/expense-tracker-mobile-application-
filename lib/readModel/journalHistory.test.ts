@@ -147,6 +147,7 @@ describe("shadow comparison of a whole history (SPENDLY-512)", () => {
     const fake = fakeSupabase([[row(1), row(2)], [], []]);
     const log = vi.fn();
     const diffs = await shadowCompareJournalHistory({
+      db: {} as never,
       user, collectionName: "expenses",
       loaded: [{ id: "d001", amount: 1, date: row(1).date }, { id: "d002", amount: 99, date: row(2).date }, { id: "local-only", amount: 3, date: "2026-01-03" }],
       conditions: { setting: { journal: "shadow" }, online: true, duress: false },
@@ -159,6 +160,7 @@ describe("shadow comparison of a whole history (SPENDLY-512)", () => {
   it("does nothing outside shadow mode", async () => {
     const connect = vi.fn();
     expect(await shadowCompareJournalHistory({
+      db: {} as never,
       user, collectionName: "expenses", loaded: [], conditions: { setting: undefined, online: true, duress: false }, connect,
     })).toBeNull();
     expect(connect).not.toHaveBeenCalled();

@@ -40,7 +40,9 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
-import { readJournalMonth, readJournalPage, shadowCompareJournalHistory } from "@/lib/readModel/journalReadPath";
+import { readJournalMatches, readJournalMonth, readJournalPage, shadowCompareJournalHistory } from "@/lib/readModel/journalReadPath";
+import type { JournalMatch } from "@/lib/readModel/backend";
+import { isLocalTestMode } from "@/lib/env";
 import type { SupabaseCursor } from "@/lib/readModel/journalHistorySource";
 import { configuredReadModelMode } from "@/shared/utils/readModelMode";
 import type {
@@ -128,6 +130,12 @@ export type ExpensesContextType = {
   expenseMonthsLoaded: Set<string>;
   /** Fetches every expense dated within `monthKey`, once, via `where("date", ...)`. */
   loadExpensesForMonth: (monthKey: string) => Promise<void>;
+  /**
+   * SPENDLY-512: in read-model `supabase` mode, loads every expense matching
+   * the filter's SQL-checkable conditions, so a filtered Journal is complete
+   * without paging all history. A no-op in `firestore` (default) and `shadow`.
+   */
+  loadMatchingExpenses: (match: JournalMatch) => Promise<void>;
   /** Local ledger mutation helper for optimistic updates. */
   removeExpense: (id: string) => void;
   updateExpense: (id: string, updates: Partial<Expense>) => void;
@@ -156,6 +164,8 @@ export type IncomesContextType = {
   incomeMonthsLoaded: Set<string>;
   /** Fetches every income dated within `monthKey`, once, via `where("date", ...)`. */
   loadIncomesForMonth: (monthKey: string) => Promise<void>;
+  /** Mirrors `loadMatchingExpenses` for incomes. */
+  loadMatchingIncomes: (match: JournalMatch) => Promise<void>;
   /** Local ledger mutation helper for optimistic updates. */
   removeIncome: (id: string) => void;
   updateIncome: (id: string, updates: Partial<Income>) => void;
@@ -253,8 +263,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   // month loaders keep their stable identities.
   const { settings: systemSettings } = useSystemSettings();
   const { isOnline } = useNetwork();
-  const readModelRef = useRef({ setting: systemSettings.readModel, online: isOnline, duress: isDuress });
-  readModelRef.current = { setting: systemSettings.readModel, online: isOnline, duress: isDuress };
+  const readModelRef = useRef({ setting: systemSettings.readModel, online: isOnline, duress: isDuress, localTestMode: isLocalTestMode() });
+  readModelRef.current = { setting: systemSettings.readModel, online: isOnline, duress: isDuress, localTestMode: isLocalTestMode() };
   /** Ids removed on this device this session; a not-yet-synced copy must not bring them back. */
   const locallyRemovedIdsRef = useRef(new Set<string>());
   /** SPENDLY-512: where read-model history paging resumes (Firestore keeps its own cursor). */
@@ -1616,6 +1626,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         setExpensesComplete(true);
         if (configuredReadModelMode(readModelRef.current.setting, "journal") === "shadow") {
           void shadowCompareJournalHistory({
+            db: database,
             user: u,
             collectionName: "expenses",
             loaded: [
@@ -1680,6 +1691,25 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loadMatchingExpenses = useCallback(async (match: JournalMatch) => {
+    const u = userRef.current;
+    const database = getFirestoreDb();
+    if (!u || !database) return;
+    const rows = await readJournalMatches<Expense>({
+      db: database,
+      user: u,
+      collectionName: "expenses",
+      match,
+      conditions: readModelRef.current,
+      locallyRemovedIds: locallyRemovedIdsRef.current,
+    });
+    if (!rows?.length) return;
+    setPaginatedExpenses((prev) => {
+      const toAdd = unseenRows(prev, realtimeExpensesRef.current, rows);
+      return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+    });
+  }, []);
+
   const removeExpense = useCallback((id: string) => {
     locallyRemovedIdsRef.current.add(id);
     setRealtimeExpenses((prev) => prev.filter((e) => e.id !== id));
@@ -1726,6 +1756,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         setIncomesComplete(true);
         if (configuredReadModelMode(readModelRef.current.setting, "journal") === "shadow") {
           void shadowCompareJournalHistory({
+            db: database,
             user: u,
             collectionName: "incomes",
             loaded: [
@@ -1785,6 +1816,25 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loadMatchingIncomes = useCallback(async (match: JournalMatch) => {
+    const u = userRef.current;
+    const database = getFirestoreDb();
+    if (!u || !database) return;
+    const rows = await readJournalMatches<Income>({
+      db: database,
+      user: u,
+      collectionName: "incomes",
+      match,
+      conditions: readModelRef.current,
+      locallyRemovedIds: locallyRemovedIdsRef.current,
+    });
+    if (!rows?.length) return;
+    setPaginatedIncomes((prev) => {
+      const toAdd = unseenRows(prev, realtimeIncomesRef.current, rows);
+      return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+    });
+  }, []);
+
   const removeIncome = useCallback((id: string) => {
     locallyRemovedIdsRef.current.add(id);
     setRealtimeIncomes((prev) => prev.filter((i) => i.id !== id));
@@ -1817,6 +1867,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       loadAllExpenses,
       expenseMonthsLoaded,
       loadExpensesForMonth,
+      loadMatchingExpenses,
       removeExpense,
       updateExpense,
     }),
@@ -1834,6 +1885,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       loadAllExpenses,
       expenseMonthsLoaded,
       loadExpensesForMonth,
+      loadMatchingExpenses,
       removeExpense,
       updateExpense,
     ]
@@ -1852,6 +1904,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       loadAllIncomes,
       incomeMonthsLoaded,
       loadIncomesForMonth,
+      loadMatchingIncomes,
       removeIncome,
       updateIncome,
     }),
@@ -1867,6 +1920,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       loadAllIncomes,
       incomeMonthsLoaded,
       loadIncomesForMonth,
+      loadMatchingIncomes,
       removeIncome,
       updateIncome,
     ]

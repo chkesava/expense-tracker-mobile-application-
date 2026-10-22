@@ -75,7 +75,23 @@ npx tsx scripts/readmodel-set-mode.ts --screen=journal --mode=firestore --apply 
 
 You can also edit the field in the Firebase console, `system_settings/global` → `readModel` map.
 
-**The app needs** `EXPO_PUBLIC_READMODEL_SUPABASE_URL` and `EXPO_PUBLIC_READMODEL_SUPABASE_PUBLISHABLE_KEY` in its build (SPENDLY-505). Without them, every mode behaves as `firestore`.
+**The app needs** `EXPO_PUBLIC_READMODEL_SUPABASE_URL` and `EXPO_PUBLIC_READMODEL_SUPABASE_PUBLISHABLE_KEY` in its build (SPENDLY-505). Without them, every mode behaves as `firestore`. `release.yml` and `web-deploy.yml` pass them in, from the variable `READMODEL_SUPABASE_URL` and the secret `EXPO_PUBLIC_READMODEL_SUPABASE_PUBLISHABLE_KEY`.
+
+### Testing on a phone with Spendly Test (SPENDLY-512)
+
+Spendly Test can't use the real read model, by design: emulator sign-in tokens are unsigned, and a test build must never see production data. In a local test build, the read model is instead a **loopback** (`lib/readModel/backend.ts`). It reads the emulator and puts every document through the same round trip as the real sync, then applies the same rules as the SQL: live rows only, date order, filters. Every mode, badge, fallback, page, filter and export can be tried on a phone. The SQL and RLS themselves are covered by the CI SQL tests.
+
+```
+# With the emulator running (npm run emulators:local):
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npx tsx scripts/readmodel-set-mode.ts --screen=journal --mode=supabase --apply
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npx tsx scripts/readmodel-set-mode.ts --screen=journal --mode=supabase --loopback-lag=240 --apply   # stale banner
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npx tsx scripts/readmodel-set-mode.ts --screen=journal --mode=supabase --loopback-fail=true --apply # outage → Firestore fallback
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npx tsx scripts/readmodel-set-mode.ts --screen=journal --mode=firestore --apply
+```
+
+The `--loopback-*` knobs are refused against production.
+
+**Filtering on the read model (SPENDLY-512):** in `supabase` mode, a category, account or amount filter fetches **every matching row** from the read model. So the filtered Journal is complete without paging all history, and the screen still applies its full filter.
 
 ## Replay and recovery
 
