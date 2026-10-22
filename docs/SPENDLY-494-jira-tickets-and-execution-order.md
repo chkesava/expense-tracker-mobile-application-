@@ -148,7 +148,8 @@ The ordering rules:
 |---|---|---|---|---|
 | SPENDLY-502 | Merged into the epic (`9cefa5e`); Done when the epic reaches main | `feature/SPENDLY-502-phase-0-adr-go-no-go` | `docs/SPENDLY-494-adr.md` | Production usage + inventory recorded; Blaze refused (option C); daily sync by default |
 | SPENDLY-504 | Merged into the epic (`41685d7`); applied to `spmsgncjbnbkxvsbpqlu` and verified (14 tables, RLS 14/14, 0 client grants) | `feature/SPENDLY-504-supabase-project-schema` | `docs/SPENDLY-504-readmodel-schema.md` | Done when the epic reaches main |
-| SPENDLY-505 | In Progress: built and tested; spike chose third-party auth (no broker); waiting for review + merge | `feature/SPENDLY-505-firebase-identity-supabase-reads` | `docs/SPENDLY-505-read-identity.md` | User setup: apply the policy migration, enable Firebase third-party auth, run the live check |
+| SPENDLY-505 | Merged into the epic (`f47d376b`); Done when the epic reaches main | `feature/SPENDLY-505-firebase-identity-supabase-reads` | `docs/SPENDLY-505-read-identity.md` | User setup: apply the policy migration, enable Firebase third-party auth, run the live check |
+| SPENDLY-571 | In Progress: stamps built + guard test; waiting for review + merge | `feature/SPENDLY-571-stamp-updatedat` | `docs/SPENDLY-571-stamp-updatedat.md` | Blocks 506. Only adds `updatedAt` to writes |
 | Track A (495–500, 503, 563, 567) | Done on `main`; synced into the epic 2026-10-22 | — | the per-story docs | Production at zero variance (26/26) |
 | SPENDLY-514–518 | Closed (`wont-do`): option C | — | — | ADR §0 |
-| SPENDLY-506 | To Do: rewritten for option C (daily sync job) | — | — | |
+| SPENDLY-506 | To Do: rewritten 2026-10-22 for 3-hourly changed-only + nightly full copy (ADR §0 decision 6) | — | — | Blocked by 571 |

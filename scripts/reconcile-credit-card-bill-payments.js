@@ -55,7 +55,7 @@
  */
 
 const { initializeApp, getApps, applicationDefault, cert } = require("firebase-admin/app");
-const { getFirestore } = require("firebase-admin/firestore");
+const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 
 function loadCredential() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -166,7 +166,7 @@ async function reconcileUser(userRef, { apply, today }) {
   const fixes = statusFixesFor(bills, today);
   for (const fix of fixes) {
     console.log(`  ${userRef.id}/creditCardBills/${fix.id}  status ${fix.from} -> ${fix.to}`);
-    if (apply) await userRef.collection("creditCardBills").doc(fix.id).update({ status: fix.to });
+    if (apply) await userRef.collection("creditCardBills").doc(fix.id).update({ status: fix.to, updatedAt: FieldValue.serverTimestamp() });
   }
 
   const resolutions = duplicateResolutionsFor(bills, today);
@@ -184,13 +184,14 @@ async function reconcileUser(userRef, { apply, today }) {
           paymentIds: resolution.canonicalPatch.paymentIds,
           status: resolution.canonicalPatch.status,
           remainingAmount: resolution.canonicalPatch.remainingAmount,
+          updatedAt: FieldValue.serverTimestamp(),
         });
       }
     }
     for (const cancelId of resolution.cancelIds) {
       cancels += 1;
       console.log(`  ${userRef.id}/creditCardBills/${cancelId}  CANCEL (duplicate of ${resolution.canonicalId})`);
-      if (apply) await userRef.collection("creditCardBills").doc(cancelId).update({ status: "CANCELLED" });
+      if (apply) await userRef.collection("creditCardBills").doc(cancelId).update({ status: "CANCELLED", updatedAt: FieldValue.serverTimestamp() });
     }
   }
 

@@ -148,7 +148,7 @@ export function useTrips(options?: { enabled?: boolean }) {
 
       // Unlink each expense
       expensesSnap.docs.forEach((expDoc) => {
-        batch.update(expDoc.ref, { tripId: null });
+        batch.update(expDoc.ref, { tripId: null, updatedAt: serverTimestamp() });
       });
 
       // Delete the trip itself
@@ -184,7 +184,10 @@ export function useTrips(options?: { enabled?: boolean }) {
       if (!trip) return false;
 
       const batch = writeBatch(db);
-      batch.update(doc(db, "users", uid, "expenses", expenseId), { tripId });
+      batch.update(doc(db, "users", uid, "expenses", expenseId), {
+        tripId,
+        updatedAt: serverTimestamp(),
+      });
       batch.update(doc(db, "users", uid, "trips", tripId), {
         spentAmount: increment(expenseAmount),
       });
@@ -215,6 +218,7 @@ export function useTrips(options?: { enabled?: boolean }) {
       const batch = writeBatch(db);
       batch.update(doc(db, "users", uid, "expenses", expenseId), {
         tripId: null,
+        updatedAt: serverTimestamp(),
       });
       batch.update(doc(db, "users", uid, "trips", tripId), {
         spentAmount: increment(-expenseAmount),
