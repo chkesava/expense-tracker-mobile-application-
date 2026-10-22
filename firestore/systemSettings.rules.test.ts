@@ -88,6 +88,8 @@ describe("system_settings release pointer", () => {
     { announcementBanner: "Verify your UPI at http://evil" },
     { enableInvestments: false },
     { defaultCurrency: "ZWL" },
+    // SPENDLY-519: the read-model kill switch (SPENDLY-511) is not client-writable.
+    { readModel: { journal: "supabase", insights: "supabase", loopbackFail: true } },
   ] as const;
 
   for (const payload of killSwitchFields) {
