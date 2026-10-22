@@ -17,6 +17,7 @@ import { useCelebration } from "@/providers/CelebrationProvider";
 import { useModals } from "@/providers/ModalProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
+import { applyOnboardingPatches, onboardingPatchesAreNoop } from "@/shared/utils/onboardingPatch";
 import { useTheme } from "@/theme/ThemeProvider";
 
 
@@ -47,7 +48,7 @@ const SetupProgressContext = createContext<SetupProgressContextType | undefined>
 
 export function SetupProgressProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, hydrated } = useSettings();
   const { data: userDoc, loading: userDocLoading } = useUserDoc();
   const { themeMode } = useTheme();
   const { accounts, loading: accountsLoading } = useAccounts();
@@ -77,8 +78,11 @@ export function SetupProgressProvider({ children }: { children: ReactNode }) {
     [onboarding?.completedSteps]
   );
 
+  // SPENDLY-565: `hydrated` too — until the stored settings are applied,
+  // `settings.onboarding` is the defaults, and every automatic write below
+  // spreads it. Writing then reset real progress on each reload.
   const dataLoading = Boolean(
-    userDocLoading || accountsLoading || expensesLoading || incomesLoading
+    !hydrated || userDocLoading || accountsLoading || expensesLoading || incomesLoading
   );
 
   // Check if this user already has pre-existing financial activity
@@ -370,19 +374,29 @@ export function SetupProgressProvider({ children }: { children: ReactNode }) {
     });
   }, [updateSettings]);
 
+  // SPENDLY-565: screens visited before settings hydrate (the dashboard
+  // marks itself on mount) are queued, then added to the stored list.
+  const pendingVisitsRef = useRef<string[]>([]);
   const markScreenVisited = useCallback(
     (screen: string) => {
-      if (!visitedScreens.includes(screen)) {
-        void updateSettings({
-          onboarding: {
-            ...onboarding,
-            visitedScreens: [...visitedScreens, screen],
-          },
-        });
+      if (!hydrated) {
+        if (!pendingVisitsRef.current.includes(screen)) pendingVisitsRef.current.push(screen);
+        return;
       }
+      const patch = { addVisitedScreens: [screen] };
+      if (onboardingPatchesAreNoop(onboarding, [patch])) return;
+      void updateSettings({ onboarding: applyOnboardingPatches(onboarding, [patch]) });
     },
-    [onboarding, visitedScreens, updateSettings]
+    [hydrated, onboarding, updateSettings]
   );
+
+  useEffect(() => {
+    if (!hydrated || pendingVisitsRef.current.length === 0) return;
+    const patch = { addVisitedScreens: pendingVisitsRef.current };
+    pendingVisitsRef.current = [];
+    if (onboardingPatchesAreNoop(onboarding, [patch])) return;
+    void updateSettings({ onboarding: applyOnboardingPatches(onboarding, [patch]) });
+  }, [hydrated, onboarding, updateSettings]);
 
   const value = useMemo(
     () => ({
