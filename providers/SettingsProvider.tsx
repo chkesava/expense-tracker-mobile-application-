@@ -38,6 +38,12 @@ import {
 type SettingsContextType = {
   settings: UserSettings;
   loading: boolean;
+  /**
+   * SPENDLY-565: true once `settings` holds the user's stored values (or the
+   * confirmed-missing-doc defaults). `loading` turns false one render before
+   * that, so automatic writes that spread current settings must wait on this.
+   */
+  hydrated: boolean;
   updateSettings: (updates: Partial<UserSettings>) => Promise<void>;
   setLockPastMonths: (val: boolean) => void;
   setCompactListMode: (val: boolean) => void;
@@ -77,6 +83,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const fallbackCurrency = systemSettings.defaultCurrency;
   const [settings, setSettings] = useState<UserSettings>(SETTINGS_DEFAULTS);
   const [seedAttempted, setSeedAttempted] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const overlayRef = useRef<Partial<UserSettings>>({});
   const pendingRef = useRef<Partial<UserSettings>>({});
   const drainPromiseRef = useRef(Promise.resolve());
@@ -93,6 +100,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       pendingRef.current = {};
       setSettings(SETTINGS_DEFAULTS);
       setSeedAttempted(false);
+      setHydrated(false);
       return;
     }
     if (userDocLoading) return;
@@ -107,6 +115,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       overlayRef.current = remainingPendingSettings(cloud, overlayRef.current);
       setSettings(overlayPendingSettings(cloud, overlayRef.current));
       setSeedAttempted(false);
+      setHydrated(true);
     } else if (!exists && !seedAttempted) {
       // Doc is confirmed missing after the first snapshot. Apply defaults in
       // memory only — never write SETTINGS_DEFAULTS to Firestore. A merge seed
@@ -115,6 +124,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const cloud = mergeSettingsFromDoc(null, { fallbackCurrency });
       overlayRef.current = remainingPendingSettings(cloud, overlayRef.current);
       setSettings(overlayPendingSettings(cloud, overlayRef.current));
+      setHydrated(true);
     }
   }, [
     realUser,
@@ -183,6 +193,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     () => ({
       settings,
       loading,
+      hydrated,
       updateSettings,
       setLockPastMonths: (val) => void updateSettings({ lockPastMonths: val }),
       setCompactListMode: (val) => void updateSettings({ compactListMode: val }),
@@ -232,7 +243,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         void updateSettings({ calendarNotifications: { ...settings.calendarNotifications, ...val } });
       },
     }),
-    [settings, loading, updateSettings]
+    [settings, loading, hydrated, updateSettings]
   );
 
   return (
