@@ -48,6 +48,8 @@ export interface SpendingCurveChartProps {
    * series such as a year of net worth (SPENDLY-568). Default `all`.
    */
   dots?: "all" | "ends";
+  /** Date labels along the bottom (default true). Off for a bare sparkline (SPENDLY-572). */
+  showXAxis?: boolean;
   /**
    * @deprecated No-op since SPENDLY-489. Dots are static; the chart fades in
    * as one view. Per-dot Reanimated props failed on unmounted SVG nodes.
@@ -66,6 +68,7 @@ export function SpendingCurveChart({
   autoDomain = false,
   tightDomain = false,
   dots = "all",
+  showXAxis = true,
 }: SpendingCurveChartProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -114,7 +117,7 @@ export function SpendingCurveChart({
   );
 
   const chartPaddingTop = 20;
-  const chartPaddingBottom = 26;
+  const chartPaddingBottom = showXAxis ? 26 : 8;
   const chartPaddingRight = 16;
   const chartPaddingLeft = showYAxis ? 38 : 16;
   const chartWidth = containerWidth - chartPaddingLeft - chartPaddingRight;
@@ -330,7 +333,7 @@ export function SpendingCurveChart({
           })}
 
           {/* Date labels at bottom */}
-          {xTicks.map((tick) => (
+          {(showXAxis ? xTicks : []).map((tick) => (
             <SvgText
               key={`tick-${tick.index}`}
               x={tick.x}

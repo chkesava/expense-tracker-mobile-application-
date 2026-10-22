@@ -167,10 +167,12 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
         <View style={styles.chartRow}>
           <DonutChart
             data={segments}
-            size={128}
-            strokeWidth={18}
+            size={140}
+            strokeWidth={22}
             currency={currency}
-            title="Spent"
+            title="Total spent"
+            titleBelow
+            centerFractionDigits={0}
             showLegend={false}
           />
           <View style={styles.legend}>
