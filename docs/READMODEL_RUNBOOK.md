@@ -26,6 +26,19 @@ The **Read-model sync health** workflow goes red. GitHub emails the repository o
 | p95 copy age over 4 h | Copies are going stale | Usually a symptom of one of the problems above; check the runs list in the summary |
 | Warning: runs skipped for the daily read budget | The sync used its 12K Firestore reads per day | Expected only in a backlog. If it repeats, check `reads_used` per run in `sync_runs` |
 
+## Backfill (first copy) and verification (SPENDLY-509)
+
+The first copy is just a full sync. Production data may only be written after an approved dry run (AGENT_WORKFLOW §7):
+
+1. Actions → Read-model sync → **Run workflow**, `mode=full`, `dry_run=true`. Review the log: reads used, docs per collection, unmapped count.
+2. Get approval. Then run it again with `mode=full`, `dry_run=false`. The **Verify count parity** step runs after it.
+3. The verify step compares Firestore `count()` per (user, collection) with the read model's live rows. Green means the copy is complete; the step summary has the table by collection.
+4. If it stopped on the read budget (`partial`), run the same thing again. It resumes and is idempotent.
+
+**Count parity also runs after every nightly full sync.** On demand, use `mode=verify`; it costs about 1 read per 1,000 documents.
+
+**Health:** "Count parity failed: …" means the latest verify found a (user, collection) whose counts differ. Usually a write landed between the sync and the verify, so re-run `mode=verify`. If it persists, run `mode=full` (`dry_run=false`), which restores missing rows and tombstones extra ones, then verify again.
+
 ## Replay and recovery
 
 There is no separate replay step. Every run re-reads the **current** Firestore document, and the upsert is version-guarded. So:

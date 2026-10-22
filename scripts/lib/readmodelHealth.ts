@@ -106,6 +106,18 @@ export function evaluateHealth(input: HealthInput, now: number, thresholds = THR
     problems.push(`The latest sync run failed${lastSync.notes?.error ? `: ${String(lastSync.notes.error)}` : ""}.`);
   }
 
+  // SPENDLY-509: the latest count-parity check must agree.
+  const lastVerify = input.runs.filter((r) => r.mode === "verify").sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+  if (lastVerify && hoursSince(lastVerify.startedAt, now) <= thresholds.maxFullGapHours && lastVerify.status === "failed") {
+    const byCollection = (lastVerify.notes?.byCollection as { collection: string; mismatchedUsers: number }[] | undefined) ?? [];
+    const which = byCollection.filter((c) => c.mismatchedUsers).map((c) => `${c.collection} ×${c.mismatchedUsers}`);
+    problems.push(
+      which.length
+        ? `Count parity failed: Firestore and the read model differ for ${which.join(", ")} (user, collection) pair(s).`
+        : `Count parity check failed${lastVerify.notes?.error ? `: ${String(lastVerify.notes.error)}` : ""}.`
+    );
+  }
+
   const skipped = last24h.filter((r) => r.notes?.skipped).length;
   if (skipped) warnings.push(`${skipped} run(s) in 24 h were skipped for the daily read budget.`);
   if (reads24h > thresholds.dailyReadBudget * 0.9) {

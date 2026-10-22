@@ -84,6 +84,9 @@ jobs:
         # twin; idempotent; a late sync cannot resurrect it; client roles can't call it.
         run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/purge.sql
 
+      - name: Count parity function (SPENDLY-509)
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/verify.sql
+
       - name: Migrations are idempotent to re-check
         # A second assertion run must still pass (the probe table is dropped).
         run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/assert_security.sql
