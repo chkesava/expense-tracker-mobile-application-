@@ -1,0 +1,90 @@
+name: Read-model sync
+
+# SPENDLY-506: copies the Wave 1 Firestore collections into the Supabase read
+# model (ADR §0, decision 6). Every 3 hours only what changed; nightly in
+# full (the only pass that may tombstone, and the catch-all for writers that
+# don't stamp updatedAt). The logic is scripts/lib/readmodelSyncCore.ts.
+#
+# Runs on the GitHub runner, not Netlify: no 10 s limit and no Netlify credits.
+# Firestore is only read; its reads count against the shared Spark quota, so
+# the job enforces a per-run and a per-day read allowance and stops early.
+#
+# Scheduled runs do nothing until the repository variable
+# READMODEL_SYNC_ENABLED is "true" (set it after the first manual full run is
+# reviewed). Manual runs work regardless.
+#
+# Secrets (Actions secrets, never in the app):
+#   READMODEL_FIREBASE_SERVICE_ACCOUNT   service account JSON
+#   READMODEL_SUPABASE_SERVICE_ROLE_KEY  read-model project service-role key
+# Variables:
+#   READMODEL_SUPABASE_URL               https://<ref>.supabase.co
+#   READMODEL_SYNC_ENABLED               "true" to enable the schedule
+#   READMODEL_MAX_READS_PER_DAY          optional, default 12000
+#
+# GitHub disables schedules after 60 days without repository activity, and
+# may start a scheduled run late; SPENDLY-507 alerts on a missing run.
+
+on:
+  schedule:
+    # Incremental: 00, 03, 06 … 21 UTC (05:30, 08:30 … IST).
+    - cron: "0 */3 * * *"
+    # Full: 20:30 UTC = 02:00 IST, the quietest time for the app's own reads.
+    - cron: "30 20 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "incremental or full"
+        required: true
+        default: incremental
+        type: choice
+        options: [incremental, full]
+      dry_run:
+        description: "Read and map only; write nothing to Supabase (still records the run and its reads)"
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: readmodel-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Sync Firestore → Supabase read model
+    if: github.event_name == 'workflow_dispatch' || vars.READMODEL_SYNC_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync
+        env:
+          READMODEL_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.READMODEL_FIREBASE_SERVICE_ACCOUNT }}
+          READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
+          READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+          READMODEL_MAX_READS_PER_DAY: ${{ vars.READMODEL_MAX_READS_PER_DAY || '12000' }}
+          MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || (github.event.schedule == '30 20 * * *' && 'full' || 'incremental') }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+        run: |
+          set -euo pipefail
+          if [ -z "$READMODEL_FIREBASE_SERVICE_ACCOUNT" ] || [ -z "$READMODEL_SUPABASE_SERVICE_ROLE_KEY" ] || [ -z "$READMODEL_SUPABASE_URL" ]; then
+            echo "::error::Read-model sync secrets/variables are not set (see docs/SPENDLY-506-readmodel-sync.md)."
+            exit 1
+          fi
+          args="--mode=$MODE"
+          if [ "$DRY_RUN" = "true" ]; then args="$args --dry-run"; fi
+          npx tsx scripts/readmodel-sync.ts $args
