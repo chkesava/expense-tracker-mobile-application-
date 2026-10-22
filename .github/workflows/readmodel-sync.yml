@@ -33,11 +33,11 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "incremental, full, or verify (count parity only)"
+        description: "incremental, full, verify (count parity only), or report (14-day parity gate report)"
         required: true
         default: incremental
         type: choice
-        options: [incremental, full, verify]
+        options: [incremental, full, verify, report]
       dry_run:
         description: "Read and map only; write nothing to Supabase (still records the run and its reads)"
         required: true
@@ -72,7 +72,7 @@ jobs:
         run: npm ci
 
       - name: Sync
-        if: github.event_name != 'workflow_dispatch' || inputs.mode != 'verify'
+        if: github.event_name != 'workflow_dispatch' || (inputs.mode != 'verify' && inputs.mode != 'report')
         env:
           READMODEL_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.READMODEL_FIREBASE_SERVICE_ACCOUNT }}
           READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
@@ -103,3 +103,22 @@ jobs:
           READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
           READMODEL_MAX_READS_PER_DAY: ${{ vars.READMODEL_MAX_READS_PER_DAY || '12000' }}
         run: npx tsx scripts/readmodel-verify.ts
+
+      # SPENDLY-510: tonight's data findings (orphans, duplicate cashback,
+      # overpaid bills, unexplained balances, missing amounts), recorded as a
+      # `parity` run for the 14-day gate report. Supabase reads only.
+      - name: Record parity findings
+        if: >-
+          github.event.schedule == '30 20 * * *' ||
+          (github.event_name == 'workflow_dispatch' && (inputs.mode == 'verify' || (inputs.mode == 'full' && !inputs.dry_run)))
+        env:
+          READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
+          READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+        run: npx tsx scripts/readmodel-parity.ts
+
+      - name: 14-day parity gate report
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'report'
+        env:
+          READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
+          READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+        run: npx tsx scripts/readmodel-parity.ts --report

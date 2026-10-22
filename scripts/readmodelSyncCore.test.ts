@@ -377,6 +377,52 @@ describe("account lifecycle (SPENDLY-508)", () => {
   });
 });
 
+describe("field parity and repair (SPENDLY-510)", () => {
+  it("detects a row edited directly in Postgres, repairs it from Firestore, and clears the failure next run", async () => {
+    const fs = world();
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+
+    // Injected divergence: same version, different amount (the version guard
+    // alone would never heal this).
+    m.row("expenses", "alice", "e1")!.amount = 999;
+    const lines: string[] = [];
+    const run = await runSync(fs.source, m.sink, { ...opts("full", T0 + H), log: (l) => lines.push(l) });
+    expect(run.notes).toMatchObject({ parityMismatches: 1, parityRepaired: 1 });
+    expect(run.status).toBe("partial");
+    expect(m.row("expenses", "alice", "e1")).toMatchObject({ amount: 100 });
+    expect(await m.sink.openFailures()).toEqual([{ uid: "alice", collection: "expenses", docId: "e1", errorClass: "parity" }]);
+    expect(m.failures[0].message).toBe("differs from Firestore in: amount");
+    expect(lines.join("\n")).not.toContain("alice");
+
+    const clean = await runSync(fs.source, m.sink, opts("full", T0 + 2 * H));
+    expect(clean.notes.parityMismatches).toBeUndefined();
+    expect(clean.status).toBe("succeeded");
+    expect(await m.sink.openFailures()).toEqual([]);
+  });
+
+  it("restores a row deleted by hand and reports it", async () => {
+    const fs = world();
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    m.tables.get("expenses")!.delete("bob/b1");
+    const run = await runSync(fs.source, m.sink, opts("full", T0 + H));
+    // The upsert re-inserts it; parity then sees it equal, so nothing is flagged.
+    expect(m.row("expenses", "bob", "b1")).toMatchObject({ amount: 75 });
+    expect(run.notes.parityMismatches).toBeUndefined();
+  });
+
+  it("dry runs don't run field parity", async () => {
+    const fs = world();
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    m.row("accounts", "alice", "bank")!.current_balance = 1;
+    await runSync(fs.source, m.sink, { ...opts("full", T0 + H), dryRun: true });
+    expect(m.failures).toEqual([]);
+    expect(m.row("accounts", "alice", "bank")).toMatchObject({ current_balance: 1 });
+  });
+});
+
 describe("readmodel-sync never writes Firestore", () => {
   const FIRESTORE_WRITES = /\.(set|update|delete|create)\(|\.batch\(|runTransaction|bulkWriter|recursiveDelete/;
 

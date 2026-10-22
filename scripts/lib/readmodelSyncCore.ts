@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { isDuressUid } from "../../shared/utils/duress";
+import { typedColumns, typedDifferences } from "../../shared/utils/readModel/parity";
 import { mapDocumentWithReason, READ_MODEL_TABLES, type ReadModelRow, type SourceDoc, type TableSpec } from "../../shared/utils/readModel/mapping";
 
 /**
@@ -92,6 +93,10 @@ export type SinkPort = {
   resolveFailures(uid: string, collection: string, docIds: string[]): Promise<number>;
   /** Uids the read model holds sync state for (SPENDLY-508 orphan check). */
   modelUids(): Promise<string[]>;
+  /** The stored rows for these ids: doc_id, source_update_time and `columns` (SPENDLY-510 parity). */
+  fetchRows(table: string, uid: string, docIds: string[], columns: string[]): Promise<Record<string, unknown>[]>;
+  /** Rewrites rows whose typed columns diverged, even at the same version. */
+  repair(table: string, rows: ReadModelRow[]): Promise<number>;
   finishRun(runId: number | null, record: RunRecord): Promise<void>;
 };
 
@@ -208,7 +213,15 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
   return record;
 
   /** Reads every page of one query, mapping and upserting as it goes. */
-  async function drain(uid: string, spec: TableSpec, request: PageRequest, seen: Set<string>, maxUpdate: { ms: number }, resolved: string[]) {
+  async function drain(
+    uid: string,
+    spec: TableSpec,
+    request: PageRequest,
+    seen: Set<string>,
+    maxUpdate: { ms: number },
+    resolved: string[],
+    collected?: ReadModelRow[]
+  ) {
     const openHere = open[`${uid}/${spec.collection}`];
     let after: unknown;
     for (;;) {
@@ -231,11 +244,51 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
         }
         maxUpdate.ms = Math.max(maxUpdate.ms, Date.parse(row.source_update_time));
         rows.push(row);
+        collected?.push(row);
       }
       if (rows.length) record.upserts += options.dryRun ? rows.length : await sink.upsert(spec.table, rows);
       if (page.docs.length < limit || page.next === undefined) return;
       after = page.next;
     }
+  }
+
+  /**
+   * SPENDLY-510 field parity, on full passes only (no extra Firestore reads:
+   * the documents were just read). Every stored row must equal what the
+   * mapper builds from its Firestore document. A row edited in Postgres would
+   * never heal through the version-guarded upsert, so a diverged row is
+   * rewritten and recorded as a `parity` failure (open until a clean pass).
+   */
+  async function checkParity(uid: string, spec: TableSpec, expected: ReadModelRow[], resolved: string[]) {
+    if (!expected.length) return;
+    const columns = typedColumns(spec);
+    const stored = new Map(
+      (await sink.fetchRows(spec.table, uid, expected.map((r) => r.doc_id), columns)).map((r) => [String(r.doc_id), r])
+    );
+    const diverged: ReadModelRow[] = [];
+    for (const row of expected) {
+      const actual = stored.get(row.doc_id);
+      // A newer version landed meanwhile: not a divergence.
+      if (actual && Date.parse(String(actual.source_update_time)) > Date.parse(row.source_update_time)) continue;
+      const fields = typedDifferences(spec, row, actual);
+      if (!fields.length) continue;
+      diverged.push(row);
+      const at = resolved.indexOf(row.doc_id);
+      if (at >= 0) resolved.splice(at, 1);
+      if (!open[`${uid}/${spec.collection}`]?.has(row.doc_id)) {
+        await sink.recordFailure({
+          uid, collection: spec.collection, docId: row.doc_id, errorClass: "parity",
+          message: `differs from Firestore in: ${fields.join(", ")}`, runId,
+        });
+      }
+    }
+    if (!diverged.length) return;
+    const repaired = await sink.repair(spec.table, diverged);
+    record.failures += diverged.length;
+    record.status = "partial";
+    record.notes.parityMismatches = ((record.notes.parityMismatches as number | undefined) ?? 0) + diverged.length;
+    record.notes.parityRepaired = ((record.notes.parityRepaired as number | undefined) ?? 0) + repaired;
+    log(`[PARITY] ${hashUid(uid)}/${spec.collection}: ${diverged.length} row(s) differed from Firestore; repaired ${repaired}`);
   }
 
   async function syncPair(uid: string, spec: TableSpec) {
@@ -249,7 +302,9 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
     let guarded = false;
 
     if (full) {
-      await drain(uid, spec, { kind: "all", limit: PAGE_SIZE }, seen, maxUpdate, resolved);
+      const expected: ReadModelRow[] = [];
+      await drain(uid, spec, { kind: "all", limit: PAGE_SIZE }, seen, maxUpdate, resolved, options.dryRun ? undefined : expected);
+      if (!options.dryRun) await checkParity(uid, spec, expected, resolved);
       // The pass is complete: anything live in the model but not seen is gone.
       const live = options.dryRun ? [] : await sink.liveIds(spec.table, uid);
       const missing = live.filter((id) => !seen.has(id));

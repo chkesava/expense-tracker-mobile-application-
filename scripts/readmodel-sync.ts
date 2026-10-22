@@ -154,6 +154,22 @@ function supabaseSink(client: SupabaseClient): SinkPort {
         throw new Error(`sync_failures: ${error.message}`);
       }
     },
+    async fetchRows(table, uid, docIds, columns) {
+      const out: Record<string, unknown>[] = [];
+      const select = ["doc_id", "source_update_time", ...columns].join(", ");
+      for (let i = 0; i < docIds.length; i += 200) {
+        const rows = (await must(table, client.from(table).select(select).eq("uid", uid).in("doc_id", docIds.slice(i, i + 200)))) as unknown as Record<string, unknown>[];
+        out.push(...rows);
+      }
+      return out;
+    },
+    async repair(table, rows) {
+      let n = 0;
+      for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
+        n += (await must("readmodel_repair", client.rpc("readmodel_repair", { p_table: table, p_rows: rows.slice(i, i + UPSERT_CHUNK) }))) as number;
+      }
+      return n;
+    },
     async modelUids() {
       const uids = new Set<string>();
       for (let from = 0; ; from += 1000) {

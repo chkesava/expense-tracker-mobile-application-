@@ -23,7 +23,8 @@ async function all<T>(label: string, page: (from: number) => PromiseLike<{ data:
 
 export async function loadHealthInput(client: SupabaseClient, now: number): Promise<HealthInput> {
   try {
-    const since = new Date(now - 48 * 3600 * 1000).toISOString();
+    // 16 days: enough for the SPENDLY-510 parity-gate streak.
+    const since = new Date(now - 16 * 24 * 3600 * 1000).toISOString();
     const runs = await all<Record<string, unknown>>("sync_runs", (from) =>
       client.from("sync_runs").select("mode, status, started_at, reads_used, failures, unmapped, notes")
         .gte("started_at", since).order("started_at", { ascending: false }).range(from, from + 999));
