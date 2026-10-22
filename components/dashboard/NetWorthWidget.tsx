@@ -18,8 +18,7 @@ import {
 import { Amount } from "@/components/common/Amount";
 import { Skeleton } from "@/components/common/Skeleton";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
-import { NetWorthTrend } from "@/components/dashboard/NetWorthTrend";
-import { PrivacyToggle } from "@/components/dashboard/PrivacyToggle";
+import { NetWorthGlassCard } from "@/components/dashboard/NetWorthGlassCard";
 import {
   DASH_RADIUS,
   DASH_TYPE,
@@ -71,21 +70,16 @@ export const NetWorthWidget = memo(function NetWorthWidget({ netWorth, currency 
     return <DashboardSkeleton variant="hero" />;
   }
 
+  // SPENDLY-572: the dashboard's own glass card; the Money hub keeps
+  // `NetWorthHeroCard`.
   return (
-    <NetWorthHeroCard
+    <NetWorthGlassCard
       netWorth={netWorth}
       currency={currency}
-      showAccountsLink={false}
-      action={<PrivacyToggle />}
-      trend={
-        <NetWorthTrend
-          points={history.points}
-          todayKey={todayKey}
-          currency={currency}
-          loading={history.loading}
-          failed={Boolean(history.error)}
-        />
-      }
+      points={history.points}
+      todayKey={todayKey}
+      historyLoading={history.loading}
+      historyFailed={Boolean(history.error)}
     />
   );
 });
