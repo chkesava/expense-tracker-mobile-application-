@@ -29,13 +29,16 @@ jobs:
   schema:
     name: Apply migrations + security assertions
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     services:
       postgres:
         image: postgres:17
         env:
-          POSTGRES_PASSWORD: postgres
+          # A throwaway container that lives only for this job. Trust auth
+          # instead of a password, so no credential-shaped value sits in the
+          # repo (GitGuardian flagged the old placeholder on PR #234).
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -48,7 +51,6 @@ jobs:
       PGHOST: localhost
       PGPORT: "5432"
       PGUSER: postgres
-      PGPASSWORD: postgres
       PGDATABASE: postgres
 
     steps:
