@@ -39,6 +39,9 @@ import {
 } from "@/lib/syncStatusStore";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
+import { useNetwork } from "@/providers/NetworkProvider";
+import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import { readJournalMonth } from "@/lib/readModel/journalReadPath";
 import type {
   Account,
   AccountEntry,
@@ -235,7 +238,7 @@ const AccountsContext = createContext<AccountsContextType | undefined>(undefined
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function FinanceDataProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, isDuress } = useAuth();
   const uid = user?.uid;
   const db = getFirestoreDb();
 
@@ -243,6 +246,16 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     userRef.current = user;
   }, [user]);
+
+  // SPENDLY-511: what the Journal month loads may read. `firestore` unless
+  // system_settings/global.readModel.journal says otherwise; refs, so the
+  // month loaders keep their stable identities.
+  const { settings: systemSettings } = useSystemSettings();
+  const { isOnline } = useNetwork();
+  const readModelRef = useRef({ setting: systemSettings.readModel, online: isOnline, duress: isDuress });
+  readModelRef.current = { setting: systemSettings.readModel, online: isOnline, duress: isDuress };
+  /** Ids removed on this device this session; a not-yet-synced copy must not bring them back. */
+  const locallyRemovedIdsRef = useRef(new Set<string>());
 
   const {
     error: financeError,
@@ -1646,22 +1659,13 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
 
     expenseMonthsLoadedRef.current.add(monthKey);
     try {
-      const expensesCol = collection(database, "users", u.uid, "expenses");
-      const q = query(
-        expensesCol,
-        where("date", ">=", scope.fromDate),
-        where("date", "<=", scope.toDate)
-      );
-      const snap = await getDocs(q);
-      logDirectRead(
-        `users/${u.uid}/expenses`,
-        snap.docs.length,
-        snap.metadata.fromCache ? "cache" : "server",
-        { feature: "ledger_month_query", queryShape: `date range ${monthKey}` }
-      );
-
-      const { items: newItems } = foldLedgerSnapshot<Expense>(snap.docs, {
-        activeOnly: true,
+      const newItems = await readJournalMonth<Expense>({
+        db: database,
+        user: u,
+        collectionName: "expenses",
+        monthKey,
+        conditions: readModelRef.current,
+        locallyRemovedIds: locallyRemovedIdsRef.current,
       });
       setPaginatedExpenses((prev) => {
         const existingIds = new Set([
@@ -1680,6 +1684,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const removeExpense = useCallback((id: string) => {
+    locallyRemovedIdsRef.current.add(id);
     setRealtimeExpenses((prev) => prev.filter((e) => e.id !== id));
     setPaginatedExpenses((prev) => prev.filter((e) => e.id !== id));
   }, []);
@@ -1766,22 +1771,13 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
 
     incomeMonthsLoadedRef.current.add(monthKey);
     try {
-      const incomesCol = collection(database, "users", u.uid, "incomes");
-      const q = query(
-        incomesCol,
-        where("date", ">=", scope.fromDate),
-        where("date", "<=", scope.toDate)
-      );
-      const snap = await getDocs(q);
-      logDirectRead(
-        `users/${u.uid}/incomes`,
-        snap.docs.length,
-        snap.metadata.fromCache ? "cache" : "server",
-        { feature: "ledger_month_query", queryShape: `date range ${monthKey}` }
-      );
-
-      const { items: newItems } = foldLedgerSnapshot<Income>(snap.docs, {
-        activeOnly: true,
+      const newItems = await readJournalMonth<Income>({
+        db: database,
+        user: u,
+        collectionName: "incomes",
+        monthKey,
+        conditions: readModelRef.current,
+        locallyRemovedIds: locallyRemovedIdsRef.current,
       });
       setPaginatedIncomes((prev) => {
         const existingIds = new Set([
@@ -1800,6 +1796,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const removeIncome = useCallback((id: string) => {
+    locallyRemovedIdsRef.current.add(id);
     setRealtimeIncomes((prev) => prev.filter((i) => i.id !== id));
     setPaginatedIncomes((prev) => prev.filter((i) => i.id !== id));
   }, []);

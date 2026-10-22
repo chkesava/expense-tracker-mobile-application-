@@ -23,6 +23,9 @@ import {
   type AccountActivityFilterField,
 } from "@/components/accounts/TransactionFilters";
 import { ExpenseList } from "@/components/ExpenseList";
+import { ReadModelFreshnessBadge } from "@/components/common/ReadModelFreshnessBadge";
+import { useReadModelFreshness } from "@/hooks/useReadModelFreshness";
+import { versionMillis } from "@/shared/utils/readModelOverlay";
 import { JournalPeriodSummary } from "@/components/ledger/JournalPeriodSummary";
 import { LedgerAuditList } from "@/components/ledger/LedgerAuditList";
 import { LedgerHealthReport } from "@/components/ledger/LedgerHealthReport";
@@ -136,6 +139,16 @@ export default function LedgerScreen() {
     monthsLoaded: incomeMonthsLoaded,
     loadMonth: loadIncomesForMonth,
   } = useIncomes();
+  // SPENDLY-511: null (renders nothing) unless the Journal reads the read model.
+  const newestLocalWriteMs = useMemo(() => {
+    let newest: number | null = null;
+    for (const row of [...expenses, ...incomes]) {
+      const ms = versionMillis(row as { updatedAt?: unknown; createdAt?: unknown });
+      if (ms !== null && (newest === null || ms > newest)) newest = ms;
+    }
+    return newest;
+  }, [expenses, incomes]);
+  const journalFreshness = useReadModelFreshness("journal", ["expenses", "incomes"], newestLocalWriteMs);
   const { accounts } = useAccounts();
   const {
     hasMore: hasMoreLedger,
@@ -586,6 +599,7 @@ export default function LedgerScreen() {
 
   const listHeaderNode = isFilterableTab ? (
     <>
+      <ReadModelFreshnessBadge freshness={journalFreshness} />
       <TransactionFilters
         title="Journal"
         filters={journalFilters}
