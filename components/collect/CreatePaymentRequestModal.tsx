@@ -88,7 +88,8 @@ export function CreatePaymentRequestModal({
         payeeName,
         upiId,
         qrStyleId: selectedStyleId,
-        payeePhotoUrl: user?.photoURL || undefined,
+        // SPENDLY-562: only when there is a photo (email sign-ups have none).
+        ...(user?.photoURL ? { payeePhotoUrl: user.photoURL } : {}),
       });
 
       haptic.success().catch(
