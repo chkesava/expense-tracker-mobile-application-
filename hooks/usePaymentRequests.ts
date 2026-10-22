@@ -21,6 +21,7 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { PaymentRequest, PaymentRequestInput } from "@/shared/types/paymentRequest";
+import { buildPaymentRequestDoc } from "@/shared/utils/paymentRequestDoc";
 import { getStoredQrStyleId } from "@/shared/utils/qrStyles";
 
 /**
@@ -91,17 +92,16 @@ export function usePaymentRequests(options?: { enabled?: boolean }) {
 
     try {
       const slug = generateSlug();
-      const newRequest: Omit<PaymentRequest, "id"> = {
-        ...input,
+      // SPENDLY-562: optional fields left out rather than sent as undefined.
+      // The public /payment/:slug page is read by someone who is not signed
+      // in, so it cannot resolve a currency from system settings; carry it.
+      const newRequest = buildPaymentRequestDoc(input, {
         slug,
         createdBy: uid,
-        createdAt: Date.now(),
-        status: "active",
-        qrStyleId: input.qrStyleId || getStoredQrStyleId(),
-        // The public /payment/:slug page is read by someone who is not signed
-        // in, so it cannot resolve a currency from system settings. Carry it.
-        currency: input.currency || system.defaultCurrency,
-      };
+        nowMs: Date.now(),
+        fallbackQrStyleId: getStoredQrStyleId(),
+        fallbackCurrency: system.defaultCurrency,
+      });
 
       const outcome = await commitWrite(
         () => setDoc(doc(db, "paymentRequests", slug), newRequest),
