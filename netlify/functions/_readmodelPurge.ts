@@ -9,13 +9,27 @@
  *
  * - A failed call throws: the phase fails, the client retries it, and Auth is
  *   never deleted before the read model is clean.
- * - When the read model isn't configured on this site, there is nothing this
- *   function can reach. The phase reports `configured: false` and moves on; the
- *   sync's orphan check (SPENDLY-508) then flags any rows left behind.
+ * - **Fails closed** (PR #234 review): if the site lacks the read-model
+ *   settings, it throws a retryable error instead of skipping. Skipping would
+ *   delete the login while the person's financial data stayed in Supabase until
+ *   someone purged it by hand. Set `READMODEL_SUPABASE_URL` and
+ *   `READMODEL_SUPABASE_SERVICE_ROLE_KEY` on the Netlify site before deploying
+ *   this, or account deletion stops at this phase until they are set.
  */
 
 export type PurgeEnv = { url?: string; serviceRoleKey?: string };
-export type PurgeResult = { configured: false } | { configured: true; rows: number };
+export type PurgeResult = { rows: number };
+
+/** Shown to the person deleting their account; no configuration detail. */
+export const PURGE_NOT_CONFIGURED_MESSAGE =
+  "Account deletion is paused while we finish a setup step. Nothing was lost; please try again later.";
+
+export class ReadModelPurgeNotConfigured extends Error {
+  constructor() {
+    super(PURGE_NOT_CONFIGURED_MESSAGE);
+    this.name = "ReadModelPurgeNotConfigured";
+  }
+}
 type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string }) => Promise<{
   ok: boolean;
   status: number;
@@ -27,7 +41,7 @@ export function readModelPurgeEnv(env: NodeJS.ProcessEnv = process.env): PurgeEn
 }
 
 export async function purgeReadModel(uid: string, env: PurgeEnv, fetchImpl: FetchLike = fetch as unknown as FetchLike): Promise<PurgeResult> {
-  if (!env.url || !env.serviceRoleKey) return { configured: false };
+  if (!env.url || !env.serviceRoleKey) throw new ReadModelPurgeNotConfigured();
   const response = await fetchImpl(`${env.url.replace(/\/$/, "")}/rest/v1/rpc/readmodel_purge_user`, {
     method: "POST",
     headers: {
@@ -42,5 +56,5 @@ export async function purgeReadModel(uid: string, env: PurgeEnv, fetchImpl: Fetc
     throw new Error(`Could not erase the reporting copy (HTTP ${response.status}). Try again.`);
   }
   const body = (await response.json().catch(() => ({}))) as { rows?: unknown };
-  return { configured: true, rows: Number(body.rows ?? 0) || 0 };
+  return { rows: Number(body.rows ?? 0) || 0 };
 }

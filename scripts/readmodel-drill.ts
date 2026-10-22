@@ -354,7 +354,7 @@ async function main() {
     const otherUserFine = others.issues.every((i) => i.kind === "missing");
     result(d, "every drill-b row is erased; a later full sync (Firestore still holding drill-b) does not bring it back; drill-a untouched",
       `purge ${JSON.stringify(purged)}; resync exit ${resync.status}; ${summarizeConvergence(report)}; drill-a intact: ${otherUserFine}`,
-      purged.configured === true && resync.status === 0 && resync.output.includes("[PURGED] skipped 1") && report.converged && otherUserFine);
+      purged.rows > 0 && resync.status === 0 && resync.output.includes("[PURGED] skipped 1") && report.converged && otherUserFine);
   }
 
   await stopPostgrest();

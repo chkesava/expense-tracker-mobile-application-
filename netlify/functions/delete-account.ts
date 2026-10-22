@@ -384,10 +384,11 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
         finished = await runTreePhase(db, `users/${duressUid(uid)}`, startedAt, state);
         break;
       case "readmodel": {
-        // SPENDLY-508. Throws on failure, so the client retries this phase and
-        // never reaches `auth` with the read-model copy still there.
+        // SPENDLY-508. Throws on failure, and when the site lacks the
+        // read-model settings, so the client retries this phase and never
+        // reaches `auth` with the read-model copy still there.
         const purged = await purgeReadModel(uid, readModelPurgeEnv());
-        if (purged.configured) state.deleted.readModelRows += purged.rows;
+        state.deleted.readModelRows += purged.rows;
         finished = true;
         break;
       }

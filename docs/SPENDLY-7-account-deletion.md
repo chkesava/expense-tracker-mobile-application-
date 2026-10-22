@@ -53,7 +53,7 @@ Two more things nobody's scope included:
 | 2 | `ganesh` | every `pandals/*/members/*` with `userId == uid` → marked `removed`, with an audit row |
 | 3 | `user-tree` | `users/{uid}` — one subcollection per pass, then the document |
 | 4 | `duress-tree` | `users/{uid}_duress` |
-| 5 | `readmodel` | SPENDLY-508: `readmodel_purge_user(uid)` on the Supabase read model. It hard-deletes every row and all sync bookkeeping for the uid and its duress twin, and records the account as purged (hashed) so a late sync can't bring it back. A failure throws and the phase is retried, so `auth` never runs first. Skipped when `READMODEL_SUPABASE_URL` / `READMODEL_SUPABASE_SERVICE_ROLE_KEY` aren't set on the site; the sync's orphan check then flags any leftover |
+| 5 | `readmodel` | SPENDLY-508: `readmodel_purge_user(uid)` on the Supabase read model. It hard-deletes every row and all sync bookkeeping for the uid and its duress twin, and records the account as purged (hashed) so a late sync can't bring it back. A failure throws and the phase is retried, so `auth` never runs first. **Fails closed:** if `READMODEL_SUPABASE_URL` / `READMODEL_SUPABASE_SERVICE_ROLE_KEY` aren't set on the site, the phase throws a retryable error ("Account deletion is paused…") and deletion stops there until they are set, instead of deleting the login with data left in Supabase |
 | 6 | `auth` | `deleteUser(uid)` |
 
 **`auth` is last** because it is the one irreversible, non-retryable step. Once
