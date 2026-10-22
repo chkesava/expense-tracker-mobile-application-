@@ -158,6 +158,12 @@ export const SPEC_BY_COLLECTION = new Map(READ_MODEL_TABLES.map((s) => [s.collec
 
 /** Thrown inside a converter; turns the row `unmapped`. */
 class Unconvertible extends Error {}
+/** Carries the source field that failed, for the failure record (SPENDLY-507). */
+class FieldUnconvertible extends Error {
+  constructor(readonly field: string, readonly type: FieldType) {
+    super(`${field}: not a valid ${type}`);
+  }
+}
 const bad = (): never => {
   throw new Unconvertible();
 };
@@ -256,6 +262,11 @@ export type ReadModelRow = Record<string, unknown> & {
 };
 
 export function mapDocument(spec: TableSpec, uid: string, source: SourceDoc): ReadModelRow {
+  return mapDocumentWithReason(spec, uid, source).row;
+}
+
+/** As mapDocument, plus why a row is unmapped (the failing field; never its value). */
+export function mapDocumentWithReason(spec: TableSpec, uid: string, source: SourceDoc): { row: ReadModelRow; reason?: string } {
   const base: ReadModelRow = {
     uid,
     doc_id: source.id,
@@ -269,7 +280,12 @@ export function mapDocument(spec: TableSpec, uid: string, source: SourceDoc): Re
   try {
     for (const field of spec.fields) {
       const value = source.data[field.source];
-      typed[field.column] = isBlank(value) ? null : convert(field.type, value);
+      try {
+        typed[field.column] = isBlank(value) ? null : convert(field.type, value);
+      } catch (error) {
+        if (error instanceof Unconvertible) throw new FieldUnconvertible(field.source, field.type);
+        throw error;
+      }
     }
     if (spec.derivedMonth) {
       typed.month = monthKeyOf({
@@ -278,11 +294,14 @@ export function mapDocument(spec: TableSpec, uid: string, source: SourceDoc): Re
       }) ?? null;
     }
   } catch (error) {
-    if (!(error instanceof Unconvertible)) throw error;
+    if (!(error instanceof FieldUnconvertible)) throw error;
     const nulls = Object.fromEntries(spec.fields.map((field) => [field.column, null]));
-    return { ...base, ...nulls, ...(spec.derivedMonth ? { month: null } : {}), mapping_status: "unmapped" };
+    return {
+      row: { ...base, ...nulls, ...(spec.derivedMonth ? { month: null } : {}), mapping_status: "unmapped" },
+      reason: error.message,
+    };
   }
-  return { ...base, ...typed };
+  return { row: { ...base, ...typed } };
 }
 
 /** The version guard must be real: a document without an updateTime is a bug. */

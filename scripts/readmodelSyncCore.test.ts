@@ -258,6 +258,76 @@ describe("read-model sync core (SPENDLY-506)", () => {
   });
 });
 
+describe("sync failures are recorded and resolve themselves (SPENDLY-507)", () => {
+  it("records a mapping failure once, naming the field but not the value, and resolves it when the document maps", async () => {
+    const fs = fakeFirestore({ alice: { expenses: [exp("weird", 0, T0 - H, { amount: "secret-ish" })] } });
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    expect(m.failures).toEqual([
+      expect.objectContaining({ uid: "alice", collection: "expenses", docId: "weird", errorClass: "mapping", message: "amount: not a valid money" }),
+    ]);
+    expect(JSON.stringify(m.failures)).not.toContain("secret-ish");
+
+    // Still broken on the next run: no duplicate.
+    await runSync(fs.source, m.sink, opts("full", T0 + H));
+    expect(m.failures).toHaveLength(1);
+    expect(await m.sink.openFailures()).toHaveLength(1);
+
+    // Fixed in Firestore: the next pass maps it and resolves the failure.
+    fs.users.alice.expenses[0] = { ...exp("weird", 12, T0 - H, { updatedAt: T0 + 2 * H }), updateMs: T0 + 2 * H };
+    await runSync(fs.source, m.sink, opts("incremental", T0 + 3 * H));
+    expect(m.row("expenses", "alice", "weird")).toMatchObject({ amount: 12, mapping_status: "mapped" });
+    expect(await m.sink.openFailures()).toEqual([]);
+  });
+
+  it("resolves a (uid, collection) failure when that pair next completes", async () => {
+    const fs = world();
+    let broken = true;
+    const flaky: SourcePort = {
+      listUserIds: fs.source.listUserIds,
+      async readPage(uid, collection, request) {
+        if (broken && uid === "alice" && collection === "expenses") throw new Error("unavailable");
+        return fs.source.readPage(uid, collection, request);
+      },
+    };
+    const m = memorySink();
+    await runSync(flaky, m.sink, opts("full", T0));
+    expect(await m.sink.openFailures()).toEqual([expect.objectContaining({ uid: "alice", collection: "expenses", docId: "*", errorClass: "pair_failed" })]);
+    // The failed pair did not advance, so nothing was skipped.
+    expect(m.checkpoints.has("alice/expenses")).toBe(false);
+
+    broken = false;
+    await runSync(flaky, m.sink, opts("incremental", T0 + 3 * H));
+    expect(await m.sink.openFailures()).toEqual([]);
+    expect(m.row("expenses", "alice", "e1")).toBeTruthy();
+  });
+
+  it("keeps a mass-tombstone guard failure open while the guard keeps firing", async () => {
+    const fs = fakeFirestore({
+      alice: { categories: Array.from({ length: MASS_TOMBSTONE_MIN + 10 }, (_, i) => ({ id: `c${i}`, data: { name: "x" }, updateMs: T0 })) },
+    });
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    const kept = fs.users.alice.categories;
+    fs.users.alice.categories = [];
+    await runSync(fs.source, m.sink, opts("full", T0 + H));
+    await runSync(fs.source, m.sink, opts("full", T0 + 2 * H));
+    expect(await m.sink.openFailures()).toEqual([expect.objectContaining({ errorClass: "mass_tombstone_guard" })]);
+
+    // The documents were really there (a bad read): the next clean pass resolves it.
+    fs.users.alice.categories = kept;
+    await runSync(fs.source, m.sink, opts("full", T0 + 3 * H));
+    expect(await m.sink.openFailures()).toEqual([]);
+  });
+
+  it("dry runs neither record nor resolve failures", async () => {
+    const fs = fakeFirestore({ alice: { expenses: [exp("weird", 0, T0 - H, { amount: "x" })] } });
+    const m = memorySink();
+    await runSync(fs.source, m.sink, { ...opts("full", T0), dryRun: true });
+    expect(m.failures).toEqual([]);
+  });
+});
+
 describe("readmodel-sync never writes Firestore", () => {
   const FIRESTORE_WRITES = /\.(set|update|delete|create)\(|\.batch\(|runTransaction|bulkWriter|recursiveDelete/;
 

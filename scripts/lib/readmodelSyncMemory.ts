@@ -14,7 +14,7 @@ export function memorySink(initial: { reads24h?: number; lastNotes?: Record<stri
   const checkpoints = new Map<string, Checkpoint>();
   const status = new Map<string, StatusUpdate>();
   const runs: (RunRecord & { id: number })[] = [];
-  const failures: { uid: string; collection: string; errorClass: string }[] = [];
+  const failures: { uid: string; collection: string; docId: string; errorClass: string; message: string; resolved?: boolean }[] = [];
   let nextRun = 1;
 
   const table = (name: string) => {
@@ -69,7 +69,22 @@ export function memorySink(initial: { reads24h?: number; lastNotes?: Record<stri
       status.set(`${update.uid}/${update.collection}`, update);
     },
     async recordFailure(failure) {
-      failures.push(failure);
+      // One open failure per document, like the partial unique index.
+      if (failures.some((f) => !f.resolved && f.uid === failure.uid && f.collection === failure.collection && f.docId === failure.docId)) return;
+      failures.push({ ...failure });
+    },
+    async openFailures() {
+      return failures.filter((f) => !f.resolved).map(({ uid, collection, docId, errorClass }) => ({ uid, collection, docId, errorClass }));
+    },
+    async resolveFailures(uid, collection, docIds) {
+      let n = 0;
+      for (const f of failures) {
+        if (!f.resolved && f.uid === uid && f.collection === collection && docIds.includes(f.docId)) {
+          f.resolved = true;
+          n += 1;
+        }
+      }
+      return n;
     },
     async finishRun(runId, record) {
       runs.push({ ...record, id: runId ?? 0 });
