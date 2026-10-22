@@ -107,15 +107,20 @@ $$;
 
 reset role;
 
--- ─── Views are not readable by clients yet; they read as the caller ─────────
+-- ─── Views read as the caller. Clients may read only the ones a screen uses
+--     (SPENDLY-513: the cash-flow chart); anon reads none ───────────────────
 do $$
 declare
   v text;
 begin
   foreach v in array array['v_period_totals', 'v_cash_flow_by_month', 'v_cashback_history', 'v_account_flows',
                            'v_account_flow_rows', 'v_account_balances', 'v_data_quality', 'v_active_expenses', 'v_active_incomes'] loop
-    if has_table_privilege('anon', format('public.%I', v), 'select') or has_table_privilege('authenticated', format('public.%I', v), 'select') then
-      raise exception '% is readable by a client role', v;
+    if has_table_privilege('anon', format('public.%I', v), 'select') then
+      raise exception '% is readable by anon', v;
+    end if;
+    if has_table_privilege('authenticated', format('public.%I', v), 'select')
+       <> (v in ('v_cash_flow_by_month', 'v_active_expenses', 'v_active_incomes')) then
+      raise exception '% client grant differs from the SPENDLY-513 list', v;
     end if;
     if not exists (select 1 from pg_class c where c.relname = v and c.relnamespace = 'public'::regnamespace
                    and 'security_invoker=true' = any(c.reloptions)) then

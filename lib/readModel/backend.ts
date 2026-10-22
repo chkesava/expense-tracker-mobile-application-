@@ -4,6 +4,17 @@ import { collection, getDocs, type Firestore } from "firebase/firestore";
 import { mapDocument, SPEC_BY_COLLECTION, type ReadModelRow } from "@/shared/utils/readModel/mapping";
 import { LEDGER_PAGE_SIZE } from "@/shared/utils/ledgerSnapshot";
 
+import {
+  auditPageFrom,
+  cashFlowFromRows,
+  supabaseAuditPage,
+  supabaseByIds,
+  supabaseByMonthKey,
+  supabaseCashFlow,
+  type AuditCursor,
+  type AuditPage,
+  type CashFlowMonth,
+} from "./analyticsSources";
 import { supabaseJournalPage, type SupabaseCursor, type SupabasePage } from "./journalHistorySource";
 import { journalMonthRange, supabaseJournalMonth, type JournalCollection } from "./journalMonthSource";
 import { fromReadModelDoc } from "./readModelDoc";
@@ -38,6 +49,19 @@ export type ReadModelBackend = {
   month<T extends { id?: string }>(collectionName: JournalCollection, monthKey: string): Promise<T[]>;
   page<T extends { id?: string }>(collectionName: JournalCollection, cursor: SupabaseCursor, pageSize?: number): Promise<SupabasePage<T>>;
   matching<T extends { id?: string }>(collectionName: JournalCollection, match: JournalMatch): Promise<T[]>;
+  /**
+   * SPENDLY-513: active rows whose month key is `monthKey`: the `month`
+   * column, which the sync fills by the app's rule (`monthKeyOf`: the row's
+   * `month`, else its date). This is how Insights assigns rows to a month,
+   * unlike `month()`, which is the Journal's date range.
+   */
+  byMonthKey<T extends { id?: string }>(collectionName: JournalCollection, monthKey: string): Promise<T[]>;
+  /** SPENDLY-513: income/expense totals per month, `fromMonth`..`toMonth` inclusive (months with no rows absent). */
+  cashFlow(fromMonth: string, toMonth: string): Promise<CashFlowMonth[]>;
+  /** SPENDLY-513: ledger audit events, newest first; one transaction's when `targetDocId` is set. */
+  auditPage<T>(cursor: AuditCursor, options: { targetDocId?: string; pageSize: number }): Promise<AuditPage<T>>;
+  /** SPENDLY-513: active rows with these ids. */
+  byIds<T extends { id?: string }>(collectionName: JournalCollection, ids: string[]): Promise<T[]>;
   /** The stalest `last_synced_at` (ms) of these collections, or null if any was never synced. */
   lastSyncedAt(collections: string[]): Promise<number | null>;
 };
@@ -68,6 +92,10 @@ export function supabaseBackend(client: SupabaseClient): ReadModelBackend {
         if (rows.length < MATCH_PAGE) return out;
       }
     },
+    byMonthKey: (c, m) => supabaseByMonthKey(client, c, m),
+    cashFlow: (from, to) => supabaseCashFlow(client, from, to),
+    auditPage: (cursor, options) => supabaseAuditPage(client, cursor, options),
+    byIds: (c, ids) => supabaseByIds(client, c, ids),
     async lastSyncedAt(collections) {
       const { data, error } = await client.from("sync_status").select("collection, last_synced_at").in("collection", collections);
       if (error) throw new Error(error.message);
@@ -82,7 +110,7 @@ export type LoopbackKnobs = { fail?: boolean; lagMinutes?: number };
 
 export function loopbackBackend(db: Firestore, uid: string, knobs: LoopbackKnobs = {}, now: () => number = Date.now): ReadModelBackend {
   /** The collection as the read model would hold it: live rows, mapped and round-tripped. */
-  async function rows(collectionName: JournalCollection): Promise<ReadModelRow[]> {
+  async function rows(collectionName: JournalCollection | "ledgerEvents"): Promise<ReadModelRow[]> {
     if (knobs.fail) throw new Error("loopback read model: simulated outage (readModel.loopbackFail)");
     const spec = SPEC_BY_COLLECTION.get(collectionName)!;
     const snap = await getDocs(collection(db, "users", uid, collectionName));
@@ -127,6 +155,27 @@ export function loopbackBackend(db: Firestore, uid: string, knobs: LoopbackKnobs
         .filter((r) => !match.fromDate || (r.date != null && String(r.date) >= match.fromDate))
         .filter((r) => !match.toDate || (r.date != null && String(r.date) <= match.toDate))
         .map((r) => toApp(r));
+    },
+    async byMonthKey(collectionName, monthKey) {
+      return (await rows(collectionName)).filter((r) => r.month === monthKey).map((r) => toApp(r));
+    },
+    async cashFlow(fromMonth, toMonth) {
+      return cashFlowFromRows(await rows("expenses"), await rows("incomes"), fromMonth, toMonth);
+    },
+    async auditPage<T>(cursor: AuditCursor, options: { targetDocId?: string; pageSize: number }) {
+      const all = (await rows("ledgerEvents")).filter((r) => !options.targetDocId || r.target_doc_id === options.targetDocId);
+      const asPage = (list: ReadModelRow[]) =>
+        list.map((r) => ({ doc_id: r.doc_id, created_at: (r.created_at as string | null) ?? null, doc: r.doc as Record<string, unknown> }));
+      if (cursor === "undated") return auditPageFrom<T>(asPage(all.filter((r) => r.created_at == null)), cursor, Number.MAX_SAFE_INTEGER);
+      const dated = all
+        .filter((r) => r.created_at != null)
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)) || b.doc_id.localeCompare(a.doc_id))
+        .filter((r) => !cursor || String(r.created_at) < cursor.createdAt || (r.created_at === cursor.createdAt && r.doc_id < cursor.docId));
+      return auditPageFrom<T>(asPage(dated.slice(0, options.pageSize)), cursor, options.pageSize);
+    },
+    async byIds(collectionName, ids) {
+      const wanted = new Set(ids);
+      return (await rows(collectionName)).filter((r) => wanted.has(r.doc_id)).map((r) => toApp(r));
     },
     async lastSyncedAt() {
       if (knobs.fail) throw new Error("loopback read model: simulated outage (readModel.loopbackFail)");

@@ -35,7 +35,8 @@ end
 $$;
 
 -- 3. anon holds no table privileges in public; authenticated holds SELECT
---    only, and only on the user-data tables plus sync_status (SPENDLY-505).
+--    only, and only on the user-data tables plus sync_status (SPENDLY-505)
+--    and the views the Phase 3 screens read (SPENDLY-513).
 do $$
 declare
   grants text;
@@ -50,7 +51,8 @@ begin
         or table_name not in (
           'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
           'account_transfers', 'account_entries', 'account_payments',
-          'credit_card_bills', 'categories', 'sync_status'
+          'credit_card_bills', 'categories', 'sync_status',
+          'v_active_expenses', 'v_active_incomes', 'v_cash_flow_by_month'
         )
       ))
     );
@@ -162,3 +164,20 @@ end
 $$;
 
 select 'read-model security assertions passed' as result;
+
+-- 7. SPENDLY-513: the Phase 3 views run as the caller (security_invoker), so
+--    RLS applies through them; a definer view would bypass it.
+do $$
+declare
+  bad text;
+begin
+  select string_agg(c.relname, ', ') into bad
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind = 'v'
+    and c.relname in ('v_active_expenses', 'v_active_incomes', 'v_cash_flow_by_month')
+    and not coalesce('security_invoker=true' = any(c.reloptions), false);
+  if bad is not null then
+    raise exception 'client-readable views must be security_invoker: %', bad;
+  end if;
+end
+$$;

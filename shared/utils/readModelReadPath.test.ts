@@ -96,3 +96,19 @@ describe("read-model freshness (SPENDLY-511)", () => {
     expect(readModelFreshness({ lastSyncedAtMs: null, newestLocalWriteMs: null, nowMs: 0, formatTime: fmt }).state).toBe("stale");
   });
 });
+
+describe("Phase 3 screens (SPENDLY-513)", () => {
+  it("each screen reads its own key and defaults to firestore", () => {
+    const setting = { journal: "supabase", insights: "shadow", cashFlow: "supabase", audit: "bogus" };
+    expect(configuredReadModelMode(setting, "insights")).toBe("shadow");
+    expect(configuredReadModelMode(setting, "cashFlow")).toBe("supabase");
+    expect(configuredReadModelMode(setting, "audit")).toBe("firestore");
+    expect(configuredReadModelMode(setting, "cashback")).toBe("firestore");
+    expect(configuredReadModelMode({ journal: "supabase" }, "insights")).toBe("firestore");
+  });
+
+  it("a screen that fell back says so, whatever the sync state", () => {
+    expect(readModelFreshness({ fellBack: true, lastSyncedAtMs: null, newestLocalWriteMs: null, nowMs: 0, formatTime: () => "" }))
+      .toEqual({ state: "fallback", label: "History copy unavailable — showing live data" });
+  });
+});

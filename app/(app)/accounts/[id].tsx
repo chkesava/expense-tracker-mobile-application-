@@ -39,6 +39,7 @@ import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { RecordCashbackModal } from "@/components/accounts/RecordCashbackModal";
 import { CashbackHistoryCard } from "@/components/accounts/CashbackHistoryCard";
+import { ReadModelFreshnessBadge } from "@/components/common/ReadModelFreshnessBadge";
 import { CreditCardAnalyticsSection } from "@/components/accounts/CreditCardAnalyticsSection";
 import { CreditStatementCard } from "@/components/accounts/CreditStatementCard";
 import { TransferFundsModal } from "@/components/accounts/TransferFundsModal";
@@ -59,6 +60,8 @@ import { useAccountActivities } from "@/hooks/useAccountActivities";
 import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAuth } from "@/providers/AuthProvider";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
+import { useCashbackExpenses } from "@/hooks/useCashbackExpenses";
+import { useReadModelFreshness } from "@/hooks/useReadModelFreshness";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
@@ -203,8 +206,12 @@ export default function AccountDetailScreen() {
   const { accounts, loading: accountsLoading, error: accountsError, retry: retryAccounts } =
     useAccounts();
   const { accountTypes } = useAccountTypes();
-  const { expenses, loading: expensesLoading, complete: expensesComplete } =
-    useExpenses();
+  const {
+    expenses,
+    loading: expensesLoading,
+    complete: expensesComplete,
+    readModelSession,
+  } = useExpenses();
   const { incomes } = useIncomes();
   const { entries, addEntry } = useAccountEntries();
   const { payments } = useAccountPayments();
@@ -1094,10 +1101,19 @@ export default function AccountDetailScreen() {
       });
   }, [account, isCreditCard, bills, settings.dateFormat]);
 
+  // SPENDLY-513: in read-model `supabase` mode, linked purchases older than
+  // the loaded window are added so their notes show; otherwise `expenses`.
+  const cashbackExpenses = useCashbackExpenses({
+    cardId: isCreditCard ? account?.id : undefined,
+    payments,
+    expenses,
+    session: readModelSession,
+  });
+  const cashbackFreshness = useReadModelFreshness("cashback", ["expenses"], null);
   const cashbackSummary = useMemo(() => {
     if (!account || !isCreditCard) return null;
-    return buildCashbackHistory(account.id, payments, expenses);
-  }, [account, isCreditCard, payments, expenses]);
+    return buildCashbackHistory(account.id, payments, cashbackExpenses);
+  }, [account, isCreditCard, payments, cashbackExpenses]);
 
   const onRecordBillPayment = useCallback(() => {
     if (openStatementBill) {
@@ -1340,7 +1356,10 @@ export default function AccountDetailScreen() {
         ) : null}
 
         {isCreditCard && cashbackSummary ? (
-          <CashbackHistoryCard summary={cashbackSummary} currency={currency} />
+          <>
+            <ReadModelFreshnessBadge freshness={cashbackFreshness} />
+            <CashbackHistoryCard summary={cashbackSummary} currency={currency} />
+          </>
         ) : null}
 
         {isCreditCard && account ? (

@@ -43,3 +43,13 @@ export function overlayLocalRows<T extends { id?: string; updatedAt?: unknown; c
   }
   return { rows: [...byId.values()], pendingIds };
 }
+
+/** The newest version (ms) among rows this device holds, for the freshness badge. */
+export function newestWriteMs(rows: readonly { updatedAt?: unknown; createdAt?: unknown }[]): number | null {
+  let newest: number | null = null;
+  for (const row of rows) {
+    const ms = versionMillis(row);
+    if (ms !== null && (newest === null || ms > newest)) newest = ms;
+  }
+  return newest;
+}

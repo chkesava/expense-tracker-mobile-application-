@@ -8,14 +8,20 @@
  *   reads "Data may be out of date — last synced HH:MM".
  * - `updating`: this device wrote something newer than the last sync. Those
  *   rows are overlaid and the badge reads "Updating…".
+ * - `fallback` (SPENDLY-513): the read model failed this session and the
+ *   screen is showing Firestore data instead. The banner says so.
  * - `fresh`: nothing to say.
  */
 export const READ_MODEL_SLO_MS = 3 * 3600 * 1000;
 
-export type FreshnessState = "fresh" | "updating" | "stale";
+export type FreshnessState = "fresh" | "updating" | "stale" | "fallback";
 export type Freshness = { state: FreshnessState; label: string | null };
 
+export const READ_MODEL_FALLBACK_LABEL = "History copy unavailable — showing live data";
+
 export function readModelFreshness(input: {
+  /** The screen fell back to Firestore this session (SPENDLY-513). */
+  fellBack?: boolean;
   lastSyncedAtMs: number | null;
   newestLocalWriteMs: number | null;
   nowMs: number;
@@ -23,6 +29,7 @@ export function readModelFreshness(input: {
   formatTime: (ms: number) => string;
 }): Freshness {
   const slo = input.sloMs ?? READ_MODEL_SLO_MS;
+  if (input.fellBack) return { state: "fallback", label: READ_MODEL_FALLBACK_LABEL };
   if (input.lastSyncedAtMs === null) {
     return { state: "stale", label: "Data may be out of date — not synced yet" };
   }

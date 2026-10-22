@@ -29,6 +29,8 @@ import { sampleScrollFps, perfEvent, perfMark } from "@/lib/perf";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useDashboardCashFlow } from "@/hooks/useDashboardCashFlow";
+import { useReadModelFreshness } from "@/hooks/useReadModelFreshness";
+import { ReadModelFreshnessBadge } from "@/components/common/ReadModelFreshnessBadge";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
@@ -109,9 +111,13 @@ export default function DashboardScreen() {
   // read from it rather than from two more per-month doc listeners.
   const {
     summaries: cashFlowSummaries,
+    chartMonths: cashFlowChartMonths,
     loading: activeLoading,
     error: financeError,
   } = useDashboardCashFlow(activeMonth, 6);
+  // SPENDLY-513: says so when the chart's older months are stale or fell back
+  // (read-model `supabase` mode only; renders nothing otherwise).
+  const cashFlowFreshness = useReadModelFreshness("cashFlow", ["expenses", "incomes"], null);
   const activeSummary = useMemo(
     () => cashFlowSummaries.find((s) => s.period === activeMonth) ?? null,
     [cashFlowSummaries, activeMonth]
@@ -196,7 +202,7 @@ export default function DashboardScreen() {
     const result = [];
     let curMonth = activeMonth;
     for (let i = 0; i < 6; i++) {
-       const summary = cashFlowSummaries.find(s => s.period === curMonth);
+       const summary = cashFlowChartMonths.find(s => s.period === curMonth);
        result.unshift({
          month: curMonth,
          income: summary?.totalIncome || 0,
@@ -207,7 +213,7 @@ export default function DashboardScreen() {
     }
     
     return result;
-  }, [cashFlowSummaries, activeMonth]);
+  }, [cashFlowChartMonths, activeMonth]);
 
   const orderedWidgetIds = useMemo(() => {
     return getOrderedDashboardWidgets(
@@ -389,6 +395,7 @@ export default function DashboardScreen() {
 
   const cashFlowOverview = (
     <DashboardEntrance index={heroCount}>
+    <ReadModelFreshnessBadge freshness={cashFlowFreshness} />
     <QuickInsightsWidget
       monthlySpent={monthlySpent}
       monthlyIncome={monthlyIncome}
