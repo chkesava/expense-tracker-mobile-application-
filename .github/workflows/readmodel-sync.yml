@@ -33,11 +33,11 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "incremental or full"
+        description: "incremental, full, or verify (count parity only)"
         required: true
         default: incremental
         type: choice
-        options: [incremental, full]
+        options: [incremental, full, verify]
       dry_run:
         description: "Read and map only; write nothing to Supabase (still records the run and its reads)"
         required: true
@@ -72,6 +72,7 @@ jobs:
         run: npm ci
 
       - name: Sync
+        if: github.event_name != 'workflow_dispatch' || inputs.mode != 'verify'
         env:
           READMODEL_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.READMODEL_FIREBASE_SERVICE_ACCOUNT }}
           READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
@@ -88,3 +89,17 @@ jobs:
           args="--mode=$MODE"
           if [ "$DRY_RUN" = "true" ]; then args="$args --dry-run"; fi
           npx tsx scripts/readmodel-sync.ts $args
+
+      # SPENDLY-509: count parity right after every real full run (and on
+      # demand). Firestore count() per (user, collection) vs live read-model
+      # rows; ~1 read per 1,000 docs. A mismatch fails the job.
+      - name: Verify count parity
+        if: >-
+          github.event.schedule == '30 20 * * *' ||
+          (github.event_name == 'workflow_dispatch' && (inputs.mode == 'verify' || (inputs.mode == 'full' && !inputs.dry_run)))
+        env:
+          READMODEL_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.READMODEL_FIREBASE_SERVICE_ACCOUNT }}
+          READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
+          READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+          READMODEL_MAX_READS_PER_DAY: ${{ vars.READMODEL_MAX_READS_PER_DAY || '12000' }}
+        run: npx tsx scripts/readmodel-verify.ts

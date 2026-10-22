@@ -5,6 +5,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { firestoreReader } from "../scripts/readmodel-sync";
 import { runSync } from "../scripts/lib/readmodelSyncCore";
 import { memorySink } from "../scripts/lib/readmodelSyncMemory";
+import { firestoreCounter } from "../scripts/readmodel-verify";
+import { runVerify, type VerifySink } from "../scripts/lib/readmodelVerifyCore";
 
 /**
  * SPENDLY-506 end to end against the Firestore emulator: the real Admin SDK
@@ -70,5 +72,48 @@ describe("read-model sync against the Firestore emulator (SPENDLY-506)", () => {
     // The 600 categories were not re-read: an incremental run costs a few reads, not the collection.
     expect(second.readsUsed).toBeLessThan(40);
     expect(second.upserts).toBe(3);
+  });
+
+  it("count parity (SPENDLY-509): agrees after a full run, catches a row deleted by hand, and the next full run restores it", async () => {
+    const source = firestoreReader(db);
+    const m = memorySink();
+    const syncOpts = { dryRun: false, maxReadsPerRun: 10_000, maxReadsPerDay: 100_000, mode: "full" as const };
+    await runSync(source, m.sink, { ...syncOpts, now: () => Date.now() });
+
+    const verifySink = (): VerifySink => ({
+      readsUsedSince: async () => 0,
+      async liveCounts() {
+        const counts = new Map<string, number>();
+        const collectionOf: Record<string, string> = { expenses: "expenses", accounts: "accounts", categories: "categories" };
+        for (const [table, rows] of m.tables) {
+          for (const row of rows.values()) {
+            if (row.source_deleted || !collectionOf[table]) continue;
+            const key = `${row.uid}/${collectionOf[table]}`;
+            counts.set(key, (counts.get(key) ?? 0) + 1);
+          }
+        }
+        return [...counts].map(([key, live]) => ({ uid: key.split("/")[0], collection: key.split("/")[1], live }));
+      },
+      recordCounts: async () => {},
+      startRun: async () => null,
+      finishRun: async () => {},
+    });
+    const counter = firestoreCounter(db);
+    const vOpts = { maxReads: 1000, maxReadsPerDay: 100_000, now: () => Date.now() };
+
+    const agree = await runVerify(counter, verifySink(), vOpts);
+    expect(agree.status).toBe("succeeded");
+    expect(agree.byCollection.find((c) => c.collection === "categories")).toMatchObject({ firestore: 600, model: 600 });
+    // 600 categories counted for 1 read, not 600.
+    expect(agree.readsUsed).toBeLessThan(30);
+
+    m.tables.get("expenses")!.delete("alice/e2");
+    const caught = await runVerify(counter, verifySink(), vOpts);
+    expect(caught.status).toBe("failed");
+    expect(caught.byCollection.find((c) => c.collection === "expenses")).toMatchObject({ mismatchedUsers: 1 });
+
+    await runSync(source, m.sink, { ...syncOpts, now: () => Date.now() });
+    expect(m.row("expenses", "alice", "e2")).toMatchObject({ amount: 250 });
+    expect((await runVerify(counter, verifySink(), vOpts)).status).toBe("succeeded");
   });
 });

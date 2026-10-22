@@ -97,6 +97,16 @@ describe("read-model sync health (SPENDLY-507)", () => {
     expect(r.warnings.join()).toMatch(/Firestore reads in 24 h/);
   });
 
+  it("fails when the latest count-parity check failed, naming the collections (SPENDLY-509)", () => {
+    const verify = run(9, "verify", { status: "failed", notes: { byCollection: [{ collection: "expenses", mismatchedUsers: 2 }, { collection: "accounts", mismatchedUsers: 0 }] } });
+    const r = evaluateHealth({ ...healthy(), runs: [...healthy().runs, verify] }, NOW);
+    expect(r.problems.join()).toMatch(/Count parity failed: .*expenses ×2/);
+    expect(r.problems.join()).not.toMatch(/accounts/);
+    // A later passing verify clears it.
+    const ok = run(1, "verify");
+    expect(evaluateHealth({ ...healthy(), runs: [...healthy().runs, verify, ok] }, NOW).ok).toBe(true);
+  });
+
   it("renders a step summary with metrics and recent runs", () => {
     const r = evaluateHealth(healthy(), NOW);
     const md = renderHealthSummary(r, healthy().runs);
