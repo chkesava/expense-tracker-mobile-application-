@@ -30,6 +30,8 @@ This runbook is for operating the Firestore → Supabase read model. Firestore s
 
 ## First-time setup (in this order)
 
+**The step-by-step version, with exact commands, dashboard paths and checks, is `docs/READMODEL_POST_MERGE_SETUP.md`.** Below is the summary.
+
 Each step is idempotent. Nothing here writes to Firestore.
 
 1. **Supabase project** `spmsgncjbnbkxvsbpqlu`: apply every file in `supabase-readmodel/supabase/migrations/`, in name order, in the SQL editor or with `supabase db push --workdir supabase-readmodel`. Then confirm with the queries in `supabase-readmodel/tests/assert_security.sql` §1–4.
