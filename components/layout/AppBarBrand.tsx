@@ -56,7 +56,7 @@ export function AppBarBrand({ ink }: { ink?: string }) {
           },
         ]}
       >
-        Vault
+        Spendly
       </Text>
       {LOCAL_TEST_MODE ? (
         // SPENDLY-175: a local test build must never pass for the real app.

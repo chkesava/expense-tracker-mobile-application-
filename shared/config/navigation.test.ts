@@ -36,6 +36,7 @@ describe("resolveAndroidBackAction", () => {
     expect(resolveAndroidBackAction("/runway")).toBe("pop");
     expect(resolveAndroidBackAction("/calendar")).toBe("pop");
     expect(resolveAndroidBackAction("/what-if")).toBe("pop");
+    expect(resolveAndroidBackAction("/inbox")).toBe("pop");
     expect(resolveAndroidBackAction("/what-if/abc")).toBe("pop");
     expect(resolveAndroidBackAction("/what-if/edit?template=salary")).toBe("pop");
     expect(resolveAndroidBackAction("/goals/optimizer")).toBe("pop");

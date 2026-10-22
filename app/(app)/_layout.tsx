@@ -27,6 +27,7 @@ import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/providers/AuthProvider";
 import { BottomChromeProvider } from "@/components/layout/BottomChromeProvider";
+import { RemindersInboxProvider } from "@/providers/RemindersInboxProvider";
 import { SpendlyUIScope } from "@/components/layout/SpendlyUIScope";
 import { BorrowingsReceivablesProvider } from "@/providers/BorrowingsReceivablesProvider";
 import { ExpenseReferenceDataProvider } from "@/providers/ExpenseReferenceDataProvider";
@@ -67,6 +68,8 @@ function AppShellInner() {
     // on screen, so the dock's centred FAB is not measured as a bar
     // (SPENDLY-141).
     <BottomChromeProvider navStyle={showSidebar ? "sidebar" : settings.navigationStyle}>
+      {/* SPENDLY-569: the app-bar bell's inbox, computed once for the shell. */}
+      <RemindersInboxProvider>
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
         {/* Gluestack dialogs/sheets portal here: inside every app provider,
             so their content can use them (SPENDLY-154). */}
@@ -264,6 +267,13 @@ function AppShellInner() {
                 animation: "fade_from_bottom",
               }}
             />
+            {/* SPENDLY-569: reminders inbox opened from the app-bar bell. */}
+            <Stack.Screen
+              name="inbox"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
           </Stack>
         </TabSwipeArea>
         </GlassBlurTarget>
@@ -280,6 +290,7 @@ function AppShellInner() {
         <SetupWizardModal />
         </OverlayProvider>
       </View>
+      </RemindersInboxProvider>
     </BottomChromeProvider>
   );
 }
