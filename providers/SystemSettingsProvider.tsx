@@ -25,6 +25,11 @@ export type SystemSettings = {
   enableAIFeatures: boolean;
   allowDataExport: boolean;
   enableInvestments: boolean;
+  /**
+   * SPENDLY-511: per-screen read source, e.g. `{ journal: "supabase" }`.
+   * Missing or unknown values mean `firestore` (shared/utils/readModelMode.ts).
+   */
+  readModel?: Record<string, unknown>;
 };
 
 const DEFAULT_SETTINGS: SystemSettings = {

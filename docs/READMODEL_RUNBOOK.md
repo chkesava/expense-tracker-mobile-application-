@@ -50,6 +50,28 @@ Every nightly full run also checks **field parity**: each stored row must equal 
 
 When the gate passes, paste the report into `docs/` for sign-off. That is the Phase 2 exit evidence; screens move to Supabase only after it.
 
+## Flipping a screen (SPENDLY-511)
+
+Each screen's source is `system_settings/global.readModel.<screen>`. Today the only screen is `journal`, which covers its month loads. Clients can only read that document; the app follows changes live and applies them on the next load, so no release is needed.
+
+| Mode | What the screen does | When |
+|---|---|---|
+| `firestore` (unset = this) | Today's queries, unchanged. Nothing touches Supabase | Default, and the **kill switch** |
+| `shadow` | Serves Firestore, fetches the same data from Supabase in the background, and logs any difference (`readModel.shadow.journal`, at most once per 10 min) | Any time after the sync is live, to prove a screen |
+| `supabase` | Serves the read model, with a "last synced" badge when stale and "Updating…" when this device has newer writes. On an error or a 4 s timeout, Firestore serves the rest of the session (logged once, no toast) | **Only after the SPENDLY-510 14-day report is signed off** |
+
+**Duress sessions, offline devices and builds without the read model always read Firestore, whatever the mode.**
+
+```
+npx tsx scripts/readmodel-set-mode.ts --screen=journal --mode=shadow            # dry run
+npx tsx scripts/readmodel-set-mode.ts --screen=journal --mode=shadow --apply
+npx tsx scripts/readmodel-set-mode.ts --screen=journal --mode=firestore --apply  # roll back
+```
+
+You can also edit the field in the Firebase console, `system_settings/global` → `readModel` map.
+
+**The app needs** `EXPO_PUBLIC_READMODEL_SUPABASE_URL` and `EXPO_PUBLIC_READMODEL_SUPABASE_PUBLISHABLE_KEY` in its build (SPENDLY-505). Without them, every mode behaves as `firestore`.
+
 ## Replay and recovery
 
 There is no separate replay step. Every run re-reads the **current** Firestore document, and the upsert is version-guarded. So:
