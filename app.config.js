@@ -30,6 +30,9 @@ const SHARED_PLUGINS = [
   ["expo-router", { sitemap: false }],
   "expo-secure-store",
   "expo-local-authentication",
+  // SPENDLY-572: dashboard hero scenes (contentPosition + crossfade). Also
+  // listed in app.json.
+  "expo-image",
   "@react-native-google-signin/google-signin",
   [
     "expo-notifications",

@@ -1,5 +1,5 @@
 import { memo, useMemo } from "react";
-import { StyleSheet, Text } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ArrowDownLeft } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
@@ -7,17 +7,17 @@ import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
 import { MerchantMonogramTile } from "@/components/dashboard/MerchantMonogramTile";
 import {
-  DataRow,
-  RowGlyph,
   Section,
   SectionAction,
   useSurfaces,
+  withAlpha,
 } from "@/components/dashboard/primitives";
 import { useMerchantOverridesOnce } from "@/hooks/useMerchantOverridesOnce";
 import { useSettings } from "@/providers/SettingsProvider";
 import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
 import type { Expense, Income } from "@/shared/types/expense";
-import { formatDisplayDate } from "@/shared/utils/dateDisplay";
+import { shortRowDate } from "@/shared/utils/dashboardLabels";
+import { todayDateKey } from "@/shared/utils/dates";
 import { merchantMonogram, type MerchantMonogram } from "@/shared/utils/merchantMonogram";
 import { expenseSourceText, incomeSourceText } from "@/shared/utils/merchantModel";
 import { resolveMerchants } from "@/shared/utils/merchantResolve";
@@ -53,6 +53,7 @@ export const RecentActivityWidget = memo(function RecentActivityWidget({
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const { settings } = useSettings();
+  const todayKey = todayDateKey(settings.timezone);
 
   // SPENDLY-570: a monogram tile for merchants the resolver is sure of (or the
   // user named); everything else keeps its category glyph. Derived only — no
@@ -100,69 +101,138 @@ export const RecentActivityWidget = memo(function RecentActivityWidget({
           tip="Tap the '+' button to log your first transaction."
         />
       ) : (
-        items.map((item, index) => {
-          const isIncome = item.kind === "income";
-          const title = isIncome
-            ? item.row.note || item.row.source || "Income"
-            : item.row.note || item.row.category || "Expense";
-          const accountName = item.row.accountId ? accountNames?.get(item.row.accountId) : undefined;
-          const meta = [
-            item.date ? formatDisplayDate(item.date, settings.dateFormat) : null,
-            accountName,
-            isIncome
+        <View style={styles.list}>
+          {items.map((item) => {
+            const isIncome = item.kind === "income";
+            const title = isIncome
+              ? item.row.note || item.row.source || "Income"
+              : item.row.note || item.row.category || "Expense";
+            // SPENDLY-572: one short line under the title, as in the reference.
+            const subtitle = isIncome
               ? item.row.note
                 ? item.row.source || "Income"
                 : "Income"
               : item.row.note
-                ? item.row.category
-                : null,
-          ]
-            .filter(Boolean)
-            .join(" · ");
+                ? item.row.category || ""
+                : item.row.subcategory || "";
+            const accountName = item.row.accountId ? accountNames?.get(item.row.accountId) : undefined;
+            const monogram = monograms.get(item.key);
+            const dateLabel = shortRowDate(item.date, todayKey);
 
-          return (
-            <DataRow
-              key={item.key}
-              onPress={() => (item.kind === "income" ? onEditIncome(item.row) : onEditExpense(item.row))}
-              divider={index < items.length - 1}
-              leading={
-                monograms.get(item.key) ? (
-                  <MerchantMonogramTile monogram={monograms.get(item.key) as MerchantMonogram} />
+            return (
+              <Pressable
+                key={item.key}
+                onPress={() => (item.kind === "income" ? onEditIncome(item.row) : onEditExpense(item.row))}
+                android_ripple={{ color: surfaces.control, borderless: false }}
+                style={({ pressed }) => [
+                  styles.tile,
+                  { backgroundColor: surfaces.tile, borderColor: withAlpha(theme.colors.foreground, 0.06) },
+                  pressed && styles.pressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit ${isIncome ? "income" : "expense"} ${title}${accountName ? `, ${accountName}` : ""}${dateLabel ? `, ${dateLabel}` : ""}`}
+              >
+                {monogram ? (
+                  <MerchantMonogramTile monogram={monogram} size={44} />
                 ) : (
-                <RowGlyph size={38} tint={isIncome ? surfaces.wash(theme.colors.success) : surfaces.tile}>
-                  {isIncome ? (
-                    <ArrowDownLeft size={17} color={theme.colors.success} strokeWidth={2.4} />
-                  ) : (
-                    <Text style={styles.glyph} accessible={false}>
-                      {item.row.category ? getCategoryIcon(item.row.category) : "📦"}
+                  <View
+                    style={[
+                      styles.glyphTile,
+                      { backgroundColor: isIncome ? surfaces.wash(theme.colors.success) : withAlpha(theme.colors.foreground, 0.06) },
+                    ]}
+                  >
+                    {isIncome ? (
+                      <ArrowDownLeft size={20} color={theme.colors.success} strokeWidth={2.4} />
+                    ) : (
+                      <Text style={styles.glyph} accessible={false}>
+                        {item.row.category ? getCategoryIcon(item.row.category) : "📦"}
+                      </Text>
+                    )}
+                  </View>
+                )}
+                <View style={styles.textCol}>
+                  <Text
+                    style={[styles.title, { color: theme.colors.foreground, fontFamily: theme.fontFamily.medium }]}
+                    numberOfLines={1}
+                  >
+                    {title}
+                  </Text>
+                  {subtitle ? (
+                    <Text
+                      style={[styles.subtitle, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+                      numberOfLines={1}
+                    >
+                      {subtitle}
                     </Text>
-                  )}
-                </RowGlyph>
-                )
-              }
-              title={title}
-              meta={meta}
-              value={
-                <FinancialAmount
-                  value={item.row.amount}
-                  currency={currency}
-                  size="sm"
-                  sign={isIncome ? "plus" : "minus"}
-                  tone={isIncome ? "positive" : "negative"}
-                  fit={false}
-                />
-              }
-              accessibilityLabel={`Edit ${isIncome ? "income" : "expense"} ${title}`}
-            />
-          );
-        })
+                  ) : null}
+                </View>
+                <View style={styles.valueCol}>
+                  <FinancialAmount
+                    value={item.row.amount}
+                    currency={currency}
+                    size="sm"
+                    sign={isIncome ? "plus" : "minus"}
+                    tone={isIncome ? "positive" : "negative"}
+                    fit={false}
+                  />
+                  {dateLabel ? (
+                    <Text style={[styles.date, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
+                      {dateLabel}
+                    </Text>
+                  ) : null}
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
       )}
     </Section>
   );
 });
 
 const styles = StyleSheet.create({
+  list: {
+    gap: 8,
+  },
+  tile: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
+  },
+  pressed: {
+    opacity: 0.85,
+  },
+  glyphTile: {
+    width: 44,
+    height: 44,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   glyph: {
-    fontSize: 17,
+    fontSize: 20,
+  },
+  textCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  title: {
+    fontSize: 15,
+  },
+  subtitle: {
+    fontSize: 13,
+  },
+  valueCol: {
+    alignItems: "flex-end",
+    gap: 2,
+  },
+  date: {
+    fontSize: 12.5,
   },
 });

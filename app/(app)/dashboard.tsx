@@ -37,10 +37,6 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useGlobalMonth, useModalActions } from "@/providers/ModalProvider";
 import { useInvestmentsEnabled } from "@/hooks/useInvestmentsEnabled";
 import { useSettings } from "@/providers/SettingsProvider";
-import {
-  formatMonthLabel,
-  type DateFormatOption,
-} from "@/shared/utils/dateDisplay";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { Expense, Income } from "@/shared/types/expense";
 import {
@@ -54,7 +50,10 @@ import {
   remainingCommittedThisMonth,
 } from "@/shared/utils/spendlyBudget";
 import { getNextRenewalDate } from "@/shared/utils/subscriptionProcessor";
-import { useTheme } from "@/theme/ThemeProvider";
+import { ThemeOverride, useTheme } from "@/theme/ThemeProvider";
+import { SpendlyUIScope } from "@/components/layout/SpendlyUIScope";
+import { SideDrawer } from "@/components/SideDrawer";
+import { dashboardMonthLabel } from "@/shared/utils/dashboardLabels";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { GridItem, ResponsiveGrid } from "@/components/layout/ResponsiveGrid";
 
@@ -77,12 +76,6 @@ function getPreviousMonthKey(month: string): string {
   return `${y}-${m}`;
 }
 
-function formatMonthChipLabel(
-  month: string,
-  dateFormat: DateFormatOption
-): string {
-  return formatMonthLabel(month, dateFormat) || "This Month";
-}
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -247,10 +240,13 @@ export default function DashboardScreen() {
     router.push("/ledger");
   }, [router]);
 
+  // SPENDLY-572: "This month" / "Sep 2026", whatever the date-format pref.
   const activeMonthChipLabel = useMemo(
-    () => formatMonthChipLabel(activeMonth, settings.dateFormat),
-    [activeMonth, settings.dateFormat]
+    () => dashboardMonthLabel(activeMonth, currentMonthKey(settings.timezone)),
+    [activeMonth, settings.timezone]
   );
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const openProfile = useCallback(() => setIsProfileOpen(true), []);
 
   const summaryUnavailable = financeError
     ? ("error" as const)
@@ -331,7 +327,13 @@ export default function DashboardScreen() {
   );
   const insertInsightsAfter = Math.max(0, moreCardIds.indexOf("budgetAlerts"));
 
+  // SPENDLY-572: the Visual First dashboard is always a dark scene (Midnight
+  // Emerald), whatever the app theme; the profile drawer and every modal stay
+  // on the user's theme because they render outside this override.
   return (
+    <>
+    <ThemeOverride themeName="midnight-emerald">
+    <SpendlyUIScope>
     <PageShell
       refreshing={refreshing}
       onRefresh={handleRefresh}
@@ -339,8 +341,10 @@ export default function DashboardScreen() {
       onScrollBeginDrag={() => sampleScrollFps("dashboard")}
       // SPENDLY-566: the hero carries the app bar and runs under the status bar.
       hideHeaderOffset
+      // SPENDLY-572: the scene is the backdrop; no decorative aura blobs.
+      withAura={false}
     >
-      <DashboardHero />
+      <DashboardHero onOpenProfile={openProfile} />
 
       {/* Rides up over the hero's fade (DASHBOARD_HERO_OVERLAP). */}
       <DashboardEntrance index={0}>
@@ -485,6 +489,10 @@ export default function DashboardScreen() {
         </ResponsiveGrid>
       )}
     </PageShell>
+    </SpendlyUIScope>
+    </ThemeOverride>
+    <SideDrawer isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
+    </>
   );
 }
 

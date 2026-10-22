@@ -14,7 +14,7 @@ import {
 
 import { Chip } from "@/components/ui/Chip";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
-import { Section, useSurfaces, withAlpha } from "@/components/dashboard/primitives";
+import { mixColors, Section, withAlpha } from "@/components/dashboard/primitives";
 import { haptic } from "@/lib/haptics";
 import { useModalActions } from "@/providers/ModalProvider";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -44,7 +44,6 @@ const BUDGET_ORB = "#B07CFF";
 export const QuickAddWidget = memo(function QuickAddWidget() {
   const router = useRouter();
   const { theme } = useTheme();
-  const surfaces = useSurfaces();
   const { setAddTransactionKind, setIsAddExpenseOpen, setIsTransferOpen } = useModalActions();
 
   const actions = useMemo<Action[]>(
@@ -110,12 +109,15 @@ export const QuickAddWidget = memo(function QuickAddWidget() {
               style={[
                 styles.orb,
                 {
-                  backgroundColor: withAlpha(action.color, surfaces.isDark ? 0.18 : 0.12),
-                  borderColor: withAlpha(action.color, surfaces.isDark ? 0.55 : 0.4),
+                  // SPENDLY-572: a deep, opaque tint of the hue with a bright
+                  // ring, as in the reference — not a pale wash.
+                  backgroundColor: mixColors(theme.colors.background, action.color, 0.2),
+                  borderColor: withAlpha(action.color, 0.8),
+                  boxShadow: `0 6px 18px ${withAlpha(action.color, 0.18)}`,
                 },
               ]}
             >
-              <Icon size={24} color={action.color} strokeWidth={2.3} />
+              <Icon size={27} color={action.color} strokeWidth={2.4} />
             </View>
             <Text
               style={[styles.label, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
@@ -212,15 +214,15 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.96 }],
   },
   orb: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     borderWidth: 1.5,
     alignItems: "center",
     justifyContent: "center",
   },
   label: {
-    fontSize: 13,
+    fontSize: 14,
   },
   shortcutsBody: {
     marginTop: 2,

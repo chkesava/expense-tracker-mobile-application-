@@ -23,6 +23,10 @@ export interface DonutChartProps {
   currency?: string;
   title?: string;
   showLegend?: boolean;
+  /** Fraction digits for the centre figure (default: the currency's own). */
+  centerFractionDigits?: number;
+  /** Put the title under the figure, sentence case (Visual First, SPENDLY-572). */
+  titleBelow?: boolean;
 }
 
 /**
@@ -74,6 +78,8 @@ export function DonutChart({
   currency = "USD",
   title = "Total Spent",
   showLegend = true,
+  centerFractionDigits,
+  titleBelow = false,
 }: DonutChartProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -207,26 +213,42 @@ export function DonutChart({
           {/* Children never take the touch, so locationX/Y always measure
               from the chart's own box. */}
           <View pointerEvents="none" style={styles.centerContent}>
-          <Text
-            style={[
-              styles.centerSub,
-              { color: theme.colors.mutedForeground, fontSize: theme.typography.xs },
-            ]}
-            numberOfLines={1}
-          >
-            {activeItem ? activeItem.label : title}
-          </Text>
+          {titleBelow ? null : (
+            <Text
+              style={[
+                styles.centerSub,
+                { color: theme.colors.mutedForeground, fontSize: theme.typography.xs },
+              ]}
+              numberOfLines={1}
+            >
+              {activeItem ? activeItem.label : title}
+            </Text>
+          )}
           <Amount
             value={activeItem ? activeItem.value : total}
             currency={currency}
+            fractionDigits={centerFractionDigits}
             animated
             ghostable
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
             style={{
               fontSize: activeItem ? 18 : 20,
-              fontWeight: "900",
+              // SPENDLY-572: the theme font, not a heavy system fallback.
+              fontFamily: theme.fontFamily.bold,
               color: theme.colors.foreground,
+              fontVariant: ["tabular-nums"],
             }}
           />
+          {titleBelow ? (
+            <Text
+              style={{ color: theme.colors.mutedForeground, fontSize: 13, fontFamily: theme.fontFamily.regular, marginTop: 1 }}
+              numberOfLines={1}
+            >
+              {activeItem ? activeItem.label : title}
+            </Text>
+          ) : null}
           {activeItem && (
             <Text
               style={[
