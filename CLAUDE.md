@@ -23,6 +23,15 @@
 - Keep UI-only work separate from financial logic unless the Jira issue explicitly requires both.
 - Do not commit secrets, service-account credentials, or environment values.
 
+## Read-model architecture (SPENDLY-494)
+Firestore is the only write path; Supabase (`supabase-readmodel/`) is a read-only copy kept by a scheduled sync. Any feature that writes or reads user data, adds a collection or field, or deletes user data **must follow [docs/READ_MODEL_RULES.md](docs/READ_MODEL_RULES.md)**. In short:
+- writes go to Firestore only and stamp `createdAt`/`updatedAt`;
+- history/report/filter reads go through `lib/readModel/screenReadPath.ts` behind a per-screen switch that defaults to `firestore`;
+- current-state money never moves to the read model;
+- new synced data needs a migration, mapping, RLS and the purge.
+
+Operations: `docs/READMODEL_RUNBOOK.md`.
+
 ## Token/context efficiency
 - Work only on the requested Jira issue and its direct dependencies.
 - Do not reread large docs, lockfiles, generated files, or the entire repository unless necessary.
