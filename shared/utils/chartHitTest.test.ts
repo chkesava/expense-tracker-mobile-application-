@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { donutSliceAt, nearestPointIndex, pressPoint } from "./chartHitTest";
+import { donutSliceAt, donutTapTarget, nearestPointIndex, pressPoint } from "./chartHitTest";
 
 describe("donutSliceAt", () => {
   // Ring between radius 60 and 90; slices of 25%, 25% and 50%.
@@ -47,5 +47,27 @@ describe("pressPoint", () => {
   it("returns null when the event has no usable point", () => {
     expect(pressPoint({})).toBeNull();
     expect(pressPoint({ locationX: Number.NaN, locationY: 3 })).toBeNull();
+  });
+});
+
+describe("donutTapTarget", () => {
+  const fractions = [0.5, 0.5];
+
+  it("reads the hole as the centre and the ring as a slice", () => {
+    expect(donutTapTarget(0, 0, 40, 60, fractions)).toEqual({ kind: "center" });
+    expect(donutTapTarget(0, -20, 40, 60, fractions)).toEqual({ kind: "center" });
+    expect(donutTapTarget(10, -50, 40, 60, fractions)).toEqual({ kind: "slice", index: 0 });
+    expect(donutTapTarget(-10, -50, 40, 60, fractions)).toEqual({ kind: "slice", index: 1 });
+  });
+
+  it("never reads the hole's edge as the centre, and misses outside the ring", () => {
+    expect(donutTapTarget(0, -38, 40, 60, fractions)).toBeNull();
+    expect(donutTapTarget(0, -80, 40, 60, fractions)).toBeNull();
+    expect(donutTapTarget(Number.NaN, 0, 40, 60, fractions)).toBeNull();
+  });
+
+  it("still opens the centre when there are no slices", () => {
+    expect(donutTapTarget(0, 0, 40, 60, [])).toEqual({ kind: "center" });
+    expect(donutTapTarget(0, -50, 40, 60, [])).toBeNull();
   });
 });

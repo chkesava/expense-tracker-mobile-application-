@@ -33,6 +33,29 @@ export function donutSliceAt(
   return fractions.length - 1;
 }
 
+export type DonutTapTarget = { kind: "center" } | { kind: "slice"; index: number } | null;
+
+/**
+ * SPENDLY-574 — what a tap on a drill-down donut means: inside the hole is the
+ * centre (Total Spending), on the ring is that slice (its category), anywhere
+ * else is nothing. The hole stops `gap` short of the ring's inner edge so a
+ * tap on the boundary is never read as both.
+ */
+export function donutTapTarget(
+  dx: number,
+  dy: number,
+  innerRadius: number,
+  outerRadius: number,
+  fractions: readonly number[],
+  gap = 4
+): DonutTapTarget {
+  const distance = Math.hypot(dx, dy);
+  if (!Number.isFinite(distance)) return null;
+  if (distance < Math.max(0, innerRadius - gap)) return { kind: "center" };
+  const index = donutSliceAt(dx, dy, innerRadius, outerRadius, fractions);
+  return index === null ? null : { kind: "slice", index };
+}
+
 /** Index of the x-coordinate nearest to `x` (ties go to the earlier point), or -1. */
 export function nearestPointIndex(x: number, xs: readonly number[]): number {
   let best = -1;
