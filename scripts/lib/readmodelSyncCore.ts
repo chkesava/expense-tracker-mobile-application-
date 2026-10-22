@@ -25,6 +25,8 @@ import { mapDocumentWithReason, READ_MODEL_TABLES, type ReadModelRow, type Sourc
  * - A full pass may not tombstone more than half of a user's live rows in a
  *   table (when more than 20), in case of a bad read; that is reported instead.
  * - Duress trees (`{uid}_duress`) are never read.
+ * - Erased accounts (SPENDLY-508 purge) are never read again, even if
+ *   Firestore still holds their documents (SPENDLY-520 drill D6).
  * - Logs and failures carry hashed uids only.
  *
  * Failures (SPENDLY-507) are recorded in sync_failures and resolved by the
@@ -93,6 +95,11 @@ export type SinkPort = {
   resolveFailures(uid: string, collection: string, docIds: string[]): Promise<number>;
   /** Uids the read model holds sync state for (SPENDLY-508 orphan check). */
   modelUids(): Promise<string[]>;
+  /**
+   * SPENDLY-520: which of these accounts were erased (readmodel_purge_user).
+   * The sync skips them entirely: no reads, no writes, no parity.
+   */
+  purgedUids(uids: string[]): Promise<Set<string>>;
   /** The stored rows for these ids: doc_id, source_update_time and `columns` (SPENDLY-510 parity). */
   fetchRows(table: string, uid: string, docIds: string[], columns: string[]): Promise<Record<string, unknown>[]>;
   /** Rewrites rows whose typed columns diverged, even at the same version. */
@@ -154,7 +161,17 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
   try {
     const allUids = await source.listUserIds();
     spend(Math.max(1, allUids.length));
-    const uids = allUids.filter((uid) => !isDuressUid(uid)).sort();
+    const candidates = allUids.filter((uid) => !isDuressUid(uid)).sort();
+    // SPENDLY-520: an erased account whose Firestore documents still exist
+    // (its deletion is unfinished) must not be read: the database would
+    // refuse the rows anyway, and parity would then report every one of them
+    // as missing, every night, with nothing able to repair it.
+    const purged = await sink.purgedUids(candidates);
+    const uids = candidates.filter((uid) => !purged.has(uid));
+    if (purged.size > 0) {
+      record.notes.purgedSkipped = purged.size;
+      log(`[PURGED] skipped ${purged.size} erased account(s) that still have Firestore documents: ${[...purged].map(hashUid).join(", ")}`);
+    }
     highWater = new Map((await sink.checkpoints()).map((c) => [`${c.uid}/${c.collection}`, c.highWaterMs]));
     for (const f of options.dryRun ? [] : await sink.openFailures()) {
       (open[`${f.uid}/${f.collection}`] ??= new Set()).add(f.docId);

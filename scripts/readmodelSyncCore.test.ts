@@ -329,6 +329,22 @@ describe("sync failures are recorded and resolve themselves (SPENDLY-507)", () =
 });
 
 describe("account lifecycle (SPENDLY-508)", () => {
+  it("never reads an erased account again, even while Firestore still holds its documents (SPENDLY-520 D6)", async () => {
+    const fs = world();
+    const m = memorySink({ purged: ["bob"] });
+    const lines: string[] = [];
+    const readUids: string[] = [];
+    const source = { ...fs.source, readPage: (uid: string, c: string, r: never) => (readUids.push(uid), fs.source.readPage(uid, c, r)) };
+    const run = await runSync(source, m.sink, { ...opts("full", T0), log: (l) => lines.push(l) });
+    expect(run.status).toBe("succeeded");
+    expect(run.failures).toBe(0);
+    expect(run.notes.purgedSkipped).toBe(1);
+    expect([...m.tables.values()].flatMap((t) => [...t.values()]).some((r) => r.uid === "bob")).toBe(false);
+    expect(readUids).not.toContain("bob");
+    expect(readUids).toContain("alice");
+    expect(lines.join("\n")).not.toContain("bob");
+  });
+
   it("a full run flags, once, an account the read model holds but Firestore no longer has", async () => {
     const fs = world();
     const m = memorySink();

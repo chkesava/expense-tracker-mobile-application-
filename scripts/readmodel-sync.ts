@@ -66,7 +66,7 @@ async function must<T>(label: string, result: PromiseLike<{ data: T; error: { me
   return data;
 }
 
-function supabaseSink(client: SupabaseClient): SinkPort {
+export function supabaseSink(client: SupabaseClient): SinkPort {
   return {
     async readsUsedSince(iso) {
       const rows = await must("sync_runs", client.from("sync_runs").select("reads_used").gte("started_at", iso));
@@ -169,6 +169,13 @@ function supabaseSink(client: SupabaseClient): SinkPort {
         n += (await must("readmodel_repair", client.rpc("readmodel_repair", { p_table: table, p_rows: rows.slice(i, i + UPSERT_CHUNK) }))) as number;
       }
       return n;
+    },
+    async purgedUids(uids) {
+      const out = new Set<string>();
+      for (const uid of uids) {
+        if ((await must("readmodel_is_purged", client.rpc("readmodel_is_purged", { p_uid: uid }))) === true) out.add(uid);
+      }
+      return out;
     },
     async modelUids() {
       const uids = new Set<string>();

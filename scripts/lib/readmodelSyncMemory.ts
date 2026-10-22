@@ -9,7 +9,8 @@ import type { Checkpoint, RunRecord, SinkPort, StatusUpdate } from "./readmodelS
  */
 export type MemoryRow = ReadModelRow & { source_deleted: boolean; deleted_at: string | null };
 
-export function memorySink(initial: { reads24h?: number; lastNotes?: Record<string, unknown> | null } = {}) {
+export function memorySink(initial: { reads24h?: number; lastNotes?: Record<string, unknown> | null; purged?: string[] } = {}) {
+  const purged = new Set(initial.purged ?? []);
   const tables = new Map<string, Map<string, MemoryRow>>();
   const checkpoints = new Map<string, Checkpoint>();
   const status = new Map<string, StatusUpdate>();
@@ -89,6 +90,9 @@ export function memorySink(initial: { reads24h?: number; lastNotes?: Record<stri
     },
     async modelUids() {
       return [...new Set([...status.values()].map((s) => s.uid))];
+    },
+    async purgedUids(uids) {
+      return new Set(uids.filter((uid) => purged.has(uid)));
     },
     async openFailures() {
       return failures.filter((f) => !f.resolved).map(({ uid, collection, docId, errorClass }) => ({ uid, collection, docId, errorClass }));
