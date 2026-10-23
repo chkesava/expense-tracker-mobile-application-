@@ -35,15 +35,17 @@ describe("read-model sync health (SPENDLY-507)", () => {
     expect(r.problems[0]).toMatch(/unreachable or paused: HTTP 540/);
   });
 
-  it("fails when no sync has run for over 4 h (schedule disabled or stuck)", () => {
-    const r = evaluateHealth({ ...healthy(), runs: [run(5, "incremental"), run(10, "full")] }, NOW);
-    expect(r.problems.join()).toMatch(/No sync run for 5 h/);
+  it("fails when no sync has run for over 26 h (nightly schedule disabled or stuck)", () => {
+    const r = evaluateHealth({ ...healthy(), runs: [run(27, "full")] }, NOW);
+    expect(r.problems.join()).toMatch(/No sync run for 27 h/);
+    // A nightly run 20 h ago is healthy.
+    expect(evaluateHealth({ ...healthy(), runs: [run(20, "full")] }, NOW).problems.join()).not.toMatch(/No sync run for/);
     expect(evaluateHealth({ ...healthy(), runs: [] }, NOW).problems.join()).toMatch(/No sync run recorded/);
   });
 
   it("does not count dry runs as syncs", () => {
-    const r = evaluateHealth({ ...healthy(), runs: [run(1, "dry_run"), run(10, "full")] }, NOW);
-    expect(r.problems.join()).toMatch(/No sync run for 10 h/);
+    const r = evaluateHealth({ ...healthy(), runs: [run(1, "dry_run"), run(30, "full")] }, NOW);
+    expect(r.problems.join()).toMatch(/No sync run for 30 h/);
   });
 
   it("fails when the nightly full run is missing", () => {
@@ -78,13 +80,13 @@ describe("read-model sync health (SPENDLY-507)", () => {
     expect(r.warnings).toHaveLength(1);
   });
 
-  it("fails when p95 copy age is over 4 h, naming the collections behind", () => {
+  it("fails when p95 copy age is over 26 h, naming the collections behind", () => {
     const status = [
       ...Array.from({ length: 10 }, () => ({ collection: "expenses", lastSyncedAt: ago(1) })),
-      { collection: "categories", lastSyncedAt: ago(9) },
+      { collection: "categories", lastSyncedAt: ago(30) },
     ];
     const r = evaluateHealth({ ...healthy(), status }, NOW);
-    expect(r.problems.join()).toMatch(/p95 copy age is 9 h .*categories ×1/);
+    expect(r.problems.join()).toMatch(/p95 copy age is 30 h .*categories ×1/);
   });
 
   it("warns when runs were skipped for the read budget or reads are near it", () => {

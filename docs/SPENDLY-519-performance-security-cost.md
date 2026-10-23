@@ -65,7 +65,7 @@ Local Postgres 18 (Windows laptop), 2026-10-22. Re-measured after the PR #234 re
 
 | Service | Plan | What the epic uses | Status |
 |---|---|---|---|
-| Firestore | Spark (free) | Sync reads: ≈ 550 per 3-hourly run and ≈ 3.8K for the nightly run, so **≈ 8–9K reads/day** (ADR §0), against a 50K/day quota with ≈ 22.7K/day already used by the app. Hard budgets: 1,500 per incremental run, 6,000 per full run, 12,000 per day | Estimate. Measured by §5 |
+| Firestore | Spark (free) | Sync reads, **nightly only since 2026-10-23**: the measured full run is 4,030 reads, plus verify, so **≈ 4.3K reads/day**. The 3-hourly schedule (≈ 600 per run, ≈ 9.1K/day in total) was removed so peak days (≈ 44K for the app) stay under the 50K/day quota. ≈ 22.7K/day is the app's normal usage. Hard budgets: 1,500 per incremental run, 6,000 per full run, 12,000 per day | Estimate. Measured by §5 |
 | Supabase | Free, dedicated project | **Storage:** measured at ≈ 700 bytes per expense and ≈ 570 per ledger event, including indexes. Today's ≈ 4,500 documents are **≈ 3 MB**. The 500 MB Free limit holds ≈ 700K rows, so ≈ 150× headroom. **Egress:** the Journal's heaviest read, a 1,000-row filter page, is ≈ 450 KB, far below the 5 GB/month Free egress at this user count | Measured locally; production in §5 |
 | GitHub Actions | Free | Sync every 3 h, nightly full run, hourly health check, schema CI. **The repo is public, so standard runners cost nothing** | ₹0 |
 | Netlify | Free (300 credits/month) | `readmodel-claims` runs **once per sign-in**, not per read; `readmodel-purge` runs once per account deletion | Negligible; check the credit meter after a month |

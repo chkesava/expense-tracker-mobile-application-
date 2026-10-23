@@ -1,9 +1,14 @@
 name: Read-model sync
 
 # SPENDLY-506: copies the Wave 1 Firestore collections into the Supabase read
-# model (ADR §0, decision 6). Every 3 hours only what changed; nightly in
-# full (the only pass that may tombstone, and the catch-all for writers that
-# don't stamp updatedAt). The logic is scripts/lib/readmodelSyncCore.ts.
+# model (ADR §0, decision 6). Scheduled: nightly, in full (the only pass
+# that may tombstone, and the catch-all for writers that don't stamp
+# updatedAt). The 3-hourly changed-only schedule was removed on 2026-10-23:
+# it cost ~4,800 Firestore reads a day while nothing reads the copy yet, and
+# with it the sync could push peak days past the 50K Spark quota. Near-real-
+# time updates will come from a per-write server push instead (SPENDLY-583),
+# with this nightly run as the safety net. `incremental` stays available as a
+# manual mode. The logic is scripts/lib/readmodelSyncCore.ts.
 #
 # Runs on the GitHub runner, not Netlify: no 10 s limit and no Netlify credits.
 # Firestore is only read; its reads count against the shared Spark quota, so
@@ -28,8 +33,6 @@ name: Read-model sync
 
 on:
   schedule:
-    # Incremental: 00, 03, 06 … 21 UTC (05:30, 08:30 … IST).
-    - cron: "0 */3 * * *"
     # Full: 20:30 UTC = 02:00 IST, the quietest time for the app's own reads.
     - cron: "30 20 * * *"
   workflow_dispatch:

@@ -163,7 +163,7 @@ The first copy is a full sync. It **only reads** Firestore: about one read per d
 gh variable set READMODEL_SYNC_ENABLED --body true
 ```
 From now on:
-- **Read-model sync:** every 3 h (changed documents) and nightly at 02:00 IST (everything, plus verify and parity).
+- **Read-model sync:** nightly at 02:00 IST (everything, plus verify and parity). About 4,300 Firestore reads a day. The 3-hourly schedule was removed on 2026-10-23 so the sync can't push peak days past Firebase's free 50K. Near-instant updates come with SPENDLY-583.
 - **Read-model sync health:** hourly at :45.
 
 GitHub emails you when a run fails. The health run's summary says why, and the runbook's first table says what to do.
@@ -197,7 +197,7 @@ npx tsx scripts/readmodel-set-mode.ts --screen=journal --mode=firestore --apply
 ```
 These scripts write `system_settings/global.readModel` in **production** Firestore. They need `GOOGLE_APPLICATION_CREDENTIALS` pointing at the Firebase admin key on your machine, and they print `Target: PRODUCTION` first. You can also edit the field in the Firebase console.
 
-**Before switching `audit`:** in `supabase` mode, a transaction's history can lag up to 3 h after an edit on another device (it shows "Updating…" for edits on this one). Leave it on `firestore` if that's not acceptable.
+**Before switching any screen to `supabase`:** SPENDLY-583 (push each save to Supabase within seconds) must be done first. With the nightly-only sync, another device could otherwise see older history and analytics up to a day late. The device that made the change always shows it at once ("Updating…").
 
 ## 11. Measure, sign off, close
 
@@ -212,7 +212,7 @@ These scripts write `system_settings/global.readModel` in **production** Firesto
 
 | File | What changed | What it needs |
 |---|---|---|
-| `.github/workflows/readmodel-sync.yml` | **New.** The sync: every 3 h, nightly, and manual (`mode` = incremental/full/verify/report, `dry_run`) | Secrets: `READMODEL_SUPABASE_SERVICE_ROLE_KEY`, `FIREBASE_SERVICE_ACCOUNT` (or `READMODEL_FIREBASE_SERVICE_ACCOUNT`). Variables: `READMODEL_SUPABASE_URL`, `READMODEL_SYNC_ENABLED` (step 8). **Runs only from `main`** |
+| `.github/workflows/readmodel-sync.yml` | **New.** The sync: nightly (since 2026-10-23), and manual (`mode` = incremental/full/verify/report, `dry_run`) | Secrets: `READMODEL_SUPABASE_SERVICE_ROLE_KEY`, `FIREBASE_SERVICE_ACCOUNT` (or `READMODEL_FIREBASE_SERVICE_ACCOUNT`). Variables: `READMODEL_SUPABASE_URL`, `READMODEL_SYNC_ENABLED` (step 8). **Runs only from `main`** |
 | `.github/workflows/readmodel-health.yml` | **New.** Hourly health check; fails (and emails) on problems | Same secret and variables as the sync |
 | `.github/workflows/readmodel-schema.yml` | **New.** CI for `supabase-readmodel/**`: migrations, security, RLS, sync functions, purge, verify, views, golden, performance | Nothing: it uses a throwaway Postgres in the job |
 | `.github/workflows/web-deploy.yml` | Writes `EXPO_PUBLIC_READMODEL_SUPABASE_URL` / `_PUBLISHABLE_KEY` into the web build's `.env` | Variable `READMODEL_SUPABASE_URL`, secret `EXPO_PUBLIC_READMODEL_SUPABASE_PUBLISHABLE_KEY` |
