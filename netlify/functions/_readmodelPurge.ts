@@ -55,6 +55,20 @@ export async function purgeReadModel(uid: string, env: PurgeEnv, fetchImpl: Fetc
     // No response body in the message: keep provider detail out of the client.
     throw new Error(`Could not erase the reporting copy (HTTP ${response.status}). Try again.`);
   }
-  const body = (await response.json().catch(() => ({}))) as { rows?: unknown };
-  return { rows: Number(body.rows ?? 0) || 0 };
+  // PR #234 review: a 2xx alone doesn't prove the purge ran. Accept only the
+  // function's contract, `{ rows: <non-negative integer>, tables: {…} }`
+  // (`{ rows: 0, … }` is the idempotent repeat). Anything else throws, so the
+  // phase is retried and Auth is never deleted on an unproven purge.
+  const body = await response.json().catch(() => null);
+  return { rows: purgeRowsFromBody(body) };
+}
+
+const INVALID_RESPONSE = "Could not erase the reporting copy (invalid response). Try again.";
+
+export function purgeRowsFromBody(body: unknown): number {
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error(INVALID_RESPONSE);
+  const { rows, tables } = body as { rows?: unknown; tables?: unknown };
+  if (typeof rows !== "number" || !Number.isSafeInteger(rows) || rows < 0) throw new Error(INVALID_RESPONSE);
+  if (!tables || typeof tables !== "object" || Array.isArray(tables)) throw new Error(INVALID_RESPONSE);
+  return rows;
 }

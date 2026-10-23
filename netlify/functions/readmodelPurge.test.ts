@@ -23,6 +23,15 @@ describe("read-model purge on account deletion (SPENDLY-508)", () => {
     await expect(purgeReadModel("user-a", env, fetchImpl)).resolves.toEqual({ rows: 0 });
   });
 
+  it("rejects a 2xx whose body isn't the purge function's result, so Auth is not deleted on an unproven purge", async () => {
+    for (const body of [null, {}, [], "ok", { rows: "3", tables: {} }, { rows: -1, tables: {} }, { rows: 1.5, tables: {} }, { rows: 2 }, { rows: 2, tables: [] }]) {
+      const fetchImpl = vi.fn(async () => ({ ok: true, status: 200, json: async () => body }));
+      await expect(purgeReadModel("user-a", env, fetchImpl)).rejects.toThrow(/invalid response/);
+    }
+    const garbled = vi.fn(async () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError("Unexpected end of JSON"); } }));
+    await expect(purgeReadModel("user-a", env, garbled)).rejects.toThrow(/invalid response/);
+  });
+
   it("throws on an outage so the phase is retried and Auth is not deleted", async () => {
     const fetchImpl = vi.fn(async () => ({ ok: false, status: 503, json: async () => ({ message: "internal detail" }) }));
     await expect(purgeReadModel("user-a", env, fetchImpl)).rejects.toThrow(/HTTP 503/);
