@@ -15,7 +15,6 @@ import {
 import { useMerchantOverridesOnce } from "@/hooks/useMerchantOverridesOnce";
 import { useSettings } from "@/providers/SettingsProvider";
 import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
-import type { Expense, Income } from "@/shared/types/expense";
 import { shortRowDate } from "@/shared/utils/dashboardLabels";
 import { todayDateKey } from "@/shared/utils/dates";
 import { merchantMonogram, type MerchantMonogram } from "@/shared/utils/merchantMonogram";
@@ -31,8 +30,8 @@ export interface RecentActivityWidgetProps {
   loading?: boolean;
   /** Account id → display name, from the accounts the screen already holds. */
   accountNames?: ReadonlyMap<string, string>;
-  onEditExpense: (expense: Expense) => void;
-  onEditIncome: (income: Income) => void;
+  /** SPENDLY-576: opens the row's transaction detail (edit lives there). */
+  onOpen: (item: RecentActivityItem) => void;
   onViewAll: () => void;
 }
 
@@ -46,8 +45,7 @@ export const RecentActivityWidget = memo(function RecentActivityWidget({
   currency,
   loading = false,
   accountNames,
-  onEditExpense,
-  onEditIncome,
+  onOpen,
   onViewAll,
 }: RecentActivityWidgetProps) {
   const { theme } = useTheme();
@@ -122,7 +120,7 @@ export const RecentActivityWidget = memo(function RecentActivityWidget({
             return (
               <Pressable
                 key={item.key}
-                onPress={() => (item.kind === "income" ? onEditIncome(item.row) : onEditExpense(item.row))}
+                onPress={() => onOpen(item)}
                 android_ripple={{ color: surfaces.control, borderless: false }}
                 style={({ pressed }) => [
                   styles.tile,
@@ -130,7 +128,7 @@ export const RecentActivityWidget = memo(function RecentActivityWidget({
                   pressed && styles.pressed,
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel={`Edit ${isIncome ? "income" : "expense"} ${title}${accountName ? `, ${accountName}` : ""}${dateLabel ? `, ${dateLabel}` : ""}`}
+                accessibilityLabel={`Open ${isIncome ? "income" : "expense"} ${title}${accountName ? `, ${accountName}` : ""}${dateLabel ? `, ${dateLabel}` : ""}`}
               >
                 {monogram ? (
                   <MerchantMonogramTile monogram={monogram} size={44} />

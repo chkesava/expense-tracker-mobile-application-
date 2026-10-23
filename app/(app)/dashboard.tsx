@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
 import { ShieldAlert, Sparkles } from "lucide-react-native";
 
 import { BudgetAlertsWidget } from "@/components/dashboard/BudgetAlertsWidget";
@@ -40,13 +40,14 @@ import { useGlobalMonth, useModalActions } from "@/providers/ModalProvider";
 import { useInvestmentsEnabled } from "@/hooks/useInvestmentsEnabled";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
-import type { Expense, Income } from "@/shared/types/expense";
 import {
   getMoreDashboardWidgets,
   type DashboardWidgetId,
 } from "@/shared/utils/dashboardWidgets";
 import { currentMonthKey, formatDateKey } from "@/shared/utils/dates";
-import { mergeRecentActivity, newestLiveExpenses } from "@/shared/utils/recentActivity";
+import { mergeRecentActivity, newestLiveExpenses, type RecentActivityItem } from "@/shared/utils/recentActivity";
+import { transactionHref } from "@/shared/utils/transactionRef";
+import { transactionsHref } from "@/shared/utils/transactionsFeed";
 import {
   computeSpendlyBudget,
   remainingCommittedThisMonth,
@@ -89,7 +90,7 @@ export default function DashboardScreen() {
   const { settings } = useSettings();
   const investmentsEnabled = useInvestmentsEnabled();
   const { globalMonth, setIsMonthDrawerOpen } = useGlobalMonth();
-  const { setIsAddExpenseOpen, setIsAddSheetOpen, setEditingExpense, setEditingIncome } =
+  const { setIsAddSheetOpen } =
     useModalActions();
 
   const activeMonth = globalMonth || currentMonthKey(settings.timezone);
@@ -223,16 +224,13 @@ export default function DashboardScreen() {
     [accounts]
   );
 
-  const handleEditExpense = useCallback((expense: Expense) => {
-    setEditingExpense(expense);
-    setIsAddExpenseOpen(true);
-  }, [setEditingExpense, setIsAddExpenseOpen]);
-
-  // Same pair the ledger uses to open an income for editing.
-  const handleEditIncome = useCallback((income: Income) => {
-    setEditingIncome(income);
-    setIsAddExpenseOpen(true);
-  }, [setEditingIncome, setIsAddExpenseOpen]);
+  // SPENDLY-576: a recent row opens its detail, where Edit and Delete live.
+  const handleOpenActivity = useCallback(
+    (item: RecentActivityItem) => {
+      router.push(transactionHref({ kind: item.kind, id: item.row.id ?? "" }, item.row.accountId) as Href);
+    },
+    [router]
+  );
 
   const handleOpenAddSheet = useCallback(() => {
     setIsAddSheetOpen(true);
@@ -242,9 +240,10 @@ export default function DashboardScreen() {
     setIsMonthDrawerOpen(true);
   }, [setIsMonthDrawerOpen]);
 
+  // SPENDLY-576: "See all" opens the Transactions list for the month in view.
   const handleViewLedger = useCallback(() => {
-    router.push("/ledger");
-  }, [router]);
+    router.push(transactionsHref(activeMonth) as Href);
+  }, [router, activeMonth]);
 
   // SPENDLY-572: "This month" / "Sep 2026", whatever the date-format pref.
   const activeMonthChipLabel = useMemo(
@@ -461,8 +460,7 @@ export default function DashboardScreen() {
                 currency={displayCurrency}
                 loading={recentLoading && recentActivity.length === 0}
                 accountNames={accountNames}
-                onEditExpense={handleEditExpense}
-                onEditIncome={handleEditIncome}
+                onOpen={handleOpenActivity}
                 onViewAll={handleViewLedger}
               />
             </DashboardEntrance>
