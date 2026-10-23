@@ -73,6 +73,8 @@ describe("isRestorableRoute", () => {
     expect(isRestorableRoute("/goals/optimizer")).toBe(true);
     expect(isRestorableRoute("/spending?month=2026-10&tab=trends")).toBe(true);
     expect(isRestorableRoute("/spending/Food?month=2026-10")).toBe(true);
+    expect(isRestorableRoute("/budgets?month=2026-10&tab=trends")).toBe(true);
+    expect(isRestorableRoute("/budgets/Food?month=2026-10")).toBe(true);
   });
 
   it("rejects routes the shell cannot resume into", () => {

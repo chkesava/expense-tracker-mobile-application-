@@ -241,11 +241,12 @@ export function monthlyCountSeries(
   expenses: readonly Expense[],
   months: readonly string[],
   loadedMonths: ReadonlySet<string>,
-  category?: string
+  category?: string,
+  subcategory?: string
 ): MonthSpendPoint[] {
   return months.map((month) => ({
     month,
-    amount: loadedMonths.has(month) ? eligibleExpenses(expenses, month, category).length : 0,
+    amount: loadedMonths.has(month) ? eligibleExpenses(expenses, month, category, subcategory).length : 0,
     hasData: loadedMonths.has(month),
   }));
 }
@@ -282,16 +283,23 @@ export function comparisonCallout(
 }
 
 /** The summary's inclusion rule for one ledger row in one month (and category). */
-export function isEligibleExpense(expense: Expense, month: string, category?: string): boolean {
+export function isEligibleExpense(expense: Expense, month: string, category?: string, subcategory?: string): boolean {
   if (expense.deletedAt) return false;
   if (!(Number.isFinite(expense.amount) && expense.amount > 0)) return false;
   if (summaryMonthOf(expense) !== month) return false;
   if (category === undefined) return Boolean(expense.category);
-  return expense.category === category;
+  if (expense.category !== category) return false;
+  // A subcategory scope matches the summary's "Parent::Sub" key (SPENDLY-575).
+  return subcategory === undefined || expense.subcategory === subcategory;
 }
 
-export function eligibleExpenses(expenses: readonly Expense[], month: string, category?: string): Expense[] {
-  return expenses.filter((e) => isEligibleExpense(e, month, category));
+export function eligibleExpenses(
+  expenses: readonly Expense[],
+  month: string,
+  category?: string,
+  subcategory?: string
+): Expense[] {
+  return expenses.filter((e) => isEligibleExpense(e, month, category, subcategory));
 }
 
 export type TransactionStats = { count: number; total: number; average: number | null };

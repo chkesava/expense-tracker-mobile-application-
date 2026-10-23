@@ -29,14 +29,17 @@ export function useSpendingSummaries(month: string, count: number) {
  * (`loadMonth`: one bounded date-range read, skipped when already loaded) —
  * no listener of its own.
  */
-export function useMonthExpenseRows(month: string, category?: string) {
+export function useMonthExpenseRows(month: string, category?: string, subcategory?: string) {
   const { expenses, loading, error, retry, isFromCache, monthsLoaded, loadMonth } = useExpenses();
 
   useEffect(() => {
     void loadMonth(month);
   }, [loadMonth, month]);
 
-  const rows = useMemo(() => eligibleExpenses(expenses, month, category), [expenses, month, category]);
+  const rows = useMemo(
+    () => eligibleExpenses(expenses, month, category, subcategory),
+    [expenses, month, category, subcategory]
+  );
   const monthLoaded = monthsLoaded.has(month);
 
   return {
@@ -60,7 +63,12 @@ export function useMonthExpenseRows(month: string, category?: string) {
  * bounded date-range read, skipped when already loaded), and only while
  * `enabled` — the chart's Amount view needs none of this.
  */
-export function useMonthlyTransactionCounts(months: readonly string[], category: string | undefined, enabled: boolean) {
+export function useMonthlyTransactionCounts(
+  months: readonly string[],
+  category: string | undefined,
+  enabled: boolean,
+  subcategory?: string
+) {
   const { expenses, monthsLoaded, loadMonth } = useExpenses();
   const key = months.join(",");
 
@@ -70,8 +78,8 @@ export function useMonthlyTransactionCounts(months: readonly string[], category:
   }, [enabled, key, loadMonth]);
 
   const series = useMemo(
-    () => monthlyCountSeries(expenses, key.split(","), monthsLoaded, category),
-    [expenses, key, monthsLoaded, category]
+    () => monthlyCountSeries(expenses, key.split(","), monthsLoaded, category, subcategory),
+    [expenses, key, monthsLoaded, category, subcategory]
   );
   return { series, loading: enabled && series.some((p) => !p.hasData) };
 }

@@ -40,6 +40,7 @@ export function SpendingTrendPanel({
   summaries,
   month,
   category,
+  subcategory,
   currency,
   months = 6,
 }: {
@@ -47,15 +48,19 @@ export function SpendingTrendPanel({
   month: string;
   /** One category's trend; the whole month's when omitted. */
   category?: string;
+  /** Narrows `category` to one subcategory (a subcategory budget). */
+  subcategory?: string;
   currency: string;
   months?: number;
 }) {
   const { theme } = useTheme();
   const money = useGhostMoney(currency);
   const [view, setView] = useState<TrendView>("amount");
-  const series = useMemo(() => monthlySpendSeries(summaries, month, months, category), [summaries, month, months, category]);
+  // A subcategory's monthly figure is the summary's "Parent::Sub" key.
+  const totalsKey = category && subcategory ? `${category}::${subcategory}` : category;
+  const series = useMemo(() => monthlySpendSeries(summaries, month, months, totalsKey), [summaries, month, months, totalsKey]);
   const windowMonths = useMemo(() => monthWindow(month, months), [month, months]);
-  const counts = useMonthlyTransactionCounts(windowMonths, category, view === "transactions");
+  const counts = useMonthlyTransactionCounts(windowMonths, category, view === "transactions", subcategory);
   const accent = theme.colors.primary;
   const formatCount = (n: number) => `${Math.round(n)} transaction${Math.round(n) === 1 ? "" : "s"}`;
 
@@ -127,16 +132,18 @@ export function SpendingTrendPanel({
 export function TransactionComparisonCards({
   month,
   category,
+  subcategory,
   currency,
 }: {
   month: string;
   category?: string;
+  subcategory?: string;
   currency: string;
 }) {
   const { theme } = useTheme();
   const money = useGhostMoney(currency);
-  const current = useMonthExpenseRows(month, category);
-  const previous = useMonthExpenseRows(shiftMonthKey(month, -1), category);
+  const current = useMonthExpenseRows(month, category, subcategory);
+  const previous = useMonthExpenseRows(shiftMonthKey(month, -1), category, subcategory);
   const now = transactionStats(current.rows);
   const before = transactionStats(previous.rows);
   const previousReady = previous.monthLoaded && before.count > 0;

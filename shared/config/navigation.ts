@@ -278,6 +278,7 @@ const SUB_SCREEN_PREFIXES = [
   "/transactions/",
   "/merchants/",
   "/spending/",
+  "/budgets/",
   "/settings/",
   "/decisions/",
   "/fees/",
@@ -286,7 +287,7 @@ const SUB_SCREEN_PREFIXES = [
   "/what-if/",
 ];
 
-const SUB_SCREEN_ROUTES = ["/settings", "/decisions", "/fees", "/app-selector", "/add", "/runway", "/calendar", "/what-if", "/inbox", "/spending"];
+const SUB_SCREEN_ROUTES = ["/settings", "/decisions", "/fees", "/app-selector", "/add", "/runway", "/calendar", "/what-if", "/inbox", "/spending", "/budgets"];
 
 const SECONDARY_TAB_PREFIXES = ["/ledger", "/vaults", "/investments", "/insights"];
 
