@@ -3,17 +3,20 @@ import {
   ActivityIndicator,
   Pressable,
   ScrollView,
+  Share,
   Text,
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, ChevronRight, Lock, Pencil, Trash2 } from "lucide-react-native";
+import { ArrowLeft, ChevronRight, Lock, MoreHorizontal, Pencil, Trash2 } from "lucide-react-native";
 
 import { TransactionFeeCard } from "@/components/fees/TransactionFeeCard";
 import { Amount } from "@/components/common/Amount";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { MerchantCorrectionSheet } from "@/components/merchant/MerchantCorrectionSheet";
+import { EditSubscriptionModal } from "@/components/subscriptions/EditSubscriptionModal";
+import { TransactionMoreSheet } from "@/components/transactions/TransactionMoreSheet";
 import { JournalRelatedRecords } from "@/components/ledger/JournalRelatedRecords";
 import { JournalTransactionAudit } from "@/components/ledger/JournalTransactionAudit";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
@@ -52,6 +55,13 @@ import { isCashbackPayment } from "@/shared/types/expense";
 import { currentMonthKey, monthKeyOf } from "@/shared/utils/dates";
 import { findJournalRelatedRecords } from "@/shared/utils/journalRelatedRecords";
 import { categoryDetailHref } from "@/shared/utils/spendingDrilldown";
+import { budgetDetailHref } from "@/shared/utils/budgetDrilldown";
+import {
+  recurringDraftFromExpense,
+  transactionShareText,
+  type TransactionActionId,
+} from "@/shared/utils/transactionActions";
+import type { Subscription } from "@/shared/types/subscription";
 import { listAccountDocuments } from "@/services/accounts/accountDocumentsStore";
 import { createDocumentSignedUrl } from "@/services/accounts/spendlyFilesClient";
 import * as WebBrowser from "expo-web-browser";
@@ -119,6 +129,9 @@ export default function TransactionDetailsScreen() {
   const { spaces } = useSpaces();
   const { entries } = useAccountEntries();
   const [openingDocument, setOpeningDocument] = useState(false);
+  // SPENDLY-577: the "More options" sheet and the recurring editor it can open.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [recurringDraft, setRecurringDraft] = useState<Subscription | null>(null);
 
   const journalKind = ref && isJournalKind(ref.kind) ? ref.kind : null;
   const expense = useMemo(
@@ -382,6 +395,52 @@ export default function TransactionDetailsScreen() {
   const updatedLabel = timestampLabel(journalRow?.updatedAt);
   const amountColor = isCredit ? theme.colors.success : theme.colors.foreground;
 
+  const rowMonth = journalRow ? monthKeyOf(journalRow) ?? currentMonthKey() : currentMonthKey();
+  const actionContext = {
+    kind: expense ? ("expense" as const) : income ? ("income" as const) : ("other" as const),
+    // The same rule as the Account row: a known account, and not the one we came from.
+    canOpenAccount: Boolean(accountName && contextAccountId && parsed?.accountId !== contextAccountId),
+    category: expense?.category || undefined,
+    isDeleted: Boolean(journalRow?.deletedAt),
+    editable: Boolean(editability?.editable),
+    fromSubscription: Boolean(expense?.subscriptionId),
+  };
+  const runAction = (action: TransactionActionId) => {
+    switch (action) {
+      case "viewAccount":
+        if (contextAccountId) router.push(`/accounts/${contextAccountId}` as Href);
+        return;
+      case "viewCategory":
+        if (expense?.category) router.push(categoryDetailHref(expense.category, rowMonth) as Href);
+        return;
+      case "viewBudget":
+        if (expense?.category) router.push(budgetDetailHref(expense.category, rowMonth) as Href);
+        return;
+      case "setBudget":
+        router.push("/settings/money" as Href);
+        return;
+      case "createRecurring":
+        if (expense) setRecurringDraft(recurringDraftFromExpense(expense));
+        return;
+      case "share": {
+        const row = expense ?? income;
+        if (!row) return;
+        void Share.share({
+          message: transactionShareText({
+            row,
+            kind: expense ? "expense" : "income",
+            amountLabel: formatAmount(row.amount, currency),
+            dateLabel: formatActivityDateLabel(row.date),
+          }),
+        }).catch((error) => logError("transactionDetail.share", error));
+        return;
+      }
+      case "delete":
+        confirmDelete();
+        return;
+    }
+  };
+
   return (
     <View style={[{ flex: 1, backgroundColor: theme.colors.background }, contentWidthStyle]}>
       <View
@@ -423,6 +482,17 @@ export default function TransactionDetailsScreen() {
             </Text>
           ) : null}
         </View>
+        {journalRow ? (
+          <Button
+            variant="tonal"
+            size="icon"
+            onPress={() => setMoreOpen(true)}
+            accessibilityLabel="More options"
+            testID="transaction-more"
+          >
+            <MoreHorizontal size={18} color={theme.colors.primary} />
+          </Button>
+        ) : null}
         {editability?.editable || editablePayment ? (
           <Button
             variant="tonal"
@@ -676,6 +746,18 @@ export default function TransactionDetailsScreen() {
         </ScrollView>
       )}
 
+      {moreOpen && journalRow ? (
+        <TransactionMoreSheet
+          onClose={() => setMoreOpen(false)}
+          context={actionContext}
+          month={rowMonth}
+          accountName={accountName}
+          onAction={runAction}
+        />
+      ) : null}
+      {recurringDraft ? (
+        <EditSubscriptionModal visible subscription={recurringDraft} onClose={() => setRecurringDraft(null)} />
+      ) : null}
       {editablePayment && paymentEditOpen ? (
         <PayCreditBillModal
           isOpen
