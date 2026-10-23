@@ -30,6 +30,7 @@ import {
   computeMonthlyCommitments,
   subscriptionsToUpcomingDues,
 } from "@/shared/utils/subscriptionProcessor";
+import { recurringHref } from "@/shared/utils/recurringDetail";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export interface SubscriptionsWidgetProps {
@@ -135,7 +136,8 @@ export const SubscriptionsWidget = memo(function SubscriptionsWidget({
     return amountDueWithinDays([...recurring, ...extraDues], 7);
   }, [extraDues, subscriptions]);
 
-  const openSubscriptions = () => push("/ledger?tab=subscriptions");
+  // SPENDLY-582: the Recurring Expenses overview, and an item's own detail.
+  const openSubscriptions = () => push("/recurring" as Href);
 
   return (
     <Section
@@ -172,7 +174,7 @@ export const SubscriptionsWidget = memo(function SubscriptionsWidget({
             return (
               <DataRow
                 key={`${item.kind}-${item.id}`}
-                onPress={openSubscriptions}
+                onPress={item.kind === "subscription" ? () => push(recurringHref(item.id) as Href) : openSubscriptions}
                 divider={idx < preview.length - 1}
                 leading={
                   <RowGlyph size={36} tint={surfaces.wash(tint)}>

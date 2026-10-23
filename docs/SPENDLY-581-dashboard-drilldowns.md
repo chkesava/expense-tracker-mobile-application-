@@ -15,7 +15,7 @@
 | SPENDLY-578 | Spending Trends charts, comparisons and insights | Merged into the epic branch; Jira In Progress until main | `feature/SPENDLY-578-spending-trends` (`5014a8bc`) | `docs/SPENDLY-578-spending-trends.md` |
 | SPENDLY-579 | Spending-by-subcategory analytics and drill-down | Merged into the epic branch; Jira In Progress until main | `feature/SPENDLY-579-subcategory-drilldown` (`b8845093`) | `docs/SPENDLY-579-subcategory-drilldown.md` |
 | SPENDLY-580 | Highest Spending Categories ranking and drill-down | Merged into the epic branch; Jira In Progress until main | `feature/SPENDLY-580-highest-spending-categories` (`c5512dd3`) | `docs/SPENDLY-580-highest-spending-categories.md` |
-| SPENDLY-582 | Recurring expenses overview, schedules and payments | To Do | — | — |
+| SPENDLY-582 | Recurring expenses overview, schedules and payments | Built on story branch (worktree); awaiting owner merge approval | `feature/SPENDLY-582-recurring-expenses` | `docs/SPENDLY-582-recurring-expenses.md` |
 
 ## Decisions
 - **Data sources (574):**
@@ -57,4 +57,8 @@
   - `/top-categories`: whole-month periods summed from summaries, ranked by the donut rule.
   - Taps reuse the 574 and 579 pages.
   - The real reference is `generated/a_wide_detailed_ui_mockup_composite_image_of_a_mo.png`.
+- **Recurring (582):**
+  - `/recurring` reuses the Money tab's `SubscriptionsList`; `/recurring/[id]` is the new detail.
+  - Upcoming dates are projections; history is only rows that carry `subscriptionId`.
+  - Skip and mark-paid are left out, because no domain rule supports them.
 - **UI review (574):** the user reviews UI personally on local Expo web with demo data. Agents stop after each story and do not capture screenshots.

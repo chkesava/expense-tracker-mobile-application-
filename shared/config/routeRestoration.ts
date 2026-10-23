@@ -38,6 +38,8 @@ const RESTORABLE_ROUTES = [
   "/budgets/",
   "/trends",
   "/top-categories",
+  "/recurring",
+  "/recurring/",
 ] as const;
 
 /**

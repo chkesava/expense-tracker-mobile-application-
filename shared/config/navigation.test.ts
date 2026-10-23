@@ -54,6 +54,9 @@ describe("resolveAndroidBackAction", () => {
     expect(resolveAndroidBackAction("/spending/Food/Groceries?month=2026-10&tab=merchants")).toBe("pop");
     // SPENDLY-580 highest spending categories.
     expect(resolveAndroidBackAction("/top-categories?month=2026-10&period=this_year")).toBe("pop");
+    // SPENDLY-582 recurring expenses.
+    expect(resolveAndroidBackAction("/recurring")).toBe("pop");
+    expect(resolveAndroidBackAction("/recurring/sub-1")).toBe("pop");
   });
 
   it("pops out of screens that used to fall through to the navigator", () => {
