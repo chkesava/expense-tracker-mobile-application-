@@ -250,6 +250,12 @@ function AppShellInner() {
               }}
             />
             <Stack.Screen
+              name="trends"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
               name="budgets/index"
               options={{
                 animation: "slide_from_right",
