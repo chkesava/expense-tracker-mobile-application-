@@ -3,6 +3,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { ArrowLeftRight, ArrowUpDown, ChevronRight, Receipt, SlidersHorizontal } from "lucide-react-native";
 
+import { ReadModelFreshnessBadge } from "@/components/common/ReadModelFreshnessBadge";
+import { useJournalFreshness } from "@/hooks/useReadModelFreshness";
 import { AccountActivityFilterModal } from "@/components/accounts/AccountActivityFilterModal";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -81,6 +83,7 @@ export default function TransactionsScreen() {
   const tab = resolveSpendingTab(params.tab, TRANSACTIONS_TABS, "all");
 
   const expensesStore = useExpenses();
+  const freshness = useJournalFreshness();
   const incomesStore = useIncomes();
   const { transfers } = useAccountTransfers();
   const { accounts } = useAccounts();
@@ -231,6 +234,7 @@ export default function TransactionsScreen() {
       ) : null}
 
       {expensesStore.isFromCache ? <DataNote offline>You're offline — showing the transactions saved on this device.</DataNote> : null}
+      <ReadModelFreshnessBadge freshness={freshness} />
       {!complete && !loading ? <DataNote>Still loading this period's older transactions — the list may be incomplete.</DataNote> : null}
       {scopeMonths.truncated ? <DataNote>Only the latest 12 months of this range are loaded here. Narrow the dates to see older ones.</DataNote> : null}
       {feed.validationError ? <DataNote>{feed.validationError}</DataNote> : null}

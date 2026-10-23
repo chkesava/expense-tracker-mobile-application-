@@ -3,6 +3,8 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
 import { ArrowUpDown } from "lucide-react-native";
 
+import { ReadModelFreshnessBadge } from "@/components/common/ReadModelFreshnessBadge";
+import { useJournalFreshness } from "@/hooks/useReadModelFreshness";
 import { EmptyState } from "@/components/common/EmptyState";
 import { SearchBar } from "@/components/common/SearchBar";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
@@ -73,6 +75,7 @@ export function SpendingTransactionList({
   const [filter, setFilter] = useState<string | null>(initialFilter);
   const [sort, setSort] = useState<TransactionSort>("newest");
   const [visible, setVisible] = useState(PAGE_SIZE);
+  const freshness = useJournalFreshness();
 
   const filtered = useMemo(
     () => filterSortExpenses(rows, { query, sort, [filterKey]: filter }),
@@ -102,6 +105,7 @@ export function SpendingTransactionList({
 
   return (
     <View style={styles.wrap}>
+      <ReadModelFreshnessBadge freshness={freshness} />
       <SearchBar
         value={query}
         onChangeText={(text) => {

@@ -85,6 +85,7 @@ export default function SubcategoryDetailScreen() {
   const tab = resolveSpendingTab(params.tab, SUB_TABS, "overview");
   const merchantFilter = typeof params.merchant === "string" && params.merchant ? params.merchant : null;
   const { summaries, current, previous, loading, error } = useSpendingSummaries(month, 6);
+  const merchantOverrides = useMerchantOverrides(tab === "merchants" || !!merchantFilter);
 
   const goBack = () =>
     router.canGoBack()
@@ -164,6 +165,7 @@ export default function SubcategoryDetailScreen() {
               subcategory={subcategory}
               month={month}
               currency={currency}
+              overrides={merchantOverrides}
               onMerchant={(id) => router.setParams({ tab: "transactions", merchant: id })}
             />
           ) : (
@@ -174,6 +176,7 @@ export default function SubcategoryDetailScreen() {
               total={total}
               currency={currency}
               merchant={merchantFilter}
+              overrides={merchantOverrides}
               onClearMerchant={() => router.setParams({ merchant: "" })}
             />
           )}
@@ -258,19 +261,20 @@ function MerchantsTab({
   subcategory,
   month,
   currency,
+  overrides,
   onMerchant,
 }: {
   category: string;
   subcategory: string;
   month: string;
   currency: string;
+  overrides: MerchantOverride[];
   onMerchant: (id: string) => void;
 }) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const money = useGhostMoney(currency);
   const { rows, loading } = useMonthExpenseRows(month, category, subcategory);
-  const overrides = useMerchantOverrides();
   const { merchants, total } = useMemo(() => merchantBreakdown(rows, overrides), [rows, overrides]);
 
   if (loading) return <DashboardSkeleton variant="section" rows={4} />;
@@ -335,12 +339,18 @@ function MerchantsTab({
   );
 }
 
-/** The user's merchant corrections, read once when the merchant view needs them. */
-function useMerchantOverrides(): MerchantOverride[] {
+/**
+ * The user's merchant corrections, read once per screen, the first time a view
+ * needs them (the Merchants tab, or a merchant-filtered transaction list), and
+ * shared by both tabs (PR #239 review: each tab used to read them on mount).
+ */
+function useMerchantOverrides(needed: boolean): MerchantOverride[] {
   const { user } = useAuth();
   const [overrides, setOverrides] = useState<MerchantOverride[]>([]);
+  const [requested, setRequested] = useState(false);
+  if (needed && !requested) setRequested(true);
   useEffect(() => {
-    if (!user?.uid) return;
+    if (!user?.uid || !requested) return;
     let alive = true;
     listMerchantOverrides(user.uid)
       .then((list) => alive && setOverrides(list))
@@ -348,7 +358,7 @@ function useMerchantOverrides(): MerchantOverride[] {
     return () => {
       alive = false;
     };
-  }, [user?.uid]);
+  }, [user?.uid, requested]);
   return overrides;
 }
 
@@ -361,6 +371,7 @@ function TransactionsTab({
   total,
   currency,
   merchant,
+  overrides,
   onClearMerchant,
 }: {
   category: string;
@@ -369,11 +380,11 @@ function TransactionsTab({
   total: number;
   currency: string;
   merchant: string | null;
+  overrides: MerchantOverride[];
   onClearMerchant: () => void;
 }) {
   const { theme } = useTheme();
   const { rows, loading, monthLoaded } = useMonthExpenseRows(month, category, subcategory);
-  const overrides = useMerchantOverrides();
   const breakdown = useMemo(() => (merchant ? merchantBreakdown(rows, overrides) : null), [merchant, rows, overrides]);
   const scoped = useMemo(
     () => (merchant && breakdown ? rowsForMerchant(rows, breakdown.merchantOf, merchant) : rows),

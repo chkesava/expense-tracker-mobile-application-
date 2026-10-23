@@ -1,17 +1,53 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 
-import { useDashboardCashFlow } from "@/hooks/useDashboardCashFlow";
 import { useExpenses } from "@/hooks/useExpenses";
+import type { LoadFailure } from "@/lib/firestoreErrors";
+import { summaryMonthStore } from "@/lib/summaryMonthStore";
+import { useAuth } from "@/providers/AuthProvider";
+import type { DashboardPeriodSummary } from "@/shared/types/financialSummary";
 import { shiftMonthKey } from "@/shared/utils/dates";
 import { eligibleExpenses, monthlyCountSeries } from "@/shared/utils/spendingDrilldown";
 
 /**
- * SPENDLY-574 — the month summaries a spending drill-down reads: the same
- * bounded `financialSummaries` window the dashboard listens to (`count` docs
- * ending at `month`), so no new collection, query shape or index.
+ * SPENDLY-574 — the month summaries a spending drill-down reads: the
+ * `dashboard_{YYYY-MM}` docs for the `count` months ending at `month`.
+ *
+ * PR #239 review: through the shared per-month store (`lib/summaryMonthStore`),
+ * not `useDashboardCashFlow`, so
+ * - each month's doc is read once per session and shared by every screen
+ *   (moving between months only reads the months not seen yet);
+ * - the read-model `cashFlow` switch, which keeps only the last two months
+ *   as summaries in `supabase` mode, can't cut these windows short.
+ * The values are Firestore's authoritative summaries (READ_MODEL_RULES R4).
  */
 export function useSpendingSummaries(month: string, count: number) {
-  const { summaries, loading, error } = useDashboardCashFlow(month, count);
+  const { user } = useAuth();
+  const uid = user?.uid ?? null;
+  const months = useMemo(() => Array.from({ length: Math.max(1, count) }, (_, i) => shiftMonthKey(month, -i)), [month, count]);
+  const monthsKey = months.join(",");
+
+  useEffect(() => {
+    if (!uid) return;
+    return summaryMonthStore.acquire(uid, monthsKey.split(","));
+  }, [uid, monthsKey]);
+
+  const version = useSyncExternalStore(summaryMonthStore.subscribe, summaryMonthStore.version, summaryMonthStore.version);
+
+  const { summaries, loading, error } = useMemo(() => {
+    const list: DashboardPeriodSummary[] = [];
+    let pending = false;
+    let failure: LoadFailure | null = null;
+    for (const m of monthsKey.split(",")) {
+      const entry = uid ? summaryMonthStore.get(uid, m) : undefined;
+      if (!entry || entry.status === "loading") pending = true;
+      if (entry?.error && !failure) failure = entry.error;
+      if (entry?.summary) list.push(entry.summary);
+    }
+    list.sort((a, b) => b.period.localeCompare(a.period));
+    return { summaries: list, loading: !!uid && pending, error: failure };
+    // `version` changes whenever any month's data arrives.
+  }, [uid, monthsKey, version]);
+
   const current = useMemo(() => summaries.find((s) => s.period === month) ?? null, [summaries, month]);
   const previousMonth = shiftMonthKey(month, -1);
   const previous = useMemo(

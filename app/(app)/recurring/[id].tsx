@@ -3,6 +3,8 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { ArrowLeft, ArrowLeftRight, ChevronRight, Pause, Pencil, Play, Trash2 } from "lucide-react-native";
 
+import { ReadModelFreshnessBadge } from "@/components/common/ReadModelFreshnessBadge";
+import { useJournalFreshness } from "@/hooks/useReadModelFreshness";
 import { EmptyState } from "@/components/common/EmptyState";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
@@ -60,6 +62,7 @@ export default function RecurringDetailScreen() {
   const { accounts } = useAccounts();
   const { transfers } = useAccountTransfers();
   const { expenses, loadMonth, monthsLoaded, isFromCache } = useExpenses();
+  const freshness = useJournalFreshness();
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -231,6 +234,7 @@ export default function RecurringDetailScreen() {
       </View>
 
       {isFromCache ? <DataNote offline>You're offline — showing what's saved on this device.</DataNote> : null}
+      <ReadModelFreshnessBadge freshness={freshness} />
 
       <SurfaceCard title="Schedule">
         <InfoRow label="Frequency" value={cadence} />

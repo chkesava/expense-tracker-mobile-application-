@@ -62,3 +62,15 @@
   - Upcoming dates are projections; history is only rows that carry `subscriptionId`.
   - Skip and mark-paid are left out, because no domain rule supports them.
 - **UI review (574):** the user reviews UI personally on local Expo web with demo data. Agents stop after each story and do not capture screenshots.
+
+## PR #239 review fixes (2026-10-24)
+
+1. **Month summaries survive the read-model `cashFlow` switch.** `useSpendingSummaries` used `useDashboardCashFlow`, which in `cashFlow = supabase` mode keeps only the last two months as summaries. Trends, top categories and budget history would have lost every older month. The drill-downs now read through `lib/summaryMonthStore.ts` instead. They are still Firestore's authoritative `dashboard_{YYYY-MM}` docs (`READ_MODEL_RULES.md` R4).
+2. **Each month's summary is read once per session.** There is one live doc listener per month, shared by every screen, and kept for 5 minutes after the last screen leaves.
+   - Before, every screen and every month change opened a new 6- to 36-doc window and re-read months it already had.
+   - Moving to the previous month now costs one read (the newly shown month), not six or thirteen.
+   - Backdated edits still update live.
+3. **Freshness badge** (R3.4): the drill-down lists of Journal rows (spending, budgets, transactions, recurring) show `ReadModelFreshnessBadge` through `useJournalFreshness()`. It renders nothing until `journal` reads the read model.
+4. **Merchant corrections** are read once per subcategory screen, the first time a view needs them, and shared by the Merchants and Transactions tabs. Before, each tab read them on mount.
+
+Tests: `lib/summaryMonthStore.test.ts` (sharing, grace period, user switch, live updates) and `lib/spendingDrilldownReads.test.ts` (no `useDashboardCashFlow` in the drill-downs, badges present, one merchant-corrections read).
