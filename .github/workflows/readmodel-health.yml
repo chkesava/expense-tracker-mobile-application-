@@ -51,4 +51,4 @@ jobs:
           READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
           READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
           READMODEL_MAX_READS_PER_DAY: ${{ vars.READMODEL_MAX_READS_PER_DAY || '12000' }}
-        run: npx tsx scripts/readmodel-health.ts
+        run: npx --no-install tsx scripts/readmodel-health.ts
