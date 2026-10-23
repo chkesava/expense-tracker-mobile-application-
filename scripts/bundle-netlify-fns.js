@@ -20,7 +20,7 @@ const root = path.resolve(__dirname, "..");
 const outDir = path.join(root, "netlify", "functions-dist");
 
 /** Every function deployed to Netlify. Add new entrypoints here. */
-const FUNCTIONS = [
+const FUNCTIONS = (module.exports.FUNCTIONS = [
   "ganesh-summary",
   "ganesh-draw",
   "epf-cron",
@@ -32,7 +32,15 @@ const FUNCTIONS = [
   "crypto",
   // SPENDLY-558: historical OHLCV series for the stock chart.
   "stock-history",
-];
+  // SPENDLY-505: gives a signed-in user the role Supabase's read model needs.
+  "readmodel-claims",
+  // SPENDLY-583: copies a user's just-saved documents to the read model.
+  "readmodel-push",
+]);
+// scripts/netlifyFunctionsBundled.test.ts fails if a function in
+// netlify/functions/ is missing here: an unlisted function is never deployed.
+
+if (require.main !== module) return;
 
 fs.mkdirSync(outDir, { recursive: true });
 

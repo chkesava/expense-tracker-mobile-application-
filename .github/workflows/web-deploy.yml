@@ -148,6 +148,8 @@ jobs:
           node --no-experimental-require-module -e "require('./netlify/functions-dist/mutual-funds.js'); console.log('mutual-funds loaded')"
           node --no-experimental-require-module -e "require('./netlify/functions-dist/crypto.js'); console.log('crypto loaded')"
           node --no-experimental-require-module -e "require('./netlify/functions-dist/stock-history.js'); console.log('stock-history loaded')"
+          node --no-experimental-require-module -e "require('./netlify/functions-dist/readmodel-claims.js'); console.log('readmodel-claims loaded')"
+          node --no-experimental-require-module -e "require('./netlify/functions-dist/readmodel-push.js'); console.log('readmodel-push loaded')"
 
       - name: Deploy to Netlify
         env:
