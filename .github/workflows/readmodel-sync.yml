@@ -90,7 +90,7 @@ jobs:
           fi
           args="--mode=$MODE"
           if [ "$DRY_RUN" = "true" ]; then args="$args --dry-run"; fi
-          npx tsx scripts/readmodel-sync.ts $args
+          npx --no-install tsx scripts/readmodel-sync.ts $args
 
       # SPENDLY-509: count parity right after every real full run (and on
       # demand). Firestore count() per (user, collection) vs live read-model
@@ -104,7 +104,7 @@ jobs:
           READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
           READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
           READMODEL_MAX_READS_PER_DAY: ${{ vars.READMODEL_MAX_READS_PER_DAY || '12000' }}
-        run: npx tsx scripts/readmodel-verify.ts
+        run: npx --no-install tsx scripts/readmodel-verify.ts
 
       # SPENDLY-510: tonight's data findings (orphans, duplicate cashback,
       # overpaid bills, unexplained balances, missing amounts), recorded as a
@@ -116,11 +116,11 @@ jobs:
         env:
           READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
           READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
-        run: npx tsx scripts/readmodel-parity.ts
+        run: npx --no-install tsx scripts/readmodel-parity.ts
 
       - name: 14-day parity gate report
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'report'
         env:
           READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
           READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
-        run: npx tsx scripts/readmodel-parity.ts --report
+        run: npx --no-install tsx scripts/readmodel-parity.ts --report
