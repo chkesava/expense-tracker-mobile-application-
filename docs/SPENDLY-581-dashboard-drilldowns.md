@@ -8,7 +8,7 @@
 ## Stories
 | Story | Title | State | Branch / commit | Doc |
 |---|---|---|---|---|
-| SPENDLY-574 | Spending Overview category details + Total Spending (donut centre) | Built on story branch; awaiting the user's UI check on Expo web, then merge approval | `feature/SPENDLY-574-spending-category-details` | `docs/SPENDLY-574-spending-category-details.md` |
+| SPENDLY-574 | Spending Overview category details + Total Spending (donut centre) | Merged into the epic branch (`88218d57`) after the owner's Expo web review; Jira In Progress until main | `feature/SPENDLY-574-spending-category-details` (`47f14d27`, `f37a2831`, `19d9bcad`) | `docs/SPENDLY-574-spending-category-details.md` |
 | SPENDLY-575 | Budget Progress overview and category drill-down | To Do | — | — |
 | SPENDLY-576 | Recent Transactions list and transaction details | To Do | — | — |
 | SPENDLY-577 | Individual transaction details and contextual actions | To Do | — | — |
