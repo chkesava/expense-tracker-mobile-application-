@@ -13,7 +13,7 @@
 | SPENDLY-576 | Recent Transactions list and transaction details | Merged into the epic branch; Jira In Progress until main | `feature/SPENDLY-576-recent-transactions` (`772573ac`) | `docs/SPENDLY-576-recent-transactions.md` |
 | SPENDLY-577 | Individual transaction details and contextual actions | Merged into the epic branch; Jira In Progress until main | `feature/SPENDLY-577-transaction-detail-actions` (`25048dbc`) | `docs/SPENDLY-577-transaction-detail-actions.md` |
 | SPENDLY-578 | Spending Trends charts, comparisons and insights | Merged into the epic branch; Jira In Progress until main | `feature/SPENDLY-578-spending-trends` (`5014a8bc`) | `docs/SPENDLY-578-spending-trends.md` |
-| SPENDLY-579 | Spending-by-subcategory analytics and drill-down | Built on story branch (worktree); awaiting owner merge approval | `feature/SPENDLY-579-subcategory-drilldown` | `docs/SPENDLY-579-subcategory-drilldown.md` |
+| SPENDLY-579 | Spending-by-subcategory analytics and drill-down | Merged into the epic branch; Jira In Progress until main | `feature/SPENDLY-579-subcategory-drilldown` (`b8845093`) | `docs/SPENDLY-579-subcategory-drilldown.md` |
 | SPENDLY-580 | Highest Spending Categories ranking and drill-down | To Do | — | — |
 | SPENDLY-582 | Recurring expenses overview, schedules and payments | To Do | — | — |
 
