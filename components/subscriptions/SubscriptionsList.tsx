@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
+import { useRouter, type Href } from "expo-router";
+import { recurringHref } from "@/shared/utils/recurringDetail";
 import {
   Pressable,
   StyleSheet,
@@ -60,6 +62,7 @@ const RECURRING_TABS: { id: RecurringTabId; label: string }[] = [
 ];
 
 export function SubscriptionsList() {
+  const router = useRouter();
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const { user } = useAuth();
@@ -114,10 +117,10 @@ export function SubscriptionsList() {
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (sub: Subscription) => {
-    setSelectedSub(sub);
-    setSuggestionKey(null);
-    setIsModalOpen(true);
+  // SPENDLY-582: an item opens its detail (schedule, history, edit, pause,
+  // delete) rather than going straight into the edit form.
+  const openDetail = (sub: Subscription) => {
+    if (sub.id) router.push(recurringHref(sub.id) as Href);
   };
 
   const handleReview = useCallback((key: string) => {
@@ -310,10 +313,10 @@ export function SubscriptionsList() {
               >
                 <View style={styles.subTopRow}>
                   <Pressable
-                    onPress={() => handleOpenEdit(sub)}
+                    onPress={() => openDetail(sub)}
                     style={({ pressed }) => [{ flex: 1, gap: 4 }, pressed && { opacity: 0.8 }]}
                     accessibilityRole="button"
-                    accessibilityLabel={`Edit ${sub.name}`}
+                    accessibilityLabel={`Open ${sub.name}`}
                   >
                     <View style={styles.typeBadgeRow}>
                       <View
@@ -489,7 +492,7 @@ export function SubscriptionsList() {
 
                 {/* Sub Bottom Timeline / Renewal Row */}
                 <Pressable
-                  onPress={() => handleOpenEdit(sub)}
+                  onPress={() => openDetail(sub)}
                   style={({ pressed }) => [
                     styles.subBottomRow,
                     { borderTopColor: theme.colors.outlineVariant },
