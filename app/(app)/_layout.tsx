@@ -250,6 +250,12 @@ function AppShellInner() {
               }}
             />
             <Stack.Screen
+              name="top-categories"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
               name="trends"
               options={{
                 animation: "slide_from_right",
