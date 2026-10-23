@@ -176,6 +176,17 @@ update public.sync_failures set resolved_at = now()
 | Stop reads from Supabase | The per-screen kill switch (SPENDLY-511), or leave the app's `EXPO_PUBLIC_READMODEL_*` empty |
 | Cut client access entirely | `revoke select on all tables in schema public from authenticated;` |
 
+## Per-write push (SPENDLY-583)
+
+After this device saves synced documents, the app asks the Netlify function `readmodel-push` to copy them. The server reads each document **from Firestore** (never from the request) and upserts it, version-guarded, within seconds. The nightly full run is the safety net. Design and tests: `docs/SPENDLY-583-readmodel-push.md`.
+
+| Need | Do |
+|---|---|
+| Turn pushes off | Netlify env `READMODEL_PUSH_ENABLED=false`. The function answers 202 and does nothing; the nightly run continues. No app release |
+| Change the per-account limit | Netlify env `READMODEL_PUSH_LIMIT` (default 120 cost units per 10 min: 1 per document, 30 per per-user sync) |
+| See what pushes are doing | The hourly health summary's "Per-write pushes today" line, or `select * from public.push_daily order by day desc;` |
+| Health warns "N per-write push(es) failed today" | Netlify → Functions → `readmodel-push` → logs. Common causes: Supabase paused, a migration not applied (`20261028000000`), or Netlify env missing. The nightly run repairs the data either way |
+
 ## Recovery drills (SPENDLY-520)
 
 Every procedure above has been exercised end to end on a local stack: the production scripts unchanged, the Firebase emulator, a local Postgres with the real migrations, and PostgREST (Supabase's API). The latest log is in `docs/SPENDLY-520-drill-log.md`. Re-run the drills after any change to the sync, the mapping or the migrations:
@@ -196,6 +207,7 @@ POSTGREST_BIN=<path to postgrest> bash supabase-readmodel/drills/run_drills.sh
 | D4 Kill switch | Every screen to `firestore` and back with `readmodel-set-mode.ts` | One remote document; other settings untouched; no release |
 | D5 Bad mapping | Deploy a broken mapper, detect it, roll back, repair | Alert on the bad run; parity and `v_data_quality` show it; rollback + full run repairs; the next run is clean |
 | D6 Account purge | `delete-account`'s purge call, then a full sync while Firestore still has the account | Every row erased; nothing brought back; no false alarms |
+| D7 Per-write push (SPENDLY-583) | The Netlify function's own wiring (`livePushPorts`): create, edit (with fake data in the request), hard delete, an erased account, a per-user push, a push during an outage | Each change is in the read model in about 0.2 s; request data is ignored; the erased account gets 403; the outage push fails without touching Firestore; the nightly run converges |
 
 **In production**, only with approval and never with Firestore writes: D4 (the switch) and the D1 dry run are safe. The rest are proven locally and are the procedures for a real incident.
 

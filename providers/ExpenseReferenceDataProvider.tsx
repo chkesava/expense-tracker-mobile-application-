@@ -33,6 +33,7 @@ import {
   logDirectRead,
   logQuerySnapshot,
 } from "@/lib/firestoreReadDebug";
+import { notifyReadModelSnapshot } from "@/lib/readModelPush";
 import { commitWrite } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
@@ -265,6 +266,7 @@ export function ExpenseReferenceDataProvider({
         query(collection(db, "users", uid, "categories"), limit(500)),
         (snap) => {
           logQuerySnapshot(path, snap, { feature: "reference", queryShape: "categories" });
+          notifyReadModelSnapshot(snap);
           perfEvent("firestore_first_snapshot", {
             collection: "categories",
             docCount: snap.docs.length,

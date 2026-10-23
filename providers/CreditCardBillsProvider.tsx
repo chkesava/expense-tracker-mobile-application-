@@ -25,6 +25,7 @@ import { AppState } from "react-native";
 
 import { getFirestoreDb } from "@/lib/firebase";
 import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
+import { notifyReadModelSnapshot } from "@/lib/readModelPush";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { friendlyErrorMessage, logError, logWarning } from "@/lib/errors";
 import { toast } from "@/lib/toast";
@@ -262,6 +263,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       query(collection(db, "users", user.uid, "creditCardBills")),
       (snap) => {
         logQuerySnapshot(path, snap, { feature: "creditCardBills", queryShape: "creditCardBills" });
+        notifyReadModelSnapshot(snap);
         perfEvent("firestore_first_snapshot", {
           collection: "creditCardBills",
           docCount: snap.docs.length,

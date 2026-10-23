@@ -10,8 +10,21 @@ import { appendFileSync } from "node:fs";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { all } from "./lib/supabasePaging";
-import { evaluateHealth, renderHealthSummary, THRESHOLDS, type HealthInput, type HealthRun } from "./lib/readmodelHealth";
+import { evaluateHealth, renderHealthSummary, THRESHOLDS, type HealthInput, type HealthPush, type HealthRun } from "./lib/readmodelHealth";
 
+
+/** SPENDLY-583: today's push counters, or null (no row yet, or the migration isn't applied). */
+async function loadPushToday(client: SupabaseClient, now: number): Promise<HealthPush | null> {
+  try {
+    const { data, error } = await client.from("push_daily").select("requests, docs, user_syncs, rejected, failed, reads")
+      .eq("day", new Date(now).toISOString().slice(0, 10)).maybeSingle();
+    if (error || !data) return null;
+    const d = data as Record<string, number>;
+    return { requests: d.requests, docs: d.docs, userSyncs: d.user_syncs, rejected: d.rejected, failed: d.failed, reads: d.reads };
+  } catch {
+    return null;
+  }
+}
 
 export async function loadHealthInput(client: SupabaseClient, now: number): Promise<HealthInput> {
   try {
@@ -33,6 +46,7 @@ export async function loadHealthInput(client: SupabaseClient, now: number): Prom
       })),
       openFailures: failures.map((f) => ({ uid: String(f.uid), collection: String(f.collection), errorClass: String(f.error_class), firstSeen: String(f.first_seen) })),
       status: status.map((s) => ({ collection: String(s.collection), lastSyncedAt: (s.last_synced_at as string | null) ?? null })),
+      push: await loadPushToday(client, now),
     };
   } catch (error) {
     // A paused or unreachable project fails every query; report that, not a crash.
@@ -49,7 +63,7 @@ async function main() {
   const input = await loadHealthInput(client, now);
   const dailyReadBudget = Number(process.env.READMODEL_MAX_READS_PER_DAY ?? THRESHOLDS.dailyReadBudget);
   const report = evaluateHealth(input, now, { ...THRESHOLDS, dailyReadBudget });
-  const summary = renderHealthSummary(report, input.runs as HealthRun[]);
+  const summary = renderHealthSummary(report, input.runs as HealthRun[], input.push);
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
   for (const problem of report.problems) console.log(`::error::${problem}`);

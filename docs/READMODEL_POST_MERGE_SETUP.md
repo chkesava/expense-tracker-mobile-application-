@@ -51,6 +51,7 @@ Project: **`spmsgncjbnbkxvsbpqlu`**. Open https://supabase.com/dashboard/project
 | 4 | `20261025000000_readmodel_verify.sql` | Count check |
 | 5 | `20261026000000_readmodel_views.sql` | Reporting views, parity checks, repair |
 | 6 | `20261027000000_readmodel_phase3_reads.sql` | Lets signed-in users read the cash-flow view |
+| 7 | `20261028000000_readmodel_push.sql` | Per-write push: rate limit and daily counters (SPENDLY-583) |
 
 **Use one method, not both.** Pasting into the SQL editor doesn't record the migration in Supabase's migration history (`supabase_migrations.schema_migrations`), so a later `supabase db push` would try to apply it again. If you prefer the CLI:
 - link it (`npx supabase link --project-ref spmsgncjbnbkxvsbpqlu --workdir supabase-readmodel`);
@@ -197,7 +198,12 @@ npx tsx scripts/readmodel-set-mode.ts --screen=journal --mode=firestore --apply
 ```
 These scripts write `system_settings/global.readModel` in **production** Firestore. They need `GOOGLE_APPLICATION_CREDENTIALS` pointing at the Firebase admin key on your machine, and they print `Target: PRODUCTION` first. You can also edit the field in the Firebase console.
 
-**Before switching any screen to `supabase`:** SPENDLY-583 (push each save to Supabase within seconds) must be done first. With the nightly-only sync, another device could otherwise see older history and analytics up to a day late. The device that made the change always shows it at once ("Updating…").
+**Before switching any screen to `supabase`:** SPENDLY-583 (push each save to Supabase within seconds) must be **deployed**:
+1. migration `20261028000000` applied;
+2. a web deploy (ships the `readmodel-push` function);
+3. an app release (ships the push hooks).
+
+Check that it works by saving an expense, then looking at `select * from public.push_daily;` in the SQL editor, or at the hourly health summary's "Per-write pushes today" line. Without it, another device could see older history and analytics up to a day late. The device that made the change always shows it at once ("Updating…").
 
 ## 11. Measure, sign off, close
 

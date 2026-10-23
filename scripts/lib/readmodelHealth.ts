@@ -19,13 +19,27 @@ export type HealthRun = {
 export type HealthFailure = { uid: string; collection: string; errorClass: string; firstSeen: string };
 export type HealthStatus = { collection: string; lastSyncedAt: string | null };
 
+/** SPENDLY-583: today's per-write push counters (push_daily); null before the migration. */
+export type HealthPush = { requests: number; docs: number; userSyncs: number; rejected: number; failed: number; reads: number };
+
 export type HealthInput = {
   reachable: boolean;
   reachError?: string;
   runs: HealthRun[];
   openFailures: HealthFailure[];
   status: HealthStatus[];
+  push?: HealthPush | null;
 };
+
+/**
+ * A per-user sync started by a push (SPENDLY-583). Not part of the schedule:
+ * it never stands in for a scheduled run, and its failure isn't the sync's
+ * (the nightly run repairs it), so health and the parity gate ignore it.
+ */
+export const isPushRun = (r: HealthRun) => r.notes?.trigger === "push";
+
+/** Push failures in a day that are worth a warning. */
+export const PUSH_FAILURE_WARN = 5;
 
 export const THRESHOLDS = {
   /** Nightly schedule (2026-10-23) plus two hours for GitHub's start delay. */
@@ -86,7 +100,9 @@ export function evaluateHealth(input: HealthInput, now: number, thresholds = THR
     };
   }
 
-  const real = input.runs.filter((r) => r.mode === "incremental" || r.mode === "full").sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  const real = input.runs
+    .filter((r) => (r.mode === "incremental" || r.mode === "full") && !isPushRun(r))
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   const last24h = input.runs.filter((r) => hoursSince(r.startedAt, now) <= 24);
   const reads24h = last24h.reduce((s, r) => s + (r.readsUsed ?? 0), 0);
 
@@ -125,7 +141,11 @@ export function evaluateHealth(input: HealthInput, now: number, thresholds = THR
     );
   }
 
-  const skipped = last24h.filter((r) => r.notes?.skipped).length;
+  if (input.push && input.push.failed >= PUSH_FAILURE_WARN) {
+    warnings.push(`${input.push.failed} per-write push(es) failed today; the nightly sync will repair them. Check the readmodel-push function logs on Netlify.`);
+  }
+
+  const skipped = last24h.filter((r) => r.notes?.skipped && !isPushRun(r)).length;
   if (skipped) warnings.push(`${skipped} run(s) in 24 h were skipped for the daily read budget.`);
   if (reads24h > thresholds.dailyReadBudget * 0.9) {
     warnings.push(`Sync used ${reads24h} Firestore reads in 24 h (budget ${thresholds.dailyReadBudget}).`);
@@ -184,7 +204,7 @@ export function evaluateHealth(input: HealthInput, now: number, thresholds = THR
 }
 
 /** Markdown for GITHUB_STEP_SUMMARY. Collections and counts only, never uids. */
-export function renderHealthSummary(report: HealthReport, recent: HealthRun[]): string {
+export function renderHealthSummary(report: HealthReport, recent: HealthRun[], push?: HealthPush | null): string {
   const m = report.metrics;
   const lines = [
     `## Read-model sync health: ${report.ok ? "OK" : "FAILING"}`,
@@ -200,10 +220,11 @@ export function renderHealthSummary(report: HealthReport, recent: HealthRun[]): 
     `| Open failures | ${m.openFailures} |`,
     `| Parity gate (SPENDLY-510) | ${m.parityStreakDays} of ${GATE_DAYS} clean days |`,
     `| Copy age p50 / p95 / max | ${m.lagP50Hours ?? "—"} / ${m.lagP95Hours ?? "—"} / ${m.lagMaxHours ?? "—"} h (${m.statusRows} user-collections) |`,
+    `| Per-write pushes today (SPENDLY-583) | ${push ? `${push.requests} requests · ${push.docs} docs · ${push.userSyncs} user syncs · ${push.rejected} rejected · ${push.failed} failed · ${push.reads} reads` : "—"} |`,
     "",
     "| Started (UTC) | Mode | Status | Reads | Failures | Unmapped |",
     "|---|---|---|---|---|---|",
-    ...recent.slice(0, 10).map((r) => `| ${r.startedAt.slice(0, 16).replace("T", " ")} | ${r.mode} | ${r.status} | ${r.readsUsed} | ${r.failures} | ${r.unmapped} |`),
+    ...recent.filter((r) => !isPushRun(r)).slice(0, 10).map((r) => `| ${r.startedAt.slice(0, 16).replace("T", " ")} | ${r.mode} | ${r.status} | ${r.readsUsed} | ${r.failures} | ${r.unmapped} |`),
     "",
   ];
   return lines.join("\n");

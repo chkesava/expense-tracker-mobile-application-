@@ -22,6 +22,12 @@ export function readModelClaimsFunctionUrl(origin: string): string {
   return base ? `${base}/.netlify/functions/readmodel-claims` : "";
 }
 
+/** SPENDLY-583: the per-write push function on the same site. */
+export function readModelPushFunctionUrl(origin: string): string {
+  const base = origin.replace(/\/$/, "");
+  return base ? `${base}/.netlify/functions/readmodel-push` : "";
+}
+
 /** True when decoded token claims already map to the `authenticated` role. */
 export function hasReadModelRole(claims: Record<string, unknown> | null | undefined): boolean {
   return claims?.role === READ_MODEL_ROLE;

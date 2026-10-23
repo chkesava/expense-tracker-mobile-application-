@@ -21,6 +21,7 @@ import {
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { notifyReadModelWrites } from "@/lib/readModelPush";
 import {
   commitWrite,
   reportLateWriteFailure,
@@ -163,6 +164,9 @@ export async function commitMutations(
     if (persist && outcome === "acked") {
       await removeWriteOutbox(entry.id);
     }
+    // SPENDLY-583: copy the synced documents to the read model once Firestore
+    // has them (the pusher waits for the commit; fire-and-forget).
+    notifyReadModelWrites(uid, serialized.map((op) => op.path));
     return outcome;
   } catch (error) {
     if (persist) await removeWriteOutbox(entry.id);
