@@ -62,6 +62,25 @@ begin
 end
 $$;
 
+-- 3b. Effective privileges (PR #234 review): role_table_grants doesn't list
+--     grants to PUBLIC, so also check what anon can actually do on every
+--     table, view and materialized view, including through PUBLIC.
+do $$
+declare
+  leaked text;
+begin
+  select string_agg(format('%s:%s', c.relname, p.priv), ', ') into leaked
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  cross join unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']) as p(priv)
+  where n.nspname = 'public' and c.relkind in ('r', 'v', 'm', 'p')
+    and has_table_privilege('anon', c.oid, p.priv);
+  if leaked is not null then
+    raise exception 'anon (directly or via PUBLIC) holds privileges: %', leaked;
+  end if;
+end
+$$;
+
 -- 4. Exactly one owner-read policy per readable table: SELECT, for
 --    authenticated, keyed on readmodel_auth.uid(). No write policies at all.
 do $$

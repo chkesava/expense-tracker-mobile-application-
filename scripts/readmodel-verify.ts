@@ -13,6 +13,7 @@ import { applicationDefault, cert, initializeApp } from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import { purgedUidsBatch } from "./lib/readmodelPurged";
 import { all } from "./lib/supabasePaging";
 import { renderVerifySummary, runVerify, type VerifyRecord, type VerifySink, type VerifySource } from "./lib/readmodelVerifyCore";
 
@@ -48,13 +49,7 @@ function supabaseVerifySink(client: SupabaseClient): VerifySink {
       );
       return rows.map((r) => ({ uid: r.uid, collection: r.collection, live: Number(r.live) }));
     },
-    async purgedUids(uids) {
-      const out = new Set<string>();
-      for (const uid of uids) {
-        if ((await must("readmodel_is_purged", client.rpc("readmodel_is_purged", { p_uid: uid }))) === true) out.add(uid);
-      }
-      return out;
-    },
+    purgedUids: (uids) => purgedUidsBatch(client, uids),
     async recordCounts(uid, collection, sourceCount, modelCount) {
       await must("sync_status", client.from("sync_status").upsert(
         { uid, collection, source_count: sourceCount, model_count: modelCount, updated_at: new Date().toISOString() },

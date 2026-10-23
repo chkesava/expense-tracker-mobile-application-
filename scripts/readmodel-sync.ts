@@ -24,6 +24,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import type { ReadModelRow } from "../shared/utils/readModel/mapping";
 import { hashUid, runSync, type Checkpoint, type RunRecord, type SinkPort, type SourcePort, type SyncMode } from "./lib/readmodelSyncCore";
+import { purgedUidsBatch } from "./lib/readmodelPurged";
 import { memorySink } from "./lib/readmodelSyncMemory";
 
 const UPSERT_CHUNK = 200;
@@ -170,13 +171,7 @@ export function supabaseSink(client: SupabaseClient): SinkPort {
       }
       return n;
     },
-    async purgedUids(uids) {
-      const out = new Set<string>();
-      for (const uid of uids) {
-        if ((await must("readmodel_is_purged", client.rpc("readmodel_is_purged", { p_uid: uid }))) === true) out.add(uid);
-      }
-      return out;
-    },
+    purgedUids: (uids) => purgedUidsBatch(client, uids),
     async modelUids() {
       const uids = new Set<string>();
       for (let from = 0; ; from += 1000) {

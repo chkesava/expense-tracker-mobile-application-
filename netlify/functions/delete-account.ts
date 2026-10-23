@@ -393,6 +393,11 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
         break;
       }
       case "auth":
+        // PR #234 review: the client chooses the phase, so the server must not
+        // trust that `readmodel` ran. Purge again (idempotent: 0 rows when it
+        // did) right before the login goes. It throws, and fails closed when
+        // unconfigured, so Auth is never deleted with read-model data left.
+        state.deleted.readModelRows += (await purgeReadModel(uid, readModelPurgeEnv())).rows;
         try {
           await getAuth().deleteUser(uid);
         } catch (error) {

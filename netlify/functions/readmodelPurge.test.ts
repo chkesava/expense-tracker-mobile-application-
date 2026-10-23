@@ -50,6 +50,15 @@ describe("read-model purge on account deletion (SPENDLY-508)", () => {
     expect(DELETE_PHASES.indexOf("readmodel")).toBeLessThan(DELETE_PHASES.indexOf("auth"));
   });
 
+  it("the auth phase itself purges before deleting the login, even if a client skips `readmodel`", () => {
+    const source = readFileSync(path.resolve(__dirname, "delete-account.ts"), "utf8");
+    const auth = source.slice(source.indexOf('case "auth":'), source.indexOf('case "complete":'));
+    const purgeAt = auth.indexOf("purgeReadModel(uid, readModelPurgeEnv())");
+    const deleteAt = auth.indexOf("deleteUser(uid)");
+    expect(purgeAt).toBeGreaterThan(0);
+    expect(purgeAt).toBeLessThan(deleteAt);
+  });
+
   it("delete-account wires the phase to the verified uid, never a request field", () => {
     const source = readFileSync(path.resolve(__dirname, "delete-account.ts"), "utf8");
     expect(source).toMatch(/case "readmodel":[\s\S]*?purgeReadModel\(uid, readModelPurgeEnv\(\)\)/);

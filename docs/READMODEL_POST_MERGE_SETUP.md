@@ -4,7 +4,7 @@ Epic [SPENDLY-494](https://kesavach.atlassian.net/browse/SPENDLY-494). PR: [#234
 
 This is the exact, ordered list of steps that make the Supabase read model work in production. It's written to be followed without any other context. Background and troubleshooting are in `docs/READMODEL_RUNBOOK.md`.
 
-**Merging #234 changes nothing users see.** Every screen reads Firestore until you switch it, and the sync does nothing until step 7. Each step below is safe to stop after.
+**What changes when.** Every screen keeps reading Firestore until you switch it (step 10), and the sync does nothing until step 8. **One thing changes at the next web deploy (step 5): account deletion.** It now also erases the Supabase copy, and it *fails closed*. If the Netlify variables from step 4 are missing, deletion stops with "Account deletion is paused…" and the login is not deleted. So do step 4 before step 5. Each step below is safe to stop after.
 
 | # | Step | Where | Time | Reversible? |
 |---|---|---|---|---|
@@ -52,15 +52,28 @@ Project: **`spmsgncjbnbkxvsbpqlu`**. Open https://supabase.com/dashboard/project
 | 5 | `20261026000000_readmodel_views.sql` | Reporting views, parity checks, repair |
 | 6 | `20261027000000_readmodel_phase3_reads.sql` | Lets signed-in users read the cash-flow view |
 
-(Or, with the Supabase CLI linked to the project: `npx supabase db push --workdir supabase-readmodel`.)
+**Use one method, not both.** Pasting into the SQL editor doesn't record the migration in Supabase's migration history (`supabase_migrations.schema_migrations`), so a later `supabase db push` would try to apply it again. If you prefer the CLI:
+- link it (`npx supabase link --project-ref spmsgncjbnbkxvsbpqlu --workdir supabase-readmodel`);
+- run `npx supabase migration list --workdir supabase-readmodel` first;
+- if `20261017000000` (or anything you already pasted) shows as not applied remotely, mark it applied with `npx supabase migration repair --status applied <version> --workdir supabase-readmodel`;
+- then `npx supabase db push --workdir supabase-readmodel`.
 
 **Check:** run this. It must return 11 rows, every one `SELECT` and `{authenticated}`:
 ```sql
 select tablename, policyname, cmd, roles from pg_policies where schemaname = 'public' order by 1;
 ```
-This one must return **no rows** (anon can read nothing):
+This one must return **no rows** (nobody signed out can read anything). It checks effective privileges, so a grant to `PUBLIC` or through role membership is caught too:
 ```sql
-select table_name from information_schema.role_table_grants where table_schema = 'public' and grantee = 'anon';
+select c.relname, c.relkind
+from pg_class c join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public' and c.relkind in ('r', 'v', 'm', 'p')
+  and has_table_privilege('anon', c.oid, 'SELECT');
+```
+And from a terminal, a request with only the publishable key (no sign-in) must be refused (HTTP 401 or 403, or an empty list `[]`, never rows):
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" "https://spmsgncjbnbkxvsbpqlu.supabase.co/rest/v1/v_cash_flow_by_month?select=*" \
+  -H "apikey: <publishable key>"
+curl -s "https://spmsgncjbnbkxvsbpqlu.supabase.co/rest/v1/expenses?select=doc_id&limit=1" -H "apikey: <publishable key>"
 ```
 
 ## 2. Turn on Firebase sign-in for Supabase
