@@ -50,6 +50,8 @@ describe("resolveAndroidBackAction", () => {
     expect(resolveAndroidBackAction("/transactions?month=2026-10&tab=transfers")).toBe("pop");
     // SPENDLY-578 spending trends.
     expect(resolveAndroidBackAction("/trends?month=2026-10&gran=weekly")).toBe("pop");
+    // SPENDLY-579 subcategory detail.
+    expect(resolveAndroidBackAction("/spending/Food/Groceries?month=2026-10&tab=merchants")).toBe("pop");
   });
 
   it("pops out of screens that used to fall through to the navigator", () => {

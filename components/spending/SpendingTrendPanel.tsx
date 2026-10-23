@@ -56,9 +56,10 @@ export function SpendingTrendPanel({
   const { theme } = useTheme();
   const money = useGhostMoney(currency);
   const [view, setView] = useState<TrendView>("amount");
-  // A subcategory's monthly figure is the summary's "Parent::Sub" key.
-  const totalsKey = category && subcategory ? `${category}::${subcategory}` : category;
-  const series = useMemo(() => monthlySpendSeries(summaries, month, months, totalsKey), [summaries, month, months, totalsKey]);
+  const series = useMemo(
+    () => monthlySpendSeries(summaries, month, months, category, subcategory),
+    [summaries, month, months, category, subcategory]
+  );
   const windowMonths = useMemo(() => monthWindow(month, months), [month, months]);
   const counts = useMonthlyTransactionCounts(windowMonths, category, view === "transactions", subcategory);
   const accent = theme.colors.primary;

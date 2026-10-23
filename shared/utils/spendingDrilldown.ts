@@ -179,6 +179,40 @@ export function categorySpendSummary(
   };
 }
 
+/**
+ * One subcategory's month from the summary: its `"Parent::Sub"` key, or for
+ * `NO_SUBCATEGORY` the parent's spend that no subcategory key covers — the
+ * same remainder `categorySpendSummary` lists, so the parts add to the parent.
+ */
+export function subcategoryAmount(
+  categoryTotals: Record<string, number> | null | undefined,
+  category: string,
+  subcategory: string
+): number {
+  if (subcategory === NO_SUBCATEGORY) {
+    return categorySpendSummary(categoryTotals, category).subcategories.find((s) => s.key === NO_SUBCATEGORY)?.amount ?? 0;
+  }
+  const value = categoryTotals?.[`${category}::${subcategory}`];
+  return Number.isFinite(value) ? Math.max(0, value as number) : 0;
+}
+
+/** Display name for a subcategory key. */
+export function subcategoryLabel(subcategory: string): string {
+  return subcategory === NO_SUBCATEGORY ? "No subcategory" : subcategory;
+}
+
+export function subcategoryDetailHref(
+  category: string,
+  subcategory: string,
+  month: string,
+  options: { tab?: "overview" | "merchants" | "transactions"; merchant?: string } = {}
+): string {
+  const query = [`month=${encodeURIComponent(month)}`];
+  if (options.tab && options.tab !== "overview") query.push(`tab=${options.tab}`);
+  if (options.merchant) query.push(`merchant=${encodeURIComponent(options.merchant)}`);
+  return `/spending/${encodeURIComponent(category)}/${encodeURIComponent(subcategory)}?${query.join("&")}`;
+}
+
 export type SpendComparison = {
   previous: number;
   delta: number;
@@ -215,7 +249,9 @@ export function monthlySpendSeries(
   summaries: readonly Pick<DashboardPeriodSummary, "period" | "categoryTotals">[],
   endMonth: string,
   count: number,
-  category?: string
+  category?: string,
+  /** Narrows `category` to a subcategory, or `NO_SUBCATEGORY` (SPENDLY-579). */
+  subcategory?: string
 ): MonthSpendPoint[] {
   const byMonth = new Map(summaries.map((s) => [s.period, s]));
   const points: MonthSpendPoint[] = [];
@@ -224,9 +260,11 @@ export function monthlySpendSeries(
     const summary = byMonth.get(month);
     const amount = !summary
       ? 0
-      : category
-        ? Math.max(0, summary.categoryTotals?.[category] ?? 0)
-        : categorizedSpendTotal(summary.categoryTotals);
+      : category && subcategory
+        ? subcategoryAmount(summary.categoryTotals, category, subcategory)
+        : category
+          ? Math.max(0, summary.categoryTotals?.[category] ?? 0)
+          : categorizedSpendTotal(summary.categoryTotals);
     points.push({ month, amount, hasData: Boolean(summary) });
   }
   return points;
@@ -289,8 +327,10 @@ export function isEligibleExpense(expense: Expense, month: string, category?: st
   if (summaryMonthOf(expense) !== month) return false;
   if (category === undefined) return Boolean(expense.category);
   if (expense.category !== category) return false;
-  // A subcategory scope matches the summary's "Parent::Sub" key (SPENDLY-575).
-  return subcategory === undefined || expense.subcategory === subcategory;
+  // A subcategory scope matches the summary's "Parent::Sub" key (SPENDLY-575);
+  // `NO_SUBCATEGORY` is the parent's spend under no subcategory (SPENDLY-579).
+  if (subcategory === undefined) return true;
+  return subcategory === NO_SUBCATEGORY ? !expense.subcategory : expense.subcategory === subcategory;
 }
 
 export function eligibleExpenses(
