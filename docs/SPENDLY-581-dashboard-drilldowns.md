@@ -9,7 +9,7 @@
 | Story | Title | State | Branch / commit | Doc |
 |---|---|---|---|---|
 | SPENDLY-574 | Spending Overview category details + Total Spending (donut centre) | Merged into the epic branch (`88218d57`) after the owner's Expo web review; Jira In Progress until main | `feature/SPENDLY-574-spending-category-details` (`47f14d27`, `f37a2831`, `19d9bcad`) | `docs/SPENDLY-574-spending-category-details.md` |
-| SPENDLY-575 | Budget Progress overview and category drill-down | To Do | — | — |
+| SPENDLY-575 | Budget Progress overview and category drill-down | Built on story branch (worktree); awaiting owner UI check and merge approval | `feature/SPENDLY-575-budget-progress-drilldown` | `docs/SPENDLY-575-budget-progress-drilldown.md` |
 | SPENDLY-576 | Recent Transactions list and transaction details | To Do | — | — |
 | SPENDLY-577 | Individual transaction details and contextual actions | To Do | — | — |
 | SPENDLY-578 | Spending Trends charts, comparisons and insights | To Do | — | — |
@@ -30,4 +30,9 @@
   - `spendly-total-spending-drilldown.png` shows category details.
   - `spendly-spending-category-details.png` shows the highest-categories → subcategory flow.
   - The real Total Spending flow is `generated/a_wide_high_resolution_ui_ux_concept_mockup_image.png`.
+- **Worktree (2026-10-23):** epic work happens in `C:\dev\worktrees\spendly-581`. Story branches are cut there from the epic branch.
+- **Budget aggregation (575):**
+  - Budget figures and statuses come only from `computeActiveCategoryBudgets` / `computeSpendlyBudget`.
+  - Totals across category budgets use `categoryBudgetRollup`, which never counts a subcategory budget inside its parent's.
+  - The real budget reference is `generated/a_clean_high_fidelity_ui_ux_mockup_image_consisti.png`; the alias shows the transactions flow.
 - **UI review (574):** the user reviews UI personally on local Expo web with demo data. Agents stop after each story and do not capture screenshots.

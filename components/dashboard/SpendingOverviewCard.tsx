@@ -19,6 +19,7 @@ import {
   computeActiveCategoryBudgets,
   spendingBreakdown,
 } from "@/shared/utils/dashboardWidgets";
+import { budgetsHref } from "@/shared/utils/budgetDrilldown";
 import {
   isFoldedOthersSlice,
   spendingOverviewTargetHref,
@@ -107,9 +108,12 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
     router.push(spendingOverviewTargetHref(slice.category, activeMonth, folded) as Href);
   };
 
+  // SPENDLY-575: with any budget set, the row opens Budget Progress for this
+  // month; with none, it still goes straight to setting one up.
+  const hasAnyBudget = budgetProgress.total > 0 || monthlyBudget > 0;
   const openBudgets = () => {
     void haptic.selection();
-    router.push("/settings/money" as Href);
+    router.push((hasAnyBudget ? budgetsHref(activeMonth) : "/settings/money") as Href);
   };
 
   const monthChip = (
@@ -236,7 +240,7 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
           pressed && styles.pressed,
         ]}
         accessibilityRole="button"
-        accessibilityLabel={`${budgetTitle}: ${budgetCaption}. Open budgets`}
+        accessibilityLabel={`${budgetTitle}: ${budgetCaption}. ${hasAnyBudget ? "Open budget progress" : "Set a budget"}`}
       >
         <View style={[styles.budgetGlyph, { backgroundColor: withAlpha(theme.colors.destructive, surfaces.isDark ? 0.18 : 0.1) }]}>
           <Target size={18} color={theme.colors.destructive} strokeWidth={2.2} />
