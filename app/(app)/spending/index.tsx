@@ -8,17 +8,21 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
-import { Section, StatTile, TrendText, useSurfaces } from "@/components/dashboard/primitives";
+import { TrendText, useSurfaces, withAlpha } from "@/components/dashboard/primitives";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { spendingSliceColor } from "@/components/spending/palette";
 import {
+  BreakdownCard,
   CalloutCard,
   CategoryShareRow,
   DataNote,
+  DrilldownTabs,
+  DrilldownTopBar,
   MonthlySpendBars,
   SpendingHero,
-  SpendingMonthSelector,
+  SurfaceCard,
+  TrendChip,
 } from "@/components/spending/SpendingParts";
 import { SpendingTrendPanel, TransactionComparisonCards } from "@/components/spending/SpendingTrendPanel";
 import { SpendingTransactionList } from "@/components/spending/SpendingTransactionList";
@@ -49,7 +53,7 @@ import {
 } from "@/shared/utils/spendingDrilldown";
 import { useTheme } from "@/theme/ThemeProvider";
 
-const TABS = [
+const TABS: Array<{ id: TotalSpendingTab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "categories", label: "Categories" },
   { id: "transactions", label: "Transactions" },
@@ -71,6 +75,7 @@ export default function TotalSpendingScreen() {
   const params = useLocalSearchParams<{ month?: string; tab?: string; range?: string }>();
   const router = useRouter();
   const { theme } = useTheme();
+  const surfaces = useSurfaces();
   const { settings } = useSettings();
   const { globalMonth } = useGlobalMonth();
   const currency = useDisplayCurrency();
@@ -91,21 +96,9 @@ export default function TotalSpendingScreen() {
 
   const goBack = () => (router.canGoBack() ? router.back() : router.replace("/dashboard" as Href));
   const setMonth = (next: string) => router.setParams({ month: next });
-  const setTab = (next: string) => router.setParams({ tab: next });
+  const setTab = (next: TotalSpendingTab) => router.setParams({ tab: next });
 
-  const header = (
-    <PageHeader
-      title="Total Spending"
-      subtitle={monthLabel(month, "long")}
-      icon={<Wallet size={22} color={theme.colors.primary} />}
-      onBack={goBack}
-      rightElement={<SpendingMonthSelector month={month} maxMonth={thisMonth} onChange={setMonth} />}
-      tabs={TABS}
-      activeTab={tab}
-      onTabChange={setTab}
-      tabVariant="underline"
-    />
-  );
+  const header = <DrilldownTopBar onBack={goBack} month={month} maxMonth={thisMonth} onChangeMonth={setMonth} />;
 
   if (error && !current) {
     return (
@@ -129,18 +122,20 @@ export default function TotalSpendingScreen() {
         <>
           <SpendingHero
             testID="total-spending-hero"
-            glyph={<Wallet size={28} color={theme.colors.primary} strokeWidth={2.2} />}
-            glyphTint={theme.colors.primary}
-            caption={
-              comparison || total > 0
-                ? `Spent in ${monthLabel(month, "long")}`
-                : `No spending recorded in ${monthLabel(month, "long")}`
+            icon={
+              <View style={[styles.heroIcon, { backgroundColor: withAlpha(theme.colors.primary, surfaces.isDark ? 0.18 : 0.1) }]}>
+                <Wallet size={24} color={theme.colors.primary} strokeWidth={2} />
+              </View>
             }
+            title="Total Spending"
+            caption={total > 0 ? `All categories · ${monthLabel(month)}` : `Nothing spent · ${monthLabel(month)}`}
             amount={total}
             currency={currency}
             change={comparison}
-            previousLabel={comparison ? `vs last month (${money(comparison.previous)})` : undefined}
+            previousLabel={comparison ? `${money(comparison.previous)} last month` : undefined}
           />
+
+          <DrilldownTabs tabs={TABS} value={tab} onChange={setTab} />
 
           {isFromCache ? <DataNote offline>You're offline — showing the figures saved on this device.</DataNote> : null}
           {uncategorized > 0 ? (
@@ -227,44 +222,20 @@ function OverviewTab({
 
   return (
     <>
-      <Section title="Spending breakdown">
-        <View style={styles.breakdown}>
-          <DonutChart
-            data={segments}
-            size={124}
-            strokeWidth={18}
-            currency={currency}
-            title="Total spent"
-            titleBelow
-            centerFractionDigits={0}
-            showLegend={false}
-            onSlicePress={(_, index) => openSlice(index)}
-          />
-          <View style={styles.legend}>
-            {categories.map((c, i) => (
-              <Pressable
-                key={c.category}
-                onPress={() => {
-                  void haptic.selection();
-                  openSlice(i);
-                }}
-                style={({ pressed }) => [styles.legendRow, pressed && { backgroundColor: surfaces.control }]}
-                accessibilityRole="button"
-                accessibilityLabel={`${c.category}, ${Math.round(c.percentage)}% of total spending, ${money(c.amount)}. Open details`}
-              >
-                <View style={[styles.dot, { backgroundColor: segments[i]?.color }]} />
-                <Text style={[styles.legendLabel, { color: theme.colors.foreground, fontFamily: theme.fontFamily.regular }]} numberOfLines={1}>
-                  {c.category}
-                </Text>
-                <Text style={[styles.legendPct, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
-                  {Math.round(c.percentage)}%
-                </Text>
-                <FinancialAmount value={c.amount} currency={currency} size="xs" weight="medium" />
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      </Section>
+      <BreakdownCard
+        title="Breakdown"
+        items={categories.map((c, i) => ({
+          key: c.category,
+          label: c.category,
+          amount: c.amount,
+          percentage: c.percentage,
+          color: segments[i]?.color ?? theme.colors.primary,
+        }))}
+        currency={currency}
+        formatMoney={money}
+        shareOf="of total spending"
+        onPick={openSlice}
+      />
 
       <SpendingTrendPanel summaries={summaries} month={month} currency={currency} />
 
@@ -300,7 +271,7 @@ function CategoriesTab({
     );
   }
   return (
-    <Section title="Categories by amount" subtitle="Share of total spending this month">
+    <SurfaceCard title="Categories by amount" meta={`${categories.length} categories`}>
       {categories.map((c, i) => (
         <CategoryShareRow
           key={c.category}
@@ -314,7 +285,7 @@ function CategoriesTab({
           onPress={() => router.push(categoryDetailHref(c.category, month) as Href)}
         />
       ))}
-    </Section>
+    </SurfaceCard>
   );
 }
 
@@ -329,14 +300,16 @@ function TransactionsTab({
   total: number;
   currency: string;
 }) {
+  const { theme } = useTheme();
   const { rows, loading, monthLoaded } = useMonthExpenseRows(month);
   const options = useMemo(
     () =>
-      topCategoryShares(current?.categoryTotals, Number.MAX_SAFE_INTEGER).categories.map((c) => ({
+      topCategoryShares(current?.categoryTotals, Number.MAX_SAFE_INTEGER).categories.map((c, i) => ({
         value: c.category,
         label: c.category,
+        color: spendingSliceColor(i, c.category, theme.colors, ""),
       })),
-    [current]
+    [current, theme.colors]
   );
   return (
     <SpendingTransactionList
@@ -395,27 +368,38 @@ function TrendsTab({
         ))}
       </ScrollView>
 
-      <Section title="Monthly spending" subtitle={`Last ${range === 12 ? "12 months" : `${range} months`}`}>
+      <SurfaceCard title="Monthly spending" meta={`Last ${range === 12 ? "12 months" : `${range} months`}`}>
         <MonthlySpendBars series={series} currency={currency} formatMoney={money} />
-      </Section>
+      </SurfaceCard>
 
       {withData.length < 2 ? (
         <DataNote>Not enough history yet — comparisons appear once two or more months have spending.</DataNote>
       ) : (
-        <View style={styles.tiles}>
-          <StatTile label="Monthly average" style={styles.tile} meta={vsAverage ? <TrendText delta={Math.round(vsAverage.pct)} invert suffix="this month" /> : undefined}>
-            <FinancialAmount value={average ?? 0} currency={currency} size="md" weight="semibold" />
-          </StatTile>
-          <StatTile label="Highest" style={styles.tile} meta={highest ? <Text style={[styles.tileMeta, muted]}>{monthLabel(highest.month)}</Text> : undefined}>
-            <FinancialAmount value={highest?.amount ?? 0} currency={currency} size="md" weight="semibold" />
-          </StatTile>
-          <StatTile label="Lowest" style={styles.tile} meta={lowest ? <Text style={[styles.tileMeta, muted]}>{monthLabel(lowest.month)}</Text> : undefined}>
-            <FinancialAmount value={lowest?.amount ?? 0} currency={currency} size="md" weight="semibold" />
-          </StatTile>
-        </View>
+        <SurfaceCard title="Summary">
+          <View style={styles.summaryRow}>
+            {[
+              {
+                label: "Average",
+                amount: average ?? 0,
+                meta: vsAverage ? <TrendChip change={vsAverage} subject="This month vs average" /> : null,
+              },
+              { label: "Highest", amount: highest?.amount ?? 0, meta: highest ? monthLabel(highest.month) : "" },
+              { label: "Lowest", amount: lowest?.amount ?? 0, meta: lowest ? monthLabel(lowest.month) : "" },
+            ].map((cell, i) => (
+              <View
+                key={cell.label}
+                style={[styles.summaryCell, i > 0 && { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: theme.colors.border }]}
+              >
+                <Text style={[styles.summaryLabel, muted]}>{cell.label}</Text>
+                <FinancialAmount value={cell.amount} currency={currency} size="md" weight="bold" fit />
+                {typeof cell.meta === "string" ? <Text style={[styles.tileMeta, muted]}>{cell.meta}</Text> : cell.meta}
+              </View>
+            ))}
+          </View>
+        </SurfaceCard>
       )}
 
-      <Section title="Same month last year">
+      <SurfaceCard title="Same month last year">
         {vsLastYear ? (
           <>
             <FinancialAmount value={vsLastYear.previous} currency={currency} size="lg" weight="semibold" />
@@ -424,12 +408,16 @@ function TrendsTab({
         ) : (
           <Text style={[styles.muted, muted]}>{`No spending recorded in ${monthLabel(lastYear?.month ?? month, "long")} to compare with.`}</Text>
         )}
-      </Section>
+      </SurfaceCard>
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  summaryRow: { flexDirection: "row" },
+  summaryCell: { flex: 1, gap: 4, paddingHorizontal: 10, alignItems: "flex-start" },
+  summaryLabel: { fontSize: 12.5 },
+  heroIcon: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
   content: { gap: 14 },
   muted: { fontSize: 13, lineHeight: 18 },
   breakdown: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 14 },
@@ -438,9 +426,6 @@ const styles = StyleSheet.create({
   dot: { width: 10, height: 10, borderRadius: 5 },
   legendLabel: { flex: 1, fontSize: 12.5 },
   legendPct: { fontSize: 12.5, fontVariant: ["tabular-nums"] },
-  tiles: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  tile: { flexGrow: 1, flexBasis: 100 },
-  tileValue: { fontSize: 18 },
   tileMeta: { fontSize: 12 },
   ranges: { flexDirection: "row", gap: 8 },
 });

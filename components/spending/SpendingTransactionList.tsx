@@ -7,16 +7,16 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { SearchBar } from "@/components/common/SearchBar";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
-import { DataRow, RowGlyph, Section } from "@/components/dashboard/primitives";
-import { DataNote } from "@/components/spending/SpendingParts";
+import { DataRow } from "@/components/dashboard/primitives";
+import { CategoryIcon, DataNote, SurfaceCard } from "@/components/spending/SpendingParts";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { useSettings } from "@/providers/SettingsProvider";
-import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
 import type { Expense } from "@/shared/types/expense";
 import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import {
+  NO_SUBCATEGORY,
   TRANSACTION_SORTS,
   TRANSACTION_SORT_LABELS,
   filterSortExpenses,
@@ -30,7 +30,8 @@ import { useTheme } from "@/theme/ThemeProvider";
 /** Rows rendered per step; "Show more" adds another page. */
 const PAGE_SIZE = 25;
 
-export type FilterOption = { value: string; label: string };
+/** A filter chip; `color` also tints the matching rows' icons. */
+export type FilterOption = { value: string; label: string; color?: string };
 
 /**
  * SPENDLY-574 — the drill-downs' transaction tab. `rows` are already the
@@ -78,6 +79,10 @@ export function SpendingTransactionList({
     [rows, query, sort, filter, filterKey]
   );
   const shown = filtered.slice(0, visible);
+  const colorByValue = useMemo(
+    () => new Map(filterOptions.filter((o) => o.color).map((o) => [o.value, o.color as string])),
+    [filterOptions]
+  );
   const narrowed = Boolean(query.trim() || filter);
   const fullTotal = useMemo(() => transactionStats(rows).total, [rows]);
   const filteredTotal = useMemo(() => transactionStats(filtered).total, [filtered]);
@@ -138,9 +143,8 @@ export function SpendingTransactionList({
         </DataNote>
       ) : null}
 
-      <Section
-        title={`Transactions (${filtered.length})`}
-        subtitle={narrowed ? `${money(filteredTotal)} matching` : undefined}
+      <SurfaceCard
+        title={narrowed ? `${filtered.length} of ${rows.length} · ${money(filteredTotal)}` : `${filtered.length} transactions`}
         action={
           <Chip
             label={TRANSACTION_SORT_LABELS[sort]}
@@ -163,19 +167,28 @@ export function SpendingTransactionList({
           <>
             {shown.map((row, index) => {
               const title = row.note?.trim() || row.subcategory || row.category;
-              const where = filterKey === "category" ? row.subcategory ? `${row.category} · ${row.subcategory}` : row.category : row.subcategory || "No subcategory";
-              const meta = `${where} · ${formatDisplayDate(row.date, settings?.dateFormat)}`;
+              const where =
+                filterKey === "category"
+                  ? row.subcategory
+                    ? `${row.category} · ${row.subcategory}`
+                    : row.category
+                  : row.subcategory || "No subcategory";
+              const date = formatDisplayDate(row.date, settings?.dateFormat);
+              const meta = `${where} · ${date}`;
+              const tint =
+                colorByValue.get(row[filterKey] || (filterKey === "subcategory" ? NO_SUBCATEGORY : "")) ?? theme.colors.primary;
               return (
                 <DataRow
                   key={row.id ?? `${row.date}-${index}`}
-                  leading={
-                    <RowGlyph>
-                      <Text style={styles.emoji}>{getCategoryIcon(row.category)}</Text>
-                    </RowGlyph>
-                  }
+                  leading={<CategoryIcon category={row.category} color={tint} size={38} />}
                   title={title}
-                  meta={meta}
+                  meta={where}
                   value={<FinancialAmount value={row.amount} currency={currency} size="sm" sign="minus" weight="semibold" />}
+                  valueMeta={
+                    <Text style={[styles.date, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
+                      {date}
+                    </Text>
+                  }
                   divider={index < shown.length - 1}
                   onPress={
                     row.id
@@ -193,9 +206,9 @@ export function SpendingTransactionList({
             ) : null}
           </>
         )}
-      </Section>
+      </SurfaceCard>
       <Text style={[styles.footnote, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
-        Expenses only. Refunds are recorded as income and transfers are not spending, so neither is listed here.
+        Expenses only — refunds and transfers aren't counted as spending.
       </Text>
     </View>
   );
@@ -203,8 +216,8 @@ export function SpendingTransactionList({
 
 const styles = StyleSheet.create({
   wrap: { gap: 12 },
+  date: { fontSize: 12, marginTop: 2, textAlign: "right" },
   chips: { flexDirection: "row", gap: 8, paddingVertical: 2 },
-  emoji: { fontSize: 16 },
   more: { marginTop: 12 },
   footnote: { fontSize: 12, lineHeight: 17, paddingHorizontal: 4 },
 });

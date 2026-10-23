@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
-import { Lightbulb, Target, TrendingDown, TrendingUp } from "lucide-react-native";
+import { Lightbulb, TrendingDown, TrendingUp } from "lucide-react-native";
 
 import { DonutChart } from "@/components/charts/DonutChart";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -9,11 +9,20 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
 import { ProgressIndicator, type ProgressStatus } from "@/components/dashboard/ProgressIndicator";
-import { DataRow, RowGlyph, Section, useSurfaces } from "@/components/dashboard/primitives";
+import { DataRow, RowGlyph, useSurfaces } from "@/components/dashboard/primitives";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { spendingSliceColor } from "@/components/spending/palette";
-import { CalloutCard, DataNote, SpendingHero, SpendingMonthSelector } from "@/components/spending/SpendingParts";
+import {
+  BreakdownCard,
+  CalloutCard,
+  CategoryIcon,
+  DataNote,
+  DrilldownTabs,
+  DrilldownTopBar,
+  SpendingHero,
+  SurfaceCard,
+} from "@/components/spending/SpendingParts";
 import { SpendingTrendPanel, TransactionComparisonCards } from "@/components/spending/SpendingTrendPanel";
 import { SpendingTransactionList } from "@/components/spending/SpendingTransactionList";
 import { Button } from "@/components/ui/Button";
@@ -25,7 +34,6 @@ import { useMonthExpenseRows, useSpendingSummaries } from "@/hooks/useSpendingDr
 import { haptic } from "@/lib/haptics";
 import { useGlobalMonth } from "@/providers/ModalProvider";
 import { useSettings } from "@/providers/SettingsProvider";
-import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
 import type { DashboardPeriodSummary } from "@/shared/types/financialSummary";
 import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { computeActiveCategoryBudgets } from "@/shared/utils/dashboardWidgets";
@@ -42,11 +50,12 @@ import {
   spendComparison,
   spendingInsights,
   totalSpendingHref,
+  type CategoryDetailTab,
   type CategorySpendSummary,
 } from "@/shared/utils/spendingDrilldown";
 import { useTheme } from "@/theme/ThemeProvider";
 
-const TABS = [
+const TABS: Array<{ id: CategoryDetailTab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "transactions", label: "Transactions" },
   { id: "budget", label: "Budget" },
@@ -87,22 +96,10 @@ export default function CategoryDetailScreen() {
 
   const goBack = () => (router.canGoBack() ? router.back() : router.replace(totalSpendingHref(month, "categories") as Href));
   const setMonth = (next: string) => router.setParams({ month: next });
-  const setTab = (next: string) => router.setParams({ tab: next });
+  const setTab = (next: CategoryDetailTab) => router.setParams({ tab: next });
   const title = category ?? "Category";
 
-  const header = (
-    <PageHeader
-      title={title}
-      subtitle={monthLabel(month, "long")}
-      icon={<Text style={styles.headerEmoji}>{getCategoryIcon(title)}</Text>}
-      onBack={goBack}
-      rightElement={<SpendingMonthSelector month={month} maxMonth={thisMonth} onChange={setMonth} />}
-      tabs={category ? TABS : undefined}
-      activeTab={tab}
-      onTabChange={setTab}
-      tabVariant="underline"
-    />
-  );
+  const header = <DrilldownTopBar onBack={goBack} month={month} maxMonth={thisMonth} onChangeMonth={setMonth} />;
 
   if (!category) {
     return (
@@ -139,18 +136,20 @@ export default function CategoryDetailScreen() {
         <>
           <SpendingHero
             testID="category-detail-hero"
-            glyph={<Text style={styles.heroEmoji}>{getCategoryIcon(category)}</Text>}
-            glyphTint={theme.colors.primary}
+            icon={<CategoryIcon category={category} color={theme.colors.primary} size={52} />}
+            title={category}
             caption={
               detail.total > 0
-                ? `${Math.round(detail.shareOfTotal)}% of your total spending in ${monthLabel(month, "long")}`
-                : `No ${category} spending in ${monthLabel(month, "long")}`
+                ? `${Math.round(detail.shareOfTotal)}% of total spending · ${monthLabel(month)}`
+                : `Nothing spent · ${monthLabel(month)}`
             }
             amount={detail.total}
             currency={currency}
             change={comparison}
-            previousLabel={comparison ? `vs last month (${money(comparison.previous)})` : undefined}
+            previousLabel={comparison ? `${money(comparison.previous)} last month` : undefined}
           />
+
+          <DrilldownTabs tabs={TABS} value={tab} onChange={setTab} />
 
           {isFromCache ? <DataNote offline>You're offline — showing the figures saved on this device.</DataNote> : null}
 
@@ -198,56 +197,28 @@ function OverviewTab({
   onOpenInsights: () => void;
 }) {
   const { theme } = useTheme();
-  const surfaces = useSurfaces();
   const money = useGhostMoney(currency);
-  const segments = detail.subcategories.map((s, i) => ({
-    id: s.key,
-    label: s.label,
-    value: s.amount,
-    color: spendingSliceColor(i, s.label, theme.colors, ""),
-  }));
 
   return (
     <>
       {detail.total > 0 ? (
-        <Section title="Category breakdown" subtitle={`Share of ${category}`}>
-          <View style={styles.breakdown}>
-            <DonutChart
-              data={segments}
-              size={124}
-              strokeWidth={18}
-              currency={currency}
-              title="Total spent"
-              titleBelow
-              centerFractionDigits={0}
-              showLegend={false}
-              onSlicePress={(segment) => segment.id && onPickSubcategory(segment.id)}
-            />
-            <View style={styles.legend}>
-              {detail.subcategories.map((s, i) => (
-                <Pressable
-                  key={s.key}
-                  onPress={() => {
-                    void haptic.selection();
-                    onPickSubcategory(s.key);
-                  }}
-                  style={({ pressed }) => [styles.legendRow, pressed && { backgroundColor: surfaces.control }]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${s.label}, ${Math.round(s.percentage)}% of ${category}, ${money(s.amount)}. Show its transactions`}
-                >
-                  <View style={[styles.dot, { backgroundColor: segments[i]?.color }]} />
-                  <Text style={[styles.legendLabel, { color: theme.colors.foreground, fontFamily: theme.fontFamily.regular }]} numberOfLines={1}>
-                    {s.label}
-                  </Text>
-                  <Text style={[styles.legendPct, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
-                    {Math.round(s.percentage)}%
-                  </Text>
-                  <FinancialAmount value={s.amount} currency={currency} size="xs" weight="medium" />
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        </Section>
+        <BreakdownCard
+          title="Breakdown"
+          items={detail.subcategories.map((sub, i) => ({
+            key: sub.key,
+            label: sub.label,
+            amount: sub.amount,
+            percentage: sub.percentage,
+            color: spendingSliceColor(i, sub.label, theme.colors, ""),
+          }))}
+          currency={currency}
+          formatMoney={money}
+          shareOf={`of ${category}`}
+          onPick={(index) => {
+            const sub = detail.subcategories[index];
+            if (sub) onPickSubcategory(sub.key);
+          }}
+        />
       ) : (
         <EmptyState
           illustration="analytics"
@@ -280,7 +251,12 @@ function TransactionsTab({
   initialSub: string | null;
 }) {
   const { rows, loading, monthLoaded } = useMonthExpenseRows(month, category);
-  const options = detail.subcategories.map((s) => ({ value: s.key, label: s.label }));
+  const { theme } = useTheme();
+  const options = detail.subcategories.map((sub, i) => ({
+    value: sub.key,
+    label: sub.label,
+    color: spendingSliceColor(i, sub.label, theme.colors, ""),
+  }));
   const validInitial = initialSub && options.some((o) => o.value === initialSub) ? initialSub : null;
   return (
     <SpendingTransactionList
@@ -350,25 +326,22 @@ function BudgetTab({
   return (
     <>
       {parent ? (
-        <Section title="Category budget" icon={<Target size={16} color={theme.colors.primary} />}>
+        <SurfaceCard title="Category budget">
           <BudgetLine label={category} amount={parent.amount} spent={parent.spent} currency={currency} />
-        </Section>
+        </SurfaceCard>
       ) : null}
       {subs.length > 0 ? (
-        <Section title="Subcategory budgets">
+        <SurfaceCard title="Subcategory budgets">
           <View style={styles.budgetList}>
             {subs.map((b) => (
               <BudgetLine key={b.id} label={b.subcategory ?? ""} amount={b.amount} spent={b.spent} currency={currency} />
             ))}
           </View>
-        </Section>
+        </SurfaceCard>
       ) : null}
       <Button variant="outline" onPress={openBudgets}>
         Manage budgets
       </Button>
-      <Text style={[styles.muted, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
-        Spent figures are this month's category totals, the same ones the dashboard uses.
-      </Text>
     </>
   );
 }
@@ -440,25 +413,33 @@ function InsightsTab({
   return (
     <>
       {insights.length > 0 ? (
-        <Section title="What stands out" icon={<Lightbulb size={16} color={theme.colors.primary} />}>
+        <SurfaceCard title="What stands out">
           {insights.map((insight, index) => {
             const Icon = insight.tone === "up" ? TrendingUp : insight.tone === "down" ? TrendingDown : Lightbulb;
             const color = insight.tone === "up" ? theme.colors.destructive : insight.tone === "down" ? theme.colors.success : theme.colors.info;
             return (
-              <DataRow
+              <View
                 key={insight.id}
-                leading={
-                  <RowGlyph tint={surfaces.wash(color)}>
-                    <Icon size={16} color={color} />
-                  </RowGlyph>
-                }
-                title={insight.title}
-                meta={insight.body}
-                divider={index < insights.length - 1}
-              />
+                style={[
+                  styles.insightRow,
+                  index < insights.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.border },
+                ]}
+              >
+                <RowGlyph tint={surfaces.wash(color)}>
+                  <Icon size={16} color={color} />
+                </RowGlyph>
+                <View style={styles.insightText}>
+                  <Text style={[styles.insightTitle, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}>
+                    {insight.title}
+                  </Text>
+                  <Text style={[styles.insightBody, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
+                    {insight.body}
+                  </Text>
+                </View>
+              </View>
             );
           })}
-        </Section>
+        </SurfaceCard>
       ) : (
         <EmptyState
           illustration="analytics"
@@ -475,6 +456,10 @@ function InsightsTab({
 }
 
 const styles = StyleSheet.create({
+  insightRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 12 },
+  insightText: { flexGrow: 1, flexShrink: 1, flexBasis: "auto", gap: 3 },
+  insightTitle: { fontSize: 14.5 },
+  insightBody: { fontSize: 13, lineHeight: 18 },
   content: { gap: 14 },
   headerEmoji: { fontSize: 20 },
   heroEmoji: { fontSize: 30 },

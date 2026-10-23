@@ -87,6 +87,19 @@ Gaps the owner found against the category-details reference, now closed:
   - These affect every screen that uses those charts, as a visual fix only.
 - Total Spending got the same hero, trend panel, cards and callout.
 
+## Review round 2 (2026-10-23): premium polish
+The owner said the screens looked generated rather than polished. Before this pass they were checked at 390px in a headless browser against the local emulator:
+- **Top bar:** the top bar now holds only a back button and the month stepper. The title moved into the hero, so it is never truncated.
+- **Tabs:** `DrilldownTabs`, equal-width underline tabs with 44dp targets.
+- **Icons:** line icons (`components/spending/categoryIcons.ts`) replace the taxonomy emoji on the hero, the category rows and the transaction rows. Transaction rows are tinted with their subcategory's breakdown colour, and their date sits under the amount.
+- **Breakdown:** a centred donut above a full-width legend (name · share · amount), so long names don't truncate on phones.
+- **One card style everywhere:** `SurfaceCard` (title plus a quiet meta) replaces `Section` on every tab.
+  - The shared `Card` shell already pads about 16dp, so these cards no longer double-pad.
+  - The stat-card labels no longer truncate.
+- **Trends:** the summary is one card split into Average / Highest / Lowest columns.
+- **Axis labels:** whole thousands read "5K", not "5.0K" (`components/charts/axis.ts`). This is shared, visual only.
+- **Copy:** shorter footnotes and insight lines.
+
 ## Visual deviations from the references
 - The period selector is a month stepper (‹ Oct 2026 ›), not a dropdown. It cannot go past the current month.
 - **Sorting** is a single chip that cycles Latest → Oldest → Highest → Lowest, not a dropdown.

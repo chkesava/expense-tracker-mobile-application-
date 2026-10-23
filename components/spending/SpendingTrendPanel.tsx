@@ -6,8 +6,8 @@ import { BarChart } from "@/components/charts/BarChart";
 import { SpendingCurveChart } from "@/components/charts/SpendingCurveChart";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
-import { Section, withAlpha } from "@/components/dashboard/primitives";
-import { ComparisonStat, DataNote, MonthlySpendBars } from "@/components/spending/SpendingParts";
+import { withAlpha } from "@/components/dashboard/primitives";
+import { ComparisonStat, DataNote, MonthlySpendBars, SurfaceCard } from "@/components/spending/SpendingParts";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { useMonthExpenseRows, useMonthlyTransactionCounts } from "@/hooks/useSpendingDrilldown";
@@ -60,13 +60,13 @@ export function SpendingTrendPanel({
   const formatCount = (n: number) => `${Math.round(n)} transaction${Math.round(n) === 1 ? "" : "s"}`;
 
   const title = view === "transactions" ? "Transactions per month" : "Spending trend";
-  const subtitle = `Last ${months} months`;
+  const meta = `Last ${months} months`;
   const hasAny = series.some((p) => p.hasData);
 
   return (
     <>
       <SegmentedControl options={VIEWS} value={view} onChange={setView} testID="spending-trend-view" />
-      <Section title={title} subtitle={subtitle}>
+      <SurfaceCard title={title} meta={meta}>
         {view === "amount" ? (
           <MonthlySpendBars series={series} currency={currency} formatMoney={money} />
         ) : view === "transactions" ? (
@@ -83,9 +83,9 @@ export function SpendingTrendPanel({
                 data={counts.series.map((p, i) => ({
                   label: monthLabel(p.month).slice(0, 3),
                   value: p.amount,
-                  color: i === counts.series.length - 1 ? accent : withAlpha(accent, 0.4),
+                  color: i === counts.series.length - 1 ? accent : withAlpha(accent, 0.28),
                 }))}
-                height={170}
+                height={180}
                 currency={currency}
                 primaryLabel="Count"
                 primaryColor={accent}
@@ -104,7 +104,7 @@ export function SpendingTrendPanel({
           >
             <SpendingCurveChart
               points={series.map((p) => ({ date: monthLabel(p.month).slice(0, 3), amount: p.amount }))}
-              height={170}
+              height={180}
               currency={currency}
               lineColor={accent}
               showYAxis
@@ -114,7 +114,7 @@ export function SpendingTrendPanel({
         ) : (
           <DataNote>No spending history for these months yet.</DataNote>
         )}
-      </Section>
+      </SurfaceCard>
     </>
   );
 }
@@ -154,21 +154,21 @@ export function TransactionComparisonCards({
         label="Transactions"
         value={<StatFigure value={String(now.count)} />}
         change={countChange}
-        footnote={previousReady ? `vs last month (${before.count})` : "No transactions last month to compare"}
+        footnote={previousReady ? `${before.count} last month` : "None last month"}
       />
       <ComparisonStat
         icon={<ReceiptText size={18} color={theme.colors.success} strokeWidth={2.2} />}
         tint={theme.colors.success}
-        label="Average per transaction"
+        label="Average spend"
         value={
           now.average === null ? (
             <StatFigure value="—" />
           ) : (
-            <FinancialAmount value={now.average} currency={currency} size="lg" weight="bold" />
+            <FinancialAmount value={now.average} currency={currency} size="xl" weight="bold" fit />
           )
         }
         change={averageChange}
-        footnote={previousReady && before.average !== null ? `vs last month (${money(before.average)})` : undefined}
+        footnote={previousReady && before.average !== null ? `${money(before.average)} last month` : undefined}
       />
     </View>
   );
@@ -178,7 +178,7 @@ export function TransactionComparisonCards({
 function StatFigure({ value }: { value: string }) {
   const { theme } = useTheme();
   return (
-    <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.bold, fontSize: 20, lineHeight: 26 }}>
+    <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.bold, fontSize: 28, lineHeight: 34, letterSpacing: -0.8 }}>
       {value}
     </Text>
   );

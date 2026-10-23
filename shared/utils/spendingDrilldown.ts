@@ -399,7 +399,7 @@ export function spendingInsights(input: {
     insights.push({
       id: "vs-previous",
       title: `${Math.abs(Math.round(vsPrevious.pct))}% ${more ? "more" : "less"} than last month`,
-      body: `${label}: ${formatMoney(current.amount)} this month against ${formatMoney(vsPrevious.previous)} last month.`,
+      body: `${formatMoney(current.amount)} this month, ${formatMoney(vsPrevious.previous)} last month.`,
       tone: more ? "up" : "down",
     });
   }
