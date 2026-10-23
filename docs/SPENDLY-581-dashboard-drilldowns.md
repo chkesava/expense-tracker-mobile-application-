@@ -13,7 +13,7 @@
 | SPENDLY-576 | Recent Transactions list and transaction details | Merged into the epic branch; Jira In Progress until main | `feature/SPENDLY-576-recent-transactions` (`772573ac`) | `docs/SPENDLY-576-recent-transactions.md` |
 | SPENDLY-577 | Individual transaction details and contextual actions | Merged into the epic branch; Jira In Progress until main | `feature/SPENDLY-577-transaction-detail-actions` (`25048dbc`) | `docs/SPENDLY-577-transaction-detail-actions.md` |
 | SPENDLY-578 | Spending Trends charts, comparisons and insights | Merged into the epic branch; Jira In Progress until main | `feature/SPENDLY-578-spending-trends` (`5014a8bc`) | `docs/SPENDLY-578-spending-trends.md` |
-| SPENDLY-579 | Spending-by-subcategory analytics and drill-down | To Do | — | — |
+| SPENDLY-579 | Spending-by-subcategory analytics and drill-down | Built on story branch (worktree); awaiting owner merge approval | `feature/SPENDLY-579-subcategory-drilldown` | `docs/SPENDLY-579-subcategory-drilldown.md` |
 | SPENDLY-580 | Highest Spending Categories ranking and drill-down | To Do | — | — |
 | SPENDLY-582 | Recurring expenses overview, schedules and payments | To Do | — | — |
 
@@ -48,4 +48,9 @@
   - Monthly and yearly figures come from summaries; daily and weekly from one month's ledger rows under the summary rule.
   - Category taps reuse the 574 category page.
   - The real reference is `generated/a_wide_high_fidelity_mobile_app_ui_concept_image.png`.
+- **Subcategories (579):**
+  - `/spending/<category>/<subcategory>`; the category route moved to `[category]/index.tsx` with the same URL.
+  - "No subcategory" is an explicit `__none__` bucket.
+  - Merchants come from SPENDLY-186 recognition, with unrecognised payees in one bucket.
+  - The real reference is `generated/wide_multi_panel_mobile_app_ui_mockup_screenshot.png`.
 - **UI review (574):** the user reviews UI personally on local Expo web with demo data. Agents stop after each story and do not capture screenshots.

@@ -49,6 +49,7 @@ import {
   resolveSpendingTab,
   spendComparison,
   spendingInsights,
+  subcategoryDetailHref,
   totalSpendingHref,
   type CategoryDetailTab,
   type CategorySpendSummary,
@@ -161,7 +162,7 @@ export default function CategoryDetailScreen() {
               summaries={summaries}
               currency={currency}
               callout={comparisonCallout(category, detail.total, comparison?.previous, monthLabel(shiftMonthKey(month, -1), "long"))}
-              onPickSubcategory={(sub) => router.setParams({ tab: "transactions", sub })}
+              onPickSubcategory={(sub) => router.push(subcategoryDetailHref(category, sub, month) as Href)}
               onOpenInsights={() => setTab("insights")}
             />
           ) : tab === "transactions" ? (

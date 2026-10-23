@@ -274,7 +274,13 @@ function AppShellInner() {
               }}
             />
             <Stack.Screen
-              name="spending/[category]"
+              name="spending/[category]/index"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="spending/[category]/[sub]"
               options={{
                 animation: "slide_from_right",
               }}
