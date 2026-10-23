@@ -19,6 +19,11 @@ import { haptic } from "@/lib/haptics";
 
 export interface BarChartItem {
   label: string; // e.g. "Jan", "Feb" or "Food"
+  /**
+   * SPENDLY-578: the selected bar's full name when the axis label is short or
+   * blank (e.g. "12 Oct" for a daily bar labelled every fifth day).
+   */
+  detailLabel?: string;
   value: number;
   secondaryValue?: number;
   color?: string;
@@ -184,7 +189,7 @@ export function BarChart({
           ]}
         >
           <Text style={[styles.tooltipLabel, { color: theme.colors.foreground }]}>
-            {selectedItem.label}:
+            {selectedItem.detailLabel ?? selectedItem.label}:
           </Text>
           <View style={styles.tooltipAmounts}>
             <Text style={{ color: primaryColor || theme.colors.primary, fontSize: 12, fontWeight: "700" }}>
@@ -325,8 +330,8 @@ export function BarChart({
               accessibilityState={{ selected: selectedIndex === idx }}
               accessibilityLabel={
                 hasSecondary
-                  ? `${item.label}: ${primaryLabel} ${Math.round(item.value)}, ${secondaryLabel} ${Math.round(item.secondaryValue ?? 0)}`
-                  : `${item.label}: ${primaryLabel} ${Math.round(item.value)}`
+                  ? `${item.detailLabel ?? item.label}: ${primaryLabel} ${Math.round(item.value)}, ${secondaryLabel} ${Math.round(item.secondaryValue ?? 0)}`
+                  : `${item.detailLabel ?? item.label}: ${primaryLabel} ${formatValue ? formatValue(item.value) : Math.round(item.value)}`
               }
             />
           ))}

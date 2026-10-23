@@ -1,7 +1,7 @@
 import { memo, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
-import { ChevronDown, ChevronRight, Target } from "lucide-react-native";
+import { ChevronDown, ChevronRight, Target, TrendingUp } from "lucide-react-native";
 
 import { DonutChart } from "@/components/charts/DonutChart";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -20,6 +20,7 @@ import {
   spendingBreakdown,
 } from "@/shared/utils/dashboardWidgets";
 import { budgetsHref } from "@/shared/utils/budgetDrilldown";
+import { trendsHref } from "@/shared/utils/spendingTrends";
 import {
   isFoldedOthersSlice,
   spendingOverviewTargetHref,
@@ -230,6 +231,42 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
           </View>
         </View>
       )}
+
+      {/* SPENDLY-578: the entry to Spending Trends for this month. */}
+      <Pressable
+        onPress={() => {
+          void haptic.selection();
+          router.push(trendsHref(activeMonth) as Href);
+        }}
+        android_ripple={{ color: surfaces.control, borderless: false }}
+        style={({ pressed }) => [
+          styles.budgetRow,
+          { backgroundColor: surfaces.tile, borderColor: theme.colors.border },
+          pressed && styles.pressed,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel="Spending trend: see how your spending changes over time. Open spending trends"
+        testID="dashboard-spending-trend"
+      >
+        <View style={[styles.budgetGlyph, { backgroundColor: withAlpha(theme.colors.primary, surfaces.isDark ? 0.18 : 0.1) }]}>
+          <TrendingUp size={18} color={theme.colors.primary} strokeWidth={2.2} />
+        </View>
+        <View style={styles.budgetBody}>
+          <Text
+            style={[styles.budgetTitle, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
+            numberOfLines={1}
+          >
+            Spending trend
+          </Text>
+          <Text
+            style={[styles.budgetCaption, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+            numberOfLines={1}
+          >
+            See how your spending changes over time
+          </Text>
+        </View>
+        <ChevronRight size={18} color={theme.colors.mutedForeground} strokeWidth={2.2} />
+      </Pressable>
 
       <Pressable
         onPress={openBudgets}
