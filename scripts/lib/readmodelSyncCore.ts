@@ -116,6 +116,8 @@ export type SyncOptions = {
   log?: (line: string) => void;
   /** Override the per-user collection order (tests). */
   tables?: TableSpec[];
+  /** What started the run, recorded in its notes (SPENDLY-583: "push"). Scheduled/manual runs leave it unset. */
+  trigger?: string;
 };
 
 export const hashUid = (uid: string) => `u#${createHash("sha256").update(uid).digest("hex").slice(0, 10)}`;
@@ -139,7 +141,7 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
     tombstones: 0,
     unmapped: 0,
     failures: 0,
-    notes: { syncMode: options.mode, usedLast24h: usedToday },
+    notes: { syncMode: options.mode, usedLast24h: usedToday, ...(options.trigger ? { trigger: options.trigger } : {}) },
   };
   const runId = await sink.startRun(runMode, budget);
 

@@ -97,6 +97,9 @@ jobs:
         # scripts/readmodelGolden.test.ts keeps the file in step with the TypeScript.
         run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/golden.sql
 
+      - name: Per-write push — rate limit, counters, purge, lockdown (SPENDLY-583)
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/push.sql
+
       - name: Migrations are idempotent to re-check
         # A second assertion run must still pass (the probe table is dropped).
         run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/assert_security.sql
