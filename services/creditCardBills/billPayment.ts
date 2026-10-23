@@ -263,6 +263,9 @@ export async function recordCreditBillPayment(
         appliedCycleStart: input.appliedCycleStart,
         appliedCycleEnd: input.appliedCycleEnd,
         createdAt: serverTimestamp(),
+        // SPENDLY-571: present from the start, so editCreditBillPayment's
+        // "changed on another device" check has a value to compare.
+        updatedAt: serverTimestamp(),
       }),
     },
   ];

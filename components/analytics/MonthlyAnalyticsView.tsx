@@ -24,6 +24,10 @@ import { Skeleton } from "@/components/common/Skeleton";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { haptic } from "@/lib/haptics";
 import { useExpenses } from "@/hooks/useExpenses";
+import { useInsightsMonth } from "@/hooks/useInsightsMonth";
+import { useReadModelFreshness } from "@/hooks/useReadModelFreshness";
+import { ReadModelFreshnessBadge } from "@/components/common/ReadModelFreshnessBadge";
+import { newestWriteMs } from "@/shared/utils/readModelOverlay";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -81,6 +85,7 @@ export function MonthlyAnalyticsView({ listHeader }: MonthlyAnalyticsViewProps) 
     loading: expensesLoading,
     error: expensesError,
     retry: retryExpenses,
+    readModelSession,
   } = useExpenses();
   const { incomes } = useIncomes();
 
@@ -108,14 +113,41 @@ export function MonthlyAnalyticsView({ listHeader }: MonthlyAnalyticsViewProps) 
   );
 
   // Filtered transactions for selected month
-  const monthExpenses = useMemo(
+  const localMonthExpenses = useMemo(
     () => expenses.filter((e) => isInMonth(e, selectedMonth)),
     [expenses, selectedMonth]
   );
-  const monthIncomes = useMemo(
+  const localMonthIncomes = useMemo(
     () => incomes.filter((inc) => isInMonth(inc, selectedMonth)),
     [incomes, selectedMonth]
   );
+  // SPENDLY-513: in read-model `supabase` mode the month comes complete from
+  // the read model (with this device's newer writes overlaid); otherwise these
+  // are the rows above, unchanged. The helpers below run on either.
+  const {
+    expenses: monthExpenses,
+    incomes: monthIncomes,
+    fromReadModel,
+  } = useInsightsMonth({
+    monthKey: selectedMonth,
+    expenses,
+    incomes,
+    localMonthExpenses,
+    localMonthIncomes,
+    session: readModelSession,
+  });
+  const pacingExpenses = useMemo(
+    () =>
+      fromReadModel
+        ? [...expenses.filter((e) => !isInMonth(e, selectedMonth)), ...monthExpenses]
+        : expenses,
+    [fromReadModel, expenses, monthExpenses, selectedMonth]
+  );
+  const newestLocalWriteMs = useMemo(
+    () => newestWriteMs([...localMonthExpenses, ...localMonthIncomes]),
+    [localMonthExpenses, localMonthIncomes]
+  );
+  const insightsFreshness = useReadModelFreshness("insights", ["expenses", "incomes"], newestLocalWriteMs);
 
   // Totals & Cashflow
   const totalExpense = useMemo(
@@ -137,8 +169,8 @@ export function MonthlyAnalyticsView({ listHeader }: MonthlyAnalyticsViewProps) 
   );
 
   const pacing = useMemo(
-    () => getPacingMetrics(expenses, selectedMonth),
-    [expenses, selectedMonth]
+    () => getPacingMetrics(pacingExpenses, selectedMonth),
+    [pacingExpenses, selectedMonth]
   );
 
   // Category breakdown
@@ -376,6 +408,7 @@ export function MonthlyAnalyticsView({ listHeader }: MonthlyAnalyticsViewProps) 
       <>
         {listHeader}
         {monthSelector}
+        <ReadModelFreshnessBadge freshness={insightsFreshness} />
         <EmptyState
           illustration="analytics"
           title="No Data For This Month"
@@ -407,6 +440,7 @@ export function MonthlyAnalyticsView({ listHeader }: MonthlyAnalyticsViewProps) 
         <View style={styles.header}>
           {listHeader}
           {monthSelector}
+          <ReadModelFreshnessBadge freshness={insightsFreshness} />
         </View>
       }
       contentContainerStyle={{ paddingBottom: listBottomPadding }}

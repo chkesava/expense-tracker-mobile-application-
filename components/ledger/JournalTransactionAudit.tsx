@@ -16,6 +16,9 @@ import { Amount } from "@/components/common/Amount";
 import { Skeleton } from "@/components/common/Skeleton";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useLedgerEvents } from "@/hooks/useLedgerEvents";
+import { useReadModelFreshness } from "@/hooks/useReadModelFreshness";
+import { ReadModelFreshnessBadge } from "@/components/common/ReadModelFreshnessBadge";
+import { versionMillis } from "@/shared/utils/readModelOverlay";
 import type { LedgerEventKind } from "@/shared/types/ledgerEvent";
 import {
   selectEventsForRow,
@@ -106,9 +109,15 @@ export function JournalTransactionAudit({
   kind,
   docId,
   formatAccount,
+  rowUpdatedAt,
 }: {
   kind: LedgerEventKind;
   docId?: string;
+  /**
+   * SPENDLY-513: the row's own `updatedAt`. In read-model `supabase` mode an
+   * edit newer than the last sync shows "Updating…" until its event arrives.
+   */
+  rowUpdatedAt?: unknown;
   /** Turns a stored account id into a name for display. */
   formatAccount?: (accountId: string) => string;
 }) {
@@ -119,6 +128,12 @@ export function JournalTransactionAudit({
     enabled: Boolean(docId),
     docId,
   });
+
+  const auditFreshness = useReadModelFreshness(
+    "audit",
+    ["ledgerEvents"],
+    versionMillis({ updatedAt: rowUpdatedAt })
+  );
 
   const rowEvents = useMemo(
     () => selectEventsForRow(events, kind, docId),
@@ -156,6 +171,7 @@ export function JournalTransactionAudit({
       <Text style={[styles.heading, { color: theme.colors.mutedForeground }]}>
         HISTORY
       </Text>
+      <ReadModelFreshnessBadge freshness={auditFreshness} />
 
       {rowEvents.length === 0 ? (
         <Text style={[styles.empty, { color: theme.colors.mutedForeground }]}>

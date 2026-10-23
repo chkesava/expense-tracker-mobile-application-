@@ -7,7 +7,6 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  startAfter,
   where,
   type QueryDocumentSnapshot,
   type QuerySnapshot,
@@ -39,6 +38,14 @@ import {
 } from "@/lib/syncStatusStore";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
+import { useNetwork } from "@/providers/NetworkProvider";
+import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import type { ReadModelReadConditions } from "@/lib/readModel/screenReadPath";
+import { readJournalMatches, readJournalMonth, readJournalPage, shadowCompareJournalHistory } from "@/lib/readModel/journalReadPath";
+import type { JournalMatch } from "@/lib/readModel/backend";
+import { isLocalTestMode } from "@/lib/env";
+import type { SupabaseCursor } from "@/lib/readModel/journalHistorySource";
+import { configuredReadModelMode } from "@/shared/utils/readModelMode";
 import type {
   Account,
   AccountEntry,
@@ -69,10 +76,10 @@ import {
   FINANCE_SNAPSHOT_LISTEN_OPTIONS,
   foldLedgerSnapshot,
   isStagedPageComplete,
-  LEDGER_PAGE_SIZE,
   LEDGER_STAGED_LIMIT,
   shouldApplySnapshotDocs,
   sortLedgerByDateDesc,
+  unseenRows,
 } from "@/shared/utils/ledgerSnapshot";
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
 import {
@@ -90,7 +97,12 @@ function noteServerSync(fromCache: boolean): void {
 
 // ─── Granular Context Types ───────────────────────────────────────────────────
 
-export type ExpensesContextType = {
+export type ReadModelSession = {
+  conditions: () => ReadModelReadConditions;
+  locallyRemovedIds: Set<string>;
+};
+
+type ExpensesContextType = {
   expenses: Expense[];
   expensesLoading: boolean;
   /**
@@ -124,6 +136,18 @@ export type ExpensesContextType = {
   expenseMonthsLoaded: Set<string>;
   /** Fetches every expense dated within `monthKey`, once, via `where("date", ...)`. */
   loadExpensesForMonth: (monthKey: string) => Promise<void>;
+  /**
+   * SPENDLY-512: in read-model `supabase` mode, loads every expense matching
+   * the filter's SQL-checkable conditions, so a filtered Journal is complete
+   * without paging all history. A no-op in `firestore` (default) and `shadow`.
+   */
+  loadMatchingExpenses: (match: JournalMatch) => Promise<void>;
+  /**
+   * SPENDLY-513: what read-model screens outside the provider need: the
+   * current read conditions, and the ids removed on this device this session
+   * (the read model may still hold them until the next sync). Stable.
+   */
+  readModelSession: ReadModelSession;
   /** Local ledger mutation helper for optimistic updates. */
   removeExpense: (id: string) => void;
   updateExpense: (id: string, updates: Partial<Expense>) => void;
@@ -152,6 +176,8 @@ export type IncomesContextType = {
   incomeMonthsLoaded: Set<string>;
   /** Fetches every income dated within `monthKey`, once, via `where("date", ...)`. */
   loadIncomesForMonth: (monthKey: string) => Promise<void>;
+  /** Mirrors `loadMatchingExpenses` for incomes. */
+  loadMatchingIncomes: (match: JournalMatch) => Promise<void>;
   /** Local ledger mutation helper for optimistic updates. */
   removeIncome: (id: string) => void;
   updateIncome: (id: string, updates: Partial<Income>) => void;
@@ -235,7 +261,7 @@ const AccountsContext = createContext<AccountsContextType | undefined>(undefined
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function FinanceDataProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, isDuress } = useAuth();
   const uid = user?.uid;
   const db = getFirestoreDb();
 
@@ -243,6 +269,23 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     userRef.current = user;
   }, [user]);
+
+  // SPENDLY-511: what the Journal month loads may read. `firestore` unless
+  // system_settings/global.readModel.journal says otherwise; refs, so the
+  // month loaders keep their stable identities.
+  const { settings: systemSettings } = useSystemSettings();
+  const { isOnline } = useNetwork();
+  const readModelRef = useRef({ setting: systemSettings.readModel, online: isOnline, duress: isDuress, localTestMode: isLocalTestMode() });
+  readModelRef.current = { setting: systemSettings.readModel, online: isOnline, duress: isDuress, localTestMode: isLocalTestMode() };
+  /** Ids removed on this device this session; a not-yet-synced copy must not bring them back. */
+  const locallyRemovedIdsRef = useRef(new Set<string>());
+  const readModelSession = useMemo<ReadModelSession>(
+    () => ({ conditions: () => readModelRef.current, locallyRemovedIds: locallyRemovedIdsRef.current }),
+    []
+  );
+  /** SPENDLY-512: where read-model history paging resumes (Firestore keeps its own cursor). */
+  const supabaseExpenseCursorRef = useRef<SupabaseCursor>(null);
+  const supabaseIncomeCursorRef = useRef<SupabaseCursor>(null);
 
   const {
     error: financeError,
@@ -1578,44 +1621,42 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     fetchingMoreExpensesRef.current = true;
     setIsFetchingMoreExpenses(true);
     try {
-      const expensesCol = collection(database, "users", u.uid, "expenses");
-      const q = query(
-        expensesCol,
-        orderBy("createdAt", "desc"),
-        startAfter(cursor),
-        limit(LEDGER_PAGE_SIZE)
-      );
-      const snap = await getDocs(q);
-      logDirectRead(
-        `users/${u.uid}/expenses`,
-        snap.docs.length,
-        snap.metadata.fromCache ? "cache" : "server",
-        {
-          feature: "ledger_pagination",
-          queryShape: `startAfter limit=${LEDGER_PAGE_SIZE}`,
-        }
-      );
-
-      if (snap.docs.length > 0) {
-        lastExpenseDocRef.current = snap.docs[snap.docs.length - 1];
+      // SPENDLY-512: the previous cursor query in `firestore` mode (default).
+      const page = await readJournalPage<Expense>({
+        db: database,
+        user: u,
+        collectionName: "expenses",
+        firestoreCursor: cursor,
+        supabaseCursor: supabaseExpenseCursorRef.current,
+        conditions: readModelRef.current,
+        locallyRemovedIds: locallyRemovedIdsRef.current,
+      });
+      if (!page) return;
+      if (page.servedBy === "firestore") {
+        if (page.lastDoc) lastExpenseDocRef.current = page.lastDoc;
+      } else {
+        supabaseExpenseCursorRef.current = page.next;
       }
-      if (snap.docs.length < LEDGER_PAGE_SIZE) {
+      if (page.exhausted) {
         setHasMoreExpenses(false);
         setExpensesComplete(true);
+        if (configuredReadModelMode(readModelRef.current.setting, "journal") === "shadow") {
+          void shadowCompareJournalHistory({
+            db: database,
+            user: u,
+            collectionName: "expenses",
+            loaded: [
+              ...realtimeExpensesRef.current,
+              ...paginatedExpensesRef.current,
+              ...unseenRows(paginatedExpensesRef.current, realtimeExpensesRef.current, page.items),
+            ],
+            conditions: readModelRef.current,
+          });
+        }
       }
 
-      const { items: newItems } = foldLedgerSnapshot<Expense>(snap.docs, {
-        activeOnly: true,
-      });
-
-      setPaginatedExpenses((prev) => {
-        const existingIds = new Set([
-          ...realtimeExpensesRef.current.map((e) => e.id),
-          ...prev.map((e) => e.id),
-        ]);
-        const toAdd = newItems.filter((e) => e.id && !existingIds.has(e.id));
-        return [...prev, ...toAdd];
-      });
+      const newItems = page.items;
+      setPaginatedExpenses((prev) => [...prev, ...unseenRows(prev, realtimeExpensesRef.current, newItems)]);
     } catch (err) {
       logError("financeProvider.loadMoreExpenses", err);
       toast.error(friendlyErrorMessage(err, "Failed to load older expenses"));
@@ -1646,29 +1687,16 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
 
     expenseMonthsLoadedRef.current.add(monthKey);
     try {
-      const expensesCol = collection(database, "users", u.uid, "expenses");
-      const q = query(
-        expensesCol,
-        where("date", ">=", scope.fromDate),
-        where("date", "<=", scope.toDate)
-      );
-      const snap = await getDocs(q);
-      logDirectRead(
-        `users/${u.uid}/expenses`,
-        snap.docs.length,
-        snap.metadata.fromCache ? "cache" : "server",
-        { feature: "ledger_month_query", queryShape: `date range ${monthKey}` }
-      );
-
-      const { items: newItems } = foldLedgerSnapshot<Expense>(snap.docs, {
-        activeOnly: true,
+      const newItems = await readJournalMonth<Expense>({
+        db: database,
+        user: u,
+        collectionName: "expenses",
+        monthKey,
+        conditions: readModelRef.current,
+        locallyRemovedIds: locallyRemovedIdsRef.current,
       });
       setPaginatedExpenses((prev) => {
-        const existingIds = new Set([
-          ...realtimeExpensesRef.current.map((e) => e.id),
-          ...prev.map((e) => e.id),
-        ]);
-        const toAdd = newItems.filter((e) => e.id && !existingIds.has(e.id));
+        const toAdd = unseenRows(prev, realtimeExpensesRef.current, newItems);
         return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
       });
       setExpenseMonthsLoaded(new Set(expenseMonthsLoadedRef.current));
@@ -1679,7 +1707,27 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loadMatchingExpenses = useCallback(async (match: JournalMatch) => {
+    const u = userRef.current;
+    const database = getFirestoreDb();
+    if (!u || !database) return;
+    const rows = await readJournalMatches<Expense>({
+      db: database,
+      user: u,
+      collectionName: "expenses",
+      match,
+      conditions: readModelRef.current,
+      locallyRemovedIds: locallyRemovedIdsRef.current,
+    });
+    if (!rows?.length) return;
+    setPaginatedExpenses((prev) => {
+      const toAdd = unseenRows(prev, realtimeExpensesRef.current, rows);
+      return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+    });
+  }, []);
+
   const removeExpense = useCallback((id: string) => {
+    locallyRemovedIdsRef.current.add(id);
     setRealtimeExpenses((prev) => prev.filter((e) => e.id !== id));
     setPaginatedExpenses((prev) => prev.filter((e) => e.id !== id));
   }, []);
@@ -1703,44 +1751,42 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     fetchingMoreIncomesRef.current = true;
     setIsFetchingMoreIncomes(true);
     try {
-      const incomesCol = collection(database, "users", u.uid, "incomes");
-      const q = query(
-        incomesCol,
-        orderBy("createdAt", "desc"),
-        startAfter(cursor),
-        limit(LEDGER_PAGE_SIZE)
-      );
-      const snap = await getDocs(q);
-      logDirectRead(
-        `users/${u.uid}/incomes`,
-        snap.docs.length,
-        snap.metadata.fromCache ? "cache" : "server",
-        {
-          feature: "ledger_pagination",
-          queryShape: `startAfter limit=${LEDGER_PAGE_SIZE}`,
-        }
-      );
-
-      if (snap.docs.length > 0) {
-        lastIncomeDocRef.current = snap.docs[snap.docs.length - 1];
+      // SPENDLY-512: the previous cursor query in `firestore` mode (default).
+      const page = await readJournalPage<Income>({
+        db: database,
+        user: u,
+        collectionName: "incomes",
+        firestoreCursor: cursor,
+        supabaseCursor: supabaseIncomeCursorRef.current,
+        conditions: readModelRef.current,
+        locallyRemovedIds: locallyRemovedIdsRef.current,
+      });
+      if (!page) return;
+      if (page.servedBy === "firestore") {
+        if (page.lastDoc) lastIncomeDocRef.current = page.lastDoc;
+      } else {
+        supabaseIncomeCursorRef.current = page.next;
       }
-      if (snap.docs.length < LEDGER_PAGE_SIZE) {
+      if (page.exhausted) {
         setHasMoreIncomes(false);
         setIncomesComplete(true);
+        if (configuredReadModelMode(readModelRef.current.setting, "journal") === "shadow") {
+          void shadowCompareJournalHistory({
+            db: database,
+            user: u,
+            collectionName: "incomes",
+            loaded: [
+              ...realtimeIncomesRef.current,
+              ...paginatedIncomesRef.current,
+              ...unseenRows(paginatedIncomesRef.current, realtimeIncomesRef.current, page.items),
+            ],
+            conditions: readModelRef.current,
+          });
+        }
       }
 
-      const { items: newItems } = foldLedgerSnapshot<Income>(snap.docs, {
-        activeOnly: true,
-      });
-
-      setPaginatedIncomes((prev) => {
-        const existingIds = new Set([
-          ...realtimeIncomesRef.current.map((i) => i.id),
-          ...prev.map((i) => i.id),
-        ]);
-        const toAdd = newItems.filter((i) => i.id && !existingIds.has(i.id));
-        return [...prev, ...toAdd];
-      });
+      const newItems = page.items;
+      setPaginatedIncomes((prev) => [...prev, ...unseenRows(prev, realtimeIncomesRef.current, newItems)]);
     } catch (err) {
       logError("financeProvider.loadMoreIncomes", err);
       toast.error(friendlyErrorMessage(err, "Failed to load older incomes"));
@@ -1766,29 +1812,16 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
 
     incomeMonthsLoadedRef.current.add(monthKey);
     try {
-      const incomesCol = collection(database, "users", u.uid, "incomes");
-      const q = query(
-        incomesCol,
-        where("date", ">=", scope.fromDate),
-        where("date", "<=", scope.toDate)
-      );
-      const snap = await getDocs(q);
-      logDirectRead(
-        `users/${u.uid}/incomes`,
-        snap.docs.length,
-        snap.metadata.fromCache ? "cache" : "server",
-        { feature: "ledger_month_query", queryShape: `date range ${monthKey}` }
-      );
-
-      const { items: newItems } = foldLedgerSnapshot<Income>(snap.docs, {
-        activeOnly: true,
+      const newItems = await readJournalMonth<Income>({
+        db: database,
+        user: u,
+        collectionName: "incomes",
+        monthKey,
+        conditions: readModelRef.current,
+        locallyRemovedIds: locallyRemovedIdsRef.current,
       });
       setPaginatedIncomes((prev) => {
-        const existingIds = new Set([
-          ...realtimeIncomesRef.current.map((i) => i.id),
-          ...prev.map((i) => i.id),
-        ]);
-        const toAdd = newItems.filter((i) => i.id && !existingIds.has(i.id));
+        const toAdd = unseenRows(prev, realtimeIncomesRef.current, newItems);
         return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
       });
       setIncomeMonthsLoaded(new Set(incomeMonthsLoadedRef.current));
@@ -1799,7 +1832,27 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loadMatchingIncomes = useCallback(async (match: JournalMatch) => {
+    const u = userRef.current;
+    const database = getFirestoreDb();
+    if (!u || !database) return;
+    const rows = await readJournalMatches<Income>({
+      db: database,
+      user: u,
+      collectionName: "incomes",
+      match,
+      conditions: readModelRef.current,
+      locallyRemovedIds: locallyRemovedIdsRef.current,
+    });
+    if (!rows?.length) return;
+    setPaginatedIncomes((prev) => {
+      const toAdd = unseenRows(prev, realtimeIncomesRef.current, rows);
+      return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+    });
+  }, []);
+
   const removeIncome = useCallback((id: string) => {
+    locallyRemovedIdsRef.current.add(id);
     setRealtimeIncomes((prev) => prev.filter((i) => i.id !== id));
     setPaginatedIncomes((prev) => prev.filter((i) => i.id !== id));
   }, []);
@@ -1830,6 +1883,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       loadAllExpenses,
       expenseMonthsLoaded,
       loadExpensesForMonth,
+      loadMatchingExpenses,
+      readModelSession,
       removeExpense,
       updateExpense,
     }),
@@ -1847,6 +1902,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       loadAllExpenses,
       expenseMonthsLoaded,
       loadExpensesForMonth,
+      loadMatchingExpenses,
+      readModelSession,
       removeExpense,
       updateExpense,
     ]
@@ -1865,6 +1922,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       loadAllIncomes,
       incomeMonthsLoaded,
       loadIncomesForMonth,
+      loadMatchingIncomes,
       removeIncome,
       updateIncome,
     }),
@@ -1880,6 +1938,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       loadAllIncomes,
       incomeMonthsLoaded,
       loadIncomesForMonth,
+      loadMatchingIncomes,
       removeIncome,
       updateIncome,
     ]

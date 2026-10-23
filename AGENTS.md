@@ -13,6 +13,10 @@ Before any task, read **[docs/AGENT_WORKFLOW.md](docs/AGENT_WORKFLOW.md)** and f
 
 It also points to the roadmap (`.claude/spendly_epic_execution_roadmap.md`, context only) and to the active epic's tracker and plan in `docs/`.
 
+# Read-model architecture (SPENDLY-494)
+
+Firestore is the only write path. Supabase (`supabase-readmodel/`) is a read-only copy kept by a scheduled sync. Any feature that writes or reads user data, adds a collection or field, or deletes user data must follow **[docs/READ_MODEL_RULES.md](docs/READ_MODEL_RULES.md)**. Operations are in `docs/READMODEL_RUNBOOK.md`.
+
 # Phase Delivery Protocol
 After completing every phase:
 1. Provide a step-by-step **Manual Testing Guide** describing how to test/verify that phase on device/simulator.

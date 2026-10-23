@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  auditStrategy,
   LEDGER_EVENTS_PAGE_SIZE,
   mergeEventPages,
   pageMayHaveMore,
@@ -35,5 +36,19 @@ describe("ledgerEventPages (SPENDLY-501)", () => {
       { id: "none" },
     ];
     expect(sortEventsNewestFirst(rows).map((r) => r.id)).toEqual(["ts", "ms", "iso", "none"]);
+  });
+});
+
+describe("audit read strategy (SPENDLY-513)", () => {
+  it("one transaction in supabase mode pages the read model and mounts no listener", () => {
+    expect(auditStrategy("supabase", "e1")).toBe("readModelPages");
+  });
+  it("the whole trail in supabase mode keeps the bounded realtime window, older pages from the read model", () => {
+    expect(auditStrategy("supabase", undefined)).toBe("listenerThenReadModel");
+  });
+  it("firestore (default) and shadow keep today's listener; an unresolved mode reads nothing yet", () => {
+    expect(auditStrategy("firestore", "e1")).toBe("listener");
+    expect(auditStrategy("shadow", undefined)).toBe("listener");
+    expect(auditStrategy(null, "e1")).toBe("pending");
   });
 });

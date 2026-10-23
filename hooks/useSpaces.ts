@@ -143,7 +143,7 @@ export function useSpaces(options?: { enabled?: boolean }) {
         for (const group of chunk(linked.docs, BATCH_CHUNK_SIZE)) {
           const batch = writeBatch(db);
           group.forEach((expenseDoc) =>
-            batch.update(expenseDoc.ref, { spaceId: null })
+            batch.update(expenseDoc.ref, { spaceId: null, updatedAt: serverTimestamp() })
           );
           await commitWrite(() => batch.commit(), { label: "space unlink" });
         }
@@ -183,6 +183,7 @@ export function useSpaces(options?: { enabled?: boolean }) {
           group.forEach((expenseId) => {
             batch.update(doc(db, "users", uid, "expenses", expenseId), {
               spaceId,
+              updatedAt: serverTimestamp(),
             });
           });
           await commitWrite(() => batch.commit(), { label: "space assignment" });

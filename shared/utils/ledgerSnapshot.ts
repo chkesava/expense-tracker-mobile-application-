@@ -97,3 +97,14 @@ export function foldLedgerSnapshot<T extends { id?: string }>(
 export function sortLedgerByDateDesc<T extends { date?: string }>(items: T[]): T[] {
   return [...items].sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")));
 }
+
+/**
+ * SPENDLY-512 — the rows of `incoming` that aren't already on screen: not in
+ * the live (staged) window and not in an earlier page or month load. Order is
+ * kept. Whatever source a page came from, a row is never shown twice at the
+ * boundary, and a row the device already holds keeps its local version.
+ */
+export function unseenRows<T extends { id?: string }>(prev: T[], live: T[], incoming: T[]): T[] {
+  const existingIds = new Set([...live.map((r) => r.id), ...prev.map((r) => r.id)]);
+  return incoming.filter((r) => r.id && !existingIds.has(r.id));
+}

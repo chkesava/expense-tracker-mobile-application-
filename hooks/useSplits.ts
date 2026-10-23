@@ -1323,6 +1323,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       for (let i = 0; i < linked.expenseIds.length; i++) {
         batch.update(doc(db, "users", uid, "expenses", linked.expenseIds[i]), {
           deletedAt,
+          updatedAt: serverTimestamp(),
         });
         const snap = expenseSnaps[i];
         // SPENDLY-563: only a live expense still counts anywhere. An already
