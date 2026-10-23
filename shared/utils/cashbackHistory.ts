@@ -28,6 +28,21 @@ export interface CashbackSummary {
 }
 
 /**
+ * SPENDLY-513: ids of purchases this card's cashback links to that are not
+ * in `expenses` (sorted, each once), so their notes can be fetched.
+ */
+export function missingCashbackLinks(cardId: string, payments: AccountPayment[], expenses: Expense[]): string[] {
+  const have = new Set(expenses.map((e) => e.id));
+  const missing = new Set<string>();
+  for (const p of payments) {
+    if (p.toAccountId === cardId && isCashbackPayment(p) && p.linkedExpenseId && !have.has(p.linkedExpenseId)) {
+      missing.add(p.linkedExpenseId);
+    }
+  }
+  return [...missing].sort();
+}
+
+/**
  * Builds a history and summary of all cashback recorded against a credit card.
  *
  * @param cardId The ID of the credit card account

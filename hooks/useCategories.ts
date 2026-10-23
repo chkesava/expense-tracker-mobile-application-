@@ -123,7 +123,10 @@ export const useCategories = () => {
   const patchCategory = async (id: string, data: Partial<Category>) => {
     const db = getFirestoreDb();
     if (!uid || !db) return;
-    await updateDoc(doc(db, "users", uid, "categories", id), data);
+    await updateDoc(doc(db, "users", uid, "categories", id), {
+      ...data,
+      updatedAt: serverTimestamp(),
+    });
   };
 
   const addCategory = async (
@@ -200,6 +203,7 @@ export const useCategories = () => {
     try {
       await updateDoc(doc(db, "users", uid, "categories", id), {
         name: newName.trim(),
+        updatedAt: serverTimestamp(),
       });
       toast.success("Category updated");
     } catch (err) {
@@ -225,6 +229,7 @@ export const useCategories = () => {
     try {
       await updateDoc(doc(db, "users", uid, "categories", id), {
         name: trimmed,
+        updatedAt: serverTimestamp(),
       });
 
       if (rewriteExpenses) {
@@ -286,12 +291,12 @@ export const useCategories = () => {
               data.category === parent.name &&
               data.subcategory === oldName
             ) {
-              batch.update(ref, { subcategory: trimmed });
+              batch.update(ref, { subcategory: trimmed, updatedAt: serverTimestamp() });
               relabels.push(relabelOf(data, { category: data.category, subcategory: trimmed }));
               ops++;
             }
           } else if (data.category === oldName) {
-            batch.update(ref, { category: trimmed });
+            batch.update(ref, { category: trimmed, updatedAt: serverTimestamp() });
             relabels.push(relabelOf(data, { category: trimmed, subcategory: data.subcategory }));
             ops++;
           }
@@ -345,6 +350,7 @@ export const useCategories = () => {
     try {
       await updateDoc(doc(db, "users", uid, "categories", id), {
         isArchived,
+        updatedAt: serverTimestamp(),
       });
       toast.success(isArchived ? "Category archived" : "Category restored");
     } catch (err) {
@@ -420,6 +426,7 @@ export const useCategories = () => {
         batch.update(doc(db, "users", uid, "categories", sub.id), {
           parentId: targetId,
           name,
+          updatedAt: serverTimestamp(),
         });
         ops++;
         if (ops >= 400) await flush();
@@ -460,6 +467,7 @@ export const useCategories = () => {
           batch.update(doc(db, "users", uid, "expenses", row.id), {
             category: target.name,
             subcategory,
+            updatedAt: serverTimestamp(),
           });
           relabels.push(relabelOf(data, { category: target.name, subcategory }));
           ops++;

@@ -1,0 +1,54 @@
+name: Read-model sync health
+
+# SPENDLY-507: hourly check that the read-model sync (readmodel-sync.yml) is
+# healthy. Goes red, and GitHub emails the repository owner, when:
+#   - Supabase is paused or unreachable;
+#   - no sync run in 4 h, or no full run in 26 h (schedule disabled or stuck);
+#   - the latest run failed;
+#   - a sync failure has been open for over 24 h (named by collection);
+#   - the p95 copy age is over 4 h (ADR §8: 3 h plus slack).
+# Metrics and the last runs are in the step summary. Reads only Supabase's
+# bookkeeping tables: no Firestore reads, no uids in the output.
+#
+# Like the sync, scheduled runs wait for READMODEL_SYNC_ENABLED = "true".
+# GitHub disables scheduled workflows after 60 days without repository
+# activity; see docs/READMODEL_RUNBOOK.md for the monthly check.
+
+on:
+  schedule:
+    - cron: "45 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: readmodel-health
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    name: Check read-model sync health
+    if: github.event_name == 'workflow_dispatch' || vars.READMODEL_SYNC_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Health check
+        env:
+          READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
+          READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+          READMODEL_MAX_READS_PER_DAY: ${{ vars.READMODEL_MAX_READS_PER_DAY || '12000' }}
+        run: npx tsx scripts/readmodel-health.ts

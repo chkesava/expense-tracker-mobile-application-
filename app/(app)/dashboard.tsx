@@ -29,6 +29,8 @@ import { sampleScrollFps, perfEvent, perfMark } from "@/lib/perf";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useDashboardCashFlow } from "@/hooks/useDashboardCashFlow";
+import { useReadModelFreshness } from "@/hooks/useReadModelFreshness";
+import { ReadModelFreshnessBadge } from "@/components/common/ReadModelFreshnessBadge";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
@@ -98,9 +100,13 @@ export default function DashboardScreen() {
   // read from it rather than from two more per-month doc listeners.
   const {
     summaries: cashFlowSummaries,
+    chartMonths: cashFlowChartMonths,
     loading: activeLoading,
     error: financeError,
   } = useDashboardCashFlow(activeMonth, 6);
+  // SPENDLY-513: says so when the chart's older months are stale or fell back
+  // (read-model `supabase` mode only; renders nothing otherwise).
+  const cashFlowFreshness = useReadModelFreshness("cashFlow", ["expenses", "incomes"], null);
   const activeSummary = useMemo(
     () => cashFlowSummaries.find((s) => s.period === activeMonth) ?? null,
     [cashFlowSummaries, activeMonth]
@@ -185,7 +191,7 @@ export default function DashboardScreen() {
     const result = [];
     let curMonth = activeMonth;
     for (let i = 0; i < 6; i++) {
-       const summary = cashFlowSummaries.find(s => s.period === curMonth);
+       const summary = cashFlowChartMonths.find(s => s.period === curMonth);
        result.unshift({
          month: curMonth,
          income: summary?.totalIncome || 0,
@@ -196,7 +202,7 @@ export default function DashboardScreen() {
     }
     
     return result;
-  }, [cashFlowSummaries, activeMonth]);
+  }, [cashFlowChartMonths, activeMonth]);
 
   // SPENDLY-566: one net-worth summary for the card and the account cards.
   // It reads providers the app already holds; no listener of its own.
@@ -258,6 +264,9 @@ export default function DashboardScreen() {
     switch (id) {
       case "cashFlow":
         return (
+          <>
+          {/* SPENDLY-513: says so when the chart's older months are stale or fell back (read-model only). */}
+          <ReadModelFreshnessBadge freshness={cashFlowFreshness} />
           <QuickInsightsWidget
             monthlySpent={monthlySpent}
             monthlyIncome={monthlyIncome}
@@ -270,6 +279,7 @@ export default function DashboardScreen() {
             monthLabel={activeMonthChipLabel}
             onOpenMonthPicker={handleOpenMonthPicker}
           />
+          </>
         );
 
       case "budgetAlerts":

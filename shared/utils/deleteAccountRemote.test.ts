@@ -48,7 +48,8 @@ describe("phase ordering", () => {
     expect(nextDeletePhase("shared")).toBe("ganesh");
     expect(nextDeletePhase("ganesh")).toBe("user-tree");
     expect(nextDeletePhase("user-tree")).toBe("duress-tree");
-    expect(nextDeletePhase("duress-tree")).toBe("auth");
+    expect(nextDeletePhase("duress-tree")).toBe("readmodel");
+    expect(nextDeletePhase("readmodel")).toBe("auth");
   });
 
   it("deletes the duress tree", () => {

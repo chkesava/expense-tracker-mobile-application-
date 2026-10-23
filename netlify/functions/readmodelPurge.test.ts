@@ -1,0 +1,75 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { describe, expect, it, vi } from "vitest";
+
+import { PURGE_NOT_CONFIGURED_MESSAGE, purgeReadModel, ReadModelPurgeNotConfigured, readModelPurgeEnv } from "./_readmodelPurge";
+import { DELETE_PHASES, nextDeletePhase } from "../../shared/utils/deleteAccountRemote";
+
+const env = { url: "https://rm.supabase.co/", serviceRoleKey: "service-key" };
+
+describe("read-model purge on account deletion (SPENDLY-508)", () => {
+  it("calls readmodel_purge_user for the verified uid with the service role", async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ rows: 23, tables: {} }) }));
+    await expect(purgeReadModel("user-a", env, fetchImpl)).resolves.toEqual({ rows: 23 });
+    expect(fetchImpl).toHaveBeenCalledWith("https://rm.supabase.co/rest/v1/rpc/readmodel_purge_user", {
+      method: "POST",
+      headers: { apikey: "service-key", Authorization: "Bearer service-key", "Content-Type": "application/json" },
+      body: JSON.stringify({ p_uid: "user-a" }),
+    });
+  });
+
+  it("a second purge succeeds with zero rows", async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ rows: 0, tables: {} }) }));
+    await expect(purgeReadModel("user-a", env, fetchImpl)).resolves.toEqual({ rows: 0 });
+  });
+
+  it("rejects a 2xx whose body isn't the purge function's result, so Auth is not deleted on an unproven purge", async () => {
+    for (const body of [null, {}, [], "ok", { rows: "3", tables: {} }, { rows: -1, tables: {} }, { rows: 1.5, tables: {} }, { rows: 2 }, { rows: 2, tables: [] }]) {
+      const fetchImpl = vi.fn(async () => ({ ok: true, status: 200, json: async () => body }));
+      await expect(purgeReadModel("user-a", env, fetchImpl)).rejects.toThrow(/invalid response/);
+    }
+    const garbled = vi.fn(async () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError("Unexpected end of JSON"); } }));
+    await expect(purgeReadModel("user-a", env, garbled)).rejects.toThrow(/invalid response/);
+  });
+
+  it("throws on an outage so the phase is retried and Auth is not deleted", async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: false, status: 503, json: async () => ({ message: "internal detail" }) }));
+    await expect(purgeReadModel("user-a", env, fetchImpl)).rejects.toThrow(/HTTP 503/);
+    await expect(purgeReadModel("user-a", env, fetchImpl)).rejects.not.toThrow(/internal detail/);
+    const network = vi.fn(async () => {
+      throw new Error("fetch failed");
+    });
+    await expect(purgeReadModel("user-a", env, network)).rejects.toThrow();
+  });
+
+  it("fails closed when the site lacks the read-model settings, so Auth is never deleted with data left behind", async () => {
+    const fetchImpl = vi.fn();
+    for (const env of [{}, { url: "https://x.supabase.co" }, { serviceRoleKey: "k" }]) {
+      await expect(purgeReadModel("user-a", env, fetchImpl)).rejects.toBeInstanceOf(ReadModelPurgeNotConfigured);
+    }
+    await expect(purgeReadModel("user-a", {}, fetchImpl)).rejects.toThrow(PURGE_NOT_CONFIGURED_MESSAGE);
+    expect(PURGE_NOT_CONFIGURED_MESSAGE).not.toMatch(/READMODEL|Supabase|env/i);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(readModelPurgeEnv({} as NodeJS.ProcessEnv)).toEqual({ url: undefined, serviceRoleKey: undefined });
+  });
+
+  it("runs after both Firestore trees and before Auth is deleted", () => {
+    expect(nextDeletePhase("duress-tree")).toBe("readmodel");
+    expect(nextDeletePhase("readmodel")).toBe("auth");
+    expect(DELETE_PHASES.indexOf("readmodel")).toBeLessThan(DELETE_PHASES.indexOf("auth"));
+  });
+
+  it("the auth phase itself purges before deleting the login, even if a client skips `readmodel`", () => {
+    const source = readFileSync(path.resolve(__dirname, "delete-account.ts"), "utf8");
+    const auth = source.slice(source.indexOf('case "auth":'), source.indexOf('case "complete":'));
+    const purgeAt = auth.indexOf("purgeReadModel(uid, readModelPurgeEnv())");
+    const deleteAt = auth.indexOf("deleteUser(uid)");
+    expect(purgeAt).toBeGreaterThan(0);
+    expect(purgeAt).toBeLessThan(deleteAt);
+  });
+
+  it("delete-account wires the phase to the verified uid, never a request field", () => {
+    const source = readFileSync(path.resolve(__dirname, "delete-account.ts"), "utf8");
+    expect(source).toMatch(/case "readmodel":[\s\S]*?purgeReadModel\(uid, readModelPurgeEnv\(\)\)/);
+  });
+});

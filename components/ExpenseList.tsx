@@ -1068,6 +1068,7 @@ export function ExpenseList({
             <JournalTransactionAudit
               kind={selectedTx.kind}
               docId={selectedTx.data.id}
+              rowUpdatedAt={selectedTx.data.updatedAt}
             />
 
             {/* Action Buttons. The Gluestack Button root is a plain RN

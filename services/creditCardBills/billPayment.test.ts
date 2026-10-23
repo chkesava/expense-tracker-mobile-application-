@@ -199,6 +199,21 @@ describe("recordCreditBillPayment", () => {
     expect(bill?.data.status).toBe("PARTIALLY_PAID");
   });
 
+  it("stamps createdAt and updatedAt on the new payment (SPENDLY-571)", async () => {
+    await recordCreditBillPayment("u1", {
+      fromAccountId: "bank-1",
+      toAccountId: "card-1",
+      amount: 500,
+      date: "2026-09-17",
+      sourceType: "account",
+      paymentId: "pay-stamp",
+    });
+    const payment = writes.find((w) => w.path.includes("/accountPayments/pay-stamp"));
+    for (const field of ["createdAt", "updatedAt"]) {
+      expect(journalled(payment?.data[field]), field).toEqual({ [FIRESTORE_SENTINEL_KEY]: "serverTimestamp" });
+    }
+  });
+
   it("does not stamp a bill when settleable is 0 — payment still commits once", async () => {
     await recordCreditBillPayment("u1", {
       fromAccountId: "bank-1",

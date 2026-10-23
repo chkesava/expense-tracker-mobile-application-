@@ -47,6 +47,16 @@ export const env = {
   },
 
   /**
+   * SPENDLY-505: the read-model Supabase project (separate from the storage
+   * project above). Publishable values only; reads are authorised by the
+   * user's Firebase ID token and RLS. Empty = screens stay on Firestore.
+   */
+  readModel: {
+    url: trimEnv(process.env.EXPO_PUBLIC_READMODEL_SUPABASE_URL),
+    publishableKey: trimEnv(process.env.EXPO_PUBLIC_READMODEL_SUPABASE_PUBLISHABLE_KEY),
+  },
+
+  /**
    * Optional Sentry DSN. Empty = crash reporting stays off.
    * Unused until an SDK is wired; keep the key static so Metro can inline it.
    */
@@ -83,6 +93,10 @@ export function isSupabaseEnvConfigured(): boolean {
   // Test builds never reach Supabase (SPENDLY-175).
   if (isLocalTestMode()) return false;
   return Boolean(env.supabase.url && env.supabase.publishableKey);
+}
+
+export function isReadModelEnvConfigured(): boolean {
+  return Boolean(env.readModel.url && env.readModel.publishableKey);
 }
 
 export function isFirebaseEnvConfigured(): boolean {

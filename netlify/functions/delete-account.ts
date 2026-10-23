@@ -19,6 +19,7 @@ import {
 } from "../../shared/utils/deleteAccountRemote";
 import { planMembershipRemoval } from "../../shared/utils/ganeshAccountRemoval";
 import { duressUid, isDuressUid } from "../../shared/utils/duress";
+import { purgeReadModel, readModelPurgeEnv } from "./_readmodelPurge";
 
 type NetlifyEvent = {
   httpMethod?: string;
@@ -382,7 +383,21 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       case "duress-tree":
         finished = await runTreePhase(db, `users/${duressUid(uid)}`, startedAt, state);
         break;
+      case "readmodel": {
+        // SPENDLY-508. Throws on failure, and when the site lacks the
+        // read-model settings, so the client retries this phase and never
+        // reaches `auth` with the read-model copy still there.
+        const purged = await purgeReadModel(uid, readModelPurgeEnv());
+        state.deleted.readModelRows += purged.rows;
+        finished = true;
+        break;
+      }
       case "auth":
+        // PR #234 review: the client chooses the phase, so the server must not
+        // trust that `readmodel` ran. Purge again (idempotent: 0 rows when it
+        // did) right before the login goes. It throws, and fails closed when
+        // unconfigured, so Auth is never deleted with read-model data left.
+        state.deleted.readModelRows += (await purgeReadModel(uid, readModelPurgeEnv())).rows;
         try {
           await getAuth().deleteUser(uid);
         } catch (error) {

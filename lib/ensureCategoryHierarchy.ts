@@ -236,13 +236,14 @@ async function upsertDefaultTaxonomy(
           sortOrder: write.data.sortOrder,
           ...(write.data.icon !== undefined ? { icon: write.data.icon } : {}),
           ...(parentId !== undefined ? { parentId } : {}),
+          updatedAt: serverTimestamp(),
         },
         true
       );
     } else {
       writer.set(
         doc(db, "users", uid, "categories", write.id),
-        { isArchived: true },
+        { isArchived: true, updatedAt: serverTimestamp() },
         true
       );
     }
@@ -288,7 +289,7 @@ async function reparentCustomSubsOntoMappedParents(db: Firestore, uid: string) {
     if (!newParentId || newParentId === item.parentId) continue;
     writer.set(
       doc(db, "users", uid, "categories", item.id),
-      { parentId: newParentId },
+      { parentId: newParentId, updatedAt: serverTimestamp() },
       true
     );
     await writer.maybeFlush();
@@ -323,6 +324,7 @@ async function remapExpenses(db: Firestore, uid: string) {
       category: mapped.category,
       subcategory: mapped.subcategory,
       tags: Array.isArray(data.tags) ? data.tags : [],
+      updatedAt: serverTimestamp(),
     });
     await writer.maybeFlush();
   }

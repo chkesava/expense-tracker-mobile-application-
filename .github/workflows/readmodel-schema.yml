@@ -1,0 +1,108 @@
+name: Read-model schema
+
+# SPENDLY-504: applies the Spendly read-model migrations to a throwaway
+# Postgres 17 (the Supabase Free major version) and runs the security
+# assertions: every table exists, RLS is on everywhere, anon holds no grants,
+# authenticated holds owner-only SELECT (SPENDLY-505), including on tables
+# added later.
+#
+# Quality gate only. It never connects to a Supabase project and holds no
+# secrets; production migrations are applied by hand
+# (docs/SPENDLY-504-readmodel-schema.md).
+
+on:
+  pull_request:
+    paths:
+      - "supabase-readmodel/**"
+      - ".github/workflows/readmodel-schema.yml"
+  push:
+    branches: [main]
+    paths:
+      - "supabase-readmodel/**"
+      - ".github/workflows/readmodel-schema.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  schema:
+    name: Apply migrations + security assertions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          # A throwaway container that lives only for this job. Trust auth
+          # instead of a password, so no credential-shaped value sits in the
+          # repo (GitGuardian flagged the old placeholder on PR #234).
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGDATABASE: postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create the Supabase roles
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/bootstrap_roles.sql
+
+      - name: Apply migrations in order
+        run: |
+          set -euo pipefail
+          for f in $(ls supabase-readmodel/supabase/migrations/*.sql | sort); do
+            echo "Applying $f"
+            psql -v ON_ERROR_STOP=1 -q -f "$f"
+          done
+
+      - name: Security assertions
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/assert_security.sql
+
+      - name: RLS behaviour (SPENDLY-505)
+        # Impersonates PostgREST requests: own rows only, tombstones hidden,
+        # other projects / expired / duress / anon claims see nothing, and
+        # every write is denied. Rolled back at the end.
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/rls_behaviour.sql
+
+      - name: Sync write functions (SPENDLY-506)
+        # Version-guarded upsert (replay and older versions are no-ops),
+        # tombstone and un-tombstone, unknown tables refused, no client execute.
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/sync_functions.sql
+
+      - name: Account purge (SPENDLY-508)
+        # Deletes every row and all sync bookkeeping for the uid and its duress
+        # twin; idempotent; a late sync cannot resurrect it; client roles can't call it.
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/purge.sql
+
+      - name: Count parity function (SPENDLY-509)
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/verify.sql
+
+      - name: Reporting views — missing data, invariants, repair, access (SPENDLY-510)
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/views.sql
+
+      - name: Golden — every view equals the TypeScript reference (SPENDLY-510)
+        # Generated from the SPENDLY-503 fixture by scripts/readmodel-golden.ts;
+        # scripts/readmodelGolden.test.ts keeps the file in step with the TypeScript.
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/golden.sql
+
+      - name: Migrations are idempotent to re-check
+        # A second assertion run must still pass (the probe table is dropped).
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/assert_security.sql
+
+      - name: Performance budget (SPENDLY-519)
+        # Every app source query, as the signed-in user under RLS, against a
+        # synthetic 30K-transaction user among 49 others in a separate
+        # database: p95 < 300 ms and no sequential scan of a user table.
+        run: bash supabase-readmodel/tests/perf/run_perf.sh

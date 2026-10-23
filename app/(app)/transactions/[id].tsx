@@ -536,6 +536,7 @@ export default function TransactionDetailsScreen() {
                 kind="payment"
                 docId={payment.id}
                 formatAccount={paymentAccountName}
+                rowUpdatedAt={(payment as { updatedAt?: unknown }).updatedAt}
               />
             </Card>
           ) : null}
