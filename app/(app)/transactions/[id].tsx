@@ -14,11 +14,13 @@ import { TransactionFeeCard } from "@/components/fees/TransactionFeeCard";
 import { Amount } from "@/components/common/Amount";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { MerchantCorrectionSheet } from "@/components/merchant/MerchantCorrectionSheet";
+import { JournalRelatedRecords } from "@/components/ledger/JournalRelatedRecords";
 import { JournalTransactionAudit } from "@/components/ledger/JournalTransactionAudit";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useAccountActivities } from "@/hooks/useAccountActivities";
+import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useAccounts } from "@/hooks/useAccounts";
@@ -47,7 +49,12 @@ import {
   formatClockLabel,
 } from "@/shared/utils/activityDisplay";
 import { isCashbackPayment } from "@/shared/types/expense";
-import { currentMonthKey } from "@/shared/utils/dates";
+import { currentMonthKey, monthKeyOf } from "@/shared/utils/dates";
+import { findJournalRelatedRecords } from "@/shared/utils/journalRelatedRecords";
+import { categoryDetailHref } from "@/shared/utils/spendingDrilldown";
+import { listAccountDocuments } from "@/services/accounts/accountDocumentsStore";
+import { createDocumentSignedUrl } from "@/services/accounts/spendlyFilesClient";
+import * as WebBrowser from "expo-web-browser";
 import { currencySymbol, formatAmount } from "@/shared/utils/formatCurrency";
 import { ledgerRowEditability } from "@/shared/utils/ledgerRow";
 import {
@@ -110,6 +117,8 @@ export default function TransactionDetailsScreen() {
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
   const { spaces } = useSpaces();
+  const { entries } = useAccountEntries();
+  const [openingDocument, setOpeningDocument] = useState(false);
 
   const journalKind = ref && isJournalKind(ref.kind) ? ref.kind : null;
   const expense = useMemo(
@@ -121,6 +130,44 @@ export default function TransactionDetailsScreen() {
     [journalKind, incomes, ref?.id]
   );
   const journalRow = expense ?? income;
+
+  // SPENDLY-576: only relationships the Journal already proves (cashback on
+  // this expense, the bill that covered it, an investment entry, shared tags)
+  // — the same rule the Money tab's detail sheet uses.
+  const relatedRecords = useMemo(
+    () =>
+      journalRow
+        ? findJournalRelatedRecords({
+            expense: expense ?? undefined,
+            income: income ?? undefined,
+            payments,
+            entries,
+            nameById: (id) => spaces.find((space) => space.id === id)?.name,
+          })
+        : [],
+    [journalRow, expense, income, payments, entries, spaces]
+  );
+
+  // The statement an imported row came from. Documents are listed only on tap,
+  // and the signed URL is fetched per open, as on the account screen.
+  const openSourceDocument = async (accountId: string, documentId: string) => {
+    if (!user?.uid) return;
+    setOpeningDocument(true);
+    try {
+      const documents = await listAccountDocuments(user.uid, accountId);
+      const document = documents.find((d) => d.id === documentId);
+      if (!document) {
+        appDialog.alert("Document not available", "The statement this came from has been removed.");
+        return;
+      }
+      await WebBrowser.openBrowserAsync(await createDocumentSignedUrl(document.storagePath));
+    } catch (error) {
+      logError("transactionDetail.openDocument", error);
+      appDialog.alert("Couldn't open the document", friendlyErrorMessage(error));
+    } finally {
+      setOpeningDocument(false);
+    }
+  };
 
   const [merchantOverrides, setMerchantOverrides] = useState<MerchantOverride[]>([]);
   const [merchantSheetOpen, setMerchantSheetOpen] = useState(false);
@@ -451,8 +498,15 @@ export default function TransactionDetailsScreen() {
                   value={
                     expense.subcategory
                       ? `${expense.category} › ${expense.subcategory}`
-                      : expense.category
+                      : expense.category || "Uncategorised"
                   }
+                  // SPENDLY-576: to that category's month (SPENDLY-574), when it has one.
+                  onPress={
+                    expense.category && !expense.deletedAt
+                      ? () => router.push(categoryDetailHref(expense.category, monthKeyOf(expense) ?? currentMonthKey()) as Href)
+                      : undefined
+                  }
+                  accessibilityHint="Opens this category's spending for the month"
                 />
               ) : null}
               {income ? <Row label="Source" value={income.source} /> : null}
@@ -499,6 +553,14 @@ export default function TransactionDetailsScreen() {
               {expense?.statementImportFingerprint ? (
                 <Row label="Recorded from" value="Statement import" />
               ) : null}
+              {expense?.accountDocumentId && expense.accountId ? (
+                <Row
+                  label="Source document"
+                  value={openingDocument ? "Opening…" : "View statement"}
+                  onPress={openingDocument ? undefined : () => void openSourceDocument(expense.accountId!, expense.accountDocumentId!)}
+                  accessibilityHint="Opens the statement this transaction was imported from"
+                />
+              ) : null}
               {payment?.voidedAt ? (
                 <Row label="Status" value="Voided" valueColor={theme.colors.destructive} />
               ) : null}
@@ -512,6 +574,12 @@ export default function TransactionDetailsScreen() {
               ) : null}
             </View>
           </Card>
+
+          {relatedRecords.length > 0 ? (
+            <Card>
+              <JournalRelatedRecords records={relatedRecords} />
+            </Card>
+          ) : null}
 
           <TransactionFeeCard transactionRef={parsed.ref} />
 

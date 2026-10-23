@@ -23,6 +23,7 @@ const RESTORABLE_ROUTES = [
   "/app-selector",
   "/accounts/",
   "/credit-card-bills/",
+  "/transactions",
   "/transactions/",
   "/runway",
   "/runway/",

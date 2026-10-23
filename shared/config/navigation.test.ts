@@ -46,6 +46,8 @@ describe("resolveAndroidBackAction", () => {
     // SPENDLY-575 budget drill-downs.
     expect(resolveAndroidBackAction("/budgets?month=2026-10")).toBe("pop");
     expect(resolveAndroidBackAction("/budgets/Food?month=2026-10&sub=Groceries")).toBe("pop");
+    // SPENDLY-576 transactions list.
+    expect(resolveAndroidBackAction("/transactions?month=2026-10&tab=transfers")).toBe("pop");
   });
 
   it("pops out of screens that used to fall through to the navigator", () => {

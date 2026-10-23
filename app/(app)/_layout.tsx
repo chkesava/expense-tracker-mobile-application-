@@ -238,6 +238,12 @@ function AppShellInner() {
               }}
             />
             <Stack.Screen
+              name="transactions/index"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
               name="transactions/[id]"
               options={{
                 animation: "slide_from_right",

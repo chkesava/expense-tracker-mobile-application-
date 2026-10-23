@@ -10,7 +10,7 @@
 |---|---|---|---|---|
 | SPENDLY-574 | Spending Overview category details + Total Spending (donut centre) | Merged into the epic branch (`88218d57`) after the owner's Expo web review; Jira In Progress until main | `feature/SPENDLY-574-spending-category-details` (`47f14d27`, `f37a2831`, `19d9bcad`) | `docs/SPENDLY-574-spending-category-details.md` |
 | SPENDLY-575 | Budget Progress overview and category drill-down | Merged into the epic branch (`3d3fb336`); Jira In Progress until main | `feature/SPENDLY-575-budget-progress-drilldown` (`a80bebdf`) | `docs/SPENDLY-575-budget-progress-drilldown.md` |
-| SPENDLY-576 | Recent Transactions list and transaction details | To Do | — | — |
+| SPENDLY-576 | Recent Transactions list and transaction details | Built on story branch (worktree); awaiting owner UI check and merge approval | `feature/SPENDLY-576-recent-transactions` | `docs/SPENDLY-576-recent-transactions.md` |
 | SPENDLY-577 | Individual transaction details and contextual actions | To Do | — | — |
 | SPENDLY-578 | Spending Trends charts, comparisons and insights | To Do | — | — |
 | SPENDLY-579 | Spending-by-subcategory analytics and drill-down | To Do | — | — |
@@ -35,4 +35,9 @@
   - Budget figures and statuses come only from `computeActiveCategoryBudgets` / `computeSpendlyBudget`.
   - Totals across category budgets use `categoryBudgetRollup`, which never counts a subcategory budget inside its parent's.
   - The real budget reference is `generated/a_clean_high_fidelity_ui_ux_mockup_image_consisti.png`; the alias shows the transactions flow.
+- **Transactions list (576):**
+  - `/transactions` is the Journal pipeline plus transfers (`shared/utils/transactionsFeed.ts`).
+  - Transfers are listed, never totalled.
+  - The detail stays `/transactions/[id]`.
+  - The real reference is `generated/a_wide_high_resolution_ui_mockup_triptych_of_a_mo.png`.
 - **UI review (574):** the user reviews UI personally on local Expo web with demo data. Agents stop after each story and do not capture screenshots.
