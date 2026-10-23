@@ -28,13 +28,16 @@ export type HealthInput = {
 };
 
 export const THRESHOLDS = {
-  /** 3-hourly schedule plus an hour for GitHub's start delay. */
-  maxSyncGapHours: 4,
+  /** Nightly schedule (2026-10-23) plus two hours for GitHub's start delay. */
+  maxSyncGapHours: 26,
   /** Nightly full run plus two hours of slack. */
   maxFullGapHours: 26,
   maxFailureAgeHours: 24,
-  /** ADR §8: ≤ 3 h for creates and edits, plus an hour of slack. */
-  maxLagP95Hours: 4,
+  /**
+   * Nightly sync: a copy is at most a day old, plus two hours of slack. Back
+   * to a few hours once the per-write push (SPENDLY-583) keeps it current.
+   */
+  maxLagP95Hours: 26,
   dailyReadBudget: 12_000,
 };
 
