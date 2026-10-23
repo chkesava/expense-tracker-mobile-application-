@@ -14,7 +14,7 @@
 | SPENDLY-577 | Individual transaction details and contextual actions | Merged into the epic branch; Jira In Progress until main | `feature/SPENDLY-577-transaction-detail-actions` (`25048dbc`) | `docs/SPENDLY-577-transaction-detail-actions.md` |
 | SPENDLY-578 | Spending Trends charts, comparisons and insights | Merged into the epic branch; Jira In Progress until main | `feature/SPENDLY-578-spending-trends` (`5014a8bc`) | `docs/SPENDLY-578-spending-trends.md` |
 | SPENDLY-579 | Spending-by-subcategory analytics and drill-down | Merged into the epic branch; Jira In Progress until main | `feature/SPENDLY-579-subcategory-drilldown` (`b8845093`) | `docs/SPENDLY-579-subcategory-drilldown.md` |
-| SPENDLY-580 | Highest Spending Categories ranking and drill-down | To Do | — | — |
+| SPENDLY-580 | Highest Spending Categories ranking and drill-down | Built on story branch (worktree); awaiting owner merge approval | `feature/SPENDLY-580-highest-spending-categories` | `docs/SPENDLY-580-highest-spending-categories.md` |
 | SPENDLY-582 | Recurring expenses overview, schedules and payments | To Do | — | — |
 
 ## Decisions
@@ -53,4 +53,8 @@
   - "No subcategory" is an explicit `__none__` bucket.
   - Merchants come from SPENDLY-186 recognition, with unrecognised payees in one bucket.
   - The real reference is `generated/wide_multi_panel_mobile_app_ui_mockup_screenshot.png`.
+- **Highest categories (580):**
+  - `/top-categories`: whole-month periods summed from summaries, ranked by the donut rule.
+  - Taps reuse the 574 and 579 pages.
+  - The real reference is `generated/a_wide_detailed_ui_mockup_composite_image_of_a_mo.png`.
 - **UI review (574):** the user reviews UI personally on local Expo web with demo data. Agents stop after each story and do not capture screenshots.

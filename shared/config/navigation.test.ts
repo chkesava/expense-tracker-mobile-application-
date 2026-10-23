@@ -52,6 +52,8 @@ describe("resolveAndroidBackAction", () => {
     expect(resolveAndroidBackAction("/trends?month=2026-10&gran=weekly")).toBe("pop");
     // SPENDLY-579 subcategory detail.
     expect(resolveAndroidBackAction("/spending/Food/Groceries?month=2026-10&tab=merchants")).toBe("pop");
+    // SPENDLY-580 highest spending categories.
+    expect(resolveAndroidBackAction("/top-categories?month=2026-10&period=this_year")).toBe("pop");
   });
 
   it("pops out of screens that used to fall through to the navigator", () => {
