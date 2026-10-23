@@ -280,6 +280,7 @@ export function SpendingCurveChart({
                     x={chartPaddingLeft - 6}
                     y={y + 3.5}
                     fontSize={9}
+                    fontFamily={theme.fontFamily.regular}
                     fill={theme.colors.mutedForeground}
                     textAnchor="end"
                   >
@@ -339,6 +340,7 @@ export function SpendingCurveChart({
               x={tick.x}
               y={height - 8}
               fontSize={10}
+              fontFamily={theme.fontFamily.regular}
               fill={theme.colors.mutedForeground}
               textAnchor={tick.anchor}
             >

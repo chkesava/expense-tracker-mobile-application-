@@ -72,10 +72,26 @@ No filename the ticket names is missing; two of the aliases point at the wrong i
 - `app/(app)/spending/[category].tsx`: Category details, with Overview, Transactions, Budget and Insights tabs.
 - `app/(app)/_layout.tsx`, `shared/config/navigation.ts`, `shared/config/routeRestoration.ts` (+ tests): route registration.
 
+## Review round 1 (2026-10-23, owner's Expo web check)
+Gaps the owner found against the category-details reference, now closed:
+- **Amount / Transactions / Trend switch** above the spending trend (`components/spending/SpendingTrendPanel.tsx`).
+  - *Amount* and *Trend* (a line) come from the month summaries.
+  - *Transactions* counts ledger rows per month. It loads the earlier months only when that view is opened: 6 bounded `loadMonth` reads, each skipped when the month is already loaded.
+- **Transactions** and **Average per transaction** cards sit under the chart, each with a vs-last-month chip and last month's figure (`TransactionComparisonCards`). Last month's rows cost one bounded `loadMonth` read.
+- **Comparison callout** ("You spent N% less/more than last month"), shown only when last month had spending. It opens Insights (category page) or Trends (Total Spending).
+- **Hero card** matches the reference: icon tile, share line, amount with a trend chip, and "vs last month (…)".
+- **Breakdown:** the donut and legend now sit side by side on phone widths.
+- **Shared charts:**
+  - `BarChart` value axes round to clean steps (`shared/utils/chartScale.ts`: 0 / 5K / 10K, not 4.6K / 9.3K).
+  - `BarChart` and `SpendingCurveChart` axis labels use the theme font. They rendered in a serif font on web.
+  - These affect every screen that uses those charts, as a visual fix only.
+- Total Spending got the same hero, trend panel, cards and callout.
+
 ## Visual deviations from the references
 - The period selector is a month stepper (‹ Oct 2026 ›), not a dropdown. It cannot go past the current month.
 - **Sorting** is a single chip that cycles Latest → Oldest → Highest → Lowest, not a dropdown.
 - **Subcategory-to-transactions:** tapping a subcategory in the category Overview opens its Transactions tab, already filtered to it. A separate subcategory page is SPENDLY-579.
+- **Trend chart:** the reference pins a value bubble over the current month. Here the value shows when you tap a bar, using the chart's existing tooltip.
 - **Insights** list only what the data supports:
   - month-on-month change;
   - the comparison with the 3+-month average;

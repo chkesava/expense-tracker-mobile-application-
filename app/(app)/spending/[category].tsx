@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
-import { ChevronRight, Lightbulb, Target, TrendingDown, TrendingUp } from "lucide-react-native";
+import { Lightbulb, Target, TrendingDown, TrendingUp } from "lucide-react-native";
 
 import { DonutChart } from "@/components/charts/DonutChart";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -9,11 +9,12 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
 import { ProgressIndicator, type ProgressStatus } from "@/components/dashboard/ProgressIndicator";
-import { DataRow, MetaLabel, RowGlyph, Section, StatTile, TrendText, useSurfaces } from "@/components/dashboard/primitives";
+import { DataRow, RowGlyph, Section, useSurfaces } from "@/components/dashboard/primitives";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { spendingSliceColor } from "@/components/spending/palette";
-import { DataNote, MonthlySpendBars, SpendingMonthSelector } from "@/components/spending/SpendingParts";
+import { CalloutCard, DataNote, SpendingHero, SpendingMonthSelector } from "@/components/spending/SpendingParts";
+import { SpendingTrendPanel, TransactionComparisonCards } from "@/components/spending/SpendingTrendPanel";
 import { SpendingTransactionList } from "@/components/spending/SpendingTransactionList";
 import { Button } from "@/components/ui/Button";
 import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
@@ -28,11 +29,12 @@ import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
 import type { DashboardPeriodSummary } from "@/shared/types/financialSummary";
 import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { computeActiveCategoryBudgets } from "@/shared/utils/dashboardWidgets";
-import { currentMonthKey } from "@/shared/utils/dates";
+import { currentMonthKey, shiftMonthKey } from "@/shared/utils/dates";
 import { monthLabel } from "@/shared/utils/monthLabel";
 import {
   CATEGORY_DETAIL_TABS,
   categorySpendSummary,
+  comparisonCallout,
   decodeCategoryParam,
   monthlySpendSeries,
   resolveSpendingMonth,
@@ -40,7 +42,6 @@ import {
   spendComparison,
   spendingInsights,
   totalSpendingHref,
-  transactionStats,
   type CategorySpendSummary,
 } from "@/shared/utils/spendingDrilldown";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -136,16 +137,20 @@ export default function CategoryDetailScreen() {
         </>
       ) : (
         <>
-          <Section testID="category-detail-hero">
-            <MetaLabel>{`Spent in ${monthLabel(month, "long")}`}</MetaLabel>
-            <FinancialAmount value={detail.total} currency={currency} size="hero" weight="bold" fit />
-            <Text style={[styles.muted, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
-              {detail.total > 0 ? `${Math.round(detail.shareOfTotal)}% of your total spending` : "No spending in this category this month"}
-            </Text>
-            {comparison ? (
-              <TrendText delta={Math.round(comparison.pct)} invert suffix={`vs last month (${money(comparison.previous)})`} />
-            ) : null}
-          </Section>
+          <SpendingHero
+            testID="category-detail-hero"
+            glyph={<Text style={styles.heroEmoji}>{getCategoryIcon(category)}</Text>}
+            glyphTint={theme.colors.primary}
+            caption={
+              detail.total > 0
+                ? `${Math.round(detail.shareOfTotal)}% of your total spending in ${monthLabel(month, "long")}`
+                : `No ${category} spending in ${monthLabel(month, "long")}`
+            }
+            amount={detail.total}
+            currency={currency}
+            change={comparison}
+            previousLabel={comparison ? `vs last month (${money(comparison.previous)})` : undefined}
+          />
 
           {isFromCache ? <DataNote offline>You're offline — showing the figures saved on this device.</DataNote> : null}
 
@@ -156,7 +161,9 @@ export default function CategoryDetailScreen() {
               detail={detail}
               summaries={summaries}
               currency={currency}
+              callout={comparisonCallout(category, detail.total, comparison?.previous, monthLabel(shiftMonthKey(month, -1), "long"))}
               onPickSubcategory={(sub) => router.setParams({ tab: "transactions", sub })}
+              onOpenInsights={() => setTab("insights")}
             />
           ) : tab === "transactions" ? (
             <TransactionsTab category={category} month={month} detail={detail} currency={currency} initialSub={typeof params.sub === "string" ? params.sub : null} />
@@ -177,38 +184,38 @@ function OverviewTab({
   detail,
   summaries,
   currency,
+  callout,
   onPickSubcategory,
+  onOpenInsights,
 }: {
   category: string;
   month: string;
   detail: CategorySpendSummary;
   summaries: DashboardPeriodSummary[];
   currency: string;
+  callout: ReturnType<typeof comparisonCallout>;
   onPickSubcategory: (sub: string) => void;
+  onOpenInsights: () => void;
 }) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const money = useGhostMoney(currency);
-  const { rows, loading: rowsLoading } = useMonthExpenseRows(month, category);
-  const stats = transactionStats(rows);
-  const series = useMemo(() => monthlySpendSeries(summaries, month, 6, category), [summaries, month, category]);
   const segments = detail.subcategories.map((s, i) => ({
     id: s.key,
     label: s.label,
     value: s.amount,
     color: spendingSliceColor(i, s.label, theme.colors, ""),
   }));
-  const tileValue = { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold };
 
   return (
     <>
       {detail.total > 0 ? (
-        <Section title="Subcategory breakdown" subtitle={`Share of ${category}`}>
+        <Section title="Category breakdown" subtitle={`Share of ${category}`}>
           <View style={styles.breakdown}>
             <DonutChart
               data={segments}
-              size={148}
-              strokeWidth={20}
+              size={124}
+              strokeWidth={18}
               currency={currency}
               title="Total spent"
               titleBelow
@@ -236,7 +243,6 @@ function OverviewTab({
                     {Math.round(s.percentage)}%
                   </Text>
                   <FinancialAmount value={s.amount} currency={currency} size="xs" weight="medium" />
-                  <ChevronRight size={14} color={theme.colors.mutedForeground} />
                 </Pressable>
               ))}
             </View>
@@ -251,22 +257,11 @@ function OverviewTab({
         />
       )}
 
-      <View style={styles.tiles}>
-        <StatTile label="Transactions" style={styles.tile}>
-          <Text style={[styles.tileValue, tileValue]}>{rowsLoading ? "…" : String(stats.count)}</Text>
-        </StatTile>
-        <StatTile label="Average per transaction" style={styles.tile}>
-          {stats.average === null || rowsLoading ? (
-            <Text style={[styles.tileValue, tileValue]}>—</Text>
-          ) : (
-            <FinancialAmount value={stats.average} currency={currency} size="md" weight="semibold" />
-          )}
-        </StatTile>
-      </View>
+      <SpendingTrendPanel summaries={summaries} month={month} category={category} currency={currency} />
 
-      <Section title="Spending trend" subtitle="Last 6 months">
-        <MonthlySpendBars series={series} currency={currency} formatMoney={money} />
-      </Section>
+      <TransactionComparisonCards month={month} category={category} currency={currency} />
+
+      {callout ? <CalloutCard title={callout.title} body={callout.body} onPress={onOpenInsights} /> : null}
     </>
   );
 }
@@ -482,16 +477,14 @@ function InsightsTab({
 const styles = StyleSheet.create({
   content: { gap: 14 },
   headerEmoji: { fontSize: 20 },
+  heroEmoji: { fontSize: 30 },
   muted: { fontSize: 13, lineHeight: 18 },
-  breakdown: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 14 },
-  legend: { flex: 1, minWidth: 200, gap: 2 },
-  legendRow: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 40, paddingHorizontal: 6, borderRadius: 10 },
+  breakdown: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 12 },
+  legend: { flex: 1, minWidth: 150, gap: 0 },
+  legendRow: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 36, paddingHorizontal: 4, borderRadius: 10 },
   dot: { width: 10, height: 10, borderRadius: 5 },
-  legendLabel: { flex: 1, fontSize: 13.5 },
+  legendLabel: { flex: 1, fontSize: 12.5 },
   legendPct: { fontSize: 12.5, fontVariant: ["tabular-nums"] },
-  tiles: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  tile: { flexGrow: 1, flexBasis: 130 },
-  tileValue: { fontSize: 18 },
   budgetList: { gap: 16 },
   budgetLine: { gap: 6 },
   budgetTop: { flexDirection: "row", alignItems: "center", gap: 8 },

@@ -1,16 +1,17 @@
 import { memo, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { ChevronLeft, ChevronRight, CloudOff, Info } from "lucide-react-native";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, CloudOff, Info, Lightbulb } from "lucide-react-native";
 
 import { BarChart } from "@/components/charts/BarChart";
 import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
 import { ProgressIndicator } from "@/components/dashboard/ProgressIndicator";
 import { RowGlyph, useSurfaces, withAlpha } from "@/components/dashboard/primitives";
+import { Card } from "@/components/ui/Card";
 import { haptic } from "@/lib/haptics";
 import { getCategoryIcon } from "@/shared/data/categoryTaxonomy";
 import { shiftMonthKey } from "@/shared/utils/dates";
 import { monthLabel } from "@/shared/utils/monthLabel";
-import type { MonthSpendPoint } from "@/shared/utils/spendingDrilldown";
+import type { MonthSpendPoint, SpendComparison } from "@/shared/utils/spendingDrilldown";
 import { useTheme } from "@/theme/ThemeProvider";
 
 /* ------------------------------------------------------- SpendingMonthSelector */
@@ -195,6 +196,175 @@ export function CategoryShareRow({
   );
 }
 
+/* ------------------------------------------------------------------ TrendChip */
+
+/**
+ * A month-on-month change as a small pill (arrow + percent). Less spending is
+ * shown as the good direction, as `TrendText invert` does elsewhere; the arrow
+ * and the spoken label carry the meaning, not the colour alone.
+ */
+export function TrendChip({ change, subject = "" }: { change: SpendComparison; subject?: string }) {
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
+  const pct = Math.abs(Math.round(change.pct));
+  const flat = change.direction === "flat" || pct === 0;
+  const color = flat
+    ? theme.colors.mutedForeground
+    : change.direction === "down"
+      ? theme.colors.success
+      : theme.colors.destructive;
+  const Icon = change.direction === "down" ? ArrowDown : ArrowUp;
+  const spoken = flat ? `${subject} unchanged from last month` : `${subject} ${change.direction} ${pct}% from last month`;
+  return (
+    <View
+      style={[styles.chip, { backgroundColor: flat ? surfaces.control : surfaces.wash(color) }]}
+      accessible
+      accessibilityLabel={spoken.trim()}
+    >
+      {flat ? null : <Icon size={12} color={color} strokeWidth={2.6} />}
+      <Text style={[styles.chipText, { color, fontFamily: theme.fontFamily.semibold }]}>{flat ? "0%" : `${pct}%`}</Text>
+    </View>
+  );
+}
+
+/* ---------------------------------------------------------------- SpendingHero */
+
+/**
+ * The drill-down header card: a glyph tile, the share line, the amount with its
+ * trend chip, and what it is compared against.
+ */
+export function SpendingHero({
+  glyph,
+  glyphTint,
+  caption,
+  amount,
+  currency,
+  change,
+  previousLabel,
+  testID,
+}: {
+  glyph: ReactNode;
+  glyphTint: string;
+  caption: string;
+  amount: number;
+  currency: string;
+  change: SpendComparison | null;
+  /** e.g. "vs last month (₹6,620.10)"; omitted with no comparison. */
+  previousLabel?: string;
+  testID?: string;
+}) {
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
+  return (
+    <Card testID={testID} variant="outlined" elevation={0} radius={20} style={styles.cardEdge} contentStyle={styles.hero}>
+      <View style={[styles.heroGlyph, { backgroundColor: withAlpha(glyphTint, surfaces.isDark ? 0.2 : 0.12) }]}>{glyph}</View>
+      <View style={styles.heroBody}>
+        <Text
+          style={[styles.heroCaption, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+          numberOfLines={2}
+        >
+          {caption}
+        </Text>
+        <View style={styles.heroAmountRow}>
+          <FinancialAmount value={amount} currency={currency} size="xl" weight="bold" fit />
+          {change ? <TrendChip change={change} subject="Spending" /> : null}
+        </View>
+        {change && previousLabel ? (
+          <Text style={[styles.heroCaption, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
+            {previousLabel}
+          </Text>
+        ) : null}
+      </View>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------ ComparisonStat */
+
+/** A stat card: glyph, label, value with trend chip, and last month's figure. */
+export function ComparisonStat({
+  icon,
+  tint,
+  label,
+  value,
+  change,
+  footnote,
+}: {
+  icon: ReactNode;
+  tint: string;
+  label: string;
+  value: ReactNode;
+  change: SpendComparison | null;
+  footnote?: string;
+}) {
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
+  return (
+    <Card variant="outlined" elevation={0} radius={18} style={[styles.cardEdge, styles.statOuter]} contentStyle={styles.stat}>
+      <View style={[styles.statGlyph, { backgroundColor: withAlpha(tint, surfaces.isDark ? 0.2 : 0.12) }]}>{icon}</View>
+      <View style={styles.statBody}>
+        <Text
+          style={[styles.statLabel, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.medium }]}
+          numberOfLines={2}
+        >
+          {label}
+        </Text>
+        <View style={styles.statValueRow}>
+          {value}
+          {change ? <TrendChip change={change} subject={label} /> : null}
+        </View>
+        {footnote ? (
+          <Text
+            style={[styles.statFoot, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+            numberOfLines={2}
+          >
+            {footnote}
+          </Text>
+        ) : null}
+      </View>
+    </Card>
+  );
+}
+
+/* ---------------------------------------------------------------- CalloutCard */
+
+/** The comparison callout under the stats; opens Insights when tappable. */
+export function CalloutCard({ title, body, onPress }: { title: string; body: string; onPress?: () => void }) {
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
+  const content = (
+    <>
+      <View style={[styles.statGlyph, { backgroundColor: surfaces.wash(theme.colors.warning) }]}>
+        <Lightbulb size={18} color={theme.colors.warning} strokeWidth={2.2} />
+      </View>
+      <View style={styles.statBody}>
+        <Text style={[styles.calloutTitle, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}>
+          {title}
+        </Text>
+        <Text style={[styles.statFoot, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
+          {body}
+        </Text>
+      </View>
+      {onPress ? <ChevronRight size={16} color={theme.colors.mutedForeground} strokeWidth={2.2} /> : null}
+    </>
+  );
+  const base = [styles.callout, { backgroundColor: surfaces.wash(theme.colors.primary), borderColor: theme.colors.border }];
+  if (!onPress) return <View style={base}>{content}</View>;
+  return (
+    <Pressable
+      onPress={() => {
+        void haptic.selection();
+        onPress();
+      }}
+      style={({ pressed }) => [...base, pressed && styles.pressed]}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. ${body}. Open insights`}
+    >
+      {content}
+    </Pressable>
+  );
+}
+
 /* ------------------------------------------------------------------- DataNote */
 
 /** One-line explanatory note: offline data, partial lists, reconciliation gaps. */
@@ -214,6 +384,95 @@ export function DataNote({ children, offline = false }: { children: ReactNode; o
 }
 
 const styles = StyleSheet.create({
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  chipText: {
+    fontSize: 12,
+    fontVariant: ["tabular-nums"],
+  },
+  cardEdge: {
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  hero: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    padding: 16,
+  },
+  heroGlyph: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  heroCaption: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  heroAmountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  statOuter: {
+    flexGrow: 1,
+    flexBasis: 150,
+  },
+  stat: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: 14,
+  },
+  statGlyph: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  statLabel: {
+    fontSize: 12.5,
+  },
+  statValueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  statFoot: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  callout: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  calloutTitle: {
+    fontSize: 14.5,
+  },
   monthSelector: {
     flexDirection: "row",
     alignItems: "center",

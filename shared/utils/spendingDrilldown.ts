@@ -232,6 +232,55 @@ export function monthlySpendSeries(
   return points;
 }
 
+/**
+ * Transactions per month from ledger rows (the summaries carry no per-category
+ * count). `loadedMonths` says which months' rows are known to be complete; a
+ * month not yet loaded is `hasData: false` rather than a misleading zero.
+ */
+export function monthlyCountSeries(
+  expenses: readonly Expense[],
+  months: readonly string[],
+  loadedMonths: ReadonlySet<string>,
+  category?: string
+): MonthSpendPoint[] {
+  return months.map((month) => ({
+    month,
+    amount: loadedMonths.has(month) ? eligibleExpenses(expenses, month, category).length : 0,
+    hasData: loadedMonths.has(month),
+  }));
+}
+
+/** The `count` month keys ending at `endMonth`, oldest first. */
+export function monthWindow(endMonth: string, count: number): string[] {
+  const months: string[] = [];
+  for (let i = Math.max(1, count) - 1; i >= 0; i -= 1) months.push(shiftMonthKey(endMonth, -i));
+  return months;
+}
+
+/**
+ * The comparison callout under a drill-down's stats: a month-on-month change
+ * stated plainly, or null when there is no comparable previous month.
+ */
+export function comparisonCallout(
+  label: string,
+  current: number,
+  previous: number | null | undefined,
+  previousMonthLabel: string
+): { title: string; body: string; direction: "up" | "down" | "flat" } | null {
+  const change = spendComparison(current, previous);
+  if (!change) return null;
+  const pct = Math.abs(Math.round(change.pct));
+  if (change.direction === "flat" || pct === 0) {
+    return { title: "Same as last month", body: `${label} spending matches ${previousMonthLabel}.`, direction: "flat" };
+  }
+  const more = change.direction === "up";
+  return {
+    title: `You spent ${pct}% ${more ? "more" : "less"} than last month`,
+    body: `${label} spending is ${more ? "higher" : "lower"} than in ${previousMonthLabel}.`,
+    direction: change.direction,
+  };
+}
+
 /** The summary's inclusion rule for one ledger row in one month (and category). */
 export function isEligibleExpense(expense: Expense, month: string, category?: string): boolean {
   if (expense.deletedAt) return false;

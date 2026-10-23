@@ -3,7 +3,7 @@ import { useEffect, useMemo } from "react";
 import { useDashboardCashFlow } from "@/hooks/useDashboardCashFlow";
 import { useExpenses } from "@/hooks/useExpenses";
 import { shiftMonthKey } from "@/shared/utils/dates";
-import { eligibleExpenses } from "@/shared/utils/spendingDrilldown";
+import { eligibleExpenses, monthlyCountSeries } from "@/shared/utils/spendingDrilldown";
 
 /**
  * SPENDLY-574 — the month summaries a spending drill-down reads: the same
@@ -52,4 +52,26 @@ export function useMonthExpenseRows(month: string, category?: string) {
     retry,
     isFromCache,
   };
+}
+
+/**
+ * SPENDLY-574 — transactions per month across `months`, for the trend chart's
+ * "Transactions" view. Each month is asked for once through `loadMonth` (a
+ * bounded date-range read, skipped when already loaded), and only while
+ * `enabled` — the chart's Amount view needs none of this.
+ */
+export function useMonthlyTransactionCounts(months: readonly string[], category: string | undefined, enabled: boolean) {
+  const { expenses, monthsLoaded, loadMonth } = useExpenses();
+  const key = months.join(",");
+
+  useEffect(() => {
+    if (!enabled) return;
+    for (const month of key.split(",")) void loadMonth(month);
+  }, [enabled, key, loadMonth]);
+
+  const series = useMemo(
+    () => monthlyCountSeries(expenses, key.split(","), monthsLoaded, category),
+    [expenses, key, monthsLoaded, category]
+  );
+  return { series, loading: enabled && series.some((p) => !p.hasData) };
 }

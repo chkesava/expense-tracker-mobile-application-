@@ -8,6 +8,9 @@ import {
   NO_SUBCATEGORY,
   categoryDetailHref,
   categorySpendSummary,
+  comparisonCallout,
+  monthWindow,
+  monthlyCountSeries,
   categorizedSpendTotal,
   decodeCategoryParam,
   eligibleExpenses,
@@ -272,5 +275,34 @@ describe("spendingInsights", () => {
     expect(insights.map((i) => i.id)).toEqual(["vs-previous", "vs-average", "top-subcategory", "largest"]);
     expect(insights[1].title).toBe("100% above your 4-month average");
     expect(insights[3].body).toBe("Party on 2026-10-04: ₹150.");
+  });
+});
+
+describe("trend panel and comparison helpers", () => {
+  it("lists the month window oldest first, across a year boundary", () => {
+    expect(monthWindow("2026-02", 4)).toEqual(["2025-11", "2025-12", "2026-01", "2026-02"]);
+    expect(monthWindow("2026-02", 0)).toEqual(["2026-02"]);
+  });
+
+  it("counts eligible rows per loaded month and never reports an unloaded month as zero data", () => {
+    const series = monthlyCountSeries(LEDGER, ["2026-09", "2026-10"], new Set(["2026-10"]), "Food");
+    expect(series).toEqual([
+      { month: "2026-09", amount: 0, hasData: false },
+      { month: "2026-10", amount: 4, hasData: true },
+    ]);
+    const all = monthlyCountSeries(LEDGER, ["2026-09", "2026-10"], new Set(["2026-09", "2026-10"]));
+    expect(all.map((p) => p.amount)).toEqual([1, 6]);
+  });
+
+  it("states the month-on-month change plainly, and nothing without a comparable month", () => {
+    expect(comparisonCallout("Food", 88, 100, "September 2026")).toEqual({
+      title: "You spent 12% less than last month",
+      body: "Food spending is lower than in September 2026.",
+      direction: "down",
+    });
+    expect(comparisonCallout("Your", 150, 100, "September 2026")?.title).toBe("You spent 50% more than last month");
+    expect(comparisonCallout("Food", 100, 100, "September 2026")?.title).toBe("Same as last month");
+    expect(comparisonCallout("Food", 100, 0, "September 2026")).toBeNull();
+    expect(comparisonCallout("Food", 100, undefined, "September 2026")).toBeNull();
   });
 });

@@ -1,23 +1,26 @@
 import { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
-import { ChevronRight, Wallet } from "lucide-react-native";
+import { Wallet } from "lucide-react-native";
 
 import { DonutChart } from "@/components/charts/DonutChart";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
-import { MetaLabel, Section, StatTile, TrendText, useSurfaces } from "@/components/dashboard/primitives";
+import { Section, StatTile, TrendText, useSurfaces } from "@/components/dashboard/primitives";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { spendingSliceColor } from "@/components/spending/palette";
 import {
+  CalloutCard,
   CategoryShareRow,
   DataNote,
   MonthlySpendBars,
+  SpendingHero,
   SpendingMonthSelector,
 } from "@/components/spending/SpendingParts";
+import { SpendingTrendPanel, TransactionComparisonCards } from "@/components/spending/SpendingTrendPanel";
 import { SpendingTransactionList } from "@/components/spending/SpendingTransactionList";
 import { Chip } from "@/components/ui/Chip";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -29,18 +32,18 @@ import { useGlobalMonth } from "@/providers/ModalProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import type { DashboardPeriodSummary } from "@/shared/types/financialSummary";
 import { spendingBreakdown, topCategoryShares } from "@/shared/utils/dashboardWidgets";
-import { currentMonthKey } from "@/shared/utils/dates";
+import { currentMonthKey, shiftMonthKey } from "@/shared/utils/dates";
 import { monthLabel } from "@/shared/utils/monthLabel";
 import {
   TOTAL_SPENDING_TABS,
   categorizedSpendTotal,
+  comparisonCallout,
   categoryDetailHref,
   isFoldedOthersSlice,
   monthlySpendSeries,
   resolveSpendingMonth,
   resolveSpendingTab,
   spendComparison,
-  transactionStats,
   uncategorizedSpend,
   type TotalSpendingTab,
 } from "@/shared/utils/spendingDrilldown";
@@ -124,21 +127,20 @@ export default function TotalSpendingScreen() {
         </>
       ) : (
         <>
-          <Section testID="total-spending-hero">
-            <MetaLabel>{`Spent in ${monthLabel(month, "long")}`}</MetaLabel>
-            <FinancialAmount value={total} currency={currency} size="hero" weight="bold" fit />
-            {comparison ? (
-              <TrendText
-                delta={Math.round(comparison.pct)}
-                invert
-                suffix={`vs last month (${money(comparison.previous)})`}
-              />
-            ) : (
-              <Text style={[styles.muted, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
-                No spending recorded last month to compare with
-              </Text>
-            )}
-          </Section>
+          <SpendingHero
+            testID="total-spending-hero"
+            glyph={<Wallet size={28} color={theme.colors.primary} strokeWidth={2.2} />}
+            glyphTint={theme.colors.primary}
+            caption={
+              comparison || total > 0
+                ? `Spent in ${monthLabel(month, "long")}`
+                : `No spending recorded in ${monthLabel(month, "long")}`
+            }
+            amount={total}
+            currency={currency}
+            change={comparison}
+            previousLabel={comparison ? `vs last month (${money(comparison.previous)})` : undefined}
+          />
 
           {isFromCache ? <DataNote offline>You're offline — showing the figures saved on this device.</DataNote> : null}
           {uncategorized > 0 ? (
@@ -146,7 +148,16 @@ export default function TotalSpendingScreen() {
           ) : null}
 
           {tab === "overview" ? (
-            <OverviewTab month={month} current={current} total={total} summaries={summaries} currency={currency} comparisonPct={comparison?.pct ?? null} onShowCategories={() => setTab("categories")} />
+            <OverviewTab
+              month={month}
+              current={current}
+              total={total}
+              summaries={summaries}
+              currency={currency}
+              callout={comparisonCallout("Your", total, comparison?.previous, monthLabel(shiftMonthKey(month, -1), "long"))}
+              onShowCategories={() => setTab("categories")}
+              onShowTrends={() => setTab("trends")}
+            />
           ) : tab === "categories" ? (
             <CategoriesTab month={month} current={current} currency={currency} />
           ) : tab === "transactions" ? (
@@ -172,23 +183,23 @@ function OverviewTab({
   total,
   summaries,
   currency,
-  comparisonPct,
+  callout,
   onShowCategories,
+  onShowTrends,
 }: {
   month: string;
   current: DashboardPeriodSummary | null;
   total: number;
   summaries: DashboardPeriodSummary[];
   currency: string;
-  comparisonPct: number | null;
+  callout: ReturnType<typeof comparisonCallout>;
   onShowCategories: () => void;
+  onShowTrends: () => void;
 }) {
   const router = useRouter();
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const money = useGhostMoney(currency);
-  const { rows, loading: rowsLoading, monthLoaded } = useMonthExpenseRows(month);
-  const stats = transactionStats(rows);
   const { categories } = useMemo(() => spendingBreakdown(current?.categoryTotals, BREAKDOWN_LIMIT), [current]);
   const segments = categories.map((c, i) => ({
     id: c.category,
@@ -196,7 +207,6 @@ function OverviewTab({
     value: c.amount,
     color: spendingSliceColor(i, c.category, theme.colors),
   }));
-  const series = useMemo(() => monthlySpendSeries(summaries, month, 6), [summaries, month]);
 
   const openSlice = (index: number) => {
     const slice = categories[index];
@@ -221,8 +231,8 @@ function OverviewTab({
         <View style={styles.breakdown}>
           <DonutChart
             data={segments}
-            size={156}
-            strokeWidth={22}
+            size={124}
+            strokeWidth={18}
             currency={currency}
             title="Total spent"
             titleBelow
@@ -250,38 +260,17 @@ function OverviewTab({
                   {Math.round(c.percentage)}%
                 </Text>
                 <FinancialAmount value={c.amount} currency={currency} size="xs" weight="medium" />
-                <ChevronRight size={14} color={theme.colors.mutedForeground} />
               </Pressable>
             ))}
           </View>
         </View>
       </Section>
 
-      <View style={styles.tiles}>
-        <StatTile label="vs last month" style={styles.tile}>
-          {comparisonPct === null ? (
-            <Text style={[styles.tileValue, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.semibold }]}>—</Text>
-          ) : (
-            <TrendText delta={Math.round(comparisonPct)} invert suffix="" />
-          )}
-        </StatTile>
-        <StatTile label="Transactions" style={styles.tile} meta={!monthLoaded && !rowsLoading ? "Loading more…" : undefined}>
-          <Text style={[styles.tileValue, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}>
-            {rowsLoading ? "…" : String(stats.count)}
-          </Text>
-        </StatTile>
-        <StatTile label="Average" style={styles.tile}>
-          {stats.average === null || rowsLoading ? (
-            <Text style={[styles.tileValue, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.semibold }]}>—</Text>
-          ) : (
-            <FinancialAmount value={stats.average} currency={currency} size="md" weight="semibold" />
-          )}
-        </StatTile>
-      </View>
+      <SpendingTrendPanel summaries={summaries} month={month} currency={currency} />
 
-      <Section title="Monthly spending" subtitle="Last 6 months">
-        <MonthlySpendBars series={series} currency={currency} formatMoney={money} />
-      </Section>
+      <TransactionComparisonCards month={month} currency={currency} />
+
+      {callout ? <CalloutCard title={callout.title} body={callout.body} onPress={onShowTrends} /> : null}
     </>
   );
 }
@@ -444,10 +433,10 @@ const styles = StyleSheet.create({
   content: { gap: 14 },
   muted: { fontSize: 13, lineHeight: 18 },
   breakdown: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 14 },
-  legend: { flex: 1, minWidth: 200, gap: 2 },
-  legendRow: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 40, paddingHorizontal: 6, borderRadius: 10 },
+  legend: { flex: 1, minWidth: 150, gap: 0 },
+  legendRow: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 36, paddingHorizontal: 4, borderRadius: 10 },
   dot: { width: 10, height: 10, borderRadius: 5 },
-  legendLabel: { flex: 1, fontSize: 13.5 },
+  legendLabel: { flex: 1, fontSize: 12.5 },
   legendPct: { fontSize: 12.5, fontVariant: ["tabular-nums"] },
   tiles: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   tile: { flexGrow: 1, flexBasis: 100 },
