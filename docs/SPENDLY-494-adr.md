@@ -60,6 +60,11 @@ The design that follows (SPENDLY-506):
 | All | **Nightly full copy**: the only pass that tombstones the changed-only collections. It also catches writers that don't stamp (older app versions, scripts) |
 
 - **Cost:** ≈ 550 reads per 3-hourly run and ≈ 3.8K for the nightly run, so **≈ 8–9K reads a day**.
+- **Amended 2026-10-23 (user): nightly only.** The 3-hourly schedule was removed.
+  - **Measured in production:** about 600 reads per changed-only run (mostly the minimum 1 read per empty query) and 4,030 for the full run, so about 9.1K a day.
+  - **Why:** with the app's measured peak near 44K a day, that would exceed the 50K Spark quota, and nothing reads the copy yet.
+  - **Now:** about 4.3K a day, and the copy may be up to a day old.
+  - **Next:** near-real-time updates come from a server-side push after each save (SPENDLY-583), which must land before any screen is switched to `supabase`. App dual-writes were rejected (the reasons are in SPENDLY-583).
 - **The job enforces its own budget:** per run and per day (default 12K). Optionally it also skips when the project's own daily read count is already high, so a peak app day (≈ 44K before 501) can't be pushed over 50K.
 - **Why not sync after every write:** it would need Blaze triggers, a per-write Netlify call (credits risk), or app write access to Supabase. All three are out on the free plans.
 

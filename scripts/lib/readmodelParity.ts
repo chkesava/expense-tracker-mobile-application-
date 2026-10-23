@@ -57,7 +57,8 @@ export function parityGate(runs: HealthRun[], now: number, days = GATE_DAYS + 1)
       reasons.push(mismatched ? `field parity: ${String(mismatched.notes?.parityMismatches)} row(s) diverged` : "no clean full sync");
     }
     if (!dayRuns.some((r) => r.mode === "verify" && r.status === "succeeded")) reasons.push("no passing count-parity verify");
-    const failed = dayRuns.filter((r) => r.status === "failed");
+    // A failed per-write push (SPENDLY-583) isn't the sync's failure: the nightly run repairs it.
+    const failed = dayRuns.filter((r) => r.status === "failed" && r.notes?.trigger !== "push");
     if (failed.length) reasons.push(`${failed.length} failed run(s): ${[...new Set(failed.map((r) => r.mode))].join(", ")}`);
     list.push({ day, clean: reasons.length === 0, reasons });
   }

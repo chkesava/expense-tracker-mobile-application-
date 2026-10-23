@@ -29,6 +29,8 @@ import { fullLedgerFixture } from "../shared/__fixtures__/readModel/fullLedger";
 import { convergence, summarizeConvergence, type ConvergenceReport, type ModelRow } from "../shared/utils/readModel/convergence";
 import { READ_MODEL_TABLES, type SourceDoc, type TableSpec } from "../shared/utils/readModel/mapping";
 import { READ_MODEL_SCREENS } from "../shared/utils/readModelMode";
+import { handleReadModelPush } from "../netlify/functions/_readmodelPushCore";
+import { livePushPorts } from "../netlify/functions/readmodel-push";
 import { runSync } from "./lib/readmodelSyncCore";
 import { firestoreReader, supabaseSink } from "./readmodel-sync";
 
@@ -355,6 +357,69 @@ async function main() {
     result(d, "every drill-b row is erased; a later full sync (Firestore still holding drill-b) does not bring it back; drill-a untouched",
       `purge ${JSON.stringify(purged)}; resync exit ${resync.status}; ${summarizeConvergence(report)}; drill-a intact: ${otherUserFine}`,
       purged.rows > 0 && resync.status === 0 && resync.output.includes("[PURGED] skipped 1") && report.converged && otherUserFine);
+  }
+
+  // D7 — per-write push (SPENDLY-583), through the same wiring as the Netlify function.
+  {
+    const d = "D7 per-write push";
+    const ports = livePushPorts({
+      db, client, enabled: true, limit: 120, maxReadsPerDay: 1_000_000,
+      // The drill's "token" is the uid; signature checks are covered by the function's unit tests.
+      verifyIdToken: async (token) => ({ uid: token }),
+    });
+    const push = (uid: string, body: unknown) =>
+      handleReadModelPush({ httpMethod: "POST", headers: { authorization: `Bearer ${uid}` }, body: JSON.stringify(body) }, ports)
+        .catch((error: unknown) => ({ statusCode: 599, headers: {}, body: String(error) }));
+    const row = async (id: string) =>
+      (await client.from("expenses").select("doc_id, amount, source_deleted").eq("uid", "drill-a").eq("doc_id", id).maybeSingle()).data as
+        { amount: number; source_deleted: boolean } | null;
+    const ref = { collection: "expenses", docId: "pushed1" };
+    const now = () => Timestamp.now();
+
+    await db.doc("users/drill-a/expenses/pushed1").set({ amount: 77, date: "2026-10-23", month: "2026-10", category: "Food & Groceries", accountId: "bank", createdAt: now(), updatedAt: now() });
+    const created = await push("drill-a", { refs: [ref] });
+    const afterCreate = await row("pushed1");
+    log(d, `new expense pushed: HTTP ${created.statusCode}; read model amount ${afterCreate?.amount}`);
+
+    await db.doc("users/drill-a/expenses/pushed1").update({ amount: 78, updatedAt: now() });
+    const edited = await push("drill-a", { refs: [ref], data: { amount: 999999 } });
+    const afterEdit = await row("pushed1");
+    log(d, `edit pushed (request also carried fake data): HTTP ${edited.statusCode}; read model amount ${afterEdit?.amount}`);
+
+    await db.doc("users/drill-a/expenses/pushed1").delete();
+    const deleted = await push("drill-a", { refs: [ref] });
+    const afterDelete = await row("pushed1");
+    log(d, `hard delete pushed: HTTP ${deleted.statusCode}; tombstoned ${afterDelete?.source_deleted}`);
+
+    const erased = await push("drill-b", { refs: [{ collection: "expenses", docId: "e1" }] });
+    log(d, `push for the erased account drill-b: HTTP ${erased.statusCode}`);
+
+    await db.doc("users/drill-a/expenses/usersync1").set({ amount: 12, date: "2026-10-23", month: "2026-10", category: "Food & Groceries", accountId: "bank", createdAt: now(), updatedAt: now() });
+    const userSync = await push("drill-a", { mode: "user" });
+    const afterUserSync = await row("usersync1");
+    const lastRun = (await client.from("sync_runs").select("mode, notes").order("id", { ascending: false }).limit(1).single()).data as { notes: { trigger?: string } };
+    log(d, `"something changed" push (per-user sync): HTTP ${userSync.statusCode}; usersync1 copied: ${!!afterUserSync}; run trigger ${lastRun?.notes?.trigger}`);
+
+    await stopPostgrest();
+    await db.doc("users/drill-a/expenses/usersync1").update({ amount: 13, updatedAt: now() });
+    const outage = await push("drill-a", { refs: [{ collection: "expenses", docId: "usersync1" }] });
+    await startPostgrest();
+    log(d, `push during a read-model outage: HTTP ${outage.statusCode} (the save in Firestore is unaffected)`);
+    const nightly = await runScript("readmodel-sync.ts", ["--mode=full"]);
+    const report = await check(db, client, new Set(["drill-b"]));
+    const quota = (await client.from("push_daily").select("requests, docs, user_syncs, rejected, failed").limit(1).single()).data;
+    log(d, `nightly full run after the outage: exit ${nightly.status}; ${summarizeConvergence(report)}; push_daily ${JSON.stringify(quota)}`);
+
+    result(d,
+      "a saved expense, its edit and its hard delete reach the read model in one push each; fake data in a request is ignored; an erased account is refused; a per-user push copies an unnamed change; a push during an outage fails without affecting Firestore and the nightly run converges",
+      `create ${created.statusCode}→${afterCreate?.amount}, edit ${edited.statusCode}→${afterEdit?.amount}, delete ${deleted.statusCode}→tombstoned ${afterDelete?.source_deleted}, erased ${erased.statusCode}, user sync ${userSync.statusCode} (${lastRun?.notes?.trigger}), outage ${outage.statusCode}, nightly ${nightly.status}: ${summarizeConvergence(report)}`,
+      created.statusCode === 200 && Number(afterCreate?.amount) === 77 &&
+      edited.statusCode === 200 && Number(afterEdit?.amount) === 78 &&
+      deleted.statusCode === 200 && afterDelete?.source_deleted === true &&
+      erased.statusCode === 403 &&
+      userSync.statusCode === 200 && !!afterUserSync && lastRun?.notes?.trigger === "push" &&
+      outage.statusCode >= 500 &&
+      nightly.status === 0 && report.converged);
   }
 
   await stopPostgrest();

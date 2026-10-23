@@ -26,8 +26,12 @@ These rules sit beside `CLAUDE.md` (Spendly safety invariants) and `docs/AGENT_W
 
 - **R1.1** Write only to Firestore, through the existing services and providers. **Never write to Supabase** from the app, a Netlify function or an Edge function. The only Supabase writers are the sync job (`scripts/readmodel-sync.ts`) and the account-deletion purge.
 - **R1.2** Every new or changed write to a synced collection must **stamp `updatedAt`** (and `createdAt` on create) with a server timestamp (SPENDLY-571).
-  - The 3-hourly sync finds changes only by `createdAt`/`updatedAt`. A write without them reaches the read model only on the nightly full run.
+  - Incremental sync runs (manual, and the per-write push of SPENDLY-583) find changes by `createdAt`/`updatedAt`. A write without them reaches the read model only on the nightly full run.
   - Add a test that the writer sets both.
+- **R1.2a** Writes to synced collections must reach the **per-write push** (SPENDLY-583), so other devices see them within seconds:
+  - Writing through `commitMutations` does this automatically, as does writing a collection that has a live listener calling `notifyReadModelSnapshot` (the 10 synced collections, today).
+  - A new writer that does neither must call `notifyReadModelWrites(uid, paths)` after its commit, or `notifyReadModelChanged(uid)` if it can't name its documents.
+  - Never send document data to the server; it reads Firestore itself.
 - **R1.3** Prefer soft deletes (`deletedAt`) for ledger rows, as today. A hard delete reaches the read model only on the nightly run, except in the always-full collections (`accounts`, `accountTypes`, `accountTransfers`, `accountEntries`).
 - **R1.4** Never write anything under `users/{uid}_duress`. The read model never reads duress trees, and nothing may make it do so.
 
@@ -77,7 +81,7 @@ These rules sit beside `CLAUDE.md` (Spendly safety invariants) and `docs/AGENT_W
 
 ## 4. Current-state money stays on Firestore
 
-- **R4.1** These stay on their existing Firestore sources: balances, net worth, card dues, the current and previous month dashboard tiles, budgets, safe-to-spend and anything else the user acts on now. Firestore's materialized values are authoritative. The read model has up to 3 hours of lag, and **never** owns a current number.
+- **R4.1** These stay on their existing Firestore sources: balances, net worth, card dues, the current and previous month dashboard tiles, budgets, safe-to-spend and anything else the user acts on now. Firestore's materialized values are authoritative. The read model lags writes (up to a day on the nightly-only sync; seconds once SPENDLY-583 pushes each save), and **never** owns a current number.
 - **R4.2** Don't create a parallel ledger, or recompute an authoritative summary in a component or in SQL (`CLAUDE.md` safety invariants). SQL may recompute only **for reconciliation** (`readmodel_invariants`, parity), never for display.
 - **R4.3** The live Journal window (the newest 300 rows), realtime listeners and anything a user just wrote are always served from Firestore.
 

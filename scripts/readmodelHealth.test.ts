@@ -35,15 +35,35 @@ describe("read-model sync health (SPENDLY-507)", () => {
     expect(r.problems[0]).toMatch(/unreachable or paused: HTTP 540/);
   });
 
-  it("fails when no sync has run for over 4 h (schedule disabled or stuck)", () => {
-    const r = evaluateHealth({ ...healthy(), runs: [run(5, "incremental"), run(10, "full")] }, NOW);
-    expect(r.problems.join()).toMatch(/No sync run for 5 h/);
+  it("fails when no sync has run for over 26 h (nightly schedule disabled or stuck)", () => {
+    const r = evaluateHealth({ ...healthy(), runs: [run(27, "full")] }, NOW);
+    expect(r.problems.join()).toMatch(/No sync run for 27 h/);
+    // A nightly run 20 h ago is healthy.
+    expect(evaluateHealth({ ...healthy(), runs: [run(20, "full")] }, NOW).problems.join()).not.toMatch(/No sync run for/);
     expect(evaluateHealth({ ...healthy(), runs: [] }, NOW).problems.join()).toMatch(/No sync run recorded/);
   });
 
   it("does not count dry runs as syncs", () => {
-    const r = evaluateHealth({ ...healthy(), runs: [run(1, "dry_run"), run(10, "full")] }, NOW);
-    expect(r.problems.join()).toMatch(/No sync run for 10 h/);
+    const r = evaluateHealth({ ...healthy(), runs: [run(1, "dry_run"), run(30, "full")] }, NOW);
+    expect(r.problems.join()).toMatch(/No sync run for 30 h/);
+  });
+
+  it("ignores per-write push runs (SPENDLY-583): a failed one isn't a failed sync, and none stands in for the schedule", () => {
+    const push = (h: number, status = "succeeded") => run(h, "incremental", { status, notes: { trigger: "push" } });
+    const failedPush = evaluateHealth({ ...healthy(), runs: [push(0.5, "failed"), run(10, "full")] }, NOW);
+    expect(failedPush.problems.join()).not.toMatch(/latest sync run failed/);
+    // Only push runs for 30 h: the schedule is still reported missing.
+    const onlyPushes = evaluateHealth({ ...healthy(), runs: [push(1), push(2), run(30, "full")] }, NOW);
+    expect(onlyPushes.problems.join()).toMatch(/No sync run for 30 h/);
+  });
+
+  it("warns on repeated push failures and shows today's push counters (SPENDLY-583)", () => {
+    const input = { ...healthy(), push: { requests: 40, docs: 55, userSyncs: 2, rejected: 1, failed: 6, reads: 113 } };
+    const r = evaluateHealth(input, NOW);
+    expect(r.ok).toBe(true);
+    expect(r.warnings.join()).toMatch(/6 per-write push\(es\) failed today/);
+    expect(renderHealthSummary(r, input.runs, input.push)).toContain("40 requests · 55 docs · 2 user syncs · 1 rejected · 6 failed · 113 reads");
+    expect(evaluateHealth({ ...healthy(), push: { ...input.push, failed: 4 } }, NOW).warnings.join()).not.toMatch(/push/);
   });
 
   it("fails when the nightly full run is missing", () => {
@@ -78,13 +98,13 @@ describe("read-model sync health (SPENDLY-507)", () => {
     expect(r.warnings).toHaveLength(1);
   });
 
-  it("fails when p95 copy age is over 4 h, naming the collections behind", () => {
+  it("fails when p95 copy age is over 26 h, naming the collections behind", () => {
     const status = [
       ...Array.from({ length: 10 }, () => ({ collection: "expenses", lastSyncedAt: ago(1) })),
-      { collection: "categories", lastSyncedAt: ago(9) },
+      { collection: "categories", lastSyncedAt: ago(30) },
     ];
     const r = evaluateHealth({ ...healthy(), status }, NOW);
-    expect(r.problems.join()).toMatch(/p95 copy age is 9 h .*categories ×1/);
+    expect(r.problems.join()).toMatch(/p95 copy age is 30 h .*categories ×1/);
   });
 
   it("warns when runs were skipped for the read budget or reads are near it", () => {
@@ -135,6 +155,6 @@ describe("health loader (SPENDLY-507)", () => {
   it("maps rows into the evaluator's input", async () => {
     const { loadHealthInput } = await import("./readmodel-health");
     const input = await loadHealthInput(client({ data: [], error: null }), NOW);
-    expect(input).toEqual({ reachable: true, runs: [], openFailures: [], status: [] });
+    expect(input).toEqual({ reachable: true, runs: [], openFailures: [], status: [], push: null });
   });
 });

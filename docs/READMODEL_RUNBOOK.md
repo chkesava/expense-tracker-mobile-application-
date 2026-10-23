@@ -5,7 +5,7 @@ This runbook is for operating the Firestore → Supabase read model. Firestore s
 ## Architecture
 
 ```
- app (writes) ──► Firestore ──(read-only, every 3 h + nightly)──► GitHub Actions sync ──(service role)──► Supabase Postgres
+ app (writes) ──► Firestore ──(read-only, nightly)──► GitHub Actions sync ──(service role)──► Supabase Postgres
                      ▲                                                                                  │
                      │ live window, writes, fallback                                                     │ RLS: owner-only SELECT
  app (reads) ────────┴──── per-screen switch system_settings/global.readModel.<screen> ─────────────────┘ (Firebase token, role claim
@@ -15,7 +15,7 @@ This runbook is for operating the Firestore → Supabase read model. Firestore s
 - **Writes never change:** the app writes only to Firestore. The read model is a rebuildable copy, so losing it loses nothing (drill D1).
 - **The sync** (`scripts/readmodel-sync.ts` + `scripts/lib/readmodelSyncCore.ts`):
   - reads Firestore with a read-only key and writes through version-guarded SQL functions;
-  - does the 3-hourly incremental runs and the nightly full run (tombstones, field parity with repair, orphan check);
+  - runs nightly in full (tombstones, field parity with repair, orphan check). The 3-hourly changed-only schedule was removed on 2026-10-23 to save about 4,800 Firestore reads a day while nothing reads the copy. `incremental` is still available as a manual mode. Per-write pushes (SPENDLY-583) will keep the copy current;
   - never reads duress trees or erased accounts.
 - **Reads:** each screen reads Firestore, or the read model under its switch, with a session fallback to Firestore and a freshness badge (SPENDLY-511 to 513).
 - **Identity:** the app's Firebase ID token. Supabase third-party auth checks it; `readmodel_auth.uid()` re-checks issuer, audience, expiry, role and duress. The `role: authenticated` claim is set once by the Netlify `readmodel-claims` function (SPENDLY-505).
@@ -23,7 +23,7 @@ This runbook is for operating the Firestore → Supabase read model. Firestore s
 
 | Piece | Where |
 |---|---|
-| Sync job | `.github/workflows/readmodel-sync.yml`, runs `scripts/readmodel-sync.ts`. Every 3 h it copies only what changed; at 02:00 IST it copies everything (SPENDLY-506) |
+| Sync job | `.github/workflows/readmodel-sync.yml`, runs `scripts/readmodel-sync.ts`. **Nightly** at 02:00 IST it copies everything (SPENDLY-506; nightly-only since 2026-10-23). Manual runs can also use `incremental` (changed documents only) |
 | Health check | `.github/workflows/readmodel-health.yml`, runs `scripts/readmodel-health.ts` hourly at :45 (SPENDLY-507) |
 | Supabase project | `spmsgncjbnbkxvsbpqlu`. Tables: `sync_runs`, `sync_failures`, `sync_status`, `sync_checkpoints` |
 | Design | `docs/SPENDLY-494-adr.md` §0 and §8 |
@@ -42,7 +42,7 @@ Each step is idempotent. Nothing here writes to Firestore.
 4. **Netlify site env:** set `READMODEL_SUPABASE_URL` and `READMODEL_SUPABASE_SERVICE_ROLE_KEY` (the account-deletion purge), plus whatever `readmodel-claims` needs (SPENDLY-505 doc). **Do this before the next web deploy:** account deletion fails closed without them ("Account deletion is paused…"), so no login is deleted while its data stays in Supabase.
 5. **The workflow files must be on `main`.** GitHub runs scheduled workflows, and offers manual runs, only from the default branch.
 6. **Backfill:** see "Backfill" below. Run a dry run, get approval, then the real full run, then verify.
-7. Set `READMODEL_SYNC_ENABLED=true`. The 3-hourly, nightly and hourly-health schedules start.
+7. Set `READMODEL_SYNC_ENABLED=true`. The nightly sync and the hourly health check start.
 8. Wait for the **14-day parity gate** (SPENDLY-510). Only then flip screens: `shadow` for 7 days, then `supabase` ("Flipping a screen").
 
 ## How you find out something is wrong
@@ -176,6 +176,17 @@ update public.sync_failures set resolved_at = now()
 | Stop reads from Supabase | The per-screen kill switch (SPENDLY-511), or leave the app's `EXPO_PUBLIC_READMODEL_*` empty |
 | Cut client access entirely | `revoke select on all tables in schema public from authenticated;` |
 
+## Per-write push (SPENDLY-583)
+
+After this device saves synced documents, the app asks the Netlify function `readmodel-push` to copy them. The server reads each document **from Firestore** (never from the request) and upserts it, version-guarded, within seconds. The nightly full run is the safety net. Design and tests: `docs/SPENDLY-583-readmodel-push.md`.
+
+| Need | Do |
+|---|---|
+| Turn pushes off | Netlify env `READMODEL_PUSH_ENABLED=false`. The function answers 202 and does nothing; the nightly run continues. No app release |
+| Change the per-account limit | Netlify env `READMODEL_PUSH_LIMIT` (default 120 cost units per 10 min: 1 per document, 30 per per-user sync) |
+| See what pushes are doing | The hourly health summary's "Per-write pushes today" line, or `select * from public.push_daily order by day desc;` |
+| Health warns "N per-write push(es) failed today" | Netlify → Functions → `readmodel-push` → logs. Common causes: Supabase paused, a migration not applied (`20261028000000`), or Netlify env missing. The nightly run repairs the data either way |
+
 ## Recovery drills (SPENDLY-520)
 
 Every procedure above has been exercised end to end on a local stack: the production scripts unchanged, the Firebase emulator, a local Postgres with the real migrations, and PostgREST (Supabase's API). The latest log is in `docs/SPENDLY-520-drill-log.md`. Re-run the drills after any change to the sync, the mapping or the migrations:
@@ -191,11 +202,12 @@ POSTGREST_BIN=<path to postgrest> bash supabase-readmodel/drills/run_drills.sh
 | Drill | Procedure it proves | Pass condition |
 |---|---|---|
 | D1 Rebuild | Drop everything, re-apply the migrations, dry run, full sync, verify | Zero divergence; duration and reads recorded |
-| D2 Sync outage | Writes continue while the sync is stopped (option C has no trigger to fail) | The 3-hourly run catches up adds, edits and soft deletes; the nightly run catches hard deletes; then zero divergence |
+| D2 Sync outage | Writes continue while the sync is stopped (option C has no trigger to fail) | An incremental run catches up adds, edits and soft deletes; the nightly run catches hard deletes; then zero divergence |
 | D3 Supabase outage | The API is down during a sync; the app reads during an outage (`lib/readModel/outageDrill.test.ts`) | The sync exits non-zero (the job alerts) and converges on the next run; every screen falls back with the banner, bounded, logged once |
 | D4 Kill switch | Every screen to `firestore` and back with `readmodel-set-mode.ts` | One remote document; other settings untouched; no release |
 | D5 Bad mapping | Deploy a broken mapper, detect it, roll back, repair | Alert on the bad run; parity and `v_data_quality` show it; rollback + full run repairs; the next run is clean |
 | D6 Account purge | `delete-account`'s purge call, then a full sync while Firestore still has the account | Every row erased; nothing brought back; no false alarms |
+| D7 Per-write push (SPENDLY-583) | The Netlify function's own wiring (`livePushPorts`): create, edit (with fake data in the request), hard delete, an erased account, a per-user push, a push during an outage | Each change is in the read model in about 0.2 s; request data is ignored; the erased account gets 403; the outage push fails without touching Firestore; the nightly run converges |
 
 **In production**, only with approval and never with Firestore writes: D4 (the switch) and the D1 dry run are safe. The rest are proven locally and are the procedures for a real incident.
 
@@ -212,7 +224,7 @@ POSTGREST_BIN=<path to postgrest> bash supabase-readmodel/drills/run_drills.sh
 
 **Why:**
 - The read model runs on Free plans with no backups and a pause after inactivity.
-- It lags writes by up to 3 hours (option C, no Blaze triggers).
+- It lags writes (option C, no Blaze triggers): up to a day with the nightly-only schedule, seconds once SPENDLY-583 pushes each write.
 - The fallback paths are the screens' original bounded queries, so keeping them costs nothing until they're used, and they are what made drills D3 and D4 trivial.
 
 **Revisit if:** the project moves to Blaze with change capture (seconds-level lag) **and** a paid Supabase plan with backups, **and** 90 days pass in `supabase` mode with no fallback logged (`readModel.fallback.*`). Even then, retire one screen at a time, keeping its switch.

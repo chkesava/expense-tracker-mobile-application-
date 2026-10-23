@@ -43,6 +43,11 @@ describe("14-day parity gate (SPENDLY-510)", () => {
     expect(gap.streak).toBe(1);
   });
 
+  it("a failed per-write push run (SPENDLY-583) doesn't break the day: the nightly run repairs it", () => {
+    const gate = parityGate([...night(0), run("incremental", at(0, 9), { status: "failed", notes: { trigger: "push" } })], NOW);
+    expect(gate.days.at(-1)?.clean).toBe(true);
+  });
+
   it("today not having run yet doesn't reset the streak", () => {
     const runs = Array.from({ length: 5 }, (_, i) => night(i + 1)).flat();
     expect(parityGate(runs, NOW).streak).toBe(5);

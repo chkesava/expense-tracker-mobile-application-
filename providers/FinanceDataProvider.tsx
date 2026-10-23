@@ -10,6 +10,7 @@ import {
   where,
   type QueryDocumentSnapshot,
   type QuerySnapshot,
+  waitForPendingWrites,
 } from "firebase/firestore";
 import {
   createContext,
@@ -23,7 +24,7 @@ import {
 } from "react";
 
 import { commitMutations } from "@/lib/commitMutations";
-import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { friendlyErrorMessage, logError, logWarning } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { writeSavedMessage } from "@/lib/firestoreWrite";
 import {
@@ -43,7 +44,10 @@ import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { ReadModelReadConditions } from "@/lib/readModel/screenReadPath";
 import { readJournalMatches, readJournalMonth, readJournalPage, shadowCompareJournalHistory } from "@/lib/readModel/journalReadPath";
 import type { JournalMatch } from "@/lib/readModel/backend";
-import { isLocalTestMode } from "@/lib/env";
+import { isLocalTestMode, isReadModelEnvConfigured } from "@/lib/env";
+import { assertNetworkAllowed } from "@/lib/networkGuard";
+import { readModelPushFunctionUrl } from "@/shared/utils/readModelIdentity";
+import { getPublicAppOrigin } from "@/shared/utils/paymentRequestUrl";
 import type { SupabaseCursor } from "@/lib/readModel/journalHistorySource";
 import { configuredReadModelMode } from "@/shared/utils/readModelMode";
 import type {
@@ -87,6 +91,7 @@ import {
   logDirectRead,
   logQuerySnapshot,
 } from "@/lib/firestoreReadDebug";
+import { configureReadModelPush, notifyReadModelSnapshot } from "@/lib/readModelPush";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import { perfEvent } from "@/lib/perf";
@@ -283,6 +288,25 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     () => ({ conditions: () => readModelRef.current, locallyRemovedIds: locallyRemovedIdsRef.current }),
     []
   );
+  // SPENDLY-583: push this device's saves to the read model within seconds.
+  // Never in Spendly Test, a duress session, or a build without the read model.
+  useEffect(() => {
+    configureReadModelPush({
+      getUser: () => userRef.current,
+      canPush: () =>
+        isReadModelEnvConfigured() && !readModelRef.current.localTestMode && !readModelRef.current.duress && !!userRef.current,
+      endpoint: () => readModelPushFunctionUrl(getPublicAppOrigin()),
+      waitForCommit: async () => {
+        const database = getFirestoreDb();
+        if (database) await waitForPendingWrites(database);
+      },
+      fetch: (url, init) => {
+        assertNetworkAllowed(url);
+        return fetch(url, init);
+      },
+      log: (event, detail) => logWarning(event, detail),
+    });
+  }, []);
   /** SPENDLY-512: where read-model history paging resumes (Firestore keeps its own cursor). */
   const supabaseExpenseCursorRef = useRef<SupabaseCursor>(null);
   const supabaseIncomeCursorRef = useRef<SupabaseCursor>(null);
@@ -539,6 +563,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           feature: "finance",
           queryShape: fromFullQuery ? "unlimited" : `limit=${LEDGER_STAGED_LIMIT}`,
         });
+        notifyReadModelSnapshot(snap);
         const { items, pendingWrites } = foldLedgerSnapshot<Expense>(snap.docs, {
           activeOnly: true,
         });
@@ -599,6 +624,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           feature: "finance",
           queryShape: fromFullQuery ? "unlimited" : `limit=${LEDGER_STAGED_LIMIT}`,
         });
+        notifyReadModelSnapshot(snap);
         const { items, pendingWrites } = foldLedgerSnapshot<Income>(snap.docs, {
           activeOnly: true,
         });
@@ -684,6 +710,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         FINANCE_SNAPSHOT_LISTEN_OPTIONS,
         (snap) => {
           logQuerySnapshot(accountPath, snap, { feature: "finance", queryShape: "accounts" });
+          notifyReadModelSnapshot(snap);
           perfEvent("firestore_first_snapshot", {
             collection: "accounts",
             docCount: snap.docs.length,
@@ -717,6 +744,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         FINANCE_SNAPSHOT_LISTEN_OPTIONS,
         (snap) => {
           logQuerySnapshot(accountTypePath, snap, { feature: "finance", queryShape: "accountTypes" });
+          notifyReadModelSnapshot(snap);
           perfEvent("firestore_first_snapshot", {
             collection: "accountTypes",
             docCount: snap.docs.length,
@@ -781,6 +809,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             FINANCE_SNAPSHOT_LISTEN_OPTIONS,
             (snap) => {
               logQuerySnapshot(paymentPath, snap, { feature: "finance", queryShape: "accountPayments" });
+              notifyReadModelSnapshot(snap);
               const { items, pendingWrites } = foldLedgerSnapshot<AccountPayment>(snap.docs);
               if (shouldApplySnapshotDocs(snap, paymentsHydrated)) {
                 setPayments(sortLedgerByDateDesc(items));
@@ -806,6 +835,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             FINANCE_SNAPSHOT_LISTEN_OPTIONS,
             (snap) => {
               logQuerySnapshot(entryPath, snap, { feature: "finance", queryShape: "accountEntries" });
+              notifyReadModelSnapshot(snap);
               const { items, pendingWrites } = foldLedgerSnapshot<AccountEntry>(snap.docs);
               if (shouldApplySnapshotDocs(snap, entriesHydrated)) {
                 setEntries(sortLedgerByDateDesc(items));
@@ -831,6 +861,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             FINANCE_SNAPSHOT_LISTEN_OPTIONS,
             (snap) => {
               logQuerySnapshot(transferPath, snap, { feature: "finance", queryShape: "accountTransfers" });
+              notifyReadModelSnapshot(snap);
               const { items, pendingWrites } = foldLedgerSnapshot<AccountTransfer>(snap.docs);
               if (shouldApplySnapshotDocs(snap, transfersHydrated)) {
                 setTransfers(sortLedgerByDateDesc(items));
