@@ -11,6 +11,7 @@ import {
   type ProgressStatus,
 } from "@/components/dashboard/ProgressIndicator";
 import { Section, useSurfaces, withAlpha } from "@/components/dashboard/primitives";
+import { spendingSliceColor } from "@/components/spending/palette";
 import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
 import { haptic } from "@/lib/haptics";
 import {
@@ -18,6 +19,11 @@ import {
   computeActiveCategoryBudgets,
   spendingBreakdown,
 } from "@/shared/utils/dashboardWidgets";
+import {
+  isFoldedOthersSlice,
+  spendingOverviewTargetHref,
+  totalSpendingHref,
+} from "@/shared/utils/spendingDrilldown";
 import type { SpendlyBudget } from "@/shared/utils/spendlyBudget";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -35,10 +41,8 @@ export interface SpendingOverviewCardProps {
   budget: SpendlyBudget;
 }
 
-/** Slice colours: the theme accent first, then the data-viz tail `categoryRamp` uses. */
-function sliceRamp(primary: string): string[] {
-  return [primary, "#EC4899", "#8B5CF6", "#F59E0B", "#0EA5E9"];
-}
+/** Legend entries before the rest fold into "Others". */
+const LEGEND_LIMIT = 4;
 
 function budgetStatusOf(status: SpendlyBudget["status"]): ProgressStatus {
   if (status === "attention") return "over";
@@ -72,17 +76,16 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
   const { budgets: categoryBudgets } = useCategoryBudgets();
 
   const { categories, totalSpent } = useMemo(
-    () => spendingBreakdown(categoryTotals, 4),
+    () => spendingBreakdown(categoryTotals, LEGEND_LIMIT),
     [categoryTotals]
   );
 
   const segments = useMemo(() => {
-    const ramp = sliceRamp(theme.colors.primary);
     return categories.map((c, i) => ({
       id: c.category,
       label: c.category,
       value: c.amount,
-      color: c.category === "Others" ? theme.colors.info : ramp[i % ramp.length],
+      color: spendingSliceColor(i, c.category, theme.colors),
     }));
   }, [categories, theme.colors.primary, theme.colors.info]);
 
@@ -90,6 +93,19 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
     const items = computeActiveCategoryBudgets(categoryBudgets ?? [], categoryTotals ?? {}, activeMonth);
     return budgetProgressSummary(items);
   }, [categoryBudgets, categoryTotals, activeMonth]);
+
+  // SPENDLY-574: the donut centre opens Total Spending; a slice or legend row
+  // opens that category (the folded "Others" opens the ranked list). The
+  // month travels with the route so the detail shows the same period.
+  const openTotalSpending = () => {
+    router.push(totalSpendingHref(activeMonth) as Href);
+  };
+  const openSlice = (index: number) => {
+    const slice = categories[index];
+    if (!slice) return;
+    const folded = isFoldedOthersSlice(categories, index, categoryTotals, LEGEND_LIMIT);
+    router.push(spendingOverviewTargetHref(slice.category, activeMonth, folded) as Href);
+  };
 
   const openBudgets = () => {
     void haptic.selection();
@@ -174,10 +190,24 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
             titleBelow
             centerFractionDigits={0}
             showLegend={false}
+            onCenterPress={openTotalSpending}
+            onSlicePress={(_, index) => openSlice(index)}
+            centerAccessibilityLabel={`Total spent for ${monthLabel}. Open total spending`}
           />
           <View style={styles.legend}>
             {categories.map((c, i) => (
-              <View key={c.category} style={styles.legendRow}>
+              <Pressable
+                key={c.category}
+                onPress={() => {
+                  void haptic.selection();
+                  openSlice(i);
+                }}
+                android_ripple={{ color: surfaces.control, borderless: false }}
+                style={({ pressed }) => [styles.legendRow, pressed && { backgroundColor: surfaces.control }]}
+                accessibilityRole="button"
+                accessibilityLabel={`${c.category}, ${totalSpent > 0 ? `${Math.round(c.percentage)}% of spending` : "no share"}. Open details`}
+                testID={`spending-overview-row-${i}`}
+              >
                 <View style={[styles.dot, { backgroundColor: segments[i]?.color }]} />
                 <Text
                   style={[styles.legendLabel, { color: theme.colors.foreground, fontFamily: theme.fontFamily.regular }]}
@@ -190,7 +220,8 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
                 >
                   {totalSpent > 0 ? `${Math.round(c.percentage)}%` : "—"}
                 </Text>
-              </View>
+                <ChevronRight size={14} color={theme.colors.mutedForeground} strokeWidth={2.2} />
+              </Pressable>
             ))}
           </View>
         </View>
@@ -266,12 +297,18 @@ const styles = StyleSheet.create({
   legend: {
     flex: 1,
     minWidth: 156,
-    gap: 10,
+    gap: 2,
   },
   legendRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    // A full-width 40dp row is the tap target (SPENDLY-574); the old 10dp
+    // gap between rows is now their padding.
+    minHeight: 40,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    overflow: "hidden",
   },
   dot: {
     width: 12,

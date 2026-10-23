@@ -31,6 +31,8 @@ const RESTORABLE_ROUTES = [
   "/what-if",
   "/what-if/",
   "/inbox",
+  "/spending",
+  "/spending/",
 ] as const;
 
 /**

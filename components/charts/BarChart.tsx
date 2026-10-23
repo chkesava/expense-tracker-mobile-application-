@@ -12,6 +12,7 @@ import Animated, {
 
 import { Amount } from "@/components/common/Amount";
 import { compactAxisValue } from "@/components/charts/axis";
+import { niceAxisMax } from "@/shared/utils/chartScale";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
@@ -35,6 +36,11 @@ export interface BarChartProps {
   showLegend?: boolean;
   /** Render a compact value axis (0, 30K, 60K…) down the left edge. */
   showYAxis?: boolean;
+  /**
+   * SPENDLY-574: format the selected bar's value (e.g. a transaction count)
+   * instead of showing it as money.
+   */
+  formatValue?: (value: number) => string;
 }
 
 function BarSegment({
@@ -78,6 +84,7 @@ export function BarChart({
   secondaryColor,
   showLegend = true,
   showYAxis = false,
+  formatValue,
 }: BarChartProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -125,8 +132,10 @@ export function BarChart({
       if (d.value > max) max = d.value;
       if ((d.secondaryValue ?? 0) > max) max = d.secondaryValue ?? 0;
     });
-    return max > 0 ? max * 1.15 : 100; // 15% headroom
-  }, [data]);
+    // SPENDLY-574: a round top so the gridlines read 0 / 5K / 10K…, with
+    // headroom built in.
+    return max > 0 ? niceAxisMax(max, showYAxis ? 4 : 2) : 100;
+  }, [data, showYAxis]);
 
   const chartPaddingTop = 20;
   const chartPaddingBottom = 26;
@@ -179,7 +188,8 @@ export function BarChart({
           </Text>
           <View style={styles.tooltipAmounts}>
             <Text style={{ color: primaryColor || theme.colors.primary, fontSize: 12, fontWeight: "700" }}>
-              {primaryLabel}: <Amount value={selectedItem.value} currency={currency} />
+              {primaryLabel}:{" "}
+              {formatValue ? formatValue(selectedItem.value) : <Amount value={selectedItem.value} currency={currency} />}
             </Text>
             {hasSecondary && selectedItem.secondaryValue !== undefined && (
               <Text style={{ color: secondaryColor || theme.colors.success, fontSize: 12, fontWeight: "700" }}>
@@ -212,6 +222,7 @@ export function BarChart({
                     x={chartPaddingLeft - 6}
                     y={y + 3.5}
                     fontSize={9}
+                    fontFamily={theme.fontFamily.regular}
                     fill={theme.colors.mutedForeground}
                     textAnchor="end"
                   >
@@ -233,6 +244,7 @@ export function BarChart({
                 x={slotCenterX}
                 y={height - 8}
                 fontSize={10}
+                fontFamily={theme.fontFamily.regular}
                 fontWeight={isSelected ? "800" : "500"}
                 fill={isSelected ? theme.colors.foreground : theme.colors.mutedForeground}
                 textAnchor="middle"
