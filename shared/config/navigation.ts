@@ -277,6 +277,9 @@ const SUB_SCREEN_PREFIXES = [
   "/credit-card-bills/",
   "/transactions/",
   "/merchants/",
+  "/spending/",
+  "/budgets/",
+  "/recurring/",
   "/settings/",
   "/decisions/",
   "/fees/",
@@ -285,7 +288,7 @@ const SUB_SCREEN_PREFIXES = [
   "/what-if/",
 ];
 
-const SUB_SCREEN_ROUTES = ["/settings", "/decisions", "/fees", "/app-selector", "/add", "/runway", "/calendar", "/what-if", "/inbox"];
+const SUB_SCREEN_ROUTES = ["/settings", "/decisions", "/fees", "/app-selector", "/add", "/runway", "/calendar", "/what-if", "/inbox", "/spending", "/budgets", "/transactions", "/trends", "/top-categories", "/recurring"];
 
 const SECONDARY_TAB_PREFIXES = ["/ledger", "/vaults", "/investments", "/insights"];
 

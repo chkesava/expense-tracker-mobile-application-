@@ -1,7 +1,7 @@
 import { memo, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
-import { ChevronDown, ChevronRight, Target } from "lucide-react-native";
+import { ChevronDown, ChevronRight, ListOrdered, Target, TrendingUp } from "lucide-react-native";
 
 import { DonutChart } from "@/components/charts/DonutChart";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -11,6 +11,7 @@ import {
   type ProgressStatus,
 } from "@/components/dashboard/ProgressIndicator";
 import { Section, useSurfaces, withAlpha } from "@/components/dashboard/primitives";
+import { spendingSliceColor } from "@/components/spending/palette";
 import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
 import { haptic } from "@/lib/haptics";
 import {
@@ -18,6 +19,14 @@ import {
   computeActiveCategoryBudgets,
   spendingBreakdown,
 } from "@/shared/utils/dashboardWidgets";
+import { budgetsHref } from "@/shared/utils/budgetDrilldown";
+import { trendsHref } from "@/shared/utils/spendingTrends";
+import { topCategoriesHref } from "@/shared/utils/topCategories";
+import {
+  isFoldedOthersSlice,
+  spendingOverviewTargetHref,
+  totalSpendingHref,
+} from "@/shared/utils/spendingDrilldown";
 import type { SpendlyBudget } from "@/shared/utils/spendlyBudget";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -35,10 +44,8 @@ export interface SpendingOverviewCardProps {
   budget: SpendlyBudget;
 }
 
-/** Slice colours: the theme accent first, then the data-viz tail `categoryRamp` uses. */
-function sliceRamp(primary: string): string[] {
-  return [primary, "#EC4899", "#8B5CF6", "#F59E0B", "#0EA5E9"];
-}
+/** Legend entries before the rest fold into "Others". */
+const LEGEND_LIMIT = 4;
 
 function budgetStatusOf(status: SpendlyBudget["status"]): ProgressStatus {
   if (status === "attention") return "over";
@@ -72,17 +79,16 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
   const { budgets: categoryBudgets } = useCategoryBudgets();
 
   const { categories, totalSpent } = useMemo(
-    () => spendingBreakdown(categoryTotals, 4),
+    () => spendingBreakdown(categoryTotals, LEGEND_LIMIT),
     [categoryTotals]
   );
 
   const segments = useMemo(() => {
-    const ramp = sliceRamp(theme.colors.primary);
     return categories.map((c, i) => ({
       id: c.category,
       label: c.category,
       value: c.amount,
-      color: c.category === "Others" ? theme.colors.info : ramp[i % ramp.length],
+      color: spendingSliceColor(i, c.category, theme.colors),
     }));
   }, [categories, theme.colors.primary, theme.colors.info]);
 
@@ -91,9 +97,25 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
     return budgetProgressSummary(items);
   }, [categoryBudgets, categoryTotals, activeMonth]);
 
+  // SPENDLY-574: the donut centre opens Total Spending; a slice or legend row
+  // opens that category (the folded "Others" opens the ranked list). The
+  // month travels with the route so the detail shows the same period.
+  const openTotalSpending = () => {
+    router.push(totalSpendingHref(activeMonth) as Href);
+  };
+  const openSlice = (index: number) => {
+    const slice = categories[index];
+    if (!slice) return;
+    const folded = isFoldedOthersSlice(categories, index, categoryTotals, LEGEND_LIMIT);
+    router.push(spendingOverviewTargetHref(slice.category, activeMonth, folded) as Href);
+  };
+
+  // SPENDLY-575: with any budget set, the row opens Budget Progress for this
+  // month; with none, it still goes straight to setting one up.
+  const hasAnyBudget = budgetProgress.total > 0 || monthlyBudget > 0;
   const openBudgets = () => {
     void haptic.selection();
-    router.push("/settings/money" as Href);
+    router.push((hasAnyBudget ? budgetsHref(activeMonth) : "/settings/money") as Href);
   };
 
   const monthChip = (
@@ -174,10 +196,24 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
             titleBelow
             centerFractionDigits={0}
             showLegend={false}
+            onCenterPress={openTotalSpending}
+            onSlicePress={(_, index) => openSlice(index)}
+            centerAccessibilityLabel={`Total spent for ${monthLabel}. Open total spending`}
           />
           <View style={styles.legend}>
             {categories.map((c, i) => (
-              <View key={c.category} style={styles.legendRow}>
+              <Pressable
+                key={c.category}
+                onPress={() => {
+                  void haptic.selection();
+                  openSlice(i);
+                }}
+                android_ripple={{ color: surfaces.control, borderless: false }}
+                style={({ pressed }) => [styles.legendRow, pressed && { backgroundColor: surfaces.control }]}
+                accessibilityRole="button"
+                accessibilityLabel={`${c.category}, ${totalSpent > 0 ? `${Math.round(c.percentage)}% of spending` : "no share"}. Open details`}
+                testID={`spending-overview-row-${i}`}
+              >
                 <View style={[styles.dot, { backgroundColor: segments[i]?.color }]} />
                 <Text
                   style={[styles.legendLabel, { color: theme.colors.foreground, fontFamily: theme.fontFamily.regular }]}
@@ -190,11 +226,84 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
                 >
                   {totalSpent > 0 ? `${Math.round(c.percentage)}%` : "—"}
                 </Text>
-              </View>
+                <ChevronRight size={14} color={theme.colors.mutedForeground} strokeWidth={2.2} />
+              </Pressable>
             ))}
           </View>
         </View>
       )}
+
+      {/* SPENDLY-580: the ranked categories for this month. */}
+      <Pressable
+        onPress={() => {
+          void haptic.selection();
+          router.push(topCategoriesHref(activeMonth) as Href);
+        }}
+        android_ripple={{ color: surfaces.control, borderless: false }}
+        style={({ pressed }) => [
+          styles.budgetRow,
+          { backgroundColor: surfaces.tile, borderColor: theme.colors.border },
+          pressed && styles.pressed,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel="Highest spending categories: see where you spend the most. Open the ranking"
+        testID="dashboard-top-categories"
+      >
+        <View style={[styles.budgetGlyph, { backgroundColor: withAlpha(theme.colors.primary, surfaces.isDark ? 0.18 : 0.1) }]}>
+          <ListOrdered size={18} color={theme.colors.primary} strokeWidth={2.2} />
+        </View>
+        <View style={styles.budgetBody}>
+          <Text
+            style={[styles.budgetTitle, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
+            numberOfLines={1}
+          >
+            Highest spending categories
+          </Text>
+          <Text
+            style={[styles.budgetCaption, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+            numberOfLines={1}
+          >
+            See where you spend the most
+          </Text>
+        </View>
+        <ChevronRight size={18} color={theme.colors.mutedForeground} strokeWidth={2.2} />
+      </Pressable>
+
+      {/* SPENDLY-578: the entry to Spending Trends for this month. */}
+      <Pressable
+        onPress={() => {
+          void haptic.selection();
+          router.push(trendsHref(activeMonth) as Href);
+        }}
+        android_ripple={{ color: surfaces.control, borderless: false }}
+        style={({ pressed }) => [
+          styles.budgetRow,
+          { backgroundColor: surfaces.tile, borderColor: theme.colors.border },
+          pressed && styles.pressed,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel="Spending trend: see how your spending changes over time. Open spending trends"
+        testID="dashboard-spending-trend"
+      >
+        <View style={[styles.budgetGlyph, { backgroundColor: withAlpha(theme.colors.primary, surfaces.isDark ? 0.18 : 0.1) }]}>
+          <TrendingUp size={18} color={theme.colors.primary} strokeWidth={2.2} />
+        </View>
+        <View style={styles.budgetBody}>
+          <Text
+            style={[styles.budgetTitle, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
+            numberOfLines={1}
+          >
+            Spending trend
+          </Text>
+          <Text
+            style={[styles.budgetCaption, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+            numberOfLines={1}
+          >
+            See how your spending changes over time
+          </Text>
+        </View>
+        <ChevronRight size={18} color={theme.colors.mutedForeground} strokeWidth={2.2} />
+      </Pressable>
 
       <Pressable
         onPress={openBudgets}
@@ -205,7 +314,7 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
           pressed && styles.pressed,
         ]}
         accessibilityRole="button"
-        accessibilityLabel={`${budgetTitle}: ${budgetCaption}. Open budgets`}
+        accessibilityLabel={`${budgetTitle}: ${budgetCaption}. ${hasAnyBudget ? "Open budget progress" : "Set a budget"}`}
       >
         <View style={[styles.budgetGlyph, { backgroundColor: withAlpha(theme.colors.destructive, surfaces.isDark ? 0.18 : 0.1) }]}>
           <Target size={18} color={theme.colors.destructive} strokeWidth={2.2} />
@@ -266,12 +375,18 @@ const styles = StyleSheet.create({
   legend: {
     flex: 1,
     minWidth: 156,
-    gap: 10,
+    gap: 2,
   },
   legendRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    // A full-width 40dp row is the tap target (SPENDLY-574); the old 10dp
+    // gap between rows is now their padding.
+    minHeight: 40,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    overflow: "hidden",
   },
   dot: {
     width: 12,

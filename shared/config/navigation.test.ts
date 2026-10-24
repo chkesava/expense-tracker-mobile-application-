@@ -40,6 +40,23 @@ describe("resolveAndroidBackAction", () => {
     expect(resolveAndroidBackAction("/what-if/abc")).toBe("pop");
     expect(resolveAndroidBackAction("/what-if/edit?template=salary")).toBe("pop");
     expect(resolveAndroidBackAction("/goals/optimizer")).toBe("pop");
+    // SPENDLY-574 spending drill-downs.
+    expect(resolveAndroidBackAction("/spending?month=2026-10")).toBe("pop");
+    expect(resolveAndroidBackAction("/spending/Home%20%26%20Household?month=2026-10")).toBe("pop");
+    // SPENDLY-575 budget drill-downs.
+    expect(resolveAndroidBackAction("/budgets?month=2026-10")).toBe("pop");
+    expect(resolveAndroidBackAction("/budgets/Food?month=2026-10&sub=Groceries")).toBe("pop");
+    // SPENDLY-576 transactions list.
+    expect(resolveAndroidBackAction("/transactions?month=2026-10&tab=transfers")).toBe("pop");
+    // SPENDLY-578 spending trends.
+    expect(resolveAndroidBackAction("/trends?month=2026-10&gran=weekly")).toBe("pop");
+    // SPENDLY-579 subcategory detail.
+    expect(resolveAndroidBackAction("/spending/Food/Groceries?month=2026-10&tab=merchants")).toBe("pop");
+    // SPENDLY-580 highest spending categories.
+    expect(resolveAndroidBackAction("/top-categories?month=2026-10&period=this_year")).toBe("pop");
+    // SPENDLY-582 recurring expenses.
+    expect(resolveAndroidBackAction("/recurring")).toBe("pop");
+    expect(resolveAndroidBackAction("/recurring/sub-1")).toBe("pop");
   });
 
   it("pops out of screens that used to fall through to the navigator", () => {

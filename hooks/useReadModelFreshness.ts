@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { useExpenses } from "@/hooks/useExpenses";
+import { useIncomes } from "@/hooks/useIncomes";
 import { isLocalTestMode } from "@/lib/env";
 import { logWarning } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
@@ -9,6 +11,7 @@ import { useNetwork } from "@/providers/NetworkProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { readModelFreshness, type Freshness } from "@/shared/utils/readModelFreshness";
 import { configuredReadModelMode, type ReadModelScreen } from "@/shared/utils/readModelMode";
+import { newestWriteMs } from "@/shared/utils/readModelOverlay";
 
 /**
  * SPENDLY-511 — the freshness of a read-model screen, from the user's own
@@ -68,4 +71,20 @@ export function useReadModelFreshness(
   const fellBack = readModelPath().fellBack(screen);
   if (!fellBack && lastSyncedAtMs === undefined) return null;
   return readModelFreshness({ fellBack, lastSyncedAtMs: lastSyncedAtMs ?? null, newestLocalWriteMs, nowMs: Date.now(), formatTime: timeLabel });
+}
+
+/**
+ * The Journal read model's freshness for any screen that lists ledger rows
+ * loaded through the Journal read path (`loadMonth`): the spending, budget,
+ * transaction and recurring drill-downs (PR #239 review, READ_MODEL_RULES
+ * R3.4). Null, so nothing renders, unless `journal` reads the read model.
+ */
+export function useJournalFreshness(): Freshness | null {
+  const { expenses } = useExpenses();
+  const { incomes } = useIncomes();
+  const newest = useMemo(
+    () => newestWriteMs([...(expenses as { updatedAt?: unknown; createdAt?: unknown }[]), ...(incomes as { updatedAt?: unknown; createdAt?: unknown }[])]),
+    [expenses, incomes]
+  );
+  return useReadModelFreshness("journal", ["expenses", "incomes"], newest);
 }

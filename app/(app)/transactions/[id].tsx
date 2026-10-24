@@ -3,22 +3,27 @@ import {
   ActivityIndicator,
   Pressable,
   ScrollView,
+  Share,
   Text,
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, ChevronRight, Lock, Pencil, Trash2 } from "lucide-react-native";
+import { ArrowLeft, ChevronRight, Lock, MoreHorizontal, Pencil, Trash2 } from "lucide-react-native";
 
 import { TransactionFeeCard } from "@/components/fees/TransactionFeeCard";
 import { Amount } from "@/components/common/Amount";
 import { PayCreditBillModal } from "@/components/accounts/PayCreditBillModal";
 import { MerchantCorrectionSheet } from "@/components/merchant/MerchantCorrectionSheet";
+import { EditSubscriptionModal } from "@/components/subscriptions/EditSubscriptionModal";
+import { TransactionMoreSheet } from "@/components/transactions/TransactionMoreSheet";
+import { JournalRelatedRecords } from "@/components/ledger/JournalRelatedRecords";
 import { JournalTransactionAudit } from "@/components/ledger/JournalTransactionAudit";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useAccountActivities } from "@/hooks/useAccountActivities";
+import { useAccountEntries } from "@/hooks/useAccountEntries";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useAccounts } from "@/hooks/useAccounts";
@@ -47,7 +52,19 @@ import {
   formatClockLabel,
 } from "@/shared/utils/activityDisplay";
 import { isCashbackPayment } from "@/shared/types/expense";
-import { currentMonthKey } from "@/shared/utils/dates";
+import { currentMonthKey, monthKeyOf } from "@/shared/utils/dates";
+import { findJournalRelatedRecords } from "@/shared/utils/journalRelatedRecords";
+import { categoryDetailHref } from "@/shared/utils/spendingDrilldown";
+import { budgetDetailHref } from "@/shared/utils/budgetDrilldown";
+import {
+  recurringDraftFromExpense,
+  transactionShareText,
+  type TransactionActionId,
+} from "@/shared/utils/transactionActions";
+import type { Subscription } from "@/shared/types/subscription";
+import { listAccountDocuments } from "@/services/accounts/accountDocumentsStore";
+import { createDocumentSignedUrl } from "@/services/accounts/spendlyFilesClient";
+import * as WebBrowser from "expo-web-browser";
 import { currencySymbol, formatAmount } from "@/shared/utils/formatCurrency";
 import { ledgerRowEditability } from "@/shared/utils/ledgerRow";
 import {
@@ -110,6 +127,11 @@ export default function TransactionDetailsScreen() {
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
   const { spaces } = useSpaces();
+  const { entries } = useAccountEntries();
+  const [openingDocument, setOpeningDocument] = useState(false);
+  // SPENDLY-577: the "More options" sheet and the recurring editor it can open.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [recurringDraft, setRecurringDraft] = useState<Subscription | null>(null);
 
   const journalKind = ref && isJournalKind(ref.kind) ? ref.kind : null;
   const expense = useMemo(
@@ -121,6 +143,44 @@ export default function TransactionDetailsScreen() {
     [journalKind, incomes, ref?.id]
   );
   const journalRow = expense ?? income;
+
+  // SPENDLY-576: only relationships the Journal already proves (cashback on
+  // this expense, the bill that covered it, an investment entry, shared tags)
+  // — the same rule the Money tab's detail sheet uses.
+  const relatedRecords = useMemo(
+    () =>
+      journalRow
+        ? findJournalRelatedRecords({
+            expense: expense ?? undefined,
+            income: income ?? undefined,
+            payments,
+            entries,
+            nameById: (id) => spaces.find((space) => space.id === id)?.name,
+          })
+        : [],
+    [journalRow, expense, income, payments, entries, spaces]
+  );
+
+  // The statement an imported row came from. Documents are listed only on tap,
+  // and the signed URL is fetched per open, as on the account screen.
+  const openSourceDocument = async (accountId: string, documentId: string) => {
+    if (!user?.uid) return;
+    setOpeningDocument(true);
+    try {
+      const documents = await listAccountDocuments(user.uid, accountId);
+      const document = documents.find((d) => d.id === documentId);
+      if (!document) {
+        appDialog.alert("Document not available", "The statement this came from has been removed.");
+        return;
+      }
+      await WebBrowser.openBrowserAsync(await createDocumentSignedUrl(document.storagePath));
+    } catch (error) {
+      logError("transactionDetail.openDocument", error);
+      appDialog.alert("Couldn't open the document", friendlyErrorMessage(error));
+    } finally {
+      setOpeningDocument(false);
+    }
+  };
 
   const [merchantOverrides, setMerchantOverrides] = useState<MerchantOverride[]>([]);
   const [merchantSheetOpen, setMerchantSheetOpen] = useState(false);
@@ -335,6 +395,56 @@ export default function TransactionDetailsScreen() {
   const updatedLabel = timestampLabel(journalRow?.updatedAt);
   const amountColor = isCredit ? theme.colors.success : theme.colors.foreground;
 
+  const rowMonth = journalRow ? monthKeyOf(journalRow) ?? currentMonthKey() : currentMonthKey();
+  const actionContext = {
+    kind: expense ? ("expense" as const) : income ? ("income" as const) : ("other" as const),
+    // The same rule as the Account row: a known account, and not the one we came from.
+    canOpenAccount: Boolean(accountName && contextAccountId && parsed?.accountId !== contextAccountId),
+    category: expense?.category || undefined,
+    isDeleted: Boolean(journalRow?.deletedAt),
+    editable: Boolean(editability?.editable),
+    fromSubscription: Boolean(expense?.subscriptionId),
+  };
+  const runAction = (action: TransactionActionId) => {
+    switch (action) {
+      case "viewAccount":
+        if (contextAccountId) router.push(`/accounts/${contextAccountId}` as Href);
+        return;
+      case "viewCategory":
+        if (expense?.category) router.push(categoryDetailHref(expense.category, rowMonth) as Href);
+        return;
+      case "viewBudget":
+        if (expense?.category) router.push(budgetDetailHref(expense.category, rowMonth) as Href);
+        return;
+      case "setBudget":
+        router.push("/settings/money" as Href);
+        return;
+      case "createRecurring":
+        if (expense) setRecurringDraft(recurringDraftFromExpense(expense, currentMonthKey(settings.timezone)));
+        return;
+      case "share": {
+        const row = expense ?? income;
+        if (!row) return;
+        void Share.share({
+          message: transactionShareText({
+            row,
+            kind: expense ? "expense" : "income",
+            amountLabel: formatAmount(row.amount, currency),
+            dateLabel: formatActivityDateLabel(row.date),
+          }),
+        }).catch((error) => {
+          // e.g. a desktop browser without the Web Share API.
+          logError("transactionDetail.share", error);
+          toast.error("Couldn't share this transaction.");
+        });
+        return;
+      }
+      case "delete":
+        confirmDelete();
+        return;
+    }
+  };
+
   return (
     <View style={[{ flex: 1, backgroundColor: theme.colors.background }, contentWidthStyle]}>
       <View
@@ -376,6 +486,17 @@ export default function TransactionDetailsScreen() {
             </Text>
           ) : null}
         </View>
+        {journalRow ? (
+          <Button
+            variant="tonal"
+            size="icon"
+            onPress={() => setMoreOpen(true)}
+            accessibilityLabel="More options"
+            testID="transaction-more"
+          >
+            <MoreHorizontal size={18} color={theme.colors.primary} />
+          </Button>
+        ) : null}
         {editability?.editable || editablePayment ? (
           <Button
             variant="tonal"
@@ -451,8 +572,15 @@ export default function TransactionDetailsScreen() {
                   value={
                     expense.subcategory
                       ? `${expense.category} › ${expense.subcategory}`
-                      : expense.category
+                      : expense.category || "Uncategorised"
                   }
+                  // SPENDLY-576: to that category's month (SPENDLY-574), when it has one.
+                  onPress={
+                    expense.category && !expense.deletedAt
+                      ? () => router.push(categoryDetailHref(expense.category, monthKeyOf(expense) ?? currentMonthKey()) as Href)
+                      : undefined
+                  }
+                  accessibilityHint="Opens this category's spending for the month"
                 />
               ) : null}
               {income ? <Row label="Source" value={income.source} /> : null}
@@ -499,6 +627,14 @@ export default function TransactionDetailsScreen() {
               {expense?.statementImportFingerprint ? (
                 <Row label="Recorded from" value="Statement import" />
               ) : null}
+              {expense?.accountDocumentId && expense.accountId ? (
+                <Row
+                  label="Source document"
+                  value={openingDocument ? "Opening…" : "View statement"}
+                  onPress={openingDocument ? undefined : () => void openSourceDocument(expense.accountId!, expense.accountDocumentId!)}
+                  accessibilityHint="Opens the statement this transaction was imported from"
+                />
+              ) : null}
               {payment?.voidedAt ? (
                 <Row label="Status" value="Voided" valueColor={theme.colors.destructive} />
               ) : null}
@@ -512,6 +648,12 @@ export default function TransactionDetailsScreen() {
               ) : null}
             </View>
           </Card>
+
+          {relatedRecords.length > 0 ? (
+            <Card>
+              <JournalRelatedRecords records={relatedRecords} />
+            </Card>
+          ) : null}
 
           <TransactionFeeCard transactionRef={parsed.ref} />
 
@@ -608,6 +750,18 @@ export default function TransactionDetailsScreen() {
         </ScrollView>
       )}
 
+      {moreOpen && journalRow ? (
+        <TransactionMoreSheet
+          onClose={() => setMoreOpen(false)}
+          context={actionContext}
+          month={rowMonth}
+          accountName={accountName}
+          onAction={runAction}
+        />
+      ) : null}
+      {recurringDraft ? (
+        <EditSubscriptionModal visible subscription={recurringDraft} onClose={() => setRecurringDraft(null)} />
+      ) : null}
       {editablePayment && paymentEditOpen ? (
         <PayCreditBillModal
           isOpen

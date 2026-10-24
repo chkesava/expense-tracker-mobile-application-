@@ -7,7 +7,7 @@ import { Amount } from "@/components/common/Amount";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
-import { donutSliceAt, pressPoint } from "@/shared/utils/chartHitTest";
+import { donutSliceAt, donutTapTarget, pressPoint } from "@/shared/utils/chartHitTest";
 
 export interface DonutSegment {
   id?: string;
@@ -27,6 +27,15 @@ export interface DonutChartProps {
   centerFractionDigits?: number;
   /** Put the title under the figure, sentence case (Visual First, SPENDLY-572). */
   titleBelow?: boolean;
+  /**
+   * SPENDLY-574 drill-down: a tap inside the hole calls this instead of
+   * clearing the selection.
+   */
+  onCenterPress?: () => void;
+  /** SPENDLY-574 drill-down: a tap on a slice calls this instead of selecting it. */
+  onSlicePress?: (segment: DonutSegment, index: number) => void;
+  /** Accessible name for the centre when `onCenterPress` is set. */
+  centerAccessibilityLabel?: string;
 }
 
 /**
@@ -80,6 +89,9 @@ export function DonutChart({
   showLegend = true,
   centerFractionDigits,
   titleBelow = false,
+  onCenterPress,
+  onSlicePress,
+  centerAccessibilityLabel,
 }: DonutChartProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
@@ -130,6 +142,32 @@ export function DonutChart({
   const handleChartPress = (event: GestureResponderEvent) => {
     const point = pressPoint(event.nativeEvent);
     if (!point) return;
+    if (onCenterPress || onSlicePress) {
+      // Drill-down mode (SPENDLY-574): centre and slices navigate.
+      const target = donutTapTarget(
+        point.x - center,
+        point.y - center,
+        radius - strokeWidth / 2 - 8,
+        radius + strokeWidth / 2 + 8,
+        fractions
+      );
+      if (target?.kind === "center" && onCenterPress) {
+        haptic.selection().catch(() => undefined);
+        onCenterPress();
+        return;
+      }
+      if (target?.kind === "slice" && onSlicePress) {
+        const segment = validData[target.index];
+        if (segment) {
+          haptic.selection().catch(() => undefined);
+          onSlicePress(segment, target.index);
+          return;
+        }
+      }
+      if (!target) setSelectedIndex(null);
+      else if (target.kind === "slice") handleSelect(target.index);
+      return;
+    }
     // A little slack either side of the stroke so thin rings stay tappable.
     const slice = donutSliceAt(
       point.x - center,
@@ -208,7 +246,14 @@ export function DonutChart({
           style={styles.centerOverlay}
           onPress={handleChartPress}
           accessibilityRole="button"
-          accessibilityLabel={activeItem ? `Clear ${activeItem.label} selection` : title}
+          accessibilityLabel={
+            onCenterPress && centerAccessibilityLabel
+              ? centerAccessibilityLabel
+              : activeItem
+                ? `Clear ${activeItem.label} selection`
+                : title
+          }
+          accessibilityHint={onCenterPress ? "Opens the spending details" : undefined}
         >
           {/* Children never take the touch, so locationX/Y always measure
               from the chart's own box. */}
