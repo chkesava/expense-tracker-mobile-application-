@@ -53,8 +53,7 @@ import {
   remainingCommittedThisMonth,
 } from "@/shared/utils/spendlyBudget";
 import { getNextRenewalDate } from "@/shared/utils/subscriptionProcessor";
-import { ThemeOverride, useTheme } from "@/theme/ThemeProvider";
-import { SpendlyUIScope } from "@/components/layout/SpendlyUIScope";
+import { useTheme } from "@/theme/ThemeProvider";
 import { SideDrawer } from "@/components/SideDrawer";
 import { dashboardMonthLabel } from "@/shared/utils/dashboardLabels";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
@@ -336,13 +335,10 @@ export default function DashboardScreen() {
   );
   const insertInsightsAfter = Math.max(0, moreCardIds.indexOf("budgetAlerts"));
 
-  // SPENDLY-572: the Visual First dashboard is always a dark scene (Midnight
-  // Emerald), whatever the app theme; the profile drawer and every modal stay
-  // on the user's theme because they render outside this override.
+  // SPENDLY-572/604: the dark Midnight Emerald scene now comes from the
+  // Expense shell (`app/(app)/_layout.tsx`), so every screen matches it.
   return (
     <>
-    <ThemeOverride themeName="midnight-emerald">
-    <SpendlyUIScope>
     <PageShell
       refreshing={refreshing}
       onRefresh={handleRefresh}
@@ -497,8 +493,6 @@ export default function DashboardScreen() {
         </ResponsiveGrid>
       )}
     </PageShell>
-    </SpendlyUIScope>
-    </ThemeOverride>
     <SideDrawer isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
     </>
   );

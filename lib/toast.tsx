@@ -18,7 +18,7 @@ import {
 } from "lucide-react-native";
 import { Toast as GluestackToast, ToastTitle as GluestackToastTitle } from "@/components/ui/toast/index";
 
-import { useTheme } from "@/theme/ThemeProvider";
+import { ShellThemeScope, useTheme } from "@/theme/ThemeProvider";
 import { haptic } from "@/lib/haptics";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { SPENDLY_DIALOG_MAX_WIDTH } from "@/shared/utils/responsiveLayout";
@@ -107,7 +107,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <ToastViewport items={items} onDismiss={dismiss} />
+      {/* SPENDLY-604: toasts match a shell that pins its palette. */}
+      <ShellThemeScope>
+        <ToastViewport items={items} onDismiss={dismiss} />
+      </ShellThemeScope>
     </ToastContext.Provider>
   );
 }

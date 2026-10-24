@@ -42,8 +42,8 @@ export const SETTINGS_SECTIONS: SettingsSectionMeta[] = [
     id: "appearance",
     group: "app",
     title: "Appearance",
-    subtitle: "Theme, accent & dashboard widgets",
-    keywords: "theme dark light accent color preview widgets dashboard",
+    subtitle: "Dark theme & dashboard widgets",
+    keywords: "theme dark preview widgets dashboard",
   },
   {
     id: "preferences",

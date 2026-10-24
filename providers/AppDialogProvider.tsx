@@ -11,6 +11,7 @@ import {
   type ActionMenuItem,
 } from "@/components/common/ActionMenuSheet";
 import { Dialog, type DialogAction } from "@/components/common/Dialog";
+import { ShellThemeScope } from "@/theme/ThemeProvider";
 import {
   mapActionMenuItems,
   mapAlertButtonsToDialogActions,
@@ -75,6 +76,8 @@ export function AppDialogProvider({ children }: { children: ReactNode }) {
   return (
     <>
       {children}
+      {/* SPENDLY-604: alerts match a shell that pins its palette. */}
+      <ShellThemeScope>
       <Dialog
         isOpen={!!alertState}
         onClose={closeAlert}
@@ -90,6 +93,7 @@ export function AppDialogProvider({ children }: { children: ReactNode }) {
         title={menuState?.title ?? ""}
         actions={menuState?.actions ?? []}
       />
+      </ShellThemeScope>
     </>
   );
 }
