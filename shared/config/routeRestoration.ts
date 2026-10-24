@@ -60,6 +60,23 @@ export function normalizeStoredRoute(pathname: string | null | undefined): strin
   return pathname.replace(/^\/\((?:app|nutrition|auth)\)/, "") || "/";
 }
 
+/**
+ * The query params that are part of a screen's view (which month, tab,
+ * granularity, period, range, merchant or filter) and are worth restoring.
+ * Path params (`category`, `sub`, `id`) are not listed: Expo Router reports
+ * them as params too, but they are already in the pathname (PR #239 review).
+ */
+export const RESTORED_QUERY_KEYS = ["month", "tab", "gran", "period", "range", "merchant", "filter"] as const;
+
+/** `route` plus its view params, in a stable order, for saving. */
+export function routeWithViewParams(route: string, params: Record<string, string | string[] | undefined>): string {
+  const query = RESTORED_QUERY_KEYS.flatMap((key) => {
+    const value = params[key];
+    return typeof value === "string" && value ? [`${key}=${encodeURIComponent(value)}`] : [];
+  });
+  return query.length ? `${route}?${query.join("&")}` : route;
+}
+
 export function isRestorableRoute(route: string): boolean {
   return RESTORABLE_ROUTES.some((candidate) =>
     candidate.endsWith("/") ? route.startsWith(candidate) : route === candidate || route.startsWith(`${candidate}?`)

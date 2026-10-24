@@ -35,6 +35,17 @@ describe("drill-down reads (PR #239 review)", () => {
     }
   });
 
+  it("category budget lines use the shared status flags, not local thresholds", () => {
+    const source = read("app/(app)/spending/[category]/index.tsx");
+    expect(source).not.toMatch(/function budgetStatus\(/);
+    expect(source).toMatch(/budgetProgressStatus\(budgetStatusOf\(item\)\)/);
+  });
+
+  it("the recurring detail never throws on a malformed id, and View budget means a category-level budget", () => {
+    expect(read("app/(app)/recurring/[id].tsx")).toMatch(/safeDecodeParam\(id\)/);
+    expect(read("components/transactions/TransactionMoreSheet.tsx")).toMatch(/!b\.subcategory && b\.month === month/);
+  });
+
   it("merchant corrections are read once per subcategory screen and shared by both tabs", () => {
     const source = read("app/(app)/spending/[category]/[sub].tsx");
     expect(source.match(/useMerchantOverrides\(/g)).toHaveLength(2); // the definition and one call

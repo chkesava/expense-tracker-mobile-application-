@@ -69,6 +69,22 @@ export function createSummaryMonthStore(subscribe: SubscribeMonth, options: { gr
     notify();
   }
 
+  /** Points the slot at a new live listener for the month. */
+  function start(uid: string, month: string, slot: Slot) {
+    slot.unsubscribe = subscribe(
+      uid,
+      month,
+      (summary) => {
+        slot.entry = { status: "ready", summary, error: null };
+        notify();
+      },
+      (error) => {
+        slot.entry = { status: "error", summary: slot.entry.summary, error };
+        notify();
+      }
+    );
+  }
+
   /** Starts (or keeps) a live listener for each month; returns the release. */
   function acquire(uid: string, months: readonly string[]): () => void {
     if (uidInUse && uidInUse !== uid) reset();
@@ -78,6 +94,15 @@ export function createSummaryMonthStore(subscribe: SubscribeMonth, options: { gr
     unique.forEach((month, i) => {
       const key = keys[i];
       let slot = slots.get(key);
+      if (slot && slot.entry.status === "error") {
+        // Firestore ends a listener after reporting an error (permission
+        // denied on a token refresh, a quick sign-out/in). Start a new one,
+        // keeping the last figure while it loads (PR #239 review).
+        slot.unsubscribe();
+        slot.entry = { status: "loading", summary: slot.entry.summary, error: null };
+        start(uid, month, slot);
+        notify();
+      }
       if (!slot) {
         const created: Slot = {
           entry: { status: "loading", summary: null, error: null },
@@ -86,18 +111,7 @@ export function createSummaryMonthStore(subscribe: SubscribeMonth, options: { gr
           timer: null,
         };
         slots.set(key, created);
-        created.unsubscribe = subscribe(
-          uid,
-          month,
-          (summary) => {
-            created.entry = { status: "ready", summary, error: null };
-            notify();
-          },
-          (error) => {
-            created.entry = { status: "error", summary: created.entry.summary, error };
-            notify();
-          }
-        );
+        start(uid, month, created);
         slot = created;
       }
       if (slot.timer) {

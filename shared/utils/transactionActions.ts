@@ -54,7 +54,11 @@ export function transactionActions(ctx: TransactionActionContext): TransactionAc
  * a month equal to `lastProcessed` — can never post a second copy of the
  * payment that is already recorded.
  */
-export function recurringDraftFromExpense(expense: Expense): Subscription {
+export function recurringDraftFromExpense(expense: Expense, currentMonth = ""): Subscription {
+  // PR #239 review: for a past-month expense, `lastProcessed` = that month
+  // would make the schedule due again this month and auto-post an expense
+  // the user didn't make. Start from whichever is later.
+  const expenseMonth = monthKeyOf(expense) ?? "";
   const day = Number(expense.date?.slice(8, 10)) || 1;
   return {
     name: expense.note?.trim() || expense.subcategory || expense.category || "Recurring payment",
@@ -63,7 +67,7 @@ export function recurringDraftFromExpense(expense: Expense): Subscription {
     dayOfMonth: Math.min(31, Math.max(1, day)),
     frequency: "monthly",
     isActive: true,
-    lastProcessed: monthKeyOf(expense) ?? "",
+    lastProcessed: currentMonth > expenseMonth ? currentMonth : expenseMonth,
     type: "subscription",
     source: "manual",
     accountId: expense.accountId,

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Linking from "expo-linking";
-import { usePathname, useRouter } from "expo-router";
+import { useGlobalSearchParams, usePathname, useRouter } from "expo-router";
 
 import { hasPendingAppShortcut } from "@/lib/pendingAppShortcut";
 import {
@@ -9,6 +9,7 @@ import {
   isRestorableRoute,
   lastRouteStorageKey,
   normalizeStoredRoute,
+  routeWithViewParams,
   shouldRestoreRoute,
 } from "@/shared/config/routeRestoration";
 
@@ -22,19 +23,22 @@ import {
  */
 export function useNavigationStateRestoration(uid: string | undefined) {
   const pathname = usePathname();
+  // `usePathname()` has no query: without these, a drill-down reopened its
+  // default month and tab after a cold start (PR #239 review).
+  const params = useGlobalSearchParams();
   const router = useRouter();
   const restoredForUid = useRef<string | null>(null);
   // Read inside the async restore without making it a dependency.
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
 
-  // 1. Remember the active route.
+  // 1. Remember the active route, with its view params (month, tab, …).
+  const route = pathname ? routeWithViewParams(normalizeStoredRoute(pathname), params) : "";
   useEffect(() => {
-    if (!uid || !pathname) return;
-    const route = normalizeStoredRoute(pathname);
+    if (!uid || !route) return;
     if (!isPersistableRoute(route)) return;
     AsyncStorage.setItem(lastRouteStorageKey(uid), route).catch(() => undefined);
-  }, [pathname, uid]);
+  }, [route, uid]);
 
   // 2. Resume it once per signed-in user, only on an unremarkable launch.
   useEffect(() => {

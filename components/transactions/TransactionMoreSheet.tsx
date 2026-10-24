@@ -47,7 +47,7 @@ export function TransactionMoreSheet({
   const surfaces = useSurfaces();
   const { budgets } = useCategoryBudgets({ enabled: context.kind === "expense" && Boolean(context.category) });
   const hasBudget = useMemo(
-    () => (budgets ?? []).some((b) => b.category === context.category && b.month === month),
+    () => (budgets ?? []).some((b) => b.category === context.category && !b.subcategory && b.month === month),
     [budgets, context.category, month]
   );
   const actions = transactionActions({ ...context, hasBudget });

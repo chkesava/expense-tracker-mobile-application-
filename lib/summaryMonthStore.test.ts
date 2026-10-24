@@ -77,6 +77,20 @@ describe("per-month summary store (PR #239 review)", () => {
     expect(store.get("u1", "2026-10")?.summary?.totalExpenses).toBe(250);
   });
 
+  it("a month whose listener failed is restarted when a screen next needs it, keeping the last figure (PR #239 review)", () => {
+    const { store, subscribed, unsubscribed, push, fail } = harness();
+    store.acquire("u1", ["2026-10"]);
+    push.get("u1|2026-10")!(summary("2026-10", 120));
+    fail.get("u1|2026-10")!({ message: "permission-denied" } as never);
+    expect(store.get("u1", "2026-10")).toMatchObject({ status: "error" });
+    store.acquire("u1", ["2026-10"]); // the next screen (or the same one after navigating)
+    expect(subscribed).toEqual(["u1|2026-10", "u1|2026-10"]);
+    expect(unsubscribed).toEqual(["u1|2026-10"]);
+    expect(store.get("u1", "2026-10")).toMatchObject({ status: "loading", summary: { totalExpenses: 120 }, error: null });
+    push.get("u1|2026-10")!(summary("2026-10", 130));
+    expect(store.get("u1", "2026-10")).toMatchObject({ status: "ready", summary: { totalExpenses: 130 } });
+  });
+
   it("another user's sign-in stops every listener of the previous one", () => {
     const { store, unsubscribed, subscribed } = harness();
     store.acquire("u1", ["2026-10", "2026-09"]);

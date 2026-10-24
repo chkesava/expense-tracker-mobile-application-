@@ -16,5 +16,7 @@ export function compactAxisValue(value: number): string {
     const thousands = value / 1000;
     return `${thousands >= 10 ? Math.round(thousands) : thousands.toFixed(1).replace(/\.0$/, "")}K`;
   }
-  return String(Math.round(value));
+  // Small steps (2.5, 0.3) keep one decimal; rounding them would print
+  // duplicated or wrong gridlines ("0, 1, 1, 1") on low counts (PR #239 review).
+  return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "");
 }

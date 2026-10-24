@@ -63,6 +63,15 @@ describe("transactionActions", () => {
 });
 
 describe("recurringDraftFromExpense", () => {
+  it("a past-month expense starts the schedule this month, so nothing is auto-posted for it (PR #239 review)", () => {
+    const july = { ...expense(), date: "2026-07-12", month: "2026-07" };
+    expect(recurringDraftFromExpense(july, "2026-10").lastProcessed).toBe("2026-10");
+    // This month's expense: its own month, as before.
+    expect(recurringDraftFromExpense(expense(), "2026-10").lastProcessed).toBe("2026-10");
+    // Never earlier than the expense's month.
+    expect(recurringDraftFromExpense({ ...expense(), date: "2026-11-02", month: "2026-11" }, "2026-10").lastProcessed).toBe("2026-11");
+  });
+
   it("prefills a monthly item from the expense, without an id (create, not edit)", () => {
     const draft = recurringDraftFromExpense(expense());
     expect(draft).toMatchObject({

@@ -5,6 +5,7 @@ import {
   isRestorableRoute,
   lastRouteStorageKey,
   normalizeStoredRoute,
+  routeWithViewParams,
   shouldRestoreRoute,
 } from "./routeRestoration";
 
@@ -169,5 +170,24 @@ describe("shouldRestoreRoute", () => {
         openedFromLink: false,
       })
     ).toBe(true);
+  });
+});
+
+describe("routeWithViewParams (PR #239 review)", () => {
+  it("keeps a drill-down's month and tab, in a stable order, so a cold start reopens the same view", () => {
+    expect(routeWithViewParams("/spending", { tab: "trends", month: "2026-10" })).toBe("/spending?month=2026-10&tab=trends");
+    expect(routeWithViewParams("/trends", { gran: "yearly", month: "2026-09" })).toBe("/trends?month=2026-09&gran=yearly");
+  });
+
+  it("drops path params, empty values and unknown keys, and encodes values", () => {
+    expect(routeWithViewParams("/spending/Food%20%26%20Groceries", { category: "Food & Groceries", month: "2026-10", foo: "x", tab: "" }))
+      .toBe("/spending/Food%20%26%20Groceries?month=2026-10");
+    expect(routeWithViewParams("/spending/Food/Groceries", { merchant: "D-Mart & Co" })).toBe("/spending/Food/Groceries?merchant=D-Mart%20%26%20Co");
+    expect(routeWithViewParams("/ledger", {})).toBe("/ledger");
+  });
+
+  it("the saved route is still restorable", () => {
+    expect(isRestorableRoute(routeWithViewParams("/trends", { month: "2026-10", gran: "weekly" }))).toBe(true);
+    expect(isRestorableRoute(routeWithViewParams("/spending/Food", { month: "2026-10", tab: "budget" }))).toBe(true);
   });
 });

@@ -50,6 +50,19 @@ const TYPE_LABELS = { subscription: "Subscription", emi: "EMI", transfer: "Recur
  * id. Edit, pause/resume and delete are the existing `useSubscriptions` and
  * `EditSubscriptionModal` flows.
  */
+/**
+ * Expo Router already decodes route params; decoding again throws a URIError on
+ * a malformed sequence (`/recurring/%E0%A4`) and would crash the screen during
+ * render. Fall back to the raw value so the screen says "not found" instead.
+ */
+function safeDecodeParam(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export default function RecurringDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
@@ -66,7 +79,7 @@ export default function RecurringDetailScreen() {
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const subId = typeof id === "string" ? decodeURIComponent(id) : "";
+  const subId = typeof id === "string" ? safeDecodeParam(id) : "";
   const sub = subscriptions.find((s) => s.id === subId) ?? null;
   const thisMonth = currentMonthKey(settings.timezone);
 

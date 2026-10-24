@@ -420,7 +420,7 @@ export default function TransactionDetailsScreen() {
         router.push("/settings/money" as Href);
         return;
       case "createRecurring":
-        if (expense) setRecurringDraft(recurringDraftFromExpense(expense));
+        if (expense) setRecurringDraft(recurringDraftFromExpense(expense, currentMonthKey(settings.timezone)));
         return;
       case "share": {
         const row = expense ?? income;
@@ -432,7 +432,11 @@ export default function TransactionDetailsScreen() {
             amountLabel: formatAmount(row.amount, currency),
             dateLabel: formatActivityDateLabel(row.date),
           }),
-        }).catch((error) => logError("transactionDetail.share", error));
+        }).catch((error) => {
+          // e.g. a desktop browser without the Web Share API.
+          logError("transactionDetail.share", error);
+          toast.error("Couldn't share this transaction.");
+        });
         return;
       }
       case "delete":

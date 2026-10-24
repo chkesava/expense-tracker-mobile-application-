@@ -8,7 +8,8 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
-import { ProgressIndicator, type ProgressStatus } from "@/components/dashboard/ProgressIndicator";
+import { budgetProgressStatus } from "@/components/budgets/BudgetParts";
+import { ProgressIndicator } from "@/components/dashboard/ProgressIndicator";
 import { DataRow, RowGlyph, useSurfaces } from "@/components/dashboard/primitives";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
@@ -36,7 +37,8 @@ import { useGlobalMonth } from "@/providers/ModalProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import type { DashboardPeriodSummary } from "@/shared/types/financialSummary";
 import { formatDisplayDate } from "@/shared/utils/dateDisplay";
-import { computeActiveCategoryBudgets } from "@/shared/utils/dashboardWidgets";
+import { budgetStatusOf } from "@/shared/utils/budgetDrilldown";
+import { computeActiveCategoryBudgets, type CategoryBudgetAlertItem } from "@/shared/utils/dashboardWidgets";
 import { currentMonthKey, shiftMonthKey } from "@/shared/utils/dates";
 import { monthLabel } from "@/shared/utils/monthLabel";
 import {
@@ -276,12 +278,6 @@ function TransactionsTab({
   );
 }
 
-function budgetStatus(spent: number, amount: number): ProgressStatus {
-  if (spent > amount) return "over";
-  if (amount > 0 && spent / amount >= 0.8) return "watch";
-  return "good";
-}
-
 function BudgetTab({
   category,
   month,
@@ -328,14 +324,14 @@ function BudgetTab({
     <>
       {parent ? (
         <SurfaceCard title="Category budget">
-          <BudgetLine label={category} amount={parent.amount} spent={parent.spent} currency={currency} />
+          <BudgetLine label={category} item={parent} currency={currency} />
         </SurfaceCard>
       ) : null}
       {subs.length > 0 ? (
         <SurfaceCard title="Subcategory budgets">
           <View style={styles.budgetList}>
             {subs.map((b) => (
-              <BudgetLine key={b.id} label={b.subcategory ?? ""} amount={b.amount} spent={b.spent} currency={currency} />
+              <BudgetLine key={b.id} label={b.subcategory ?? ""} item={b} currency={currency} />
             ))}
           </View>
         </SurfaceCard>
@@ -347,12 +343,18 @@ function BudgetTab({
   );
 }
 
-function BudgetLine({ label, amount, spent, currency }: { label: string; amount: number; spent: number; currency: string }) {
+/**
+ * One budget's line. The status comes from `computeActiveCategoryBudgets`'
+ * own `isOver`/`isWarning` (PR #239 review), so it matches the dashboard and
+ * the budget drill-downs exactly, including their rounding at the 80% mark.
+ */
+function BudgetLine({ label, item, currency }: { label: string; item: CategoryBudgetAlertItem; currency: string }) {
   const { theme } = useTheme();
   const money = useGhostMoney(currency);
+  const { amount, spent } = item;
   const remaining = amount - spent;
   const over = remaining < 0;
-  const status = budgetStatus(spent, amount);
+  const status = budgetProgressStatus(budgetStatusOf(item));
   const pct = amount > 0 ? (spent / amount) * 100 : 0;
   return (
     <View style={styles.budgetLine} accessible accessibilityLabel={`${label}: spent ${money(spent)} of ${money(amount)}. ${over ? `Over by ${money(-remaining)}` : `${money(remaining)} left`}`}>
