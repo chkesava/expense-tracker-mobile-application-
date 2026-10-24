@@ -71,6 +71,11 @@ import {
 } from "@/shared/utils/journalFilterPipeline";
 import type { JournalPeriodGranularity } from "@/shared/utils/journalPeriodSummary";
 import { journalCashFlowById } from "@/shared/utils/journalRunningBalance";
+import {
+  journalHistoryNotice,
+  journalRefreshAction,
+  journalScopeLabel,
+} from "@/shared/utils/journalRefresh";
 import type { LedgerAuditSubject } from "@/shared/utils/ledgerAudit";
 import { describeAccountActivityFilters } from "@/shared/utils/accountActivityFilterLabels";
 import { buildJournalReport } from "@/shared/utils/journalReport";
@@ -182,7 +187,10 @@ export default function LedgerScreen() {
   }, [params.tab, router, setLedgerTab]);
 
   const [refreshing, setRefreshing] = useState(false);
+  // SPENDLY-585: the listeners are live, so a healthy refresh has nothing
+  // newer to fetch; re-subscribing would re-read every finance collection.
   const handleRefresh = () => {
+    if (journalRefreshAction({ hasError: !!(expensesError || incomesError) }) === "none") return;
     setRefreshing(true);
     retryExpenses();
   };
@@ -373,6 +381,8 @@ export default function LedgerScreen() {
   // JournalPeriodSummary, which is rounded, scoped to the rows actually in
   // view, and refuses to render at all while the ledger is truncated. Showing
   // both would put two different Spent figures on one screen.
+  const historyNotice = journalHistoryNotice({ periodComplete: periodSummaryComplete });
+
   const cashFlowById = useMemo(
     () => journalCashFlowById(journal.runningBalance),
     [journal.runningBalance]
@@ -631,7 +641,7 @@ export default function LedgerScreen() {
         filters={journalFilters}
         searchQuery={query}
         onSearchChange={setQuery}
-        totalCount={journal.records.length}
+        totalCount={journal.periodCount}
         allCount={journal.kindCounts.all}
         incomeCount={journal.kindCounts.income}
         expenseCount={journal.kindCounts.expense}
@@ -640,13 +650,11 @@ export default function LedgerScreen() {
         activeFilterCount={journal.activeFilterCount}
         availableKinds={availableKinds}
         compact
-        scopeLabel={
-          !ledgerComplete
-            ? "loaded so far"
-            : journal.dateScope.monthOverridden
-              ? "custom range"
-              : activeMonth
-        }
+        scopeLabel={journalScopeLabel({
+          monthKey: activeMonth,
+          monthOverridden: journal.dateScope.monthOverridden,
+          periodComplete: periodSummaryComplete,
+        })}
         onKindChange={(kind) =>
           setJournalFilters((previous) => ({ ...previous, kind }))
         }
@@ -719,7 +727,7 @@ export default function LedgerScreen() {
               { color: theme.colors.foreground },
             ]}
           >
-            Showing recent transactions
+            {historyNotice.title}
           </Text>
           <Text
             style={[
@@ -727,7 +735,7 @@ export default function LedgerScreen() {
               { color: theme.colors.mutedForeground },
             ]}
           >
-            Displaying the latest {journal.records.length} transactions. Scroll down or tap below to load older history.
+            {historyNotice.body}
           </Text>
           {hasMoreLedger ? (
             <View style={{ marginTop: 8, flexDirection: "row" }}>

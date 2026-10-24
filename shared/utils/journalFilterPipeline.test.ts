@@ -446,3 +446,59 @@ describe("journal filter pipeline (SPENDLY-109)", () => {
     });
   });
 });
+
+describe("period count and month scoping (SPENDLY-585)", () => {
+  // A live window spanning several months, like the app-wide staged listener:
+  // the header must count only the selected month, never the whole window.
+  const windowExpenses: Expense[] = [
+    ...Array.from({ length: 104 }, (_, i) =>
+      expense({ id: `oct-e${i}`, date: `2026-10-${String((i % 28) + 1).padStart(2, "0")}`, month: "2026-10" })
+    ),
+    ...Array.from({ length: 196 }, (_, i) =>
+      expense({ id: `old-e${i}`, date: `2026-0${(i % 3) + 7}-15`, month: `2026-0${(i % 3) + 7}` })
+    ),
+  ];
+  const windowIncomes: Income[] = [
+    ...Array.from({ length: 11 }, (_, i) =>
+      income({ id: `oct-i${i}`, date: `2026-10-${String(i + 1).padStart(2, "0")}`, month: "2026-10" })
+    ),
+    ...Array.from({ length: 31 }, (_, i) => income({ id: `old-i${i}`, date: "2026-06-01", month: "2026-06" })),
+  ];
+  const runWindow = (monthKey: string, query = "") =>
+    runJournalFilterPipeline({
+      expenses: windowExpenses,
+      incomes: windowIncomes,
+      accounts,
+      query,
+      filters: createEmptyAccountActivityFilters(),
+      monthKey,
+      scope: "all",
+    });
+
+  it("counts the selected month, not the 342-row window", () => {
+    const result = runWindow("2026-10");
+    expect(result.records).toHaveLength(342);
+    expect(result.periodCount).toBe(115);
+    expect(result.kindCounts).toMatchObject({ all: 115, expense: 104, income: 11 });
+    expect(result.filtered).toHaveLength(115);
+  });
+
+  it("reports an empty month as zero rather than the window size", () => {
+    const result = runWindow("2025-01");
+    expect(result.periodCount).toBe(0);
+    expect(result.filtered).toEqual([]);
+  });
+
+  it("follows a month change with no stale rows from the previous month", () => {
+    const august = runWindow("2026-08");
+    expect(august.filtered.every((r) => r.activity.date.startsWith("2026-08"))).toBe(true);
+    expect(august.periodCount).toBe(august.filtered.length);
+    expect(runWindow("2026-10").periodCount).toBe(115);
+  });
+
+  it("keeps the period count fixed while search narrows the list", () => {
+    const result = runWindow("2026-10", "no-such-note");
+    expect(result.periodCount).toBe(115);
+    expect(result.filtered).toHaveLength(0);
+  });
+});
