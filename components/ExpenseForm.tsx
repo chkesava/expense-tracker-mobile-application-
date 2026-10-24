@@ -135,8 +135,16 @@ export function ExpenseForm({
   const { accountTypes } = useAccountTypes();
   const { spaces } = useSpaces();
   const { rules } = useCategorizationRules();
-  const { expenses } = useExpenses();
-  const { incomes } = useIncomes();
+  const {
+    expenses,
+    complete: expensesComplete,
+    hasMore: hasMoreExpenses,
+  } = useExpenses();
+  const {
+    incomes,
+    complete: incomesComplete,
+    hasMore: hasMoreIncomes,
+  } = useIncomes();
   const { payments } = useAccountPayments();
   const { entries } = useAccountEntries();
   const { transfers } = useAccountTransfers();
@@ -385,7 +393,27 @@ export function ExpenseForm({
       receivables,
       receivableRepayments,
       bills,
-      todayDateKey(settings.timezone)
+      todayDateKey(settings.timezone),
+      {
+        ledgerComplete:
+          expensesComplete &&
+          incomesComplete &&
+          !hasMoreExpenses &&
+          !hasMoreIncomes,
+        editing: editingExpense
+          ? {
+              kind: "expense",
+              accountId: editingExpense.accountId,
+              amount: editingExpense.amount,
+            }
+          : editingIncome
+            ? {
+                kind: "income",
+                accountId: editingIncome.accountId,
+                amount: editingIncome.amount,
+              }
+            : undefined,
+      }
     );
   }, [
     selectedAccount,
@@ -403,8 +431,12 @@ export function ExpenseForm({
     receivableRepayments,
     bills,
     settings.timezone,
-    editingExpense?.id,
-    editingIncome?.id,
+    editingExpense,
+    editingIncome,
+    expensesComplete,
+    incomesComplete,
+    hasMoreExpenses,
+    hasMoreIncomes,
   ]);
 
   const handleAddQuickAmount = (val: number) => {

@@ -674,6 +674,17 @@ function storedBalanceAnchor(account: Account): number | undefined {
   return account.currentBalance;
 }
 
+export interface BalancePreviewOptions {
+  /**
+   * False while only the newest ledger pages are loaded. Without a trusted
+   * stored balance the preview is then hidden instead of replayed.
+   * Defaults to true.
+   */
+  ledgerComplete?: boolean;
+  /** The saved row being edited, as it is before this edit. */
+  editing?: { kind: "expense" | "income"; accountId?: string; amount: number };
+}
+
 export function previewBalanceAfterTransaction(
   account: Account,
   typeName: string,
@@ -690,10 +701,31 @@ export function previewBalanceAfterTransaction(
   receivables: Receivable[] = [],
   receivableRepayments: ReceivableRepayment[] = [],
   bills: OpenCreditBillSlice[] = [],
-  today: string = todayDateKey()
+  today: string = todayDateKey(),
+  options: BalancePreviewOptions = {}
 ): number | null {
   const kind = getAccountKind(typeName);
   if (kind !== "credit") {
+    // SPENDLY-584: start from the materialized balance the account screen
+    // shows and apply the same delta the save writes (`createExpense` /
+    // `updateExpense` & income twins). Replaying from `openingBalance` over
+    // the paged ledger drops every unloaded older row and inflates the result.
+    const anchor = storedBalanceAnchor(account);
+    if (anchor !== undefined) {
+      const sign = (k: "expense" | "income") => (k === "expense" ? -1 : 1);
+      let balance = anchor + sign(transactionType) * amount;
+      const editing = options.editing;
+      if (editing && editing.accountId === account.id) {
+        // The stored balance already holds the original row; the save
+        // reverses it before applying the new amount.
+        balance -= sign(editing.kind) * editing.amount;
+      }
+      return roundMoney(balance);
+    }
+    // No trustworthy stored balance: a replay is only right over the full
+    // history, so show nothing rather than a guess from a partial ledger.
+    if (options.ledgerComplete === false) return null;
+
     const filteredExpenses = excludeId
       ? expenses.filter((e) => e.id !== excludeId)
       : expenses;
@@ -718,9 +750,10 @@ export function previewBalanceAfterTransaction(
     return roundMoney(balance);
   }
   if (kind === "credit" && transactionType === "expense" && account.billGenerationDay) {
+    // An edited row is replaced by the draft, so it must not count twice.
     const { availableCredit } = computeOutstandingCredit(
       account,
-      expenses,
+      excludeId ? expenses.filter((e) => e.id !== excludeId) : expenses,
       payments,
       bills,
       today,

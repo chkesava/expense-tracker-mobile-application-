@@ -1263,3 +1263,167 @@ describe("bill payment source correction", () => {
     ).toEqual([10000, 10000]);
   });
 });
+
+describe("previewBalanceAfterTransaction uses the stored balance (SPENDLY-584)", () => {
+  const TODAY = "2026-10-24";
+  const sbi: Account = {
+    id: "sbi",
+    name: "State Bank of India",
+    typeId: "bank-type",
+    openingBalance: 20_000,
+    currentBalance: 1072,
+    balanceInitialized: true,
+  };
+  const wallet: Account = {
+    id: "wallet",
+    name: "Wallet",
+    typeId: "cash-type",
+    openingBalance: 0,
+    currentBalance: 450,
+    balanceInitialized: true,
+  };
+  const card: Account = {
+    id: "slice",
+    name: "Slice",
+    typeId: "credit-type",
+    billGenerationDay: 21,
+    creditLimit: 100000,
+    currentOutstanding: 200,
+    balanceInitialized: true,
+  };
+
+  function row(
+    amount: number,
+    accountId: string,
+    id: string,
+    date = "2026-10-20"
+  ): Expense {
+    return {
+      id,
+      amount,
+      category: "Food",
+      note: "",
+      date,
+      month: date.slice(0, 7),
+      accountId,
+      createdAt: null,
+    };
+  }
+
+  // Only the newest page is loaded: a replay from openingBalance would see
+  // just this ₹789 and land on 20,000 − 789 − 100 = 19,111, not the truth.
+  const loadedPage = [row(789, "sbi", "e-new")];
+
+  function preview(
+    account: Account,
+    typeName: string,
+    type: "expense" | "income",
+    amount: number,
+    expenses: Expense[] = loadedPage,
+    extra: { excludeId?: string; options?: Parameters<typeof previewBalanceAfterTransaction>[16] } = {}
+  ) {
+    return previewBalanceAfterTransaction(
+      account,
+      typeName,
+      expenses,
+      [],
+      type,
+      amount,
+      [],
+      [],
+      [],
+      extra.excludeId,
+      [],
+      [],
+      [],
+      [],
+      [],
+      TODAY,
+      extra.options
+    );
+  }
+
+  it("a ₹100 expense against a ₹1,072 bank balance previews ₹972, ignoring the partial ledger", () => {
+    expect(preview(sbi, "Bank", "expense", 100, loadedPage, { options: { ledgerComplete: false } })).toBe(972);
+    expect(preview(sbi, "Bank", "expense", 100)).toBe(972);
+  });
+
+  it("uses the same rule for cash accounts", () => {
+    expect(preview(wallet, "Cash", "expense", 100)).toBe(350);
+  });
+
+  it("adds income to the stored balance", () => {
+    expect(preview(sbi, "Bank", "income", 500)).toBe(1572);
+  });
+
+  it("editing an expense on the same account reverses the original amount first", () => {
+    // Stored 1,072 already includes the ₹789; editing it to ₹800 nets −11.
+    expect(
+      preview(sbi, "Bank", "expense", 800, loadedPage, {
+        excludeId: "e-new",
+        options: { editing: { kind: "expense", accountId: "sbi", amount: 789 } },
+      })
+    ).toBe(1061);
+  });
+
+  it("editing an income on the same account reverses the original amount first", () => {
+    expect(
+      preview(sbi, "Bank", "income", 300, [], {
+        options: { editing: { kind: "income", accountId: "sbi", amount: 500 } },
+      })
+    ).toBe(872);
+  });
+
+  it("an edit moving a row from another account only applies the new amount", () => {
+    expect(
+      preview(wallet, "Cash", "expense", 100, loadedPage, {
+        excludeId: "e-new",
+        options: { editing: { kind: "expense", accountId: "sbi", amount: 789 } },
+      })
+    ).toBe(350);
+  });
+
+  it("switching accounts gives each account its own result for the same draft", () => {
+    const results = [
+      preview(sbi, "Bank", "expense", 100),
+      preview(wallet, "Cash", "expense", 100),
+      preview(sbi, "Bank", "expense", 100),
+    ];
+    expect(results).toEqual([972, 350, 972]);
+  });
+
+  it("falls back to the full replay when the stored balance is untrusted and the ledger is complete", () => {
+    const unseeded: Account = { ...sbi, balanceInitialized: false };
+    const flagged: Account = { ...sbi, balanceReconciliationStatus: "needs_reconciliation" };
+    expect(preview(unseeded, "Bank", "expense", 100)).toBe(19111);
+    expect(preview(flagged, "Bank", "expense", 100, loadedPage, { options: { ledgerComplete: true } })).toBe(19111);
+  });
+
+  it("hides the preview when the stored balance is untrusted and the ledger is partial", () => {
+    const unseeded: Account = { ...sbi, balanceInitialized: false };
+    expect(
+      preview(unseeded, "Bank", "expense", 100, loadedPage, { options: { ledgerComplete: false } })
+    ).toBeNull();
+  });
+
+  describe("credit cards keep available-credit semantics", () => {
+    const cardSpend = [row(200, "slice", "c-1", "2026-10-22")];
+
+    it("previews limit − unbilled − draft, the figure card detail shows", () => {
+      expect(preview(card, "Credit Card", "expense", 100, cardSpend)).toBe(99700);
+    });
+
+    it("does not count the row being edited twice", () => {
+      expect(
+        preview(card, "Credit Card", "expense", 300, cardSpend, { excludeId: "c-1" })
+      ).toBe(99700);
+    });
+
+    it("switching from bank to card and back keeps each account's semantics", () => {
+      const all = [...loadedPage, ...cardSpend];
+      expect(preview(sbi, "Bank", "expense", 100, all)).toBe(972);
+      expect(preview(card, "Credit Card", "expense", 100, all)).toBe(99700);
+      expect(preview(sbi, "Bank", "expense", 100, all)).toBe(972);
+    });
+  });
+});
