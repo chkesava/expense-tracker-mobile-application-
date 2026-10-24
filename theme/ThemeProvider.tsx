@@ -53,6 +53,15 @@ export const ThemeContext = createContext<ThemeContextValue | undefined>(undefin
 
 export type { ThemeContextValue };
 
+/**
+ * SPENDLY-604: a product shell that pins its palette (the Expense app is
+ * always dark) registers it here, so root-level hosts that render above the
+ * shell (`appDialog` alerts, toasts) can match it through `ShellThemeScope`.
+ * Null whenever no such shell is mounted, e.g. in Ganesh Seva or Nutrition.
+ */
+type ShellThemeValue = { name: ThemeName | null; setName: (name: ThemeName | null) => void };
+const ShellThemeContext = createContext<ShellThemeValue>({ name: null, setName: () => undefined });
+
 function resolveInitialTheme(system: string | null | undefined): ThemeName {
   try {
     const stored = memoryStorage.getItem(THEME_STORAGE_KEY);
@@ -88,6 +97,11 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
   );
   const [accentColor, setAccentColorState] = useState<AccentColorName>(() =>
     resolveInitialAccent()
+  );
+  const [shellThemeName, setShellThemeName] = useState<ThemeName | null>(null);
+  const shellTheme = useMemo<ShellThemeValue>(
+    () => ({ name: shellThemeName, setName: setShellThemeName }),
+    [shellThemeName]
   );
 
   useEffect(() => {
@@ -257,7 +271,9 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+    <ThemeContext.Provider value={value}>
+      <ShellThemeContext.Provider value={shellTheme}>{children}</ShellThemeContext.Provider>
+    </ThemeContext.Provider>
   );
 }
 
@@ -278,6 +294,21 @@ export function ThemeOverride({ themeName, children }: { themeName: ThemeName; c
     [parent, themeName]
   );
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+}
+
+/** SPENDLY-604: pins root-level hosts to `name` while the calling shell is mounted. */
+export function useRegisterShellTheme(name: ThemeName) {
+  const { setName } = useContext(ShellThemeContext);
+  useEffect(() => {
+    setName(name);
+    return () => setName(null);
+  }, [name, setName]);
+}
+
+/** Renders `children` in the registered shell palette, or unchanged when none is. */
+export function ShellThemeScope({ children }: { children: ReactNode }) {
+  const { name } = useContext(ShellThemeContext);
+  return name ? <ThemeOverride themeName={name}>{children}</ThemeOverride> : <>{children}</>;
 }
 
 export function useTheme() {

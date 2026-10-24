@@ -377,6 +377,13 @@ export const midnightEmeraldColors: ColorTokens = {
   infoForeground: "#06111F",
 };
 
+/**
+ * SPENDLY-604: the Expense app is always dark. Every screen under the Expense
+ * shell renders in this palette, whatever theme the user has saved; Ganesh
+ * Seva and Nutrition still follow the saved theme.
+ */
+export const EXPENSE_THEME_NAME: ThemeName = "midnight-emerald";
+
 /** Presets that ship their own accent; the accent picker does not apply. */
 export function themeOwnsAccent(name: ThemeName): boolean {
   return name === "midnight-emerald";

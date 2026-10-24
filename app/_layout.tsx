@@ -49,7 +49,7 @@ import { SettingsProvider, useSettings } from "@/providers/SettingsProvider";
 import { SystemSettingsProvider } from "@/providers/SystemSettingsProvider";
 import { UserDocProvider, useUserDoc } from "@/providers/UserDocProvider";
 import { WorkspaceProvider, useWorkspace } from "@/providers/WorkspaceProvider";
-import { AppThemeProvider, useTheme } from "@/theme/ThemeProvider";
+import { AppThemeProvider, ShellThemeScope, useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette, THEME_STORAGE_KEY } from "@/theme/tokens";
 
 // Uncaught throws / unhandled rejections — installed before any provider mounts.
@@ -299,7 +299,9 @@ export default function RootLayout() {
                                 <AppErrorBoundary scope="app.navigator">
                                   <RootNavigator />
                                 </AppErrorBoundary>
-                                <CelebrationOverlay />
+                                <ShellThemeScope>
+                                  <CelebrationOverlay />
+                                </ShellThemeScope>
                               </AppInitializer>
                               </AppDialogProvider>
                             </ToastProvider>

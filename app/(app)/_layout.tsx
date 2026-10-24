@@ -1,5 +1,6 @@
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { Redirect, Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 
 import { AddActionSheet } from "@/components/AddActionSheet";
 import { AddTransactionModal } from "@/components/AddTransactionModal";
@@ -16,7 +17,7 @@ import { GlassBlurScope, GlassBlurTarget } from "@/components/ui/GlassSurface";
 import { OverlayProvider } from "@gluestack-ui/core/overlay/creator";
 import { NavigationBar } from "expo-navigation-bar";
 import { navigationBarStyleFor } from "@/lib/navigationBarStyle";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { EXPENSE_THEME_NAME, themeUsesDarkPalette } from "@/theme/tokens";
 import { SetupWizardModal } from "@/components/onboarding/SetupWizardModal";
 import { useAndroidBackHandler } from "@/hooks/useAndroidBackHandler";
 import { useAppShortcutHandler } from "@/hooks/useAppShortcutHandler";
@@ -38,7 +39,7 @@ import { ModalProvider } from "@/providers/ModalProvider";
 import { SetupProgressProvider } from "@/providers/SetupProgressProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
-import { useTheme } from "@/theme/ThemeProvider";
+import { ThemeOverride, useRegisterShellTheme, useTheme } from "@/theme/ThemeProvider";
 
 function AppShellInner() {
   const { settings } = useSettings();
@@ -356,9 +357,26 @@ function AppShellInner() {
 }
 
 /**
- * Protected app shell — auth + maintenance + privacy lock + finance data + product navigation.
+ * SPENDLY-604: the Expense app is always dark. One override at the shell
+ * covers every screen, the nav, the header, modals, sheets and the Gluestack
+ * overlay, without touching the user's saved theme (Ganesh Seva and Nutrition
+ * render outside this layout and keep following it).
  */
 export default function AppLayout() {
+  // Root-level alerts and toasts render above this layout; match them too.
+  useRegisterShellTheme(EXPENSE_THEME_NAME);
+  return (
+    <ThemeOverride themeName={EXPENSE_THEME_NAME}>
+      <StatusBar style="light" />
+      <ProtectedAppLayout />
+    </ThemeOverride>
+  );
+}
+
+/**
+ * Protected app shell — auth + maintenance + privacy lock + finance data + product navigation.
+ */
+function ProtectedAppLayout() {
   const { theme } = useTheme();
   const { user, loading: authLoading } = useAuth();
   const { settings, loading: settingsLoading } = useSystemSettings();
