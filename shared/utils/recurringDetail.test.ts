@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { AccountTransfer, Expense } from "@/shared/types/expense";
 import type { Subscription } from "@/shared/types/subscription";
 import { evaluateSubscriptionDue } from "./subscriptionProcessor";
-import { autoPostState, recurringHistory, recurringHref, upcomingPaymentDates } from "./recurringDetail";
+import { autoPostState, recurringHistory, recurringHref, safeDecodeParam, upcomingPaymentDates } from "./recurringDetail";
 
 const sub = (p: Partial<Subscription> = {}): Subscription => ({
   id: "s1",
@@ -118,5 +118,18 @@ describe("autoPostState", () => {
 describe("recurringHref", () => {
   it("encodes the id", () => {
     expect(recurringHref("abc/1")).toBe("/recurring/abc%2F1");
+  });
+});
+
+describe("safeDecodeParam (PR #239 review)", () => {
+  it("decodes an encoded id", () => {
+    expect(safeDecodeParam("sub%201")).toBe("sub 1");
+    expect(safeDecodeParam("abc123")).toBe("abc123");
+  });
+
+  it("returns a malformed sequence unchanged instead of throwing", () => {
+    expect(() => safeDecodeParam("%E0%A4")).not.toThrow();
+    expect(safeDecodeParam("%E0%A4")).toBe("%E0%A4");
+    expect(safeDecodeParam("%")).toBe("%");
   });
 });

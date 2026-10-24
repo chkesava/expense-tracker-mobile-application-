@@ -124,3 +124,16 @@ export const AUTO_POST_LABELS: Record<AutoPostState, string> = {
 export function recurringHref(id: string): string {
   return `/recurring/${encodeURIComponent(id)}`;
 }
+
+/**
+ * Expo Router already decodes route params; decoding again throws a URIError on
+ * a malformed sequence (`/recurring/%E0%A4`) and would crash the screen during
+ * render. Fall back to the raw value so the screen says "not found" instead.
+ */
+export function safeDecodeParam(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}

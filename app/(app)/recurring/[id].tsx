@@ -31,6 +31,7 @@ import {
   AUTO_POST_LABELS,
   autoPostState,
   recurringHistory,
+  safeDecodeParam,
   upcomingPaymentDates,
 } from "@/shared/utils/recurringDetail";
 import { getNextRenewalDate, isSubscriptionOverdue } from "@/shared/utils/subscriptionProcessor";
@@ -50,19 +51,6 @@ const TYPE_LABELS = { subscription: "Subscription", emi: "EMI", transfer: "Recur
  * id. Edit, pause/resume and delete are the existing `useSubscriptions` and
  * `EditSubscriptionModal` flows.
  */
-/**
- * Expo Router already decodes route params; decoding again throws a URIError on
- * a malformed sequence (`/recurring/%E0%A4`) and would crash the screen during
- * render. Fall back to the raw value so the screen says "not found" instead.
- */
-function safeDecodeParam(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
 export default function RecurringDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
