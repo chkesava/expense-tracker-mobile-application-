@@ -3,22 +3,22 @@ import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
 import { todayDateKey } from "@/shared/utils/dates";
 import {
   baselineAwareBalanceDeltas,
-  type AccountDelta,
+  type BalanceLeg,
 } from "@/shared/utils/ledgerAccountDeltas";
 
 import type { AccountInfo } from "./fetchAccountTypes";
 
 /**
- * SPENDLY-602 — the `accounts` summary ops for an expense / income write,
- * given its signed legs (`-amount` for an expense, `+amount` for an income,
- * reversed for the row an edit or delete takes away).
+ * SPENDLY-602/603 — the `accounts` summary ops for a ledger write, given its
+ * signed, dated legs (`-amount` for money out of an account, `+amount` for
+ * money in, reversed for whatever an edit or delete takes away).
  *
  * Bank legs dated before the account's `balanceAsOfDate` are dropped, as a
  * full rebuild drops them; card legs move `currentOutstanding` as before.
  */
 export function journalBalanceOps(
   owner: string,
-  legs: readonly AccountDelta[],
+  legs: readonly BalanceLeg[],
   info: Map<string, AccountInfo>,
   today: string = todayDateKey()
 ): MutationOp[] {
@@ -39,7 +39,7 @@ export function journalBalanceOps(
       return {
         accountId: d.accountId,
         amountDelta: d.amountDelta,
-        isCreditCard: account?.isCreditCard ?? false,
+        isCreditCard: d.isCreditCard ?? account?.isCreditCard ?? false,
         oldBalance: account?.oldBalance,
         oldOutstanding: account?.oldOutstanding,
         needsInitialization: account?.needsInitialization,

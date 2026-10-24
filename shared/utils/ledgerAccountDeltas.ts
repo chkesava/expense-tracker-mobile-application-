@@ -188,6 +188,13 @@ export function netBankBalanceDeltas(
 }
 
 /**
+ * A signed, dated balance change. `isCreditCard` pins the account kind where
+ * a writer already knows it (a bill payment's bank and card sides) instead
+ * of the account's own type.
+ */
+export type BalanceLeg = AccountDelta & { isCreditCard?: boolean };
+
+/**
  * SPENDLY-602 — the net balance change per account for a set of signed legs,
  * as the stored summaries must move: a non-credit leg dated before the
  * account's effective `balanceAsOfDate` is dropped (it already sits inside
@@ -197,21 +204,28 @@ export function netBankBalanceDeltas(
  * Accounts that net to zero are dropped.
  */
 export function baselineAwareBalanceDeltas(
-  legs: readonly AccountDelta[],
+  legs: readonly BalanceLeg[],
   accountContext: (accountId: string) => BalanceAccountContext | undefined,
   today: string = todayDateKey()
-): { accountId: string; amountDelta: number }[] {
-  const net = new Map<string, number>();
+): { accountId: string; amountDelta: number; isCreditCard?: boolean }[] {
+  const net = new Map<string, { amountDelta: number; isCreditCard?: boolean }>();
   for (const d of legs) {
     if (!d.accountId) continue;
     const account = accountContext(d.accountId);
-    if (account && !account.isCreditCard) {
+    const isCreditCard = d.isCreditCard ?? account?.isCreditCard ?? false;
+    if (account && !isCreditCard) {
       const baseline = effectiveBalanceAsOfDate(account.balanceAsOfDate, [], today);
       if (baseline && d.date < baseline) continue;
     }
-    net.set(d.accountId, (net.get(d.accountId) ?? 0) + (Number(d.amountDelta) || 0));
+    const entry = net.get(d.accountId) ?? { amountDelta: 0, isCreditCard: d.isCreditCard };
+    entry.amountDelta += Number(d.amountDelta) || 0;
+    net.set(d.accountId, entry);
   }
   return [...net.entries()]
-    .map(([accountId, amountDelta]) => ({ accountId, amountDelta: roundMoney(amountDelta) }))
+    .map(([accountId, { amountDelta, isCreditCard }]) => ({
+      accountId,
+      amountDelta: roundMoney(amountDelta),
+      ...(isCreditCard === undefined ? {} : { isCreditCard }),
+    }))
     .filter((d) => d.amountDelta !== 0);
 }

@@ -72,6 +72,7 @@ import {
 import { getAccountKind } from "@/shared/utils/accountKind";
 import { fetchAccountTypes } from "@/services/ledger/fetchAccountTypes";
 import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
+import { journalBalanceOps } from "@/services/ledger/journalBalanceOps";
 import type { MutationOp } from "@/shared/types/mutations";
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { resolveJournalDateScope } from "@/shared/utils/journalDateScope";
@@ -1463,13 +1464,13 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         const ref = doc(collection(database, "users", u.uid, "accountEntries"));
         
         const accountTypes = await fetchAccountTypes(database, u.uid, [accountId]);
-        const balanceDeltas = [{
-          accountId,
-          amountDelta: direction === "credit" ? amount : -amount,
-          isCreditCard: accountTypes.get(accountId)?.isCreditCard || false, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding,
-          needsInitialization: accountTypes.get(accountId)?.needsInitialization
-        }];
-        const balOps = buildAccountBalanceOps(u.uid, balanceDeltas);
+        // SPENDLY-603: an entry dated before the account's baseline is
+        // already inside its opening balance.
+        const balOps = journalBalanceOps(
+          u.uid,
+          [{ accountId, amountDelta: direction === "credit" ? amount : -amount, date }],
+          accountTypes
+        );
 
         const outcome = await commitMutations(
           u.uid,
@@ -1520,12 +1521,13 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         const data = snap.data();
         const accountTypes = await fetchAccountTypes(database, u.uid, [data.accountId]);
         const amountDelta = data.direction === "credit" ? -data.amount : data.amount;
-        balOps.push(...buildAccountBalanceOps(u.uid, [{
-          accountId: data.accountId,
-          amountDelta,
-          isCreditCard: accountTypes.get(data.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(data.accountId)?.oldBalance, oldOutstanding: accountTypes.get(data.accountId)?.oldOutstanding,
-          needsInitialization: accountTypes.get(data.accountId)?.needsInitialization
-        }]));
+        balOps.push(
+          ...journalBalanceOps(
+            u.uid,
+            [{ accountId: data.accountId, amountDelta, date: String(data.date ?? "") }],
+            accountTypes
+          )
+        );
       }
 
       const outcome = await commitMutations(
@@ -1574,11 +1576,15 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         const ref = doc(collection(database, "users", u.uid, "accountTransfers"));
         
         const accountTypes = await fetchAccountTypes(database, u.uid, [fromAccountId, toAccountId]);
-        const balanceDeltas = [
-          { accountId: fromAccountId, amountDelta: -amount, isCreditCard: accountTypes.get(fromAccountId)?.isCreditCard || false, oldBalance: accountTypes.get(fromAccountId)?.oldBalance, oldOutstanding: accountTypes.get(fromAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(fromAccountId)?.needsInitialization },
-          { accountId: toAccountId, amountDelta: amount, isCreditCard: accountTypes.get(toAccountId)?.isCreditCard || false, oldBalance: accountTypes.get(toAccountId)?.oldBalance, oldOutstanding: accountTypes.get(toAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(toAccountId)?.needsInitialization }
-        ];
-        const balOps = buildAccountBalanceOps(u.uid, balanceDeltas);
+        // SPENDLY-603: each side honours its own account's baseline.
+        const balOps = journalBalanceOps(
+          u.uid,
+          [
+            { accountId: fromAccountId, amountDelta: -amount, date },
+            { accountId: toAccountId, amountDelta: amount, date },
+          ],
+          accountTypes
+        );
 
         const outcome = await commitMutations(
           u.uid,
@@ -1621,11 +1627,17 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       if (snap.exists()) {
         const data = snap.data();
         const accountTypes = await fetchAccountTypes(database, u.uid, [data.fromAccountId, data.toAccountId]);
-        const balanceDeltas = [
-          { accountId: data.fromAccountId, amountDelta: data.amount, isCreditCard: accountTypes.get(data.fromAccountId)?.isCreditCard || false, oldBalance: accountTypes.get(data.fromAccountId)?.oldBalance, oldOutstanding: accountTypes.get(data.fromAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(data.fromAccountId)?.needsInitialization },
-          { accountId: data.toAccountId, amountDelta: -data.amount, isCreditCard: accountTypes.get(data.toAccountId)?.isCreditCard || false, oldBalance: accountTypes.get(data.toAccountId)?.oldBalance, oldOutstanding: accountTypes.get(data.toAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(data.toAccountId)?.needsInitialization }
-        ];
-        balOps.push(...buildAccountBalanceOps(u.uid, balanceDeltas));
+        const date = String(data.date ?? "");
+        balOps.push(
+          ...journalBalanceOps(
+            u.uid,
+            [
+              { accountId: data.fromAccountId, amountDelta: data.amount, date },
+              { accountId: data.toAccountId, amountDelta: -data.amount, date },
+            ],
+            accountTypes
+          )
+        );
       }
 
       const outcome = await commitMutations(

@@ -20,7 +20,7 @@ import {
   docAlreadyWritten,
   fetchAccountTypes,
 } from "@/services/ledger/fetchAccountTypes";
-import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
+import { journalBalanceOps } from "@/services/ledger/journalBalanceOps";
 import { computeDashboardExpenseCreateOps } from "@/shared/utils/dashboardMutations";
 import { omitUndefined } from "@/shared/utils/firestorePayload";
 import {
@@ -146,18 +146,6 @@ async function chargeBalanceOps(
     owner,
     deltas.map((d) => d.accountId)
   );
-  return buildAccountBalanceOps(
-    owner,
-    deltas.map((d) => {
-      const account = info.get(d.accountId);
-      return {
-        accountId: d.accountId,
-        amountDelta: d.amountDelta,
-        isCreditCard: account?.isCreditCard ?? false,
-        oldBalance: account?.oldBalance,
-        oldOutstanding: account?.oldOutstanding,
-        needsInitialization: account?.needsInitialization,
-      };
-    })
-  );
+  // SPENDLY-603: a charge dated before the account's baseline doesn't move it.
+  return journalBalanceOps(owner, deltas, info);
 }

@@ -10,7 +10,7 @@ import { journalBalanceOps } from "./journalBalanceOps";
 
 const TODAY = "2026-10-24";
 
-function info(overrides: Partial<AccountInfo> = {}): AccountInfo {
+function info_(overrides: Partial<AccountInfo> = {}): AccountInfo {
   return {
     isCreditCard: false,
     oldBalance: 1000,
@@ -27,7 +27,7 @@ describe("journalBalanceOps (SPENDLY-602)", () => {
     const ops = journalBalanceOps(
       "u1",
       [{ accountId: "bank", amountDelta: -250, date: "2026-10-01" }],
-      new Map([["bank", info()]]),
+      new Map([["bank", info_()]]),
       TODAY
     );
     expect(ops).toHaveLength(1);
@@ -42,7 +42,7 @@ describe("journalBalanceOps (SPENDLY-602)", () => {
     const ops = journalBalanceOps(
       "u1",
       [{ accountId: "bank", amountDelta: -250, date: "2026-08-01" }],
-      new Map([["bank", info({ balanceAsOfDate: "2026-09-10" })]]),
+      new Map([["bank", info_({ balanceAsOfDate: "2026-09-10" })]]),
       TODAY
     );
     expect(ops).toEqual([]);
@@ -52,7 +52,7 @@ describe("journalBalanceOps (SPENDLY-602)", () => {
     const ops = journalBalanceOps(
       "u1",
       [{ accountId: "card", amountDelta: -250, date: "2026-08-01" }],
-      new Map([["card", info({ isCreditCard: true, balanceAsOfDate: "2026-09-10" })]]),
+      new Map([["card", info_({ isCreditCard: true, balanceAsOfDate: "2026-09-10" })]]),
       TODAY
     );
     expect(ops[0]).toMatchObject({ data: { currentOutstanding: { __inc: 250 } } });
@@ -62,7 +62,7 @@ describe("journalBalanceOps (SPENDLY-602)", () => {
     const ops = journalBalanceOps(
       "u1",
       [{ accountId: "bank", amountDelta: -250, date: "2026-10-01" }],
-      new Map([["bank", info({ needsInitialization: true, oldBalance: 1000 })]]),
+      new Map([["bank", info_({ needsInitialization: true, oldBalance: 1000 })]]),
       TODAY
     );
     expect(ops[0]).toMatchObject({
@@ -71,6 +71,29 @@ describe("journalBalanceOps (SPENDLY-602)", () => {
         balanceInitialized: true,
         balanceReconciliationStatus: "needs_reconciliation",
       },
+    });
+  });
+
+  it("a leg's pinned card flag wins over the account type (SPENDLY-603)", () => {
+    const info = new Map([
+      ["bank", info_({ balanceAsOfDate: "2026-09-10" })],
+      ["card", info_({ isCreditCard: false, balanceAsOfDate: "2026-09-10" })],
+    ]);
+    const ops = journalBalanceOps(
+      "u1",
+      [
+        // Bank side of a bill payment: pinned non-card, before the baseline.
+        { accountId: "bank", amountDelta: -730, date: "2026-09-01", isCreditCard: false },
+        // Card side: pinned card, so no baseline and it moves outstanding.
+        { accountId: "card", amountDelta: 730, date: "2026-09-01", isCreditCard: true },
+      ],
+      info,
+      TODAY
+    );
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({
+      ref: { path: "users/u1/accounts/card" },
+      data: { currentOutstanding: { __inc: -730 } },
     });
   });
 

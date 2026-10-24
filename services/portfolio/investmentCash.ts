@@ -35,7 +35,7 @@ import { docAlreadyWritten, fetchAccountTypes } from "@/services/ledger/fetchAcc
 import { stageMutationOps } from "@/lib/stageMutationOps";
 import type { AccountEntry } from "@/shared/types/expense";
 import type { MutationOp } from "@/shared/types/mutations";
-import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
+import { journalBalanceOps } from "@/services/ledger/journalBalanceOps";
 import { isValidDateKey } from "@/shared/utils/dates";
 import { ledgerRowAccountDeltas } from "@/shared/utils/ledgerAccountDeltas";
 import { roundMoney } from "@/shared/utils/money";
@@ -141,18 +141,8 @@ async function bankLegBalanceOps(
   row: Pick<AccountEntry, "id" | "accountId" | "amount" | "direction" | "date">
 ): Promise<MutationOp[]> {
   const deltas = ledgerRowAccountDeltas({ kind: "accountEntry", row });
-  const info = (await fetchAccountTypes(db, owner, [row.accountId])).get(row.accountId);
-  return buildAccountBalanceOps(
-    owner,
-    deltas.map((d) => ({
-      accountId: d.accountId,
-      amountDelta: d.amountDelta,
-      isCreditCard: info?.isCreditCard ?? false,
-      oldBalance: info?.oldBalance,
-      oldOutstanding: info?.oldOutstanding,
-      needsInitialization: info?.needsInitialization,
-    }))
-  );
+  // SPENDLY-603: a leg dated before the account's baseline doesn't move it.
+  return journalBalanceOps(owner, deltas, await fetchAccountTypes(db, owner, [row.accountId]));
 }
 
 /** The signed effect an entry has on the balance. */
