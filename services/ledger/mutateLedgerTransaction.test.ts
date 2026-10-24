@@ -456,3 +456,103 @@ describe("restore (SPENDLY-110)", () => {
     expect(commits).toBe(2);
   });
 });
+
+describe("balance baseline on journal writes (SPENDLY-602)", () => {
+  const BANK = "users/u1/accounts/bank-1";
+
+  function accountWrite() {
+    return writes.find((write) => write.path === BANK);
+  }
+
+  function bankWithBaseline(balanceAsOfDate: string | null) {
+    docs.set(BANK, {
+      typeId: "bank-type",
+      openingBalance: 10000,
+      currentBalance: 10000,
+      balanceInitialized: true,
+      ...(balanceAsOfDate ? { balanceAsOfDate } : {}),
+    });
+  }
+
+  const edit = (overrides: Partial<{ amount: number; date: string; accountId: string }>) =>
+    updateExpense("u1", "exp-1", {
+      amount: overrides.amount ?? 5000,
+      category: "Food",
+      subcategory: "Groceries",
+      date: overrides.date ?? "2026-09-01",
+      month: (overrides.date ?? "2026-09-01").slice(0, 7),
+      accountId: overrides.accountId ?? "bank-1",
+      note: "Lunch",
+      tags: ["work"],
+    });
+
+  it("without a baseline an edit still moves the balance by the difference", async () => {
+    bankWithBaseline(null);
+    await edit({ amount: 500 });
+    expect(accountWrite()?.data.currentBalance).toEqual({ __increment: 4500 });
+  });
+
+  it("editing a row dated before the baseline leaves the balance alone", async () => {
+    bankWithBaseline("2026-09-10");
+    await edit({ amount: 500 });
+    expect(accountWrite()).toBeUndefined();
+  });
+
+  it("moving a row from before the baseline to after it applies only the new amount", async () => {
+    bankWithBaseline("2026-09-10");
+    await edit({ amount: 500, date: "2026-09-15" });
+    expect(accountWrite()?.data.currentBalance).toEqual({ __increment: -500 });
+  });
+
+  it("moving a row from after the baseline to before it only reverses the old amount", async () => {
+    bankWithBaseline("2026-09-10");
+    docs.set("users/u1/expenses/exp-1", { ...EXPENSE, date: "2026-09-15" });
+    await edit({ amount: 500, date: "2026-09-01" });
+    expect(accountWrite()?.data.currentBalance).toEqual({ __increment: 5000 });
+  });
+
+  it("soft-deleting a pre-baseline row leaves the balance alone; a post-baseline one gives it back", async () => {
+    bankWithBaseline("2026-09-10");
+    await softDeleteExpense("u1", "exp-1");
+    expect(accountWrite()).toBeUndefined();
+
+    writes = [];
+    docs.set("users/u1/expenses/exp-1", { ...EXPENSE, date: "2026-09-15" });
+    await softDeleteExpense("u1", "exp-1");
+    expect(accountWrite()?.data.currentBalance).toEqual({ __increment: 5000 });
+  });
+
+  it("restoring a pre-baseline row leaves the balance alone", async () => {
+    bankWithBaseline("2026-09-10");
+    docs.set("users/u1/expenses/exp-1", { ...EXPENSE, deletedAt: "2026-09-02T10:00:00.000Z", deletedBy: "u1" });
+    await restoreExpense("u1", "exp-1");
+    expect(accountWrite()).toBeUndefined();
+  });
+
+  it("income edits follow the same rule", async () => {
+    bankWithBaseline("2026-09-10");
+    await updateIncome("u1", "inc-1", {
+      amount: 2500,
+      source: "Salary",
+      date: "2026-09-12",
+      month: "2026-09",
+      accountId: "bank-1",
+      note: "Pay",
+    });
+    expect(accountWrite()?.data.currentBalance).toEqual({ __increment: 2500 });
+  });
+
+  it("credit-card outstanding still moves for any date", async () => {
+    docs.set("users/u1/accountTypes/card-type", { name: "Credit Card" });
+    docs.set("users/u1/accounts/card-1", {
+      typeId: "card-type",
+      currentOutstanding: 8000,
+      balanceInitialized: true,
+      balanceAsOfDate: "2026-09-10",
+    });
+    docs.set("users/u1/expenses/exp-1", { ...EXPENSE, accountId: "card-1" });
+    await edit({ amount: 500, accountId: "card-1" });
+    const cardWrite = writes.find((write) => write.path === "users/u1/accounts/card-1");
+    expect(cardWrite?.data.currentOutstanding).toEqual({ __increment: -4500 });
+  });
+});

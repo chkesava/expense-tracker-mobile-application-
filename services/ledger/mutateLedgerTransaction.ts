@@ -48,8 +48,8 @@ import type {
   CreateIncomeInput,
   LedgerWriteResult,
 } from "./createLedgerTransaction";
-import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
 import { fetchAccountTypes } from "./fetchAccountTypes";
+import { journalBalanceOps } from "./journalBalanceOps";
 
 export {
   ALREADY_REMOVED_LEDGER_MESSAGE,
@@ -266,13 +266,12 @@ export async function updateExpense(
   const delta = roundMoney(amount - before.amount);
 
   const accountTypes = await fetchAccountTypes(db, owner, [before.accountId, afterRow.accountId]);
-  const balanceDeltas: { accountId: string, amountDelta: number, isCreditCard: boolean, oldBalance?: number, oldOutstanding?: number, needsInitialization?: boolean }[] = [];
-  if (before.accountId) {
-    balanceDeltas.push({ accountId: before.accountId, amountDelta: before.amount, isCreditCard: accountTypes.get(before.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(before.accountId)?.oldBalance, oldOutstanding: accountTypes.get(before.accountId)?.oldOutstanding, needsInitialization: accountTypes.get(before.accountId)?.needsInitialization });
-  }
-  if (afterRow.accountId) {
-    balanceDeltas.push({ accountId: afterRow.accountId, amountDelta: -amount, isCreditCard: accountTypes.get(afterRow.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(afterRow.accountId)?.oldBalance, oldOutstanding: accountTypes.get(afterRow.accountId)?.oldOutstanding, needsInitialization: accountTypes.get(afterRow.accountId)?.needsInitialization });
-  }
+  // SPENDLY-602: reverse the old row and apply the new one, each on its own
+  // date, so moving a row across the account's baseline nets correctly.
+  const balanceLegs = [
+    { accountId: before.accountId ?? "", amountDelta: before.amount, date: before.date },
+    { accountId: afterRow.accountId ?? "", amountDelta: -amount, date: afterRow.date },
+  ];
 
   const outcome = await commitMutations(
     owner,
@@ -304,7 +303,7 @@ export async function updateExpense(
         reason: options?.reason,
       });
       applyTripIncrement(ops, db, owner, data, delta);
-      const balOps = buildAccountBalanceOps(owner, balanceDeltas);
+      const balOps = journalBalanceOps(owner, balanceLegs, accountTypes);
       
       ops.push(...balOps, ...computeDashboardExpenseUpdateOps(owner, before, after));
       return ops;
@@ -344,13 +343,12 @@ export async function updateIncome(
   const after = ledgerEventSnapshot(afterRow);
 
   const accountTypes = await fetchAccountTypes(db, owner, [before.accountId, afterRow.accountId]);
-  const balanceDeltas: { accountId: string, amountDelta: number, isCreditCard: boolean, oldBalance?: number, oldOutstanding?: number, needsInitialization?: boolean }[] = [];
-  if (before.accountId) {
-    balanceDeltas.push({ accountId: before.accountId, amountDelta: -before.amount, isCreditCard: accountTypes.get(before.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(before.accountId)?.oldBalance, oldOutstanding: accountTypes.get(before.accountId)?.oldOutstanding, needsInitialization: accountTypes.get(before.accountId)?.needsInitialization });
-  }
-  if (afterRow.accountId) {
-    balanceDeltas.push({ accountId: afterRow.accountId, amountDelta: amount, isCreditCard: accountTypes.get(afterRow.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(afterRow.accountId)?.oldBalance, oldOutstanding: accountTypes.get(afterRow.accountId)?.oldOutstanding, needsInitialization: accountTypes.get(afterRow.accountId)?.needsInitialization });
-  }
+  // SPENDLY-602: reverse the old row and apply the new one, each on its own
+  // date, so moving a row across the account's baseline nets correctly.
+  const balanceLegs = [
+    { accountId: before.accountId ?? "", amountDelta: -before.amount, date: before.date },
+    { accountId: afterRow.accountId ?? "", amountDelta: amount, date: afterRow.date },
+  ];
 
   const outcome = await commitMutations(
     owner,
@@ -378,7 +376,7 @@ export async function updateIncome(
         after,
         reason: options?.reason,
       });
-      const balOps = buildAccountBalanceOps(owner, balanceDeltas);
+      const balOps = journalBalanceOps(owner, balanceLegs, accountTypes);
       
       ops.push(...balOps, ...computeDashboardIncomeUpdateOps(owner, before, after));
       return ops;
@@ -407,12 +405,9 @@ async function softDeleteRow(
   const deletedAt = new Date().toISOString();
 
   const accountTypes = await fetchAccountTypes(db, owner, [before.accountId]);
-  const accountInfo = before.accountId ? accountTypes.get(before.accountId) : null; const isCreditCard = accountInfo?.isCreditCard || false; const oldBalance = accountInfo?.oldBalance; const oldOutstanding = accountInfo?.oldOutstanding; const needsInitialization = accountInfo?.needsInitialization;
-  const balanceDeltas: { accountId: string, amountDelta: number, isCreditCard: boolean, oldBalance?: number, oldOutstanding?: number, needsInitialization?: boolean }[] = [];
-  if (before.accountId) {
-    const deltaAmount = kind === "expense" ? before.amount : -before.amount;
-    balanceDeltas.push({ accountId: before.accountId, amountDelta: deltaAmount, isCreditCard, oldBalance, oldOutstanding, needsInitialization });
-  }
+  const balanceLegs = [
+    { accountId: before.accountId ?? "", amountDelta: kind === "expense" ? before.amount : -before.amount, date: before.date },
+  ];
 
   const outcome = await commitMutations(
     owner,
@@ -440,7 +435,7 @@ async function softDeleteRow(
       if (kind === "expense") {
         applyTripIncrement(ops, db, owner, data, -before.amount);
       }
-      const balOps = buildAccountBalanceOps(owner, balanceDeltas);
+      const balOps = journalBalanceOps(owner, balanceLegs, accountTypes);
       
       ops.push(...balOps, ...computeDashboardDeleteOps(owner, before, kind));
       return ops;
@@ -471,12 +466,9 @@ async function restoreRow(
   const before = ledgerEventSnapshot(data);
 
   const accountTypes = await fetchAccountTypes(db, owner, [before.accountId]);
-  const accountInfo = before.accountId ? accountTypes.get(before.accountId) : null; const isCreditCard = accountInfo?.isCreditCard || false; const oldBalance = accountInfo?.oldBalance; const oldOutstanding = accountInfo?.oldOutstanding; const needsInitialization = accountInfo?.needsInitialization;
-  const balanceDeltas: { accountId: string, amountDelta: number, isCreditCard: boolean, oldBalance?: number, oldOutstanding?: number, needsInitialization?: boolean }[] = [];
-  if (before.accountId) {
-    const deltaAmount = kind === "expense" ? -before.amount : before.amount;
-    balanceDeltas.push({ accountId: before.accountId, amountDelta: deltaAmount, isCreditCard, oldBalance, oldOutstanding, needsInitialization });
-  }
+  const balanceLegs = [
+    { accountId: before.accountId ?? "", amountDelta: kind === "expense" ? -before.amount : before.amount, date: before.date },
+  ];
 
   const outcome = await commitMutations(
     owner,
@@ -508,7 +500,7 @@ async function restoreRow(
         // amount of every restored expense.
         applyTripIncrement(ops, db, owner, data, before.amount);
       }
-      const balOps = buildAccountBalanceOps(owner, balanceDeltas);
+      const balOps = journalBalanceOps(owner, balanceLegs, accountTypes);
       
       ops.push(...balOps, ...computeDashboardRestoreOps(owner, before, kind));
       return ops;

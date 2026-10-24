@@ -186,3 +186,32 @@ export function netBankBalanceDeltas(
     .map(([accountId, amountDelta]) => ({ accountId, amountDelta: roundMoney(amountDelta) }))
     .filter((d) => d.amountDelta !== 0);
 }
+
+/**
+ * SPENDLY-602 — the net balance change per account for a set of signed legs,
+ * as the stored summaries must move: a non-credit leg dated before the
+ * account's effective `balanceAsOfDate` is dropped (it already sits inside
+ * `openingBalance`, exactly as `computeBankBalance` skips it); credit-card
+ * legs always count, since card outstanding has no baseline. Unknown
+ * accounts keep every leg, matching the writers' behaviour before this.
+ * Accounts that net to zero are dropped.
+ */
+export function baselineAwareBalanceDeltas(
+  legs: readonly AccountDelta[],
+  accountContext: (accountId: string) => BalanceAccountContext | undefined,
+  today: string = todayDateKey()
+): { accountId: string; amountDelta: number }[] {
+  const net = new Map<string, number>();
+  for (const d of legs) {
+    if (!d.accountId) continue;
+    const account = accountContext(d.accountId);
+    if (account && !account.isCreditCard) {
+      const baseline = effectiveBalanceAsOfDate(account.balanceAsOfDate, [], today);
+      if (baseline && d.date < baseline) continue;
+    }
+    net.set(d.accountId, (net.get(d.accountId) ?? 0) + (Number(d.amountDelta) || 0));
+  }
+  return [...net.entries()]
+    .map(([accountId, amountDelta]) => ({ accountId, amountDelta: roundMoney(amountDelta) }))
+    .filter((d) => d.amountDelta !== 0);
+}

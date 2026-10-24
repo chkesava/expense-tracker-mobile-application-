@@ -395,6 +395,7 @@ export function ExpenseForm({
       bills,
       todayDateKey(settings.timezone),
       {
+        draftDate: date,
         ledgerComplete:
           expensesComplete &&
           incomesComplete &&
@@ -405,12 +406,14 @@ export function ExpenseForm({
               kind: "expense",
               accountId: editingExpense.accountId,
               amount: editingExpense.amount,
+              date: editingExpense.date,
             }
           : editingIncome
             ? {
                 kind: "income",
                 accountId: editingIncome.accountId,
                 amount: editingIncome.amount,
+                date: editingIncome.date,
               }
             : undefined,
       }
@@ -433,6 +436,7 @@ export function ExpenseForm({
     settings.timezone,
     editingExpense,
     editingIncome,
+    date,
     expensesComplete,
     incomesComplete,
     hasMoreExpenses,

@@ -20,6 +20,7 @@ import {
   type LedgerBillSlice,
 } from "./creditCardLedger";
 import { parseLocalDate, todayDateKey } from "./dates";
+import { baselineAwareBalanceDeltas } from "./ledgerAccountDeltas";
 import { isActiveLedgerRow } from "./ledgerRow";
 import { roundMoney } from "./money";
 
@@ -682,7 +683,14 @@ export interface BalancePreviewOptions {
    */
   ledgerComplete?: boolean;
   /** The saved row being edited, as it is before this edit. */
-  editing?: { kind: "expense" | "income"; accountId?: string; amount: number };
+  editing?: {
+    kind: "expense" | "income";
+    accountId?: string | null;
+    amount: number;
+    date: string;
+  };
+  /** The draft's posting date; defaults to `today`. */
+  draftDate?: string;
 }
 
 export function previewBalanceAfterTransaction(
@@ -707,20 +715,32 @@ export function previewBalanceAfterTransaction(
   const kind = getAccountKind(typeName);
   if (kind !== "credit") {
     // SPENDLY-584: start from the materialized balance the account screen
-    // shows and apply the same delta the save writes (`createExpense` /
-    // `updateExpense` & income twins). Replaying from `openingBalance` over
-    // the paged ledger drops every unloaded older row and inflates the result.
+    // shows and apply the same delta the save writes (`journalBalanceOps`).
+    // Replaying from `openingBalance` over the paged ledger drops every
+    // unloaded older row and inflates the result.
     const anchor = storedBalanceAnchor(account);
     if (anchor !== undefined) {
       const sign = (k: "expense" | "income") => (k === "expense" ? -1 : 1);
-      let balance = anchor + sign(transactionType) * amount;
       const editing = options.editing;
-      if (editing && editing.accountId === account.id) {
+      const legs = [
         // The stored balance already holds the original row; the save
         // reverses it before applying the new amount.
-        balance -= sign(editing.kind) * editing.amount;
-      }
-      return roundMoney(balance);
+        ...(editing && editing.accountId === account.id
+          ? [{ accountId: account.id, amountDelta: -sign(editing.kind) * editing.amount, date: editing.date }]
+          : []),
+        {
+          accountId: account.id,
+          amountDelta: sign(transactionType) * amount,
+          date: options.draftDate || today,
+        },
+      ];
+      // SPENDLY-602: rows before the balance baseline don't move it.
+      const delta = baselineAwareBalanceDeltas(
+        legs,
+        () => ({ isCreditCard: false, balanceAsOfDate: account.balanceAsOfDate }),
+        today
+      ).reduce((sum, d) => sum + d.amountDelta, 0);
+      return roundMoney(anchor + delta);
     }
     // No trustworthy stored balance: a replay is only right over the full
     // history, so show nothing rather than a guess from a partial ledger.
