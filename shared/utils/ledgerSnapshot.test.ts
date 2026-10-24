@@ -146,3 +146,20 @@ describe("unseenRows: the live-window boundary (SPENDLY-512)", () => {
     expect(merged).toEqual([{ id: "c", v: "page1" }]);
   });
 });
+
+describe("50-row history pages over the live window (SPENDLY-585)", () => {
+  it("adds every older row exactly once, even when pages overlap the window", () => {
+    const all = Array.from({ length: 420 }, (_, i) => ({ id: `tx-${i}` }));
+    const live = all.slice(0, 300);
+    let loaded: { id: string }[] = [];
+    // The cursor starts inside the window's tail, so the first page overlaps it,
+    // and each later page repeats the previous page's last row.
+    for (let start = 290; start < all.length; start += 49) {
+      const page = all.slice(start, start + LEDGER_PAGE_SIZE);
+      loaded = [...loaded, ...unseenRows(loaded, live, page)];
+    }
+    const ids = [...live, ...loaded].map((r) => r.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toEqual(all.map((r) => r.id));
+  });
+});

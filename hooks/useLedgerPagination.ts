@@ -28,37 +28,20 @@ export function useLedgerPagination() {
   const hasMore = hasMoreExpenses || hasMoreIncomes;
   const isFetchingMore = isFetchingMoreExpenses || isFetchingMoreIncomes;
 
+  // SPENDLY-585: the provider's loaders guard in-flight and exhausted
+  // collections with refs, so no state is read here and `loadMore` keeps one
+  // identity instead of changing on every page.
   const loadMore = useCallback(
     async (scope: LedgerPaginationScope = "all") => {
       if (scope === "expenses") {
-        if (hasMoreExpenses && !isFetchingMoreExpenses) {
-          await loadMoreExpenses();
-        }
+        await loadMoreExpenses();
       } else if (scope === "incomes") {
-        if (hasMoreIncomes && !isFetchingMoreIncomes) {
-          await loadMoreIncomes();
-        }
+        await loadMoreIncomes();
       } else {
-        const promises: Promise<void>[] = [];
-        if (hasMoreExpenses && !isFetchingMoreExpenses) {
-          promises.push(loadMoreExpenses());
-        }
-        if (hasMoreIncomes && !isFetchingMoreIncomes) {
-          promises.push(loadMoreIncomes());
-        }
-        if (promises.length > 0) {
-          await Promise.all(promises);
-        }
+        await Promise.all([loadMoreExpenses(), loadMoreIncomes()]);
       }
     },
-    [
-      hasMoreExpenses,
-      isFetchingMoreExpenses,
-      loadMoreExpenses,
-      hasMoreIncomes,
-      isFetchingMoreIncomes,
-      loadMoreIncomes,
-    ]
+    [loadMoreExpenses, loadMoreIncomes]
   );
 
   const loadAll = useCallback(async () => {

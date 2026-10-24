@@ -20,6 +20,7 @@ import type { AccountType, Expense, Income } from "@/shared/types/expense";
 import {
   applyAccountActivityFilters,
   countActiveAccountActivityFilters,
+  createEmptyAccountActivityFilters,
   getAccountActivityFilterOptions,
   getAccountActivityFilterValidationError,
   type AccountActivityFilterOptions,
@@ -73,8 +74,14 @@ export interface JournalKindCounts {
 }
 
 export interface JournalPipelineResult {
-  /** Every canonical row in scope, before search/filters. Drives `totalCount`. */
+  /** Every canonical row loaded for the sub-tab, across all dates, before search/filters. */
   records: JournalRecord[];
+  /**
+   * SPENDLY-585: rows in the selected month or range, before search and the
+   * user's filters. Drives the header count, which used to show `records`
+   * (the whole app-wide live window) beside a month label.
+   */
+  periodCount: number;
   /** Built from `records`, never from the searched set. */
   filterOptions: AccountActivityFilterOptions;
   dateScope: JournalDateScope;
@@ -138,6 +145,10 @@ export function runJournalFilterPipeline(
   );
 
   const filtered = applyAccountActivityFilters(searched, effectiveFilters);
+  const periodCount = applyAccountActivityFilters(
+    records,
+    withJournalDateScope(createEmptyAccountActivityFilters(), dateScope)
+  ).length;
 
   return {
     runningBalance: buildJournalRunningBalance(filtered),
@@ -146,6 +157,7 @@ export function runJournalFilterPipeline(
       firstDayOfWeek: input.firstDayOfWeek,
     }),
     records,
+    periodCount,
     filterOptions,
     dateScope,
     effectiveFilters,
