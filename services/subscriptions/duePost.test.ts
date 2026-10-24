@@ -26,7 +26,7 @@ vi.mock("@/lib/firebase", () => ({
 const writes: Write[] = [];
 let commits = 0;
 let chargeExists = false;
-const accounts: Record<string, { isCreditCard: boolean; oldBalance: number; oldOutstanding: number; needsInitialization: boolean }> = {};
+const accounts: Record<string, { isCreditCard: boolean; oldBalance: number; oldOutstanding: number; needsInitialization: boolean; balanceAsOfDate?: string | null }> = {};
 
 vi.mock("@/services/ledger/fetchAccountTypes", () => ({
   docAlreadyWritten: vi.fn(async () => chargeExists),
@@ -265,5 +265,35 @@ describe("postDueSubscriptionCharge", () => {
     });
     const expense = writes.find((w) => w.path.includes("/expenses/"));
     expect(expense?.data).not.toHaveProperty("subcategory");
+  });
+});
+
+describe("due posts respect the balance baseline (SPENDLY-603)", () => {
+  it("a charge dated before the account's baseline doesn't move it", async () => {
+    accounts["bank-1"] = {
+      isCreditCard: false,
+      oldBalance: 10000,
+      oldOutstanding: 0,
+      needsInitialization: false,
+      balanceAsOfDate: "2026-09-01",
+    };
+    await postDueSubscriptionCharge("u1", EXPENSE_ACTION);
+    expect(commits).toBe(1);
+    expect(accountWrite("bank-1")).toBeUndefined();
+  });
+
+  it("a card charge still raises outstanding whatever the date", async () => {
+    accounts["card-1"] = {
+      isCreditCard: true,
+      oldBalance: 0,
+      oldOutstanding: 500,
+      needsInitialization: false,
+      balanceAsOfDate: "2026-09-01",
+    };
+    await postDueSubscriptionCharge("u1", {
+      ...EXPENSE_ACTION,
+      expense: { ...EXPENSE_ACTION.expense, accountId: "card-1" },
+    });
+    expect(accountWrite("card-1")?.data.currentOutstanding).toEqual(increment(649));
   });
 });

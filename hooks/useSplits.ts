@@ -79,7 +79,8 @@ import {
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { isActiveLedgerRow } from "@/shared/utils/ledgerRow";
 import { fetchAccountTypes } from "@/services/ledger/fetchAccountTypes";
-import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
+import { journalBalanceOps } from "@/services/ledger/journalBalanceOps";
+import type { BalanceLeg } from "@/shared/utils/ledgerAccountDeltas";
 import { stageMutationOps } from "@/lib/stageMutationOps";
 import { computeDashboardDeleteOps, computeDashboardExpenseCreateOps } from "@/shared/utils/dashboardMutations";
 import type { MutationOp } from "@/shared/types/mutations";
@@ -120,11 +121,11 @@ async function queueSplitReversals(
   originalIds: string[],
   dateKey: string,
   note: string
-): Promise<{ accountId: string; amountDelta: number }[]> {
+): Promise<BalanceLeg[]> {
   const lookupIds = originalIds.flatMap((id) => [id, reversalEntryDocId(id)]);
   const existing = await loadSplitLedgerEntries(db, uid, lookupIds);
   const originals = existing.filter((row) => originalIds.includes(row.id));
-  const deltas: { accountId: string; amountDelta: number }[] = [];
+  const deltas: BalanceLeg[] = [];
   
   for (const original of entriesNeedingReversal(originals, existing)) {
     const reversal = buildSplitReversalEntry({ original, dateKey, note });
@@ -133,7 +134,7 @@ async function queueSplitReversals(
       createdAt: serverTimestamp(),
     });
     const amountDelta = reversal.entry.direction === "credit" ? Number(reversal.entry.amount) || 0 : -(Number(reversal.entry.amount) || 0);
-    deltas.push({ accountId: String(reversal.entry.accountId || ""), amountDelta });
+    deltas.push({ accountId: String(reversal.entry.accountId || ""), amountDelta, date: String(reversal.entry.date ?? dateKey) });
   }
   return deltas;
 }
@@ -227,19 +228,15 @@ async function splitExpenseSideOps(
   const row = expense as DashboardExpenseRow & { accountId?: string };
   const ops: MutationOp[] = [...computeDashboardExpenseCreateOps(uid, row)];
   if (row.accountId) {
-    const account = (await fetchAccountTypes(db, uid, [row.accountId])).get(row.accountId);
-    if (account?.exists) {
+    const info = await fetchAccountTypes(db, uid, [row.accountId]);
+    if (info.get(row.accountId)?.exists) {
+      // SPENDLY-603: a share dated before the account's baseline doesn't move it.
       ops.push(
-        ...buildAccountBalanceOps(uid, [
-          {
-            accountId: row.accountId,
-            amountDelta: -(Number(row.amount) || 0),
-            isCreditCard: account.isCreditCard,
-            oldBalance: account.oldBalance,
-            oldOutstanding: account.oldOutstanding,
-            needsInitialization: account.needsInitialization,
-          },
-        ])
+        ...journalBalanceOps(
+          uid,
+          [{ accountId: row.accountId, amountDelta: -(Number(row.amount) || 0), date: String(row.date ?? "") }],
+          info
+        )
       );
     }
   }
@@ -731,11 +728,11 @@ export function useSplits(options?: { enabled?: boolean }) {
 
       const accountTypes = await fetchAccountTypes(db, uid, [accountId]);
       const amountDelta = built.entry.direction === "credit" ? Number(built.entry.amount) || 0 : -Number(built.entry.amount) || 0;
-      const balOps = buildAccountBalanceOps(uid, [{
-        accountId,
-        amountDelta,
-        isCreditCard: accountTypes.get(accountId)?.isCreditCard || false, oldBalance: accountTypes.get(accountId)?.oldBalance, oldOutstanding: accountTypes.get(accountId)?.oldOutstanding
-      }]);
+      const balOps = journalBalanceOps(
+        uid,
+        [{ accountId, amountDelta, date: String(built.entry.date ?? "") }],
+        accountTypes
+      );
       stageMutationOps(batch, db, balOps);
       if (options?.claimId) {
         batch.delete(doc(db, "splitShareClaims", options.claimId));
@@ -781,12 +778,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       
       if (rawDeltas.length > 0) {
         const accountTypes = await fetchAccountTypes(db, uid, rawDeltas.map(d => d.accountId));
-        const balanceDeltas = rawDeltas.map(d => ({
-          accountId: d.accountId,
-          amountDelta: d.amountDelta,
-          isCreditCard: accountTypes.get(d.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(d.accountId)?.oldBalance, oldOutstanding: accountTypes.get(d.accountId)?.oldOutstanding
-        }));
-        const balOps = buildAccountBalanceOps(uid, balanceDeltas);
+        const balOps = journalBalanceOps(uid, rawDeltas, accountTypes);
         stageMutationOps(batch, db, balOps);
       }
 
@@ -863,18 +855,19 @@ export function useSplits(options?: { enabled?: boolean }) {
         stageMutationOps(batch, db, computeDashboardExpenseCreateOps(uid, built.expense as DashboardExpenseRow));
       }
 
-      let totalDelta = 0;
-      if (built.expense) totalDelta -= Number(built.expense.amount) || 0;
-      if (built.passThroughEntry) totalDelta -= Number(built.passThroughEntry.amount) || 0;
+      // SPENDLY-603: each row on its own date, so one dated before the
+      // account's baseline doesn't move it.
+      const giftLegs: BalanceLeg[] = [];
+      if (built.expense) {
+        giftLegs.push({ accountId: payingAccountId, amountDelta: -(Number(built.expense.amount) || 0), date: String(built.expense.date ?? "") });
+      }
+      if (built.passThroughEntry) {
+        giftLegs.push({ accountId: payingAccountId, amountDelta: -(Number(built.passThroughEntry.amount) || 0), date: String(built.passThroughEntry.date ?? "") });
+      }
 
-      if (totalDelta !== 0) {
+      if (giftLegs.length > 0) {
         const accountTypes = await fetchAccountTypes(db, uid, [payingAccountId]);
-        const balOps = buildAccountBalanceOps(uid, [{
-          accountId: payingAccountId,
-          amountDelta: totalDelta,
-          isCreditCard: accountTypes.get(payingAccountId)?.isCreditCard || false, oldBalance: accountTypes.get(payingAccountId)?.oldBalance, oldOutstanding: accountTypes.get(payingAccountId)?.oldOutstanding
-        }]);
-        stageMutationOps(batch, db, balOps);
+        stageMutationOps(batch, db, journalBalanceOps(uid, giftLegs, accountTypes));
       }
       const outcome = await commitWrite(() => batch.commit(), {
         label: "gift purchase",
@@ -1332,7 +1325,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         if (snap.exists() && !snap.data().deletedAt) {
           const expenseData = snap.data();
           if (expenseData.accountId) {
-            rawDeltas.push({ accountId: expenseData.accountId, amountDelta: expenseData.amount });
+            rawDeltas.push({ accountId: expenseData.accountId, amountDelta: expenseData.amount, date: String(expenseData.date ?? "") });
           }
           stageMutationOps(
             batch,
@@ -1344,12 +1337,7 @@ export function useSplits(options?: { enabled?: boolean }) {
 
       if (rawDeltas.length > 0) {
         const accountTypes = await fetchAccountTypes(db, uid, rawDeltas.map(d => d.accountId));
-        const balanceDeltas = rawDeltas.map(d => ({
-          accountId: d.accountId,
-          amountDelta: d.amountDelta,
-          isCreditCard: accountTypes.get(d.accountId)?.isCreditCard || false, oldBalance: accountTypes.get(d.accountId)?.oldBalance, oldOutstanding: accountTypes.get(d.accountId)?.oldOutstanding
-        }));
-        const balOps = buildAccountBalanceOps(uid, balanceDeltas);
+        const balOps = journalBalanceOps(uid, rawDeltas, accountTypes);
         stageMutationOps(batch, db, balOps);
       }
       for (const requestId of linked.paymentRequestIds) {

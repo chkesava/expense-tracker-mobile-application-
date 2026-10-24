@@ -1145,3 +1145,19 @@ describe("readAvailableInvestmentCash", () => {
     await expect(readAvailableInvestmentCash("u1")).resolves.toBe(0);
   });
 });
+
+describe("investment cash bank legs respect the balance baseline (SPENDLY-603)", () => {
+  it("a top-up dated before the bank's baseline doesn't move the bank", async () => {
+    accountInfo = { ...accountInfo, balanceAsOfDate: "2026-10-20" } as typeof accountInfo;
+    await transferInvestmentCashWithBank("u1", {
+      type: "TOP_UP",
+      amount: 20000,
+      date: "2026-10-15",
+      accountId: "bank-1",
+      entryId: "cash-1",
+      accountEntryId: "bank-entry-1",
+    });
+    expect(commits).toBe(1);
+    expect(writes.find((w) => w.path === "users/u1/accounts/bank-1")).toBeUndefined();
+  });
+});

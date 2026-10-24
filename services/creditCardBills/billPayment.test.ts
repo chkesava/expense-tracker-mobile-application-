@@ -728,3 +728,103 @@ describe("outbox serialisation of every payment path", () => {
     }
   });
 });
+
+describe("bill payments respect the bank's balance baseline (SPENDLY-603)", () => {
+  const TS = { seconds: 1_790_000_000, nanoseconds: 0 };
+  const accountWrite = (id: string) => writes.find((w) => w.path === `users/u1/accounts/${id}`);
+
+  const seedAccounts = () => {
+    docs.set("users/u1/accounts/hdfc", {
+      name: "HDFC",
+      currentBalance: 5000,
+      balanceInitialized: true,
+      balanceAsOfDate: "2026-09-20",
+    });
+    docs.set("users/u1/accounts/card-1", { name: "Card", currentOutstanding: 730, balanceInitialized: true });
+  };
+  const seedPayment = (payment: Record<string, unknown> = {}) => {
+    docs.set("users/u1/accountPayments/pay-1", {
+      fromAccountId: "hdfc",
+      toAccountId: "card-1",
+      amount: 730,
+      date: "2026-09-17",
+      note: "Credit card bill payment",
+      sourceType: "account",
+      creditCardBillId: "bill-1",
+      billAppliedAmount: 730,
+      updatedAt: TS,
+      ...payment,
+    });
+    docs.set("users/u1/creditCardBills/bill-1", {
+      statementAmount: 730,
+      amountPaid: 730,
+      dueDate: "2026-09-25",
+      statementDate: "2026-09-05",
+      status: "PAID",
+      paymentIds: ["pay-1"],
+      paymentDate: "2026-09-17",
+    });
+  };
+
+  it("a payment dated before the bank's baseline only moves the card", async () => {
+    seedAccounts();
+    await recordCreditBillPayment("u1", {
+      fromAccountId: "hdfc",
+      toAccountId: "card-1",
+      amount: 730,
+      date: "2026-09-17",
+      note: "",
+      sourceType: "account",
+      paymentId: "pay-1",
+    });
+    expect(accountWrite("hdfc")).toBeUndefined();
+    expect(journalled(accountWrite("card-1")?.data.currentOutstanding)).toEqual({
+      [FIRESTORE_SENTINEL_KEY]: "increment",
+      n: -730,
+    });
+  });
+
+  it("a payment on or after the baseline still debits the bank", async () => {
+    seedAccounts();
+    await recordCreditBillPayment("u1", {
+      fromAccountId: "hdfc",
+      toAccountId: "card-1",
+      amount: 730,
+      date: "2026-09-20",
+      note: "",
+      sourceType: "account",
+      paymentId: "pay-1",
+    });
+    expect(journalled(accountWrite("hdfc")?.data.currentBalance)).toEqual({
+      [FIRESTORE_SENTINEL_KEY]: "increment",
+      n: -730,
+    });
+  });
+
+  it("voiding a pre-baseline payment only restores the card", async () => {
+    seedAccounts();
+    seedPayment();
+    await voidCreditBillPayment("u1", "pay-1", { timezone: "Asia/Kolkata" });
+    expect(accountWrite("hdfc")).toBeUndefined();
+    expect(journalled(accountWrite("card-1")?.data.currentOutstanding)).toEqual({
+      [FIRESTORE_SENTINEL_KEY]: "increment",
+      n: 730,
+    });
+  });
+
+  it("re-dating a payment across the baseline debits the bank once and leaves the card alone", async () => {
+    seedAccounts();
+    seedPayment();
+    await editCreditBillPayment(
+      "u1",
+      "pay-1",
+      { fromAccountId: "hdfc", sourceType: "account", amount: 730, date: "2026-09-22", note: "Credit card bill payment" },
+      { expectedUpdatedAt: TS, timezone: "Asia/Kolkata" }
+    );
+    expect(journalled(accountWrite("hdfc")?.data.currentBalance)).toEqual({
+      [FIRESTORE_SENTINEL_KEY]: "increment",
+      n: -730,
+    });
+    expect(accountWrite("card-1")).toBeUndefined();
+  });
+});

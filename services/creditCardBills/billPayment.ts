@@ -38,6 +38,7 @@ import type { CreditCardBillStatus } from "@/shared/types/creditCardBill";
 import { CASHBACK_SOURCE_ID } from "@/shared/types/expense";
 import type { LedgerEventSnapshot } from "@/shared/types/ledgerEvent";
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
+import type { BalanceLeg } from "@/shared/utils/ledgerAccountDeltas";
 import {
   computeCreditCardBillStatus,
   computeRemainingAmount,
@@ -284,17 +285,18 @@ export async function recordCreditBillPayment(
     });
   }
   const accountTypes = await import("@/services/ledger/fetchAccountTypes").then(m => m.fetchAccountTypes(db, owner, [input.fromAccountId, input.toAccountId]));
-  const balanceDeltas: any[] = [];
+  const balanceLegs: BalanceLeg[] = [];
   if (input.sourceType !== "external" && input.fromAccountId) {
-    balanceDeltas.push({ accountId: input.fromAccountId, amountDelta: -input.amount, isCreditCard: false, oldBalance: accountTypes.get(input.fromAccountId)?.oldBalance, oldOutstanding: accountTypes.get(input.fromAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(input.fromAccountId)?.needsInitialization });
+    // SPENDLY-603: the bank side honours that account's balance baseline.
+    balanceLegs.push({ accountId: input.fromAccountId, amountDelta: -input.amount, date: input.date, isCreditCard: false });
   }
   if (input.toAccountId) {
     // Bill payment: reduces outstanding, but does NOT affect unbilled spend.
-    balanceDeltas.push({ accountId: input.toAccountId, amountDelta: input.amount, isCreditCard: true, oldBalance: accountTypes.get(input.toAccountId)?.oldBalance, oldOutstanding: accountTypes.get(input.toAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(input.toAccountId)?.needsInitialization });
+    balanceLegs.push({ accountId: input.toAccountId, amountDelta: input.amount, date: input.date, isCreditCard: true });
   }
 
-  const { buildAccountBalanceOps } = await import("@/shared/utils/balanceMutations");
-  const balOps = buildAccountBalanceOps(owner, balanceDeltas);
+  const { journalBalanceOps } = await import("@/services/ledger/journalBalanceOps");
+  const balOps = journalBalanceOps(owner, balanceLegs, accountTypes);
   ops.push(...balOps);
 
   const outcome = await commitMutations(owner, ops, {
@@ -373,17 +375,18 @@ export async function voidCreditBillPayment(
     });
   }
   const accountTypes = await import("@/services/ledger/fetchAccountTypes").then(m => m.fetchAccountTypes(db, owner, [data.fromAccountId, data.toAccountId]));
-  const balanceDeltas: any[] = [];
+  const paidOn = String(data.date ?? "");
+  const balanceLegs: BalanceLeg[] = [];
   if (data.sourceType !== "external" && data.fromAccountId) {
-    balanceDeltas.push({ accountId: data.fromAccountId, amountDelta: Number(data.amount) || 0, isCreditCard: false, oldBalance: accountTypes.get(data.fromAccountId)?.oldBalance, oldOutstanding: accountTypes.get(data.fromAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(data.fromAccountId)?.needsInitialization });
+    balanceLegs.push({ accountId: data.fromAccountId, amountDelta: Number(data.amount) || 0, date: paidOn, isCreditCard: false });
   }
   if (data.toAccountId) {
     // Reversing bill payment: increases outstanding back up, but does NOT affect unbilled spend.
-    balanceDeltas.push({ accountId: data.toAccountId, amountDelta: -Number(data.amount) || 0, isCreditCard: true, oldBalance: accountTypes.get(data.toAccountId)?.oldBalance, oldOutstanding: accountTypes.get(data.toAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(data.toAccountId)?.needsInitialization });
+    balanceLegs.push({ accountId: data.toAccountId, amountDelta: -Number(data.amount) || 0, date: paidOn, isCreditCard: true });
   }
 
-  const { buildAccountBalanceOps } = await import("@/shared/utils/balanceMutations");
-  const balOps = buildAccountBalanceOps(owner, balanceDeltas);
+  const { journalBalanceOps } = await import("@/services/ledger/journalBalanceOps");
+  const balOps = journalBalanceOps(owner, balanceLegs, accountTypes);
   ops.push(...balOps);
 
   const outcome = await commitMutations(owner, ops, {
@@ -605,26 +608,27 @@ export async function editCreditBillPayment(
   });
 
   const accountTypes = await import("@/services/ledger/fetchAccountTypes").then(m => m.fetchAccountTypes(db, owner, [before.fromAccountId, before.toAccountId, fromAccountId]));
-  const balanceDeltas: any[] = [];
-  
-  // Revert before
+  const balanceLegs: BalanceLeg[] = [];
+
+  // Revert before, on its own date (SPENDLY-603: so a date moved across the
+  // bank account's baseline nets correctly).
   if (before.sourceType !== "external" && before.fromAccountId) {
-    balanceDeltas.push({ accountId: before.fromAccountId, amountDelta: Number(before.amount) || 0, isCreditCard: false, oldBalance: accountTypes.get(before.fromAccountId)?.oldBalance, oldOutstanding: accountTypes.get(before.fromAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(before.fromAccountId)?.needsInitialization });
+    balanceLegs.push({ accountId: before.fromAccountId, amountDelta: Number(before.amount) || 0, date: beforeDate, isCreditCard: false });
   }
   if (before.toAccountId) {
-    balanceDeltas.push({ accountId: before.toAccountId, amountDelta: -Number(before.amount) || 0, isCreditCard: true, oldBalance: accountTypes.get(before.toAccountId)?.oldBalance, oldOutstanding: accountTypes.get(before.toAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(before.toAccountId)?.needsInitialization });
+    balanceLegs.push({ accountId: before.toAccountId, amountDelta: -Number(before.amount) || 0, date: beforeDate, isCreditCard: true });
   }
 
   // Apply after
   if (patch.sourceType !== "external" && fromAccountId) {
-    balanceDeltas.push({ accountId: fromAccountId, amountDelta: -amount, isCreditCard: false, oldBalance: accountTypes.get(fromAccountId)?.oldBalance, oldOutstanding: accountTypes.get(fromAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(fromAccountId)?.needsInitialization });
+    balanceLegs.push({ accountId: fromAccountId, amountDelta: -amount, date, isCreditCard: false });
   }
   if (before.toAccountId) { // edit doesn't change toAccountId
-    balanceDeltas.push({ accountId: before.toAccountId, amountDelta: amount, isCreditCard: true, oldBalance: accountTypes.get(before.toAccountId)?.oldBalance, oldOutstanding: accountTypes.get(before.toAccountId)?.oldOutstanding, needsInitialization: accountTypes.get(before.toAccountId)?.needsInitialization });
+    balanceLegs.push({ accountId: before.toAccountId, amountDelta: amount, date, isCreditCard: true });
   }
 
-  const { buildAccountBalanceOps } = await import("@/shared/utils/balanceMutations");
-  const balOps = buildAccountBalanceOps(owner, balanceDeltas);
+  const { journalBalanceOps } = await import("@/services/ledger/journalBalanceOps");
+  const balOps = journalBalanceOps(owner, balanceLegs, accountTypes);
   ops.push(...balOps);
 
   const outcome = await commitMutations(owner, ops, {
