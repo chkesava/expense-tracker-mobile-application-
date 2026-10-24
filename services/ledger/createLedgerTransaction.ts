@@ -12,8 +12,8 @@ import { collection, doc, serverTimestamp } from "firebase/firestore";
 import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";
 import type { WriteOutcome } from "@/lib/firestoreWrite";
-import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
 import { fetchAccountTypes } from "./fetchAccountTypes";
+import { journalBalanceOps } from "./journalBalanceOps";
 
 export type CreateExpenseInput = {
   amount: number;
@@ -110,17 +110,17 @@ export async function createExpense(
   // SPENDLY-491: cache first, so the save never waits on a server round trip.
   // SPENDLY-436's "never seeded" handling lives in accountInfoFromSnap.
   const accountInfo = payload.accountId
-    ? (await fetchAccountTypes(db, uid, [payload.accountId])).get(payload.accountId)
-    : undefined;
-  const isCreditCard = accountInfo?.isCreditCard ?? false;
-  const oldBalance = accountInfo?.oldBalance ?? 0;
-  const oldOutstanding = accountInfo?.oldOutstanding ?? 0;
-  const needsInitialization = accountInfo?.needsInitialization ?? false;
+    ? await fetchAccountTypes(db, uid, [payload.accountId])
+    : new Map();
 
   const expenseOps = [{ op: "set" as const, ref, data, merge: Boolean(options?.id) }];
-  const balanceOps = payload.accountId ? buildAccountBalanceOps(uid, [
-    { accountId: payload.accountId, amountDelta: -payload.amount, isCreditCard, oldBalance, oldOutstanding, needsInitialization }
-  ]) : [];
+  // SPENDLY-602: a row dated before the account's baseline is already
+  // inside its opening balance, so it must not move the stored balance.
+  const balanceOps = journalBalanceOps(
+    uid,
+    [{ accountId: payload.accountId ?? "", amountDelta: -payload.amount, date: payload.date }],
+    accountInfo
+  );
 
   
   // SPENDLY-495: parent and subcategory keys, the same scheme edits use.
@@ -157,17 +157,17 @@ export async function createIncome(
   // SPENDLY-491: cache first, so the save never waits on a server round trip.
   // SPENDLY-436's "never seeded" handling lives in accountInfoFromSnap.
   const accountInfo = payload.accountId
-    ? (await fetchAccountTypes(db, uid, [payload.accountId])).get(payload.accountId)
-    : undefined;
-  const isCreditCard = accountInfo?.isCreditCard ?? false;
-  const oldBalance = accountInfo?.oldBalance ?? 0;
-  const oldOutstanding = accountInfo?.oldOutstanding ?? 0;
-  const needsInitialization = accountInfo?.needsInitialization ?? false;
+    ? await fetchAccountTypes(db, uid, [payload.accountId])
+    : new Map();
 
   const incomeOps = [{ op: "set" as const, ref, data, merge: Boolean(options?.id) }];
-  const balanceOps = payload.accountId ? buildAccountBalanceOps(uid, [
-    { accountId: payload.accountId, amountDelta: payload.amount, isCreditCard, oldBalance, oldOutstanding, needsInitialization }
-  ]) : [];
+  // SPENDLY-602: a row dated before the account's baseline is already
+  // inside its opening balance, so it must not move the stored balance.
+  const balanceOps = journalBalanceOps(
+    uid,
+    [{ accountId: payload.accountId ?? "", amountDelta: payload.amount, date: payload.date }],
+    accountInfo
+  );
 
   
   const dashboardOps = computeDashboardIncomeCreateOps(uid, payload);

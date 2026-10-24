@@ -1361,7 +1361,7 @@ describe("previewBalanceAfterTransaction uses the stored balance (SPENDLY-584)",
     expect(
       preview(sbi, "Bank", "expense", 800, loadedPage, {
         excludeId: "e-new",
-        options: { editing: { kind: "expense", accountId: "sbi", amount: 789 } },
+        options: { editing: { kind: "expense", accountId: "sbi", amount: 789, date: "2026-10-20" } },
       })
     ).toBe(1061);
   });
@@ -1369,7 +1369,7 @@ describe("previewBalanceAfterTransaction uses the stored balance (SPENDLY-584)",
   it("editing an income on the same account reverses the original amount first", () => {
     expect(
       preview(sbi, "Bank", "income", 300, [], {
-        options: { editing: { kind: "income", accountId: "sbi", amount: 500 } },
+        options: { editing: { kind: "income", accountId: "sbi", amount: 500, date: "2026-10-20" } },
       })
     ).toBe(872);
   });
@@ -1378,7 +1378,7 @@ describe("previewBalanceAfterTransaction uses the stored balance (SPENDLY-584)",
     expect(
       preview(wallet, "Cash", "expense", 100, loadedPage, {
         excludeId: "e-new",
-        options: { editing: { kind: "expense", accountId: "sbi", amount: 789 } },
+        options: { editing: { kind: "expense", accountId: "sbi", amount: 789, date: "2026-10-20" } },
       })
     ).toBe(350);
   });
@@ -1404,6 +1404,40 @@ describe("previewBalanceAfterTransaction uses the stored balance (SPENDLY-584)",
     expect(
       preview(unseeded, "Bank", "expense", 100, loadedPage, { options: { ledgerComplete: false } })
     ).toBeNull();
+  });
+
+  describe("balance baseline (SPENDLY-602)", () => {
+    const based: Account = { ...sbi, balanceAsOfDate: "2026-09-10" };
+
+    it("a draft dated before the baseline leaves the balance unchanged, as the save does", () => {
+      expect(preview(based, "Bank", "expense", 100, [], { options: { draftDate: "2026-09-01" } })).toBe(1072);
+    });
+
+    it("a draft on or after the baseline moves it", () => {
+      expect(preview(based, "Bank", "expense", 100, [], { options: { draftDate: "2026-09-10" } })).toBe(972);
+    });
+
+    it("editing a pre-baseline row to a post-baseline date only applies the new amount", () => {
+      expect(
+        preview(based, "Bank", "expense", 100, [], {
+          options: {
+            draftDate: "2026-09-20",
+            editing: { kind: "expense", accountId: "sbi", amount: 789, date: "2026-09-01" },
+          },
+        })
+      ).toBe(972);
+    });
+
+    it("editing a post-baseline row to a pre-baseline date only reverses the old amount", () => {
+      expect(
+        preview(based, "Bank", "expense", 100, [], {
+          options: {
+            draftDate: "2026-09-01",
+            editing: { kind: "expense", accountId: "sbi", amount: 789, date: "2026-09-20" },
+          },
+        })
+      ).toBe(1861);
+    });
   });
 
   describe("credit cards keep available-credit semantics", () => {
