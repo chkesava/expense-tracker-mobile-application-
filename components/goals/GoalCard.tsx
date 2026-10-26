@@ -16,6 +16,8 @@ type Props = {
   goal: FinancialGoal;
   currency: string;
   onPress: (goal: FinancialGoal) => void;
+  /** SPENDLY-613: a write to this goal is waiting to sync. */
+  pending?: boolean;
   /** Reorder mode: show move buttons instead of opening the goal. */
   reorder?: { canUp: boolean; canDown: boolean; onMove: (goal: FinancialGoal, direction: -1 | 1) => void };
 };
@@ -25,7 +27,7 @@ type Props = {
  * left (or the surplus, shown separately), and its status when not active.
  * Summary fields only — the card never reads history.
  */
-export const GoalCard = memo(function GoalCard({ goal, currency, onPress, reorder }: Props) {
+export const GoalCard = memo(function GoalCard({ goal, currency, onPress, reorder, pending }: Props) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const p = goalProgress(goal);
@@ -35,7 +37,7 @@ export const GoalCard = memo(function GoalCard({ goal, currency, onPress, reorde
   const statusLabel = p.reached ? (status === "completed" ? "Completed" : "Target reached") : GOAL_STATUS_LABELS[status];
   const meta = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
 
-  const summary = `${goal.name}, ${GOAL_STATUS_LABELS[status]}, ${pct}% saved${p.surplus > 0 ? ", over target" : ""}${goal.pinned ? ", pinned" : ""}`;
+  const summary = `${goal.name}, ${GOAL_STATUS_LABELS[status]}, ${pct}% saved${p.surplus > 0 ? ", over target" : ""}${goal.pinned ? ", pinned" : ""}${pending ? ", waiting to sync" : ""}`;
 
   return (
     <Pressable
@@ -81,6 +83,7 @@ export const GoalCard = memo(function GoalCard({ goal, currency, onPress, reorde
         accessibilityLabel={`${goal.name}, ${pct}% saved`}
       />
 
+      {pending ? <Text style={[meta, { fontStyle: "italic" }]}>Waiting to sync</Text> : null}
       {p.surplus > 0 ? (
         <View style={styles.amounts}>
           <Text style={[meta, { color: theme.colors.success, fontFamily: theme.fontFamily.semibold }]}>Over target by</Text>
