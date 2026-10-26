@@ -49,6 +49,20 @@ describe("Save Goals isolation", () => {
     }
   });
 
+  it("a11y (SPENDLY-614): every icon-only button in the goal UI has an accessible label", () => {
+    const files = [
+      ...readdirSync("components/goals").map((f) => join("components/goals", f)),
+      ...readdirSync("app/(app)/goals").map((f) => join("app/(app)/goals", f)),
+    ].filter((f) => f.endsWith(".tsx") && !/optimizer|GoalPlan|GoalFunding/.test(f));
+    for (const f of files) {
+      const src = readFileSync(f, "utf8");
+      // `=>` inside props is not the end of the tag.
+      for (const m of src.matchAll(/<Button\b(?:=>|[^>])*?size="icon"(?:=>|[^>])*>/g)) {
+        expect(m[0], `${f}: icon-only button without accessibilityLabel`).toMatch(/accessibilityLabel=/);
+      }
+    }
+  });
+
   it("the old hard delete is gone from the goals hook", () => {
     const src = readFileSync("hooks/useFinancialGoals.ts", "utf8");
     expect(src).not.toMatch(/deleteDoc/);

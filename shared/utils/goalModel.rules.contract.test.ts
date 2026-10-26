@@ -58,7 +58,17 @@ function allOps() {
     buildStatusChange(full, "completed", ctx),
     buildStatusChange(full, "archived", ctx),
     buildMilestonesChange(full, [{ id: "m", amount: 5, label: "five" }], ctx),
-    buildSettingsChange(full, { pinned: true, sortOrder: 1, locked: true, reminders: { frequency: "weekly", time: "09:00", milestoneEnabled: true, inactivityEnabled: true, inactivityDays: 7 } }, ctx),
+    buildSettingsChange(
+      full,
+      {
+        pinned: true,
+        sortOrder: 1,
+        locked: true,
+        reminders: { frequency: "weekly", time: "09:00", weekday: 2, monthDay: 1, milestoneEnabled: true, inactivityEnabled: true, inactivityDays: 7 },
+        image: { path: "users/u/goals/g/i/image.jpg", mimeType: "image/jpeg", sizeBytes: 1, width: 1, height: 1, uploadedAtMs: 1 },
+      },
+      ctx
+    ),
     // A legacy goal: the upgrade path adds its own fields.
     buildAmountChange({ id: "g", name: "Car", targetAmount: 1000, currentAmount: 5 }, { kind: "contribution", amount: 1 }, ctx),
   ];
@@ -98,6 +108,13 @@ describe("Save Goals rules contract", () => {
     expect(fn("goalEventWellFormed")).toContain(`optionalText(d, 'note', ${GOAL_LIMITS.noteMax})`);
     expect(fn("goalV2Shape")).toContain(`optionalText(d, 'description', ${GOAL_LIMITS.descriptionMax})`);
     expect(fn("goalV2Shape")).toContain(`d.milestones.size() <= ${GOAL_LIMITS.maxMilestones}`);
+  });
+
+  it("image metadata keys and types match the rules (SPENDLY-614)", () => {
+    const fnBody = fn("goalImageOk");
+    expect(firstList(fnBody, /d\.image\.keys\(\)\.hasOnly\(\[([^\]]*)\]\)/).sort()).toEqual(["height", "mimeType", "path", "sizeBytes", "uploadedAtMs", "width"]);
+    expect(firstList(fnBody, /d\.image\.mimeType in \[([^\]]*)\]/)).toEqual(["image/jpeg", "image/png", "image/webp"]);
+    expect(fnBody).toContain("d.image.sizeBytes <= 10485760");
   });
 
   it("never allows account or ledger fields on goal documents", () => {

@@ -40,6 +40,7 @@ import { useCategorizationRules } from "@/hooks/useCategorizationRules";
 import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
 import { useFinancialGoals } from "@/hooks/useFinancialGoals";
 import { useSaveGoalsEnabled } from "@/hooks/useSaveGoalsEnabled";
+import { useUnlockedGoalIds } from "@/lib/goalLockSession";
 import { isGoalInProgress, parseGoalAmount } from "@/shared/utils/goalModel";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useAccounts } from "@/hooks/useAccounts";
@@ -601,6 +602,7 @@ export function FinancialGoalsManager() {
   // SPENDLY-608: only goals still being saved for; closed goals live on the Goals screen.
   const goals = allGoals.filter(isGoalInProgress);
   const saveGoals = useSaveGoalsEnabled();
+  const unlockedIds = useUnlockedGoalIds();
   const router = useRouter();
   const { celebrateMilestone } = useCelebration();
   const [name, setName] = useState("");
@@ -718,10 +720,15 @@ export function FinancialGoalsManager() {
                     <Text style={{ color: theme.colors.foreground, fontWeight: "800", fontSize: 14 }}>
                       {g.name}
                     </Text>
-                    <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 3 }}>
-                      <Amount value={g.currentAmount} ghostable /> / <Amount value={g.targetAmount} ghostable /> ({pct}%)
-                      {g.deadline ? ` · ${g.deadline}` : ""}
-                    </Text>
+                    {g.locked && !unlockedIds.has(g.id) ? (
+                      // SPENDLY-614: locked goals show no amounts until unlocked on this device.
+                      <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 3 }}>Locked</Text>
+                    ) : (
+                      <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 3 }}>
+                        <Amount value={g.currentAmount} ghostable /> / <Amount value={g.targetAmount} ghostable /> ({pct}%)
+                        {g.deadline ? ` · ${g.deadline}` : ""}
+                      </Text>
+                    )}
 
                     {/* Mini Progress Bar */}
                     <View

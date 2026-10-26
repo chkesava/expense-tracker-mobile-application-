@@ -153,6 +153,27 @@ nothing in production even if Steps 1–4 are complete.
 
 ---
 
+## Save Goals images (SPENDLY-614)
+
+Goal photos use the same bucket and the same Edge Function, at
+`users/{uid}/goals/{goalId}/{imageId}/image.jpg`. The function proves ownership
+by reading `users/{uid}/financialGoals/{goalId}` as the caller (the same
+mechanism as accounts), and accepts only JPEG/PNG/WebP uploads for goal paths.
+The client normalises every photo to a JPEG with the longest edge at most
+1600 px before upload.
+
+**Deploy:** redeploy the function (Step 3) so it accepts goal paths, then the
+Firestore rules (Step 5). The rules check that a goal's `image.path` is the
+caller's own image for that goal. No bucket changes: its MIME list and 10 MB
+limit already cover images.
+
+Replacing a photo uploads the new object, saves its metadata on the goal, and
+only then deletes the old object. If saving fails, the new object is deleted
+again. A cleanup that fails is logged and leaves an unreferenced object (no
+sweeper, as below).
+
+---
+
 ## What is deliberately not here
 
 - **No orphan sweeper.** A failed upload leaves a `pending` metadata row, which

@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { ArrowDown, ArrowUp, Pin } from "lucide-react-native";
+import { ArrowDown, ArrowUp, Lock, Pin } from "lucide-react-native";
 
 import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
 import { ProgressIndicator } from "@/components/dashboard/ProgressIndicator";
@@ -18,6 +18,8 @@ type Props = {
   onPress: (goal: FinancialGoal) => void;
   /** SPENDLY-613: a write to this goal is waiting to sync. */
   pending?: boolean;
+  /** SPENDLY-614: locked and not unlocked on this device — amounts are hidden. */
+  hidden?: boolean;
   /** Reorder mode: show move buttons instead of opening the goal. */
   reorder?: { canUp: boolean; canDown: boolean; onMove: (goal: FinancialGoal, direction: -1 | 1) => void };
 };
@@ -27,7 +29,7 @@ type Props = {
  * left (or the surplus, shown separately), and its status when not active.
  * Summary fields only — the card never reads history.
  */
-export const GoalCard = memo(function GoalCard({ goal, currency, onPress, reorder, pending }: Props) {
+export const GoalCard = memo(function GoalCard({ goal, currency, onPress, reorder, pending, hidden }: Props) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const p = goalProgress(goal);
@@ -37,7 +39,9 @@ export const GoalCard = memo(function GoalCard({ goal, currency, onPress, reorde
   const statusLabel = p.reached ? (status === "completed" ? "Completed" : "Target reached") : GOAL_STATUS_LABELS[status];
   const meta = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
 
-  const summary = `${goal.name}, ${GOAL_STATUS_LABELS[status]}, ${pct}% saved${p.surplus > 0 ? ", over target" : ""}${goal.pinned ? ", pinned" : ""}${pending ? ", waiting to sync" : ""}`;
+  const summary = hidden
+    ? `${goal.name}, locked`
+    : `${goal.name}, ${GOAL_STATUS_LABELS[status]}, ${pct}% saved${p.surplus > 0 ? ", over target" : ""}${goal.pinned ? ", pinned" : ""}${pending ? ", waiting to sync" : ""}`;
 
   return (
     <Pressable
@@ -57,11 +61,18 @@ export const GoalCard = memo(function GoalCard({ goal, currency, onPress, reorde
               {goal.name}
             </Text>
           </View>
-          <View style={styles.amounts}>
-            <FinancialAmount value={p.saved} currency={currency} size="sm" />
-            <Text style={meta}>of</Text>
-            <FinancialAmount value={p.target} currency={currency} size="xs" tone="muted" weight="medium" />
-          </View>
+          {hidden ? (
+            <View style={styles.nameRow}>
+              <Lock size={12} color={theme.colors.mutedForeground} accessibilityElementsHidden />
+              <Text style={meta}>Locked</Text>
+            </View>
+          ) : (
+            <View style={styles.amounts}>
+              <FinancialAmount value={p.saved} currency={currency} size="sm" />
+              <Text style={meta}>of</Text>
+              <FinancialAmount value={p.target} currency={currency} size="xs" tone="muted" weight="medium" />
+            </View>
+          )}
         </View>
         {reorder ? (
           <View style={styles.moveCol}>
@@ -75,16 +86,18 @@ export const GoalCard = memo(function GoalCard({ goal, currency, onPress, reorde
         ) : null}
       </View>
 
-      <ProgressIndicator
-        pct={pct}
-        status={p.reached ? "good" : "neutral"}
-        statusLabel={statusLabel}
-        trailing={`${pct}%`}
-        accessibilityLabel={`${goal.name}, ${pct}% saved`}
-      />
+      {hidden ? null : (
+        <ProgressIndicator
+          pct={pct}
+          status={p.reached ? "good" : "neutral"}
+          statusLabel={statusLabel}
+          trailing={`${pct}%`}
+          accessibilityLabel={`${goal.name}, ${pct}% saved`}
+        />
+      )}
 
       {pending ? <Text style={[meta, { fontStyle: "italic" }]}>Waiting to sync</Text> : null}
-      {p.surplus > 0 ? (
+      {hidden ? null : p.surplus > 0 ? (
         <View style={styles.amounts}>
           <Text style={[meta, { color: theme.colors.success, fontFamily: theme.fontFamily.semibold }]}>Over target by</Text>
           <FinancialAmount value={p.surplus} currency={currency} size="xs" tone="positive" weight="semibold" />

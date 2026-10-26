@@ -375,6 +375,54 @@ describe("offline sync and two devices (SPENDLY-613)", () => {
   });
 });
 
+describe("images and lock (SPENDLY-614)", () => {
+  const image = (over: Record<string, unknown> = {}) => ({
+    path: `users/${OWNER}/goals/g1/img-1/image.jpg`,
+    mimeType: "image/jpeg",
+    sizeBytes: 200_000,
+    width: 1600,
+    height: 1200,
+    uploadedAtMs: 1,
+    ...over,
+  });
+  const withImage = async (img: unknown) => {
+    const p = plan(buildSettingsChange(await readGoal(), { pinned: true }, ctx(`i${Math.random()}`)));
+    return commit(ownerDb(), { ...p, fields: { ...p.fields, image: img } });
+  };
+
+  beforeEach(async () => {
+    await createGoal("g1", "Car", 1000, 0);
+  });
+
+  it("stores this user's image for this goal, and removes it", async () => {
+    await assertSucceeds(withImage(image()));
+    expect((await readGoal()).image).toMatchObject({ path: `users/${OWNER}/goals/g1/img-1/image.jpg` });
+    await assertSucceeds(withImage(null));
+  });
+
+  it("refuses an image path that isn't this user's image for this goal", async () => {
+    await assertFails(withImage(image({ path: `users/${OTHER}/goals/g1/img-1/image.jpg` })));
+    await assertFails(withImage(image({ path: `users/${OWNER}/goals/g2/img-1/image.jpg` })));
+    await assertFails(withImage(image({ path: `users/${OWNER}/accounts/a1/d1/statement.pdf` })));
+    await assertFails(withImage(image({ path: `users/${OWNER}/goals/g1/../x/image.jpg` })));
+  });
+
+  it("refuses bad metadata", async () => {
+    await assertFails(withImage(image({ mimeType: "application/pdf" })));
+    await assertFails(withImage(image({ sizeBytes: 10 * 1024 * 1024 + 1 })));
+    await assertFails(withImage(image({ width: 0 })));
+    await assertFails(withImage(image({ url: "https://evil" })));
+    await assertFails(withImage("users/u/goals/g1/x/y.jpg"));
+  });
+
+  it("the lock is a boolean setting that never moves money", async () => {
+    await assertSucceeds(commit(ownerDb(), plan(buildSettingsChange(await readGoal(), { locked: true }, ctx("l1")))));
+    expect((await readGoal()).locked).toBe(true);
+    const p = plan(buildSettingsChange(await readGoal(), { locked: false }, ctx("l2")));
+    await assertFails(commit(ownerDb(), { ...p, fields: { ...p.fields, locked: "yes" } }));
+  });
+});
+
 describe("names", () => {
   it("renames by claiming the new lock and releasing the old one", async () => {
     await createGoal("g1", "Car");

@@ -14,6 +14,10 @@ import { GoalCorrectionSheet } from "@/components/goals/GoalCorrectionSheet";
 import { GoalFormSheet, type GoalFormSubmit } from "@/components/goals/GoalFormSheet";
 import { GoalCompletionSection } from "@/components/goals/GoalCompletionSection";
 import { GoalForecastSection } from "@/components/goals/GoalForecastSection";
+import { GoalLockPanel } from "@/components/goals/GoalLockPanel";
+import { GoalPhotoSection } from "@/components/goals/GoalPhotoSection";
+import { useDeviceAuth } from "@/hooks/useDeviceAuth";
+import { goalLockSession, useGoalHidden } from "@/lib/goalLockSession";
 import { GoalRemindersSheet } from "@/components/goals/GoalRemindersSheet";
 import { GoalSyncIssuesBanner } from "@/components/goals/GoalSyncIssuesBanner";
 import { goalReminders } from "@/shared/utils/goalReminders";
@@ -100,6 +104,9 @@ export default function GoalDetailScreen() {
   const [amountSheet, setAmountSheet] = useState<AmountSheetKind | null>(null);
   const [correcting, setCorrecting] = useState<GoalEvent | null>(null);
   const newKey = () => (user ? newGoalEventId(user.uid) : `${Date.now()}`);
+  // SPENDLY-614: per-goal lock (a privacy screen on this device).
+  const hidden = useGoalHidden(goal);
+  const deviceAuth = useDeviceAuth();
 
   if (!enabled) return <Redirect href={"/settings/money" as Href} />;
 
@@ -140,6 +147,15 @@ export default function GoalDetailScreen() {
       <PageShell scrollable={false}>
         {header}
         <EmptyState title="This goal isn't here" description="It may belong to another account, or the link is out of date." primaryAction={{ label: "Back to goals", onPress: () => router.replace("/goals" as Href) }} />
+      </PageShell>
+    );
+  }
+
+  if (hidden) {
+    return (
+      <PageShell>
+        <PageHeader title={goal.name} icon={<GoalIcon iconKey={goal.iconKey} size={28} muted />} onBack={back} />
+        <GoalLockPanel goalId={goal.id} goalName={goal.name} />
       </PageShell>
     );
   }
@@ -202,6 +218,21 @@ export default function GoalDetailScreen() {
     setBusy(true);
     try {
       await updateSettings(goal, { pinned: !goal.pinned }, goal.pinned ? "Goal unpinned" : "Goal pinned");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Both directions need the device lock, so nobody holding the phone can remove it. */
+  const toggleLock = async () => {
+    if (busy || !deviceAuth.available) return;
+    const ok = await deviceAuth.confirm(goal.locked ? `Remove the lock from ${goal.name}` : `Lock ${goal.name}`);
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const saved = await updateSettings(goal, { locked: !goal.locked }, goal.locked ? "Lock removed" : "Goal locked");
+      // Locking keeps it open for the rest of this session; it locks when the app goes to the background.
+      if (saved && !goal.locked) goalLockSession.unlock(goal.id);
     } finally {
       setBusy(false);
     }
@@ -306,6 +337,8 @@ export default function GoalDetailScreen() {
 
         {status === "completed" ? <GoalCompletionSection goal={goal} currency={currency} /> : null}
 
+        <GoalPhotoSection goal={goal} editable={status !== "archived"} saveImage={(image) => updateSettings(goal, { image }, image ? "Photo saved" : "Photo removed")} />
+
         {inProgress ? <GoalForecastSection goal={goal} currency={currency} onEditReminders={() => setRemindersOpen(true)} /> : null}
 
         <GoalMilestonesSection goal={goal} currency={currency} canEdit={inProgress} onEdit={() => setMilestonesOpen(true)} />
@@ -333,6 +366,17 @@ export default function GoalDetailScreen() {
             <Button variant="secondary" onPress={() => void togglePin()} disabled={busy} accessibilityLabel={goal.pinned ? "Unpin goal" : "Pin goal to top"}>
               {goal.pinned ? "Unpin" : "Pin to top"}
             </Button>
+            <Button
+              variant="secondary"
+              onPress={() => void toggleLock()}
+              disabled={busy || !deviceAuth.available}
+              accessibilityLabel={goal.locked ? "Remove the lock from this goal" : "Lock this goal with your device lock"}
+            >
+              {goal.locked ? "Remove lock" : "Lock this goal"}
+            </Button>
+            {!deviceAuth.available ? (
+              <Text style={meta}>Goal locks need a device screen lock (fingerprint, face or passcode), which isn't available here.</Text>
+            ) : null}
             {actions
               .filter((a) => a !== "complete")
               .map((a) => (

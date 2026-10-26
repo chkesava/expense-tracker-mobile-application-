@@ -588,6 +588,24 @@ service cloud.firestore {
           && (!d.keys().hasAny(['image']) || d.image == null || d.image is map);
       }
 
+      // SPENDLY-614: image metadata only (the bytes live in the private
+      // spendly-files bucket). The path must be this user's image for this
+      // goal, so a goal can never point at someone else's object.
+      function goalImageOk(goalId, d) {
+        return !d.keys().hasAny(['image'])
+          || d.image == null
+          || (d.image is map
+              && d.image.keys().hasOnly(['path', 'mimeType', 'sizeBytes', 'width', 'height', 'uploadedAtMs'])
+              && d.image.keys().hasAll(['path', 'mimeType', 'sizeBytes', 'width', 'height', 'uploadedAtMs'])
+              && d.image.path is string
+              && d.image.path.matches('^users/' + uid + '/goals/' + goalId + '/[A-Za-z0-9_-]{1,64}/[A-Za-z0-9._-]{1,80}$')
+              && d.image.mimeType in ['image/jpeg', 'image/png', 'image/webp']
+              && d.image.sizeBytes is int && d.image.sizeBytes > 0 && d.image.sizeBytes <= 10485760
+              && d.image.width is int && d.image.width >= 1 && d.image.width <= 10000
+              && d.image.height is int && d.image.height >= 1 && d.image.height <= 10000
+              && d.image.uploadedAtMs is number);
+      }
+
       // The event this write links to was created by this same batch.
       function goalNewEvent(eventId) {
         return !exists(goalEventDocPath(eventId)) && existsAfter(goalEventDocPath(eventId));
@@ -601,6 +619,7 @@ service cloud.firestore {
       function goalV2Create(goalId) {
         let d = request.resource.data;
         return goalV2Shape(d)
+          && goalImageOk(goalId, d)
           && d.version == 1
           && d.openingAmount == 0
           && d.status == 'active'
@@ -656,6 +675,7 @@ service cloud.firestore {
         let settingsOnly = d.diff(r).affectedKeys()
           .hasOnly(['pinned', 'sortOrder', 'reminders', 'locked', 'image', 'updatedAt']);
         return goalV2Shape(d)
+          && goalImageOk(goalId, d)
           // A legacy goal's whole saved amount becomes its immutable opening amount.
           && ((upgrading && goalMoneyClose(d.openingAmount, r.get('currentAmount', 0)))
               || (!upgrading

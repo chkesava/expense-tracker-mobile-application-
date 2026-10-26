@@ -35,6 +35,7 @@ import {
   GOAL_SCHEMA_VERSION,
   type GoalEvent,
   type GoalIconKey,
+  type GoalImage,
   type GoalMilestone,
   type GoalReason,
   type GoalReminders,
@@ -541,6 +542,8 @@ export type GoalSettingsPatch = {
   sortOrder?: number;
   reminders?: GoalReminders;
   locked?: boolean;
+  /** SPENDLY-614: image metadata, or null to remove it. */
+  image?: GoalImage | null;
 };
 
 /** Last-writer-wins preferences: no event, no version move (unless upgrading). */
@@ -557,6 +560,7 @@ export function buildSettingsChange(goal: FinancialGoal, patch: GoalSettingsPatc
     fields.reminders = { ...patch.reminders };
   }
   if (patch.locked !== undefined) fields.locked = patch.locked;
+  if (patch.image !== undefined) fields.image = patch.image ? { ...patch.image } : null;
   if (Object.keys(fields).length === 0) return fail("no_change");
   const plan: GoalWritePlan = {
     goalId: goal.id,

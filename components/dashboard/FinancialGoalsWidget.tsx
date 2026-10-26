@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { useFinancialGoals } from "@/hooks/useFinancialGoals";
 import { useSaveGoalsEnabled } from "@/hooks/useSaveGoalsEnabled";
+import { useUnlockedGoalIds } from "@/lib/goalLockSession";
 import { haptic } from "@/lib/haptics";
 import { useSettings } from "@/providers/SettingsProvider";
 import { formatDisplayDate } from "@/shared/utils/dateDisplay";
@@ -43,6 +44,7 @@ export const FinancialGoalsWidget = memo(function FinancialGoalsWidget({
   const surfaces = useSurfaces();
   const { settings } = useSettings();
   const { shown, total } = dashboardGoals(goals, 2);
+  const unlockedIds = useUnlockedGoalIds();
 
   const openGoals = () => {
     void haptic.selection();
@@ -102,6 +104,8 @@ export const FinancialGoalsWidget = memo(function FinancialGoalsWidget({
         const target = progress.target;
         const pct = Math.floor(progress.percent);
         const isComplete = progress.reached;
+        // SPENDLY-614: a locked goal shows no amounts until unlocked on this device.
+        const locked = Boolean(goal.locked) && !unlockedIds.has(goal.id);
 
         return (
           <Pressable
@@ -129,28 +133,34 @@ export const FinancialGoalsWidget = memo(function FinancialGoalsWidget({
                   </View>
                 ) : null}
               </View>
-              <View style={styles.goalValueCol}>
-                <FinancialAmount value={current} currency={currency} size="sm" />
-                <View style={styles.ofRow}>
-                  <MetaLabel>of</MetaLabel>
-                  <FinancialAmount
-                    value={target}
-                    currency={currency}
-                    size="xs"
-                    tone="muted"
-                    weight="medium"
-                  />
+              {locked ? (
+                <MetaLabel>Locked</MetaLabel>
+              ) : (
+                <View style={styles.goalValueCol}>
+                  <FinancialAmount value={current} currency={currency} size="sm" />
+                  <View style={styles.ofRow}>
+                    <MetaLabel>of</MetaLabel>
+                    <FinancialAmount
+                      value={target}
+                      currency={currency}
+                      size="xs"
+                      tone="muted"
+                      weight="medium"
+                    />
+                  </View>
                 </View>
-              </View>
+              )}
             </View>
 
-            <ProgressIndicator
-              pct={pct}
-              status={isComplete ? "good" : "neutral"}
-              statusLabel={isComplete ? "Goal reached" : "In progress"}
-              trailing={`${pct}%`}
-              accessibilityLabel={`${goal.name}, ${pct}% saved`}
-            />
+            {locked ? null : (
+              <ProgressIndicator
+                pct={pct}
+                status={isComplete ? "good" : "neutral"}
+                statusLabel={isComplete ? "Goal reached" : "In progress"}
+                trailing={`${pct}%`}
+                accessibilityLabel={`${goal.name}, ${pct}% saved`}
+              />
+            )}
           </Pressable>
         );
       })}

@@ -12,6 +12,7 @@ import { GoalCard } from "@/components/goals/GoalCard";
 import { GoalFormSheet, type GoalFormSubmit } from "@/components/goals/GoalFormSheet";
 import { GoalIcon } from "@/components/goals/GoalIcon";
 import { GoalSyncIssuesBanner } from "@/components/goals/GoalSyncIssuesBanner";
+import { useUnlockedGoalIds } from "@/lib/goalLockSession";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageListStateScroll } from "@/components/layout/PageListStateScroll";
 import { PageShell } from "@/components/layout/PageShell";
@@ -43,6 +44,7 @@ export default function GoalsScreen() {
   const { isOnline } = useNetwork();
   const bottomPadding = usePageListBottomPadding();
   const { goals, loading, error, retry, createGoal, updateSettings, pendingGoalIds } = useFinancialGoals();
+  const unlockedIds = useUnlockedGoalIds();
   const { celebrateMilestone } = useCelebration();
   const [tab, setTab] = useState<GoalTab>("active");
   const [status, setStatus] = useState<GoalStatus | "all">("all");
@@ -218,12 +220,13 @@ export default function GoalsScreen() {
             <FlashList
               data={list}
               keyExtractor={(g) => g.id}
-              extraData={[reorder, pendingGoalIds]}
+              extraData={[reorder, pendingGoalIds, unlockedIds]}
               renderItem={({ item, index }) => (
                 <View style={{ paddingHorizontal: theme.space.lg, paddingBottom: theme.space.sm }}>
                   <GoalCard
                     goal={item}
                     pending={pendingGoalIds.has(item.id)}
+                    hidden={Boolean(item.locked) && !unlockedIds.has(item.id)}
                     currency={currency}
                     onPress={open}
                     reorder={

@@ -125,6 +125,52 @@ describe("ownerForPath", () => {
   });
 });
 
+describe("goal images (SPENDLY-614)", () => {
+  const GOAL_IMG = `users/${OWNER}/goals/g1/img1/image.jpg`;
+  const goalDeps = () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const match = /documents\/users\/([^/]+)\/financialGoals\/([^/?]+)/.exec(url);
+      const authorization = (init?.headers as Record<string, string> | undefined)?.Authorization;
+      if (!match || !authorization) return new Response("{}", { status: 404 });
+      const [, uid, goalId] = match;
+      if (uid !== OWNER || goalId !== "g1") return new Response("{}", { status: 404 });
+      return new Response(JSON.stringify({ name: `projects/p/databases/(default)/documents/users/${uid}/financialGoals/${goalId}` }), { status: 200 });
+    });
+    const { deps } = makeDeps(ONE_ACCOUNT);
+    return { deps: { ...deps, fetch: fetchMock as unknown as typeof fetch }, fetchMock };
+  };
+
+  it("reads the uid and goal out of a goal image path", () => {
+    expect(ownerForPath(GOAL_IMG)).toEqual({ uid: OWNER, goalId: "g1" });
+    expect(ownerForPath(`users/${OWNER}/goals/g1/image.jpg`)).toBeNull();
+    expect(ownerForPath(`users/${OWNER}/goals/../g1/img/x.jpg`)).toBeNull();
+  });
+
+  it("proves ownership by reading the goal document as the caller", async () => {
+    const { deps, fetchMock } = goalDeps();
+    const res = await handleSpendlyFiles(request({ operation: "upload", path: GOAL_IMG, contentType: "image/jpeg", declaredSize: 1000 }), deps);
+    expect(res.status).toBe(200);
+    expect(String(fetchMock.mock.calls[0][0])).toContain(`/documents/users/${OWNER}/financialGoals/g1`);
+  });
+
+  it("refuses another user's goal, a goal that doesn't exist, and non-image uploads", async () => {
+    const { deps } = goalDeps();
+    expect((await handleSpendlyFiles(request({ operation: "download", path: `users/${OTHER}/goals/g1/img1/image.jpg` }), deps)).status).toBe(403);
+    expect((await handleSpendlyFiles(request({ operation: "download", path: `users/${OWNER}/goals/g2/img1/image.jpg` }), deps)).status).toBe(403);
+    expect((await handleSpendlyFiles(request({ operation: "upload", path: GOAL_IMG, contentType: "application/pdf" }), deps)).status).toBe(415);
+    expect((await handleSpendlyFiles(request({ operation: "upload", path: GOAL_IMG }), deps)).status).toBe(415);
+    expect((await handleSpendlyFiles(request({ operation: "upload", path: GOAL_IMG, contentType: "image/png", declaredSize: MAX_UPLOAD_BYTES + 1 }), deps)).status).toBe(413);
+  });
+
+  it("deletes a goal image the caller owns", async () => {
+    const { deps } = goalDeps();
+    const res = await handleSpendlyFiles(request({ operation: "delete", path: GOAL_IMG }), deps);
+    expect(res.status).toBe(200);
+    expect(deps.storage.remove).toHaveBeenCalledWith([GOAL_IMG]);
+  });
+});
+
 describe("uidFromToken", () => {
   it("reads user_id", () => {
     expect(uidFromToken(tokenFor(OWNER))).toBe(OWNER);
