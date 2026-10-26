@@ -300,3 +300,24 @@ These are behaviour changes made deliberately in 608, not in 607:
 6. **Biometric lock is a device privacy feature.** The data is still readable by the owner through Firestore, as all of their data is.
 7. **Production steps requiring approval:** the rules deploy, the index deploy, the read-model migration and sync deploy, and the `spendly-files` Edge Function deploy.
 8. **Drift:** `.claude/spendly_epic_execution_roadmap.md` is not present in this checkout, and the FRD is in `docs/` rather than `docs/features/` as the task prompt said.
+
+## 9. Status after SPENDLY-615 (2026-10-26)
+All nine stories are built on `feature/SPENDLY-606-save-goals`, each with its own doc (`docs/SPENDLY-607…615-*.md`). The rollout, monitoring and rollback runbook is `ROLLOUT.md`.
+
+**FRD coverage:** FR-01 to FR-16 are implemented. These deviations are documented:
+
+| Area | Deviation |
+|---|---|
+| Events | No `resultingAmount` (§2.4) |
+| "Push" | Local notifications only (SPENDLY-222) |
+| Ordering | Reorder mode with up/down instead of drag-and-drop |
+| Upload progress | Shown in stages, not as a byte percentage |
+| Goal lock | A device privacy screen |
+| Offline | Corrections need a connection |
+
+**Still open:**
+- device QA (`ROLLOUT.md` §5);
+- live read measurement in stage 1;
+- the production steps in `ROLLOUT.md` §1;
+- a new ticket for `delete-account` storage cleanup;
+- the SPENDLY-616 merge conflict in `spendly-files`.

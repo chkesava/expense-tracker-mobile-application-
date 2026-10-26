@@ -13,8 +13,10 @@
 | SPENDLY-611 | Analytics, charts, filters, CSV/PDF export (read path) | `feature/SPENDLY-611-analytics-exports` | Merged to epic (c139541c) |
 | SPENDLY-612 | Reminders, estimated completion | `feature/SPENDLY-612-reminders-estimates` | Merged to epic (0b7ac1a3) |
 | SPENDLY-613 | Offline sync, idempotency, conflicts | `feature/SPENDLY-613-offline-sync` | Merged to epic (bc92ac51) |
-| SPENDLY-614 | Security, images, biometric lock, accessibility | `feature/SPENDLY-614-security-images-a11y` | Built, awaiting merge approval |
-| SPENDLY-615 | QA, performance, staged rollout | — | Not started |
+| SPENDLY-614 | Security, images, biometric lock, accessibility | `feature/SPENDLY-614-security-images-a11y` | Merged to epic (251827ea) |
+| SPENDLY-615 | QA, performance, staged rollout | `feature/SPENDLY-615-qa-rollout` | Built, awaiting merge approval |
+
+**Worktree:** from 615 on, the epic lives in `C:\dev\worktrees\spendly-606`, because the main checkout is in use by SPENDLY-616.
 
 ## Decisions
 - **Extend, don't replace.** `financialGoals` stays the summary and every new field is optional. The audit log is `users/{uid}/goalEvents`, and unique names are enforced by `users/{uid}/goalNames`.
@@ -38,7 +40,14 @@
 - **Screen flag:** `system_settings/global.enableSaveGoals`, off by default and on in `__DEV__` and the emulator. It gates screens only; writes always use the audited model.
 - **Ordering:** accessible up/down "Reorder" mode instead of drag-and-drop (no gesture library is installed; not worth adding).
 
-## Production steps pending (each needs approval, after merge to main)
+- **Staged rollout:** `enableSaveGoalsFor` (a uid allowlist) and then `enableSaveGoals`, both admin-only in `system_settings/global` (615). Full order, monitoring and rollback: `docs/features/save-goals/ROLLOUT.md`.
+
+## Open items found during the epic
+- **`delete-account` has no storage phase.** Account documents (SPENDLY-88) and goal photos outlive account deletion. This is pre-existing and needs its own ticket.
+- **SPENDLY-616 conflicts.** It changes the same `spendly-files` handler and client files as 614; resolve the conflict when the second of the two reaches main.
+- **Device QA:** see the checklist in `ROLLOUT.md` §5.
+
+## Production steps pending (each needs approval, after merge to main; order in ROLLOUT.md §1)
 - [ ] **Firestore rules deploy BEFORE the next app release.** From 608 on, the app writes `goalEvents`/`goalNames`, which current production rules deny (608, 609, 614).
 - [ ] Firestore indexes `goalEvents (goalId, createdAtMs desc)` (609) and `goalEvents (goalId, type, createdAtMs desc)` (610). Diff against live first.
 - [ ] **Read-model migration `20261029000000` before** any sync/push run that knows the goal tables, then a dry-run full sync (609)
