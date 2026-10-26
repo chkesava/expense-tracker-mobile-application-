@@ -1,8 +1,10 @@
-import { collection, doc, increment, serverTimestamp } from "firebase/firestore";
+import { collection, doc, getDocs, increment, limit, query, serverTimestamp, where } from "firebase/firestore";
 
 import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";
+import { logDirectRead } from "@/lib/firestoreReadDebug";
 import type { WriteOutcome } from "@/lib/firestoreWrite";
+import type { GoalEvent } from "@/shared/types/goal";
 import type { GoalIssue } from "@/shared/utils/goalModel";
 import { goalWritePlanToOps, type GoalWriteResult } from "@/shared/utils/goalWrites";
 
@@ -42,6 +44,23 @@ export function newGoalId(uid: string): string {
  */
 export function newGoalEventId(uid: string): string {
   return doc(collection(db(), "users", uid, "goalEvents")).id;
+}
+
+/**
+ * Every correction/reversal already linked to `originalId` (SPENDLY-609).
+ * Read fresh before building a correction, so it is computed from the entry's
+ * effective amount even when those events sit on an unloaded history page.
+ * Bounded: an entry with more than 50 corrections is not a real case.
+ */
+export async function loadGoalCorrections(uid: string, originalId: string): Promise<GoalEvent[]> {
+  const snap = await getDocs(
+    query(collection(db(), "users", uid, "goalEvents"), where("correctionOf", "==", originalId), limit(50))
+  );
+  logDirectRead(`users/${uid}/goalEvents`, snap.docs.length, snap.metadata.fromCache ? "cache" : "server", {
+    feature: "goals",
+    queryShape: "corrections of one entry",
+  });
+  return snap.docs.map((d) => ({ ...(d.data() as Omit<GoalEvent, "id">), id: d.id }));
 }
 
 export async function commitGoalWrite(uid: string, result: GoalWriteResult, label: string): Promise<WriteOutcome> {

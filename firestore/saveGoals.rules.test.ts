@@ -6,10 +6,16 @@ import {
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
 import {
+  collection,
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   increment,
+  limit,
+  orderBy,
+  query,
+  where,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -332,6 +338,23 @@ describe("legacy goals", () => {
 
   it("legacy goals stay deletable by installed builds", async () => {
     await assertSucceeds(deleteDoc(doc(ownerDb(), "users", OWNER, "financialGoals", "g1")));
+  });
+});
+
+describe("history queries (SPENDLY-609)", () => {
+  it("the owner can page a goal's history and look up an entry's corrections; nobody else can", async () => {
+    await createGoal("g1", "Car", 1000, 100);
+    await commit(ownerDb(), plan(buildAmountChange(await readGoal(), { kind: "contribution", amount: 50 }, ctx("c1"))));
+    const history = (db: Firestore) =>
+      getDocs(query(collection(db, "users", OWNER, "goalEvents"), where("goalId", "==", "g1"), orderBy("createdAtMs", "desc"), limit(25)));
+    const corrections = (db: Firestore) =>
+      getDocs(query(collection(db, "users", OWNER, "goalEvents"), where("correctionOf", "==", "c1"), limit(50)));
+    const page = await assertSucceeds(history(ownerDb()));
+    expect(page.docs.map((d) => d.id)).toContain("c1");
+    await assertSucceeds(corrections(ownerDb()));
+    const other = env.authenticatedContext(OTHER).firestore() as unknown as Firestore;
+    await assertFails(history(other));
+    await assertFails(corrections(other));
   });
 });
 

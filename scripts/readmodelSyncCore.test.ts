@@ -370,7 +370,7 @@ describe("account lifecycle (SPENDLY-508)", () => {
     expect(m.failures).toEqual([]);
   });
 
-  it("only ever requests the Wave 1 collections, and never a duress tree", async () => {
+  it("only ever requests the synced collections (Wave 1 + SPENDLY-609 goals), and never a duress tree", async () => {
     const fs = world();
     const requested: string[] = [];
     const watched: SourcePort = {
@@ -384,9 +384,9 @@ describe("account lifecycle (SPENDLY-508)", () => {
     const collections = new Set(requested.map((r) => r.split("/")[1]));
     expect([...collections].sort()).toEqual([
       "accountEntries", "accountPayments", "accountTransfers", "accountTypes", "accounts",
-      "categories", "creditCardBills", "expenses", "incomes", "ledgerEvents",
+      "categories", "creditCardBills", "expenses", "financialGoals", "goalEvents", "incomes", "ledgerEvents",
     ]);
-    for (const excluded of ["meta", "stats", "notifications", "financialSummaries", "daily_logs", "weight_history", "pandalMemberships"]) {
+    for (const excluded of ["meta", "stats", "notifications", "financialSummaries", "daily_logs", "weight_history", "pandalMemberships", "goalNames"]) {
       expect(collections.has(excluded)).toBe(false);
     }
     expect(requested.some((r) => r.startsWith("alice_duress/"))).toBe(false);

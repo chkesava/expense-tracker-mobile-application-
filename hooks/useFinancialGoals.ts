@@ -6,17 +6,20 @@ import { toast } from "@/lib/toast";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useAuth } from "@/providers/AuthProvider";
 import { useExpenseReferenceData } from "@/providers/ExpenseReferenceDataProvider";
-import { commitGoalWrite, newGoalEventId, newGoalId } from "@/services/goals/goalStore";
+import { commitGoalWrite, loadGoalCorrections, newGoalEventId, newGoalId } from "@/services/goals/goalStore";
 import type { FinancialGoal } from "@/shared/types/expense";
-import type { GoalStatus } from "@/shared/types/goal";
+import type { GoalEvent, GoalStatus } from "@/shared/types/goal";
 import { goalIssuesMessage } from "@/shared/utils/goalMessages";
 import {
   buildAmountChange,
+  buildCorrection,
   buildCreateGoal,
   buildEditGoal,
   buildSettingsChange,
   buildStatusChange,
   buildTargetChange,
+  type AmountChangeInput,
+  type CorrectionInput,
   type GoalDetailsPatch,
   type GoalInput,
   type GoalSettingsPatch,
@@ -62,12 +65,14 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
       scope: string,
       label: string,
       success: string,
-      build: (ctx: GoalWriteContext) => GoalWriteResult
+      build: (ctx: GoalWriteContext) => GoalWriteResult | Promise<GoalWriteResult>,
+      /** The submit's idempotency key; reuse it when retrying the same submit. */
+      eventId?: string
     ): Promise<boolean> => {
       if (!uid) return false;
       let result: GoalWriteResult;
       try {
-        result = build({ uid, nowMs: Date.now(), eventId: newGoalEventId(uid) });
+        result = await build({ uid, nowMs: Date.now(), eventId: eventId ?? newGoalEventId(uid) });
       } catch (err) {
         logError(`financialGoals.${scope}`, err);
         toast.error("Couldn't save the goal. Try again.");
@@ -123,6 +128,39 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
     [run]
   );
 
+  /**
+   * SPENDLY-609: a contribution or reduction, recorded as an audit event. A
+   * manual savings record only — no account, ledger row or transfer changes.
+   */
+  const recordAmountChange = useCallback(
+    (goal: FinancialGoal, input: AmountChangeInput, eventId: string) =>
+      run(
+        "recordAmountChange",
+        input.kind === "contribution" ? "goal contribution" : "goal reduction",
+        input.kind === "contribution" ? "Added to goal" : "Taken out of goal",
+        (ctx) => buildAmountChange(goal, input, ctx),
+        eventId
+      ),
+    [run]
+  );
+
+  /**
+   * SPENDLY-609: correct or reverse an earlier entry. The original stays; a
+   * linked event carries the difference. Its existing corrections are read
+   * fresh first, so the change is computed from the entry's effective amount.
+   */
+  const correctEvent = useCallback(
+    (goal: FinancialGoal, original: GoalEvent, input: CorrectionInput, eventId: string) =>
+      run(
+        "correctEvent",
+        "goal correction",
+        input.mode === "reverse" ? "Entry reversed" : "Entry corrected",
+        async (ctx) => buildCorrection(goal, original, await loadGoalCorrections(ctx.uid, original.id), input, ctx),
+        eventId
+      ),
+    [run]
+  );
+
   /** @deprecated Kept for older callers; prefer `createGoal`. */
   const addGoal = (name: string, targetAmount: number, currentAmount: number, deadline?: string) =>
     createGoal({ name, targetAmount, initialAmount: Number(currentAmount) || 0, targetDate: deadline || undefined });
@@ -160,6 +198,8 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
     changeTarget,
     changeStatus,
     updateSettings,
+    recordAmountChange,
+    correctEvent,
     addGoal,
     addGoalContribution,
     deleteGoal,

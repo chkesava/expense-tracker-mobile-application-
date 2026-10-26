@@ -87,6 +87,29 @@ from (
   cross join lateral generate_series(1, u.n) g(i)
 ) s;
 
+-- SPENDLY-609 Save Goals: 60 goals and 20,000 goal events for perf-user (one
+-- goal, g0001, holds 5,000 of them); 1,000 events per noise user.
+insert into public.financial_goals (uid, doc_id, name, status, target_amount, current_amount, created_at, pinned, doc, source_path, source_update_time)
+select 'perf-user', 'g' || lpad(g.i::text, 4, '0'), 'Goal ' || g.i,
+       (array['active', 'paused', 'completed', 'archived', 'cancelled'])[1 + g.i % 5],
+       100000, round((random() * 100000)::numeric, 2), timestamptz '2021-11-01' + g.i * interval '9 days', g.i % 7 = 0,
+       jsonb_build_object('name', 'Goal ' || g.i), 'users/perf-user/financialGoals/g' || g.i, now()
+from generate_series(1, 60) g(i);
+
+insert into public.goal_events (uid, doc_id, goal_id, type, amount_delta, reason, created_at, doc, source_path, source_update_time)
+select s.uid, s.doc_id, s.goal_id, (array['contribution', 'reduction', 'correction'])[1 + s.i % 3],
+       case when s.i % 3 = 1 then -50 else 500 end, 'savings', s.at,
+       jsonb_build_object('goalId', s.goal_id, 'note', 'perf'), 'users/' || s.uid || '/goalEvents/' || s.doc_id, now()
+from (
+  select u.uid, g.i, 'ge' || lpad(g.i::text, 6, '0') as doc_id,
+         case when u.uid = 'perf-user' and g.i <= 5000 then 'g0001'
+              else 'g' || lpad((g.i % 60 + 1)::text, 4, '0') end as goal_id,
+         timestamptz '2021-11-01' + (g.i * 9973 % 157766400) * interval '1 second' as at
+  from (select 'perf-user' as uid, 20000 as n
+        union all select 'noise-' || k, 1000 from generate_series(1, 49) k) u
+  cross join lateral generate_series(1, u.n) g(i)
+) s;
+
 insert into public.sync_status (uid, collection, last_synced_at)
 select u, c, now() from unnest(array['perf-user']) u, unnest(array['expenses', 'incomes', 'ledgerEvents', 'accountPayments']) c;
 

@@ -18,10 +18,16 @@ function createdTables(source: string): string[] {
   return [...source.matchAll(/create table public\.([a-z_]+)/gi)].map((m) => m[1]);
 }
 
+/**
+ * Tables named by any `foreach … loop` whose body enables RLS. Later
+ * migrations (e.g. SPENDLY-609 goals) add their own loop, so every such loop
+ * counts, not just the first one in the file.
+ */
 function rlsLoopTables(source: string): string[] {
-  const loop = source.match(/foreach t in array array\[([\s\S]*?)\]/i);
-  if (!loop) return [];
-  return [...loop[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+  const loops = [...source.matchAll(/foreach t in array array\[([\s\S]*?)\] loop([\s\S]*?)end loop/gi)];
+  return loops
+    .filter((m) => /enable row level security/i.test(m[2]))
+    .flatMap((m) => [...m[1].matchAll(/'([a-z_]+)'/g)].map((t) => t[1]));
 }
 
 const WAVE_1 = [
@@ -51,6 +57,10 @@ describe("read-model migrations (SPENDLY-504)", () => {
     const covered = new Set(rlsLoopTables(sql));
     const uncovered = createdTables(sql).filter((table) => !covered.has(table));
     expect(uncovered).toEqual([]);
+  });
+
+  it("creates the Save Goals tables (SPENDLY-609)", () => {
+    expect(createdTables(sql)).toEqual(expect.arrayContaining(["financial_goals", "goal_events"]));
   });
 
   it("stops default grants to client roles for future tables", () => {
