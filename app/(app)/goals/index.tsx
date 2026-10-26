@@ -11,6 +11,7 @@ import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { GoalCard } from "@/components/goals/GoalCard";
 import { GoalFormSheet, type GoalFormSubmit } from "@/components/goals/GoalFormSheet";
 import { GoalIcon } from "@/components/goals/GoalIcon";
+import { GoalSyncIssuesBanner } from "@/components/goals/GoalSyncIssuesBanner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageListStateScroll } from "@/components/layout/PageListStateScroll";
 import { PageShell } from "@/components/layout/PageShell";
@@ -41,7 +42,7 @@ export default function GoalsScreen() {
   const currency = useDisplayCurrency();
   const { isOnline } = useNetwork();
   const bottomPadding = usePageListBottomPadding();
-  const { goals, loading, error, retry, createGoal, updateSettings } = useFinancialGoals();
+  const { goals, loading, error, retry, createGoal, updateSettings, pendingGoalIds } = useFinancialGoals();
   const { celebrateMilestone } = useCelebration();
   const [tab, setTab] = useState<GoalTab>("active");
   const [status, setStatus] = useState<GoalStatus | "all">("all");
@@ -192,6 +193,9 @@ export default function GoalsScreen() {
     body = (
       <>
         {controls}
+        <View style={{ paddingHorizontal: theme.space.lg }}>
+          <GoalSyncIssuesBanner />
+        </View>
         {!isOnline ? (
           <View style={[styles.row, { gap: theme.space.sm, paddingHorizontal: theme.space.lg, paddingBottom: theme.space.sm }]} accessibilityLiveRegion="polite">
             <WifiOff size={16} color={theme.colors.mutedForeground} />
@@ -214,11 +218,12 @@ export default function GoalsScreen() {
             <FlashList
               data={list}
               keyExtractor={(g) => g.id}
-              extraData={reorder}
+              extraData={[reorder, pendingGoalIds]}
               renderItem={({ item, index }) => (
                 <View style={{ paddingHorizontal: theme.space.lg, paddingBottom: theme.space.sm }}>
                   <GoalCard
                     goal={item}
+                    pending={pendingGoalIds.has(item.id)}
                     currency={currency}
                     onPress={open}
                     reorder={

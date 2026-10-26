@@ -15,6 +15,7 @@ import { GoalFormSheet, type GoalFormSubmit } from "@/components/goals/GoalFormS
 import { GoalCompletionSection } from "@/components/goals/GoalCompletionSection";
 import { GoalForecastSection } from "@/components/goals/GoalForecastSection";
 import { GoalRemindersSheet } from "@/components/goals/GoalRemindersSheet";
+import { GoalSyncIssuesBanner } from "@/components/goals/GoalSyncIssuesBanner";
 import { goalReminders } from "@/shared/utils/goalReminders";
 import { GoalHistorySection } from "@/components/goals/GoalHistorySection";
 import { GoalMilestonesSection } from "@/components/goals/GoalMilestonesSection";
@@ -79,6 +80,7 @@ export default function GoalDetailScreen() {
     updateSettings,
     recordAmountChange,
     correctEvent,
+    pendingGoalIds,
   } = useFinancialGoals();
   const { user } = useAuth();
   const celebrate = useGoalCelebrations(currency);
@@ -231,6 +233,12 @@ export default function GoalDetailScreen() {
     <PageShell>
       {header}
       <View style={{ gap: theme.space.md, paddingBottom: theme.space.xl }}>
+        <GoalSyncIssuesBanner goalId={goal.id} />
+        {pendingGoalIds.has(goal.id) ? (
+          <Text style={meta} accessibilityLiveRegion="polite">
+            Waiting to sync. This change is saved on this device and will sync when you're online.
+          </Text>
+        ) : null}
         <Section title="Progress" subtitle={GOAL_STATUS_LABELS[status]}>
           <View style={{ gap: theme.space.sm }}>
             <View style={styles.amounts}>

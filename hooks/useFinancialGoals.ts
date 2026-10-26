@@ -1,7 +1,8 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { writeSavedMessage } from "@/lib/firestoreWrite";
+import { goalSyncIssues } from "@/lib/goalSyncIssues";
 import { toast } from "@/lib/toast";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useAuth } from "@/providers/AuthProvider";
@@ -10,6 +11,7 @@ import { commitGoalWrite, loadGoalCorrections, newGoalEventId, newGoalId } from 
 import type { FinancialGoal } from "@/shared/types/expense";
 import type { GoalEvent, GoalMilestone, GoalStatus } from "@/shared/types/goal";
 import { goalIssuesMessage } from "@/shared/utils/goalMessages";
+import { classifyGoalWriteFailure, errorCode, goalFailureMessage } from "@/shared/utils/goalWriteFailure";
 import {
   buildAmountChange,
   buildCorrection,
@@ -32,13 +34,32 @@ import {
 /** Receives the committed plan (its events say what was achieved). */
 export type OnGoalSaved = (plan: GoalWritePlan) => void;
 
+type WriteSpec = {
+  scope: string;
+  /** Short noun for messages, e.g. "goal contribution". */
+  label: string;
+  success: string;
+  /** Built against the latest goal each time it runs (first try and retry). */
+  build: (ctx: GoalWriteContext) => GoalWriteResult | Promise<GoalWriteResult>;
+  /** The submit's idempotency key; reused for a retry of the same submit. */
+  eventId?: string;
+  /** Called once the write is saved or durably queued — never for a refused one. */
+  onSaved?: OnGoalSaved;
+};
+
 /**
  * Financial goals (SPENDLY-606 Save Goals).
  *
  * Reads come from the one shared, ref-counted listener in
- * ExpenseReferenceDataProvider — summaries only, never history. Every write is
- * built by shared/utils/goalWrites and committed as one outbox batch by
- * services/goals/goalStore; firestore.rules enforce the same invariants.
+ * ExpenseReferenceDataProvider — summaries only, never history — including
+ * which goals have a write still waiting to sync (`pendingGoalIds`). Every
+ * write is built by shared/utils/goalWrites and committed as one outbox batch
+ * by services/goals/goalStore; firestore.rules enforce the same invariants.
+ *
+ * SPENDLY-613: a write refused by the server says why (a conflict with another
+ * device, a closed goal, a negative balance) and, when it fails after being
+ * reported as queued, is kept in `goalSyncIssues` with a retry that re-applies
+ * the same change, with the same idempotency key, to the latest goal.
  *
  * Actions resolve to `true` when the change was saved (or durably queued) and
  * `false` when it was refused, after telling the user why.
@@ -52,6 +73,7 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
     goals: sharedGoals,
     goalsLoading,
     goalsError,
+    pendingGoalIds,
     retryGoals,
     registerGoalsSubscriber,
   } = useExpenseReferenceData();
@@ -59,6 +81,10 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
   const loading = enabled ? goalsLoading : false;
   const error = enabled ? goalsError : null;
   const retry = retryGoals;
+  // The latest snapshot, so a build (or a later retry) never uses a stale goal.
+  const goalsRef = useRef(sharedGoals);
+  goalsRef.current = sharedGoals;
+  const fresh = useCallback((goal: FinancialGoal) => goalsRef.current.find((g) => g.id === goal.id) ?? goal, []);
 
   useEffect(() => {
     if (!enabled) return;
@@ -66,37 +92,50 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
   }, [enabled, registerGoalsSubscriber]);
 
   const run = useCallback(
-    async (
-      scope: string,
-      label: string,
-      success: string,
-      build: (ctx: GoalWriteContext) => GoalWriteResult | Promise<GoalWriteResult>,
-      /** The submit's idempotency key; reuse it when retrying the same submit. */
-      eventId?: string,
-      /** Called once the write is saved or durably queued — never for a refused one. */
-      onSaved?: OnGoalSaved
-    ): Promise<boolean> => {
+    async (spec: WriteSpec, goalId: string | null): Promise<boolean> => {
       if (!uid) return false;
+      const eventId = spec.eventId ?? newGoalEventId(uid);
       let result: GoalWriteResult;
       try {
-        result = await build({ uid, nowMs: Date.now(), eventId: eventId ?? newGoalEventId(uid) });
+        result = await spec.build({ uid, nowMs: Date.now(), eventId });
       } catch (err) {
-        logError(`financialGoals.${scope}`, err);
-        toast.error("Couldn't save the goal. Try again.");
+        logError(`financialGoals.${spec.scope}`, err);
+        toast.error("Couldn't prepare this change. Check your connection and try again.");
         return false;
       }
       if (!result.ok) {
         toast.error(goalIssuesMessage(result.issues));
         return false;
       }
+      const plan = result.plan;
+      const describe = (err: unknown) => {
+        const kind = classifyGoalWriteFailure(errorCode(err), plan);
+        return kind === "other" ? friendlyErrorMessage(err, goalFailureMessage(kind, plan)) : goalFailureMessage(kind, plan);
+      };
       try {
-        const outcome = await commitGoalWrite(uid, result, label);
-        toast.success(writeSavedMessage(outcome, success));
-        onSaved?.(result.plan);
+        const outcome = await commitGoalWrite(uid, result, spec.label, {
+          // A failure after "saved"/"queued" was shown: say so, and keep it retryable.
+          onLateFailure: (err) => {
+            logError(`financialGoals.${spec.scope}.late`, err);
+            const message = describe(err);
+            toast.error(`Your ${spec.label} was not saved after all. ${message}`);
+            goalSyncIssues.add({
+              id: eventId,
+              goalId: goalId ?? plan.goalId,
+              label: spec.label,
+              message,
+              atMs: Date.now(),
+              retry: () => run({ ...spec, eventId }, goalId),
+            });
+          },
+        });
+        toast.success(writeSavedMessage(outcome, spec.success));
+        goalSyncIssues.dismiss(eventId);
+        spec.onSaved?.(plan);
         return true;
       } catch (err) {
-        logError(`financialGoals.${scope}`, err);
-        toast.error(friendlyErrorMessage(err, "Couldn't save the goal."));
+        logError(`financialGoals.${spec.scope}`, err);
+        toast.error(describe(err));
         return false;
       }
     },
@@ -105,49 +144,63 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
 
   const createGoal = useCallback(
     (input: GoalInput & { initialAmount?: number }) =>
-      run("createGoal", "goal", "Goal added", (ctx) =>
-        buildCreateGoal({ ...input, currency }, { ...ctx, goalId: newGoalId(ctx.uid) }, sharedGoals)
+      run(
+        {
+          scope: "createGoal",
+          label: "goal",
+          success: "Goal added",
+          build: (ctx) => buildCreateGoal({ ...input, currency }, { ...ctx, goalId: newGoalId(ctx.uid) }, goalsRef.current),
+        },
+        null
       ),
-    [run, currency, sharedGoals]
+    [run, currency]
   );
 
   const editGoal = useCallback(
     (goal: FinancialGoal, patch: GoalDetailsPatch) =>
-      run("editGoal", "goal", "Goal updated", (ctx) => buildEditGoal(goal, patch, ctx, sharedGoals)),
-    [run, sharedGoals]
+      run(
+        { scope: "editGoal", label: "goal change", success: "Goal updated", build: (ctx) => buildEditGoal(fresh(goal), patch, ctx, goalsRef.current) },
+        goal.id
+      ),
+    [run, fresh]
   );
 
   /** Callers confirm with the user first (FRD FR-05). */
   const changeTarget = useCallback(
     (goal: FinancialGoal, targetAmount: number, onSaved?: OnGoalSaved) =>
-      run("changeTarget", "goal target", "Target updated", (ctx) => buildTargetChange(goal, targetAmount, ctx), undefined, onSaved),
-    [run]
+      run(
+        { scope: "changeTarget", label: "goal target", success: "Target updated", build: (ctx) => buildTargetChange(fresh(goal), targetAmount, ctx), onSaved },
+        goal.id
+      ),
+    [run, fresh]
   );
 
   const changeStatus = useCallback(
     (goal: FinancialGoal, to: GoalStatus, success: string, onSaved?: OnGoalSaved) =>
-      run("changeStatus", "goal", success, (ctx) => buildStatusChange(goal, to, ctx), undefined, onSaved),
-    [run]
+      run({ scope: "changeStatus", label: "goal status change", success, build: (ctx) => buildStatusChange(fresh(goal), to, ctx), onSaved }, goal.id),
+    [run, fresh]
   );
 
   /** SPENDLY-610: custom milestones, or `null` to go back to 25/50/75/100%. */
   const changeMilestones = useCallback(
     (goal: FinancialGoal, milestones: GoalMilestone[] | null, onSaved?: OnGoalSaved) =>
       run(
-        "changeMilestones",
-        "goal milestones",
-        milestones ? "Milestones saved" : "Milestones reset",
-        (ctx) => buildMilestonesChange(goal, milestones, ctx),
-        undefined,
-        onSaved
+        {
+          scope: "changeMilestones",
+          label: "goal milestones",
+          success: milestones ? "Milestones saved" : "Milestones reset",
+          build: (ctx) => buildMilestonesChange(fresh(goal), milestones, ctx),
+          onSaved,
+        },
+        goal.id
       ),
-    [run]
+    [run, fresh]
   );
 
   const updateSettings = useCallback(
     (goal: FinancialGoal, patch: GoalSettingsPatch, success = "Goal updated") =>
-      run("updateSettings", "goal", success, (ctx) => buildSettingsChange(goal, patch, ctx)),
-    [run]
+      run({ scope: "updateSettings", label: "goal setting", success, build: (ctx) => buildSettingsChange(fresh(goal), patch, ctx) }, goal.id),
+    [run, fresh]
   );
 
   /**
@@ -157,14 +210,17 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
   const recordAmountChange = useCallback(
     (goal: FinancialGoal, input: AmountChangeInput, eventId: string, onSaved?: OnGoalSaved) =>
       run(
-        "recordAmountChange",
-        input.kind === "contribution" ? "goal contribution" : "goal reduction",
-        input.kind === "contribution" ? "Added to goal" : "Taken out of goal",
-        (ctx) => buildAmountChange(goal, input, ctx),
-        eventId,
-        onSaved
+        {
+          scope: "recordAmountChange",
+          label: input.kind === "contribution" ? "goal contribution" : "goal reduction",
+          success: input.kind === "contribution" ? "Added to goal" : "Taken out of goal",
+          build: (ctx) => buildAmountChange(fresh(goal), input, ctx),
+          eventId,
+          onSaved,
+        },
+        goal.id
       ),
-    [run]
+    [run, fresh]
   );
 
   /**
@@ -175,14 +231,17 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
   const correctEvent = useCallback(
     (goal: FinancialGoal, original: GoalEvent, input: CorrectionInput, eventId: string, onSaved?: OnGoalSaved) =>
       run(
-        "correctEvent",
-        "goal correction",
-        input.mode === "reverse" ? "Entry reversed" : "Entry corrected",
-        async (ctx) => buildCorrection(goal, original, await loadGoalCorrections(ctx.uid, original.id), input, ctx),
-        eventId,
-        onSaved
+        {
+          scope: "correctEvent",
+          label: "goal correction",
+          success: input.mode === "reverse" ? "Entry reversed" : "Entry corrected",
+          build: async (ctx) => buildCorrection(fresh(goal), original, await loadGoalCorrections(ctx.uid, original.id), input, ctx),
+          eventId,
+          onSaved,
+        },
+        goal.id
       ),
-    [run]
+    [run, fresh]
   );
 
   /** @deprecated Kept for older callers; prefer `createGoal`. */
@@ -192,14 +251,8 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
   /** Records a contribution (positive) or reduction (negative) with an audit event. */
   const addGoalContribution = (id: string, amountDelta: number) => {
     const goal = sharedGoals.find((g) => g.id === id);
-    if (!goal || !amountDelta) return Promise.resolve(false);
-    return run("addGoalContribution", "goal contribution", "Goal progress updated", (ctx) =>
-      buildAmountChange(
-        goal,
-        { kind: amountDelta > 0 ? "contribution" : "reduction", amount: Math.abs(amountDelta) },
-        ctx
-      )
-    );
+    if (!goal || !amountDelta || !uid) return Promise.resolve(false);
+    return recordAmountChange(goal, { kind: amountDelta > 0 ? "contribution" : "reduction", amount: Math.abs(amountDelta) }, newGoalEventId(uid));
   };
 
   /**
@@ -217,12 +270,14 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
     loading,
     error,
     retry,
+    /** SPENDLY-613: goals with a write not yet acknowledged by the server. */
+    pendingGoalIds,
     createGoal,
     editGoal,
     changeTarget,
     changeStatus,
-    updateSettings,
     changeMilestones,
+    updateSettings,
     recordAmountChange,
     correctEvent,
     addGoal,

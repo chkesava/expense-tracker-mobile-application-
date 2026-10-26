@@ -84,8 +84,18 @@ export async function loadRecentGoalEvents(uid: string, goalId: string, sinceMs:
   return snap.docs.map((d) => ({ ...(d.data() as Omit<GoalEvent, "id">), id: d.id }));
 }
 
-export async function commitGoalWrite(uid: string, result: GoalWriteResult, label: string): Promise<WriteOutcome> {
+export async function commitGoalWrite(
+  uid: string,
+  result: GoalWriteResult,
+  label: string,
+  /**
+   * SPENDLY-613: called if the write fails after it was reported queued.
+   * Supplying it replaces the outbox's default toast, so the caller must tell
+   * the user (useFinancialGoals does, and keeps the change retryable).
+   */
+  options: { onLateFailure?: (error: unknown) => void } = {}
+): Promise<WriteOutcome> {
   if (!result.ok) throw new GoalInvalidError(result.issues);
   const ops = goalWritePlanToOps(uid, result.plan, { serverTimestamp, increment });
-  return commitMutations(uid, ops, { label });
+  return commitMutations(uid, ops, { label, onLateFailure: options.onLateFailure });
 }

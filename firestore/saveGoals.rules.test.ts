@@ -311,6 +311,70 @@ describe("milestones (SPENDLY-610)", () => {
   });
 });
 
+describe("offline sync and two devices (SPENDLY-613)", () => {
+  // Two independent clients of the same user, each building from what it last saw.
+  const device = () => env.authenticatedContext(OWNER).firestore() as unknown as Firestore;
+
+  it("a partial failure changes nothing: summary, events and name lock land together or not at all", async () => {
+    await createGoal("g1", "Car", 1000, 100);
+    const before = await readGoal();
+    const p = plan(buildAmountChange(before, { kind: "contribution", amount: 50, note: "x" }, ctx("bad")));
+    // One invalid event (note too long) poisons the whole batch.
+    const poisoned = { ...p, events: [{ ...p.events[0], note: "n".repeat(501) }] };
+    await assertFails(commit(device(), poisoned));
+    expect((await readGoal()).currentAmount).toBe(100);
+    expect((await readGoal()).version).toBe(before.version);
+    await env.withSecurityRulesDisabled(async (c) => {
+      expect((await getDoc(doc(c.firestore() as unknown as Firestore, "users", OWNER, "goalEvents", "bad"))).exists()).toBe(false);
+    });
+    // A create whose lock is invalid leaves no goal and no lock.
+    const created = plan(buildCreateGoal({ name: "Trip", targetAmount: 10 }, { ...ctx("t1"), goalId: "g2" }, []));
+    await assertFails(commit(device(), { ...created, fields: { ...created.fields, nameKey: "n_other" } }));
+    await env.withSecurityRulesDisabled(async (c) => {
+      const db = c.firestore() as unknown as Firestore;
+      expect((await getDoc(doc(db, "users", OWNER, "financialGoals", "g2"))).exists()).toBe(false);
+      expect((await getDoc(doc(db, "users", OWNER, "goalNames", "n_trip"))).exists()).toBe(false);
+    });
+  });
+
+  it("simultaneous devices: deltas merge, stale edits are refused, settings are last-writer-wins", async () => {
+    await createGoal("g1", "Car", 1000, 0);
+    const seen = await readGoal();
+    const [a, b] = [device(), device()];
+    // Both devices save contributions from the same view: both land.
+    await assertSucceeds(commit(a, plan(buildAmountChange(seen, { kind: "contribution", amount: 300 }, ctx("a1")))));
+    await assertSucceeds(commit(b, plan(buildAmountChange(seen, { kind: "contribution", amount: 200 }, ctx("b1")))));
+    expect((await readGoal()).currentAmount).toBe(500);
+    // Device A edits the target from the stale view: refused (B's change isn't overwritten).
+    await assertFails(commit(a, plan(buildTargetChange(seen, 5000, ctx("a2")))));
+    // Rebuilt from the latest goal (what Retry does), it lands.
+    await assertSucceeds(commit(a, plan(buildTargetChange(await readGoal(), 5000, ctx("a2")))));
+    // A stale lifecycle change is refused the same way.
+    await assertFails(commit(b, plan(buildStatusChange(seen, "paused", ctx("b2")))));
+    // Ordering: both write sortOrder from stale views; the last one wins, no conflict.
+    await assertSucceeds(commit(a, plan(buildSettingsChange(seen, { sortOrder: 1 }, ctx("a3")))));
+    await assertSucceeds(commit(b, plan(buildSettingsChange(seen, { sortOrder: 2 }, ctx("b3")))));
+    expect(await readGoal()).toMatchObject({ sortOrder: 2, targetAmount: 5000, currentAmount: 500 });
+  });
+
+  it("duplicate delivery of a queued write is refused as a whole and counted once", async () => {
+    await createGoal("g1", "Car", 1000, 0);
+    const p = plan(buildAmountChange(await readGoal(), { kind: "contribution", amount: 100 }, ctx("dup")));
+    await assertSucceeds(commit(device(), p));
+    await assertFails(commit(device(), p));
+    expect((await readGoal()).currentAmount).toBe(100);
+  });
+
+  it("a reduction that became too large on another device is refused, not clamped", async () => {
+    await createGoal("g1", "Car", 1000, 500);
+    const seen = await readGoal();
+    await assertSucceeds(commit(device(), plan(buildAmountChange(seen, { kind: "reduction", amount: 400 }, ctx("r1")))));
+    // The other device still thinks 500 is saved: its reduction of 300 would go negative.
+    await assertFails(commit(device(), plan(buildAmountChange(seen, { kind: "reduction", amount: 300 }, ctx("r2")))));
+    expect((await readGoal()).currentAmount).toBe(100);
+  });
+});
+
 describe("names", () => {
   it("renames by claiming the new lock and releasing the old one", async () => {
     await createGoal("g1", "Car");

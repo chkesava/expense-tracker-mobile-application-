@@ -82,6 +82,8 @@ export type ExpenseReferenceData = {
   goals: FinancialGoal[];
   goalsLoading: boolean;
   goalsError: LoadFailure | null;
+  /** SPENDLY-613: goals with a write not yet acknowledged by the server. */
+  pendingGoalIds: ReadonlySet<string>;
   retryGoals: () => void;
   registerGoalsSubscriber: () => () => void;
 };
@@ -111,6 +113,7 @@ export function ExpenseReferenceDataProvider({
   const [rules, setRules] = useState<CategorizationRule[]>([]);
   const [budgets, setBudgets] = useState<CategoryBudget[]>([]);
   const [goals, setGoals] = useState<FinancialGoal[]>([]);
+  const [pendingGoalIds, setPendingGoalIds] = useState<ReadonlySet<string>>(() => new Set());
 
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [subscriptionsLoading, setSubscriptionsLoading] = useState(true);
@@ -543,6 +546,9 @@ export function ExpenseReferenceDataProvider({
         collection(db, "users", uid, "financialGoals"),
         orderBy("createdAt", "asc")
       ),
+      // SPENDLY-613: metadata changes too, so a goal's "waiting to sync"
+      // state clears when the server acknowledges the write.
+      { includeMetadataChanges: true },
       (snap) => {
         logQuerySnapshot(path, snap, { feature: "reference", queryShape: "financialGoals" });
         perfEvent("firestore_first_snapshot", {
@@ -552,6 +558,10 @@ export function ExpenseReferenceDataProvider({
         });
         setGoals(
           snap.docs.map((d) => ({ id: d.id, ...d.data() } as FinancialGoal))
+        );
+        const pending = snap.docs.filter((d) => d.metadata.hasPendingWrites).map((d) => d.id);
+        setPendingGoalIds((prev) =>
+          prev.size === pending.length && pending.every((id) => prev.has(id)) ? prev : new Set(pending)
         );
         setGoalsError(null);
         setGoalsLoading(false);
@@ -679,6 +689,7 @@ export function ExpenseReferenceDataProvider({
       goals,
       goalsLoading,
       goalsError,
+      pendingGoalIds,
       retryGoals,
       registerGoalsSubscriber,
     }),
@@ -707,6 +718,7 @@ export function ExpenseReferenceDataProvider({
       goals,
       goalsLoading,
       goalsError,
+      pendingGoalIds,
       retryGoals,
       registerGoalsSubscriber,
     ]
