@@ -530,7 +530,9 @@ export function validateReminders(r: GoalReminders): GoalIssue[] {
     typeof r.inactivityEnabled === "boolean" &&
     Number.isInteger(r.inactivityDays) &&
     r.inactivityDays >= GOAL_LIMITS.minInactivityDays &&
-    r.inactivityDays <= GOAL_LIMITS.maxInactivityDays;
+    r.inactivityDays <= GOAL_LIMITS.maxInactivityDays &&
+    (r.weekday === undefined || (Number.isInteger(r.weekday) && r.weekday >= 0 && r.weekday <= 6)) &&
+    (r.monthDay === undefined || (Number.isInteger(r.monthDay) && r.monthDay >= 1 && r.monthDay <= 28));
   return ok ? [] : ["reminders_invalid"];
 }
 

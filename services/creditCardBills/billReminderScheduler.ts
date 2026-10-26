@@ -104,6 +104,14 @@ export function dateTriggerFromDateKey(
   timezone?: string
 ): Date {
   const quiet = applyQuietHours(9, 0, quietStart, quietEnd);
+  return zonedDateAt(dateKey, quiet.hour, quiet.minute, timezone);
+}
+
+/**
+ * `dateKey` at `hour:minute` wall-clock time in `timezone` (else the device's).
+ * Shared with the Save Goals reminder scheduler (SPENDLY-612).
+ */
+export function zonedDateAt(dateKey: string, hour: number, minute: number, timezone?: string): Date {
   const [y, m, d] = dateKey.split("-").map(Number);
 
   // The Settings copy promises reminders follow the user's timezone, so honour
@@ -111,7 +119,7 @@ export function dateTriggerFromDateKey(
   // `timezone` used to be accepted and discarded (`void timezone`), which meant
   // a user whose app timezone differed from their device's got notified at the
   // wrong hour.
-  const naiveLocal = new Date(y, m - 1, d, quiet.hour, quiet.minute, 0, 0);
+  const naiveLocal = new Date(y, m - 1, d, hour, minute, 0, 0);
   if (!timezone) return naiveLocal;
 
   const offsetMinutes = timezoneOffsetMinutes(naiveLocal, timezone);
