@@ -1,6 +1,7 @@
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
 import { getFirebaseAuth } from "@/lib/firebase";
-import { env } from "@/lib/env";
-import { getSupabaseClient } from "@/lib/supabase";
+import { env, isLocalTestMode } from "@/lib/env";
 import { SPENDLY_FILES_BUCKET } from "@/shared/utils/accountDocuments";
 import { assertNetworkAllowed } from "@/lib/networkGuard";
 
@@ -20,7 +21,42 @@ import { assertNetworkAllowed } from "@/lib/networkGuard";
  * Bytes never pass through the function: an upload gets a signed *upload* URL
  * and is sent straight to Storage, so the Edge Function request-size limit does
  * not apply to a 10 MB statement.
+ *
+ * The bucket and function live in Spendly's own Supabase project, the read-model
+ * one (SPENDLY-616), not the Ganesh Seva project behind `env.supabase`. Storage
+ * there is the documented exception to READ_MODEL_RULES R1.1: it holds the
+ * binaries themselves, not a copy of Firestore.
  */
+
+/** Spendly's Supabase project; null when unconfigured or in a local test build. */
+export function spendlyFilesProject(): { url: string; publishableKey: string } | null {
+  // Test builds never reach Supabase (SPENDLY-175).
+  if (isLocalTestMode()) return null;
+  const { url, publishableKey } = env.readModel;
+  return url && publishableKey ? { url, publishableKey } : null;
+}
+
+function requireProject(): { url: string; publishableKey: string } {
+  const project = spendlyFilesProject();
+  if (!project) throw new Error("Storage is not configured.");
+  return project;
+}
+
+let storageClient: SupabaseClient | null = null;
+
+/**
+ * Only used to send bytes to a signed upload URL; the token in that URL is the
+ * authorization, so the client carries no session of its own.
+ */
+function getStorageClient(): SupabaseClient {
+  if (!storageClient) {
+    const { url, publishableKey } = requireProject();
+    storageClient = createClient(url, publishableKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
+  }
+  return storageClient;
+}
 
 type FunctionResult = {
   path?: string;
@@ -77,10 +113,10 @@ async function requireIdToken(): Promise<string> {
 }
 
 async function callSpendlyFiles(payload: Record<string, unknown>): Promise<FunctionResult> {
-  if (!env.supabase.url) throw new Error("Storage is not configured.");
+  const functionUrl = `${requireProject().url}/functions/v1/spendly-files`;
   const idToken = await requireIdToken();
-  assertNetworkAllowed(`${env.supabase.url}/functions/v1/spendly-files`);
-  const response = await fetch(`${env.supabase.url}/functions/v1/spendly-files`, {
+  assertNetworkAllowed(functionUrl);
+  const response = await fetch(functionUrl, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -117,7 +153,7 @@ export async function uploadDocumentObject(
       declaredSize: declaredSize || bytes.byteLength,
     });
     if (!grant.path || !grant.token) throw new Error("No signed upload URL.");
-    const { error } = await getSupabaseClient()
+    const { error } = await getStorageClient()
       .storage.from(SPENDLY_FILES_BUCKET)
       .uploadToSignedUrl(grant.path, grant.token, bytes, { contentType: mimeType });
     if (error) throw error;
