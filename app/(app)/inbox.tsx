@@ -7,6 +7,7 @@ import {
   CreditCard,
   HandCoins,
   Landmark,
+  PiggyBank,
   Repeat,
   Target,
 } from "lucide-react-native";
@@ -35,6 +36,7 @@ const SOURCE_ICONS: Partial<Record<InboxItem["source"], IconType>> = {
   receivable: HandCoins,
   reminder: Bell,
   budget: Target,
+  goal: PiggyBank,
 };
 
 /**

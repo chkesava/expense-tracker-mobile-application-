@@ -98,8 +98,13 @@ export interface GoalMilestone {
 
 export interface GoalReminders {
   frequency: GoalReminderFrequency;
-  /** Local wall-clock time, "HH:mm". */
+  /** Local wall-clock time, "HH:mm", in the user's timezone setting. */
   time: string;
+  /** SPENDLY-612: weekly reminders, 0 = Sunday … 6 = Saturday. */
+  weekday?: number;
+  /** SPENDLY-612: monthly reminders, 1–28 (every month has it). */
+  monthDay?: number;
+  /** Celebrate milestones and list them in the inbox. */
   milestoneEnabled: boolean;
   inactivityEnabled: boolean;
   inactivityDays: number;

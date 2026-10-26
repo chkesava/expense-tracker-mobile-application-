@@ -13,6 +13,9 @@ import { GoalAmountSheet, type AmountSheetKind } from "@/components/goals/GoalAm
 import { GoalCorrectionSheet } from "@/components/goals/GoalCorrectionSheet";
 import { GoalFormSheet, type GoalFormSubmit } from "@/components/goals/GoalFormSheet";
 import { GoalCompletionSection } from "@/components/goals/GoalCompletionSection";
+import { GoalForecastSection } from "@/components/goals/GoalForecastSection";
+import { GoalRemindersSheet } from "@/components/goals/GoalRemindersSheet";
+import { goalReminders } from "@/shared/utils/goalReminders";
 import { GoalHistorySection } from "@/components/goals/GoalHistorySection";
 import { GoalMilestonesSection } from "@/components/goals/GoalMilestonesSection";
 import { GoalMilestonesSheet } from "@/components/goals/GoalMilestonesSheet";
@@ -84,6 +87,10 @@ export default function GoalDetailScreen() {
   const goalRef = useRef(goal);
   goalRef.current = goal;
   const [milestonesOpen, setMilestonesOpen] = useState(false);
+  const [remindersOpen, setRemindersOpen] = useState(false);
+  // SPENDLY-612: a goal's "milestone alerts" setting gates its milestone celebrations.
+  const celebrateGoal = (g: FinancialGoal, plan: GoalWritePlan) =>
+    celebrate(g.name, plan, { milestones: goalReminders(g).milestoneEnabled });
   const [busy, setBusy] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [targetOpen, setTargetOpen] = useState(false);
@@ -148,7 +155,7 @@ export default function GoalDetailScreen() {
     if (busy || !current) return;
     setBusy(true);
     try {
-      await changeStatus(current, actionTarget(current, action), GOAL_ACTION_DONE[action], (plan) => celebrate(current.name, plan));
+      await changeStatus(current, actionTarget(current, action), GOAL_ACTION_DONE[action], (plan) => celebrateGoal(current, plan));
     } finally {
       setBusy(false);
     }
@@ -162,7 +169,7 @@ export default function GoalDetailScreen() {
    */
   const afterAmountSaved = (before: FinancialGoal) => (plan: GoalWritePlan) => {
     if (!targetJustReached(before, plan.amountDelta)) {
-      celebrate(before.name, plan);
+      celebrateGoal(before, plan);
       return;
     }
     for (const e of plan.events) if (e.type === "milestone_reached") claimGoalCelebration(e.id);
@@ -291,6 +298,8 @@ export default function GoalDetailScreen() {
 
         {status === "completed" ? <GoalCompletionSection goal={goal} currency={currency} /> : null}
 
+        {inProgress ? <GoalForecastSection goal={goal} currency={currency} onEditReminders={() => setRemindersOpen(true)} /> : null}
+
         <GoalMilestonesSection goal={goal} currency={currency} canEdit={inProgress} onEdit={() => setMilestonesOpen(true)} />
 
         <GoalHistorySection goalId={goal.id} currency={currency} canCorrect={inProgress} onCorrect={setCorrecting} />
@@ -336,13 +345,19 @@ export default function GoalDetailScreen() {
         currency={currency}
         suggested={targetSuggestion}
         onClose={() => setTargetOpen(false)}
-        onConfirm={(t) => changeTarget(goal, t, (plan) => celebrate(goal.name, plan))}
+        onConfirm={(t) => changeTarget(goal, t, (plan) => celebrateGoal(goal, plan))}
+      />
+      <GoalRemindersSheet
+        isOpen={remindersOpen}
+        goal={goal}
+        onClose={() => setRemindersOpen(false)}
+        onSave={(reminders) => updateSettings(goal, { reminders }, "Reminders saved")}
       />
       <GoalMilestonesSheet
         isOpen={milestonesOpen}
         goal={goal}
         onClose={() => setMilestonesOpen(false)}
-        onSave={(m) => changeMilestones(goal, m, (plan) => celebrate(goal.name, plan))}
+        onSave={(m) => changeMilestones(goal, m, (plan) => celebrateGoal(goal, plan))}
       />
       <GoalAmountSheet
         isOpen={amountSheet !== null}

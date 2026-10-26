@@ -98,6 +98,9 @@ describe("tap routing", () => {
   it("routes only known sources with in-app urls", () => {
     expect(isRoutableNotification({ source: "calendar", url: "/calendar?focus=x" })).toBe(true);
     expect(isRoutableNotification({ source: "credit_card_bill", url: "/credit-card-bills/b" })).toBe(true);
+    // SPENDLY-612: goal reminders open the goal.
+    expect(isRoutableNotification({ source: "goal", url: "/goals/g1" })).toBe(true);
+    expect(isRoutableNotification({ source: "goal", url: "https://evil" })).toBe(false);
     expect(isRoutableNotification({ source: "calendar", url: "https://evil" })).toBe(false);
     expect(isRoutableNotification({ source: "other", url: "/x" })).toBe(false);
     expect(isRoutableNotification(undefined)).toBe(false);

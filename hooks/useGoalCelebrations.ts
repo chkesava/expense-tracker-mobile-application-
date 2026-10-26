@@ -29,9 +29,15 @@ export function useGoalCelebrations(currency: string) {
   const { celebrate } = useCelebration();
   const money = useGhostMoney(currency);
   return useCallback(
-    (goalName: string, plan: GoalWritePlan) => {
+    /**
+     * `milestones: false` (the goal's "milestone alerts" reminder setting,
+     * SPENDLY-612) skips milestone celebrations; completion always celebrates.
+     */
+    (goalName: string, plan: GoalWritePlan, options?: { milestones?: boolean }) => {
       const c = celebrationFor(goalName, plan.events);
-      if (!c || !guard.claim(c.eventId)) return;
+      if (!c) return;
+      if (c.kind === "milestone" && options?.milestones === false) return;
+      if (!guard.claim(c.eventId)) return;
       celebrate({
         title: c.title,
         subtitle: fillAmounts(c.subtitle, c.amounts, money),

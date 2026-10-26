@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, increment, limit, query, serverTimestamp, where } from "firebase/firestore";
+import { collection, doc, getDocs, increment, limit, orderBy, query, serverTimestamp, where } from "firebase/firestore";
 
 import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";
@@ -59,6 +59,27 @@ export async function loadGoalCorrections(uid: string, originalId: string): Prom
   logDirectRead(`users/${uid}/goalEvents`, snap.docs.length, snap.metadata.fromCache ? "cache" : "server", {
     feature: "goals",
     queryShape: "corrections of one entry",
+  });
+  return snap.docs.map((d) => ({ ...(d.data() as Omit<GoalEvent, "id">), id: d.id }));
+}
+
+/**
+ * SPENDLY-612: one goal's events from `sinceMs` on, for the completion
+ * estimate. Bounded by the window and a limit; read once on the goal page.
+ */
+export async function loadRecentGoalEvents(uid: string, goalId: string, sinceMs: number): Promise<GoalEvent[]> {
+  const snap = await getDocs(
+    query(
+      collection(db(), "users", uid, "goalEvents"),
+      where("goalId", "==", goalId),
+      where("createdAtMs", ">=", sinceMs),
+      orderBy("createdAtMs", "desc"),
+      limit(200)
+    )
+  );
+  logDirectRead(`users/${uid}/goalEvents`, snap.docs.length, snap.metadata.fromCache ? "cache" : "server", {
+    feature: "goals",
+    queryShape: "estimate window",
   });
   return snap.docs.map((d) => ({ ...(d.data() as Omit<GoalEvent, "id">), id: d.id }));
 }
