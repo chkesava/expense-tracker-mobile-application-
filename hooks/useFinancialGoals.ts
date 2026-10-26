@@ -8,13 +8,14 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useExpenseReferenceData } from "@/providers/ExpenseReferenceDataProvider";
 import { commitGoalWrite, loadGoalCorrections, newGoalEventId, newGoalId } from "@/services/goals/goalStore";
 import type { FinancialGoal } from "@/shared/types/expense";
-import type { GoalEvent, GoalStatus } from "@/shared/types/goal";
+import type { GoalEvent, GoalMilestone, GoalStatus } from "@/shared/types/goal";
 import { goalIssuesMessage } from "@/shared/utils/goalMessages";
 import {
   buildAmountChange,
   buildCorrection,
   buildCreateGoal,
   buildEditGoal,
+  buildMilestonesChange,
   buildSettingsChange,
   buildStatusChange,
   buildTargetChange,
@@ -24,8 +25,12 @@ import {
   type GoalInput,
   type GoalSettingsPatch,
   type GoalWriteContext,
+  type GoalWritePlan,
   type GoalWriteResult,
 } from "@/shared/utils/goalWrites";
+
+/** Receives the committed plan (its events say what was achieved). */
+export type OnGoalSaved = (plan: GoalWritePlan) => void;
 
 /**
  * Financial goals (SPENDLY-606 Save Goals).
@@ -67,7 +72,9 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
       success: string,
       build: (ctx: GoalWriteContext) => GoalWriteResult | Promise<GoalWriteResult>,
       /** The submit's idempotency key; reuse it when retrying the same submit. */
-      eventId?: string
+      eventId?: string,
+      /** Called once the write is saved or durably queued — never for a refused one. */
+      onSaved?: OnGoalSaved
     ): Promise<boolean> => {
       if (!uid) return false;
       let result: GoalWriteResult;
@@ -85,6 +92,7 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
       try {
         const outcome = await commitGoalWrite(uid, result, label);
         toast.success(writeSavedMessage(outcome, success));
+        onSaved?.(result.plan);
         return true;
       } catch (err) {
         logError(`financialGoals.${scope}`, err);
@@ -111,14 +119,28 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
 
   /** Callers confirm with the user first (FRD FR-05). */
   const changeTarget = useCallback(
-    (goal: FinancialGoal, targetAmount: number) =>
-      run("changeTarget", "goal target", "Target updated", (ctx) => buildTargetChange(goal, targetAmount, ctx)),
+    (goal: FinancialGoal, targetAmount: number, onSaved?: OnGoalSaved) =>
+      run("changeTarget", "goal target", "Target updated", (ctx) => buildTargetChange(goal, targetAmount, ctx), undefined, onSaved),
     [run]
   );
 
   const changeStatus = useCallback(
-    (goal: FinancialGoal, to: GoalStatus, success: string) =>
-      run("changeStatus", "goal", success, (ctx) => buildStatusChange(goal, to, ctx)),
+    (goal: FinancialGoal, to: GoalStatus, success: string, onSaved?: OnGoalSaved) =>
+      run("changeStatus", "goal", success, (ctx) => buildStatusChange(goal, to, ctx), undefined, onSaved),
+    [run]
+  );
+
+  /** SPENDLY-610: custom milestones, or `null` to go back to 25/50/75/100%. */
+  const changeMilestones = useCallback(
+    (goal: FinancialGoal, milestones: GoalMilestone[] | null, onSaved?: OnGoalSaved) =>
+      run(
+        "changeMilestones",
+        "goal milestones",
+        milestones ? "Milestones saved" : "Milestones reset",
+        (ctx) => buildMilestonesChange(goal, milestones, ctx),
+        undefined,
+        onSaved
+      ),
     [run]
   );
 
@@ -133,13 +155,14 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
    * manual savings record only — no account, ledger row or transfer changes.
    */
   const recordAmountChange = useCallback(
-    (goal: FinancialGoal, input: AmountChangeInput, eventId: string) =>
+    (goal: FinancialGoal, input: AmountChangeInput, eventId: string, onSaved?: OnGoalSaved) =>
       run(
         "recordAmountChange",
         input.kind === "contribution" ? "goal contribution" : "goal reduction",
         input.kind === "contribution" ? "Added to goal" : "Taken out of goal",
         (ctx) => buildAmountChange(goal, input, ctx),
-        eventId
+        eventId,
+        onSaved
       ),
     [run]
   );
@@ -150,13 +173,14 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
    * fresh first, so the change is computed from the entry's effective amount.
    */
   const correctEvent = useCallback(
-    (goal: FinancialGoal, original: GoalEvent, input: CorrectionInput, eventId: string) =>
+    (goal: FinancialGoal, original: GoalEvent, input: CorrectionInput, eventId: string, onSaved?: OnGoalSaved) =>
       run(
         "correctEvent",
         "goal correction",
         input.mode === "reverse" ? "Entry reversed" : "Entry corrected",
         async (ctx) => buildCorrection(goal, original, await loadGoalCorrections(ctx.uid, original.id), input, ctx),
-        eventId
+        eventId,
+        onSaved
       ),
     [run]
   );
@@ -198,6 +222,7 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
     changeTarget,
     changeStatus,
     updateSettings,
+    changeMilestones,
     recordAmountChange,
     correctEvent,
     addGoal,

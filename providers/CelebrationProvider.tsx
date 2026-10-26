@@ -15,6 +15,12 @@ export interface CelebrationEvent {
   subtitle?: string;
   badgeEmoji?: string;
   pointsEarned?: number;
+  /**
+   * SPENDLY-610: when the device asks for reduced motion, show a still card
+   * (no confetti, springs or pulsing) and announce it to screen readers.
+   * Opt-in so existing celebrations elsewhere are unchanged.
+   */
+  respectReducedMotion?: boolean;
 }
 
 interface CelebrationContextType {

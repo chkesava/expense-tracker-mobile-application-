@@ -31,6 +31,7 @@ import {
   buildCorrection,
   buildCreateGoal,
   buildEditGoal,
+  buildMilestonesChange,
   buildSettingsChange,
   buildStatusChange,
   buildTargetChange,
@@ -290,6 +291,26 @@ describe("lifecycle", () => {
   });
 });
 
+describe("milestones (SPENDLY-610)", () => {
+  it("custom milestones save with their crossing events; a contribution records achievements once", async () => {
+    await createGoal("g1", "Car", 1000, 0);
+    await assertSucceeds(commit(ownerDb(), plan(buildMilestonesChange(await readGoal(), [{ id: "m1", amount: 300, label: "First step" }], ctx("ms1")))));
+    await assertSucceeds(commit(ownerDb(), plan(buildAmountChange(await readGoal(), { kind: "contribution", amount: 400 }, ctx("c1")))));
+    expect(await readEvent("c1__ms_m1")).toMatchObject({ type: "milestone_reached", milestoneId: "m1", amountDelta: 0 });
+    // Dropping below records the loss; the earlier achievement stays.
+    await assertSucceeds(commit(ownerDb(), plan(buildAmountChange(await readGoal(), { kind: "reduction", amount: 200 }, ctx("r1")))));
+    expect(await readEvent("r1__ms_m1")).toMatchObject({ type: "milestone_lost" });
+    expect(await readEvent("c1__ms_m1")).toMatchObject({ type: "milestone_reached" });
+  });
+
+  it("refuses a milestone event that carries money", async () => {
+    await createGoal("g1", "Car", 1000, 0);
+    const p = plan(buildAmountChange(await readGoal(), { kind: "contribution", amount: 300 }, ctx("c1")));
+    const forged = { ...p, events: p.events.map((e) => (e.type === "milestone_reached" ? { ...e, amountDelta: 50 } : e)) };
+    await assertFails(commit(ownerDb(), forged));
+  });
+});
+
 describe("names", () => {
   it("renames by claiming the new lock and releasing the old one", async () => {
     await createGoal("g1", "Car");
@@ -352,9 +373,24 @@ describe("history queries (SPENDLY-609)", () => {
     const page = await assertSucceeds(history(ownerDb()));
     expect(page.docs.map((d) => d.id)).toContain("c1");
     await assertSucceeds(corrections(ownerDb()));
+    // SPENDLY-610: the achievements filter.
+    const achievements = (db: Firestore) =>
+      getDocs(
+        query(
+          collection(db, "users", OWNER, "goalEvents"),
+          where("goalId", "==", "g1"),
+          where("type", "in", ["milestone_reached", "completed"]),
+          orderBy("createdAtMs", "desc"),
+          limit(25)
+        )
+      );
+    const reached = await assertSucceeds(achievements(ownerDb()));
+    // 100 → 150 of 1000 crosses nothing; the created event at 100 crossed nothing either.
+    expect(reached.docs.map((d) => d.data().type)).toEqual([]);
     const other = env.authenticatedContext(OTHER).firestore() as unknown as Firestore;
     await assertFails(history(other));
     await assertFails(corrections(other));
+    await assertFails(achievements(other));
   });
 });
 

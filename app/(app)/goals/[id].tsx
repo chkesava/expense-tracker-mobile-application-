@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Redirect, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { PartyPopper, Pencil, Target } from "lucide-react-native";
@@ -12,7 +12,14 @@ import { Section } from "@/components/dashboard/primitives";
 import { GoalAmountSheet, type AmountSheetKind } from "@/components/goals/GoalAmountSheet";
 import { GoalCorrectionSheet } from "@/components/goals/GoalCorrectionSheet";
 import { GoalFormSheet, type GoalFormSubmit } from "@/components/goals/GoalFormSheet";
+import { GoalCompletionSection } from "@/components/goals/GoalCompletionSection";
 import { GoalHistorySection } from "@/components/goals/GoalHistorySection";
+import { GoalMilestonesSection } from "@/components/goals/GoalMilestonesSection";
+import { GoalMilestonesSheet } from "@/components/goals/GoalMilestonesSheet";
+import { claimGoalCelebration, useGoalCelebrations } from "@/hooks/useGoalCelebrations";
+import type { FinancialGoal } from "@/shared/types/expense";
+import { targetJustReached } from "@/shared/utils/goalAchievements";
+import type { GoalWritePlan } from "@/shared/utils/goalWrites";
 import { GoalIcon } from "@/components/goals/GoalIcon";
 import { GoalTargetSheet } from "@/components/goals/GoalTargetSheet";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -57,10 +64,26 @@ export default function GoalDetailScreen() {
   const currency = useDisplayCurrency();
   const money = useGhostMoney(currency);
   const { settings } = useSettings();
-  const { goals, loading, error, retry, editGoal, changeTarget, changeStatus, updateSettings, recordAmountChange, correctEvent } =
-    useFinancialGoals();
+  const {
+    goals,
+    loading,
+    error,
+    retry,
+    editGoal,
+    changeTarget,
+    changeStatus,
+    changeMilestones,
+    updateSettings,
+    recordAmountChange,
+    correctEvent,
+  } = useFinancialGoals();
   const { user } = useAuth();
+  const celebrate = useGoalCelebrations(currency);
   const goal = useMemo(() => goals.find((g) => g.id === id), [goals, id]);
+  // The latest goal, for prompts answered after a write has updated it.
+  const goalRef = useRef(goal);
+  goalRef.current = goal;
+  const [milestonesOpen, setMilestonesOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [targetOpen, setTargetOpen] = useState(false);
@@ -121,13 +144,36 @@ export default function GoalDetailScreen() {
   const body = { color: theme.colors.foreground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.sm };
 
   const runAction = async (action: GoalAction) => {
-    if (busy) return;
+    const current = goalRef.current;
+    if (busy || !current) return;
     setBusy(true);
     try {
-      await changeStatus(goal, actionTarget(goal, action), GOAL_ACTION_DONE[action]);
+      await changeStatus(current, actionTarget(current, action), GOAL_ACTION_DONE[action], (plan) => celebrate(current.name, plan));
     } finally {
       setBusy(false);
     }
+  };
+
+  /**
+   * After a committed amount change (SPENDLY-610, FRD FR-05/07): if it took
+   * the goal to its target, ask whether to mark it completed — that prompt
+   * replaces the 100% milestone celebration, and completing celebrates. Any
+   * other milestone crossed is celebrated once.
+   */
+  const afterAmountSaved = (before: FinancialGoal) => (plan: GoalWritePlan) => {
+    if (!targetJustReached(before, plan.amountDelta)) {
+      celebrate(before.name, plan);
+      return;
+    }
+    for (const e of plan.events) if (e.type === "milestone_reached") claimGoalCelebration(e.id);
+    appDialog.show({
+      title: "Target reached!",
+      message: `"${before.name}" has reached its target. Mark it completed? Completed goals stop taking contributions; you can reopen it later.`,
+      buttons: [
+        { text: "Keep saving", style: "cancel" },
+        { text: "Mark completed", onPress: () => void runAction("complete") },
+      ],
+    });
   };
 
   const onAction = (action: GoalAction) => {
@@ -243,6 +289,10 @@ export default function GoalDetailScreen() {
           </View>
         ) : null}
 
+        {status === "completed" ? <GoalCompletionSection goal={goal} currency={currency} /> : null}
+
+        <GoalMilestonesSection goal={goal} currency={currency} canEdit={inProgress} onEdit={() => setMilestonesOpen(true)} />
+
         <GoalHistorySection goalId={goal.id} currency={currency} canCorrect={inProgress} onCorrect={setCorrecting} />
 
         <Section title="Details">
@@ -286,7 +336,13 @@ export default function GoalDetailScreen() {
         currency={currency}
         suggested={targetSuggestion}
         onClose={() => setTargetOpen(false)}
-        onConfirm={(t) => changeTarget(goal, t)}
+        onConfirm={(t) => changeTarget(goal, t, (plan) => celebrate(goal.name, plan))}
+      />
+      <GoalMilestonesSheet
+        isOpen={milestonesOpen}
+        goal={goal}
+        onClose={() => setMilestonesOpen(false)}
+        onSave={(m) => changeMilestones(goal, m, (plan) => celebrate(goal.name, plan))}
       />
       <GoalAmountSheet
         isOpen={amountSheet !== null}
@@ -295,7 +351,7 @@ export default function GoalDetailScreen() {
         currency={currency}
         newKey={newKey}
         onClose={() => setAmountSheet(null)}
-        onSubmit={(input, key) => recordAmountChange(goal, input, key)}
+        onSubmit={(input, key) => recordAmountChange(goal, input, key, afterAmountSaved(goal))}
       />
       <GoalCorrectionSheet
         isOpen={correcting !== null}
@@ -303,7 +359,7 @@ export default function GoalDetailScreen() {
         currency={currency}
         newKey={newKey}
         onClose={() => setCorrecting(null)}
-        onSubmit={(input, key) => (correcting ? correctEvent(goal, correcting, input, key) : Promise.resolve(false))}
+        onSubmit={(input, key) => (correcting ? correctEvent(goal, correcting, input, key, afterAmountSaved(goal)) : Promise.resolve(false))}
       />
     </PageShell>
   );
