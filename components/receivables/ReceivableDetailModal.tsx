@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Chip } from "@/components/ui/Chip";
 import { useAccounts } from "@/hooks/useAccounts";
+import { useSettings } from "@/providers/SettingsProvider";
 import type { AddReceivableRepaymentInput } from "@/hooks/useReceivables";
 import { useSpaces } from "@/hooks/useSpaces";
 import { toast } from "@/lib/toast";
@@ -84,7 +85,11 @@ export function ReceivableDetailModal({
   const [isEditing, setIsEditing] = useState(false);
   const [amount, setAmount] = useState("");
   const [receivedAccountId, setReceivedAccountId] = useState("");
-  const [repaymentDate, setRepaymentDate] = useState(todayDateKey());
+  // SPENDLY-605: the same "today" the provider stamps against (the settings
+  // timezone, not the device's), and no repayment dated after it.
+  const { settings } = useSettings();
+  const today = todayDateKey(settings.timezone);
+  const [repaymentDate, setRepaymentDate] = useState(today);
   const [repaymentNote, setRepaymentNote] = useState("");
   const [editPersonName, setEditPersonName] = useState("");
   const [editPurpose, setEditPurpose] = useState("");
@@ -158,7 +163,7 @@ export function ReceivableDetailModal({
   const resetRepaymentForm = () => {
     setAmount("");
     setReceivedAccountId("");
-    setRepaymentDate(todayDateKey());
+    setRepaymentDate(today);
     setRepaymentNote("");
     setIsRepaying(false);
   };
@@ -183,6 +188,10 @@ export function ReceivableDetailModal({
 
     if (!isValidDateKey(repaymentDate)) {
       toast.error("Pick a valid repayment date");
+      return;
+    }
+    if (repaymentDate > today) {
+      toast.error("A repayment can't be dated in the future");
       return;
     }
 
@@ -629,7 +638,7 @@ export function ReceivableDetailModal({
               <Text style={[styles.label, { color: theme.colors.foreground }]}>
                 Date
               </Text>
-              <DateField value={repaymentDate} onChange={setRepaymentDate} accessibilityLabel="Repayment date" />
+              <DateField value={repaymentDate} onChange={setRepaymentDate} maxDate={today} accessibilityLabel="Repayment date" />
             </View>
 
             <View style={styles.group}>
