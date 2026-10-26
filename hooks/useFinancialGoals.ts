@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { writeSavedMessage } from "@/lib/firestoreWrite";
 import { goalSyncIssues } from "@/lib/goalSyncIssues";
+import { perfEvent } from "@/lib/perf";
 import { toast } from "@/lib/toast";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useAuth } from "@/providers/AuthProvider";
@@ -130,6 +131,8 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
           },
         });
         toast.success(writeSavedMessage(outcome, spec.success));
+        // SPENDLY-615 telemetry: what kind of write and how it landed — never amounts or notes.
+        perfEvent("goal_write", { scope: spec.scope, outcome, events: plan.events.length });
         goalSyncIssues.dismiss(eventId);
         spec.onSaved?.(plan);
         return true;
