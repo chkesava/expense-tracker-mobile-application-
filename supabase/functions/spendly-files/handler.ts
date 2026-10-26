@@ -94,20 +94,37 @@ export function json(body: unknown, status: number): Response {
 const SAFE_SEGMENT = /^[A-Za-z0-9_-]{1,64}$/;
 const SAFE_FILE = /^[A-Za-z0-9._-]{1,80}$/;
 
-export type PathOwner = { uid: string; accountId: string };
+/**
+ * Who a path belongs to, and which Firestore document proves it:
+ * an account's documents (SPENDLY-88), or a Save Goals image (SPENDLY-614).
+ */
+export type PathOwner = { uid: string; accountId: string } | { uid: string; goalId: string };
 
-/** users/{uid}/accounts/{accountId}/{documentId}/{fileName} */
+/** Goal images are images only — a goal never holds a PDF (SPENDLY-614). */
+export const GOAL_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+/**
+ * users/{uid}/accounts/{accountId}/{documentId}/{fileName}
+ * users/{uid}/goals/{goalId}/{imageId}/{fileName}
+ */
 export function ownerForPath(path: unknown): PathOwner | null {
   if (typeof path !== "string" || path.length === 0 || path.length > 512) return null;
   if (path.includes("..") || path.startsWith("/")) return null;
   const parts = path.split("/");
   if (parts.length !== 6) return null;
-  if (parts[0] !== "users" || parts[2] !== "accounts") return null;
+  if (parts[0] !== "users" || (parts[2] !== "accounts" && parts[2] !== "goals")) return null;
   if (!SAFE_SEGMENT.test(parts[1] ?? "")) return null;
   if (!SAFE_SEGMENT.test(parts[3] ?? "")) return null;
   if (!SAFE_SEGMENT.test(parts[4] ?? "")) return null;
   if (!SAFE_FILE.test(parts[5] ?? "")) return null;
-  return { uid: parts[1], accountId: parts[3] };
+  return parts[2] === "goals" ? { uid: parts[1], goalId: parts[3] } : { uid: parts[1], accountId: parts[3] };
+}
+
+/** The Firestore document whose readability proves ownership of the path. */
+function ownerDocumentPath(owner: PathOwner): string {
+  return "goalId" in owner
+    ? `users/${owner.uid}/financialGoals/${owner.goalId}`
+    : `users/${owner.uid}/accounts/${owner.accountId}`;
 }
 
 /**
@@ -163,7 +180,7 @@ export async function checkOwnership(
 
   const url =
     `https://firestore.googleapis.com/v1/projects/${deps.firebaseProjectId}` +
-    `/databases/(default)/documents/users/${owner.uid}/accounts/${owner.accountId}`;
+    `/databases/(default)/documents/${ownerDocumentPath(owner)}`;
 
   const response = await deps.fetch(url, {
     headers: { Authorization: `Bearer ${idToken}` },
@@ -230,6 +247,14 @@ export async function handleSpendlyFiles(req: Request, deps: Deps): Promise<Resp
 
   const owner = ownerForPath(path);
   if (!owner) return json({ error: INVALID_PATH }, 400);
+
+  // SPENDLY-614: a goal image must declare an image type up front.
+  if (operation === "upload" && "goalId" in owner) {
+    const declaredType = typeof body.contentType === "string" ? body.contentType.toLowerCase() : "";
+    if (!GOAL_IMAGE_MIME_TYPES.includes(declaredType)) {
+      return json({ error: "Only JPEG, PNG or WebP images can be used for a goal." }, 415);
+    }
+  }
 
   const ownership = await checkOwnership(deps, idToken, owner);
   if (ownership === "unauthenticated") return json({ error: SIGN_IN_AGAIN }, 401);

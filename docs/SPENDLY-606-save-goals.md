@@ -12,8 +12,8 @@
 | SPENDLY-610 | Milestones, completion, achievements | `feature/SPENDLY-610-milestones-completion` | Merged to epic (65c7b588) |
 | SPENDLY-611 | Analytics, charts, filters, CSV/PDF export (read path) | `feature/SPENDLY-611-analytics-exports` | Merged to epic (c139541c) |
 | SPENDLY-612 | Reminders, estimated completion | `feature/SPENDLY-612-reminders-estimates` | Merged to epic (0b7ac1a3) |
-| SPENDLY-613 | Offline sync, idempotency, conflicts | `feature/SPENDLY-613-offline-sync` | Built, awaiting merge approval |
-| SPENDLY-614 | Security, images, biometric lock, accessibility | — | Not started |
+| SPENDLY-613 | Offline sync, idempotency, conflicts | `feature/SPENDLY-613-offline-sync` | Merged to epic (bc92ac51) |
+| SPENDLY-614 | Security, images, biometric lock, accessibility | `feature/SPENDLY-614-security-images-a11y` | Built, awaiting merge approval |
 | SPENDLY-615 | QA, performance, staged rollout | — | Not started |
 
 ## Decisions

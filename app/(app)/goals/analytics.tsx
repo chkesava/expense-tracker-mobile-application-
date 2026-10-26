@@ -22,6 +22,7 @@ import { useGoalAnalyticsEvents } from "@/hooks/useGoalAnalyticsEvents";
 import { useReadModelFreshness } from "@/hooks/useReadModelFreshness";
 import { useSaveGoalsEnabled } from "@/hooks/useSaveGoalsEnabled";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { useUnlockedGoalIds } from "@/lib/goalLockSession";
 import { toast } from "@/lib/toast";
 import { useSettings } from "@/providers/SettingsProvider";
 import { deliverGoalsCsv, deliverGoalsPdf } from "@/services/goals/goalExportDelivery";
@@ -85,6 +86,8 @@ export default function GoalAnalyticsScreen() {
   const freshness = useReadModelFreshness("goals", ["goalEvents"], newestMs);
 
   const scope = useMemo(() => goalsInScope(goals, statuses), [goals, statuses]);
+  const unlockedIds = useUnlockedGoalIds();
+  const lockedIds = useMemo(() => new Set(goals.filter((g) => g.locked).map((g) => g.id)), [goals]);
   const analytics = useMemo(
     () => (range && current ? analyzeGoals(goals, current.events, { statuses, range }) : null),
     [goals, current, statuses, range]
@@ -267,19 +270,30 @@ export default function GoalAnalyticsScreen() {
         {analytics.perGoal.length > 0 ? (
           <Section title="By goal">
             <View style={{ gap: theme.space.xs }}>
-              {analytics.perGoal.map((r) => (
-                <View key={r.goalId} style={styles.goalRow} accessible accessibilityLabel={`${r.name}, ${GOAL_STATUS_LABELS[r.status]}, net ${money(r.net)}`}>
-                  <View style={styles.flex}>
-                    <Text style={[body, { fontFamily: theme.fontFamily.medium }]} numberOfLines={1}>
+              {analytics.perGoal.map((r) => {
+                // SPENDLY-614: a locked goal's own figures stay hidden here too (totals still include it).
+                const locked = lockedIds.has(r.goalId) && !unlockedIds.has(r.goalId);
+                return locked ? (
+                  <View key={r.goalId} style={styles.goalRow} accessible accessibilityLabel={`${r.name}, locked`}>
+                    <Text style={[body, styles.flex, { fontFamily: theme.fontFamily.medium }]} numberOfLines={1}>
                       {r.name}
                     </Text>
-                    <Text style={meta}>
-                      {GOAL_STATUS_LABELS[r.status]} · saved {money(r.increased)} · taken out {money(r.decreased)}
-                    </Text>
+                    <Text style={meta}>Locked</Text>
                   </View>
-                  <FinancialAmount value={r.net} currency={currency} size="sm" tone="auto" />
-                </View>
-              ))}
+                ) : (
+                  <View key={r.goalId} style={styles.goalRow} accessible accessibilityLabel={`${r.name}, ${GOAL_STATUS_LABELS[r.status]}, net ${money(r.net)}`}>
+                    <View style={styles.flex}>
+                      <Text style={[body, { fontFamily: theme.fontFamily.medium }]} numberOfLines={1}>
+                        {r.name}
+                      </Text>
+                      <Text style={meta}>
+                        {GOAL_STATUS_LABELS[r.status]} · saved {money(r.increased)} · taken out {money(r.decreased)}
+                      </Text>
+                    </View>
+                    <FinancialAmount value={r.net} currency={currency} size="sm" tone="auto" />
+                  </View>
+                );
+              })}
             </View>
           </Section>
         ) : null}
