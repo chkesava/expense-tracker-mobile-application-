@@ -96,6 +96,7 @@ describe("buildCreateGoal", () => {
     expect(p.fields).toMatchObject({
       name: "Car Fund",
       normalizedName: "car fund",
+      nameKey: "n_car%20fund",
       targetAmount: 1000,
       currentAmount: 300,
       deadline: "2027-06-01",
@@ -135,7 +136,7 @@ describe("buildCreateGoal", () => {
 describe("legacy upgrade on first write", () => {
   it("opens the audit log without changing the amount", () => {
     const p = plan(buildAmountChange(legacy(), { kind: "contribution", amount: 100 }, ctx()));
-    expect(p.fields).toMatchObject({ schemaVersion: 2, openingAmount: 400, status: "active", normalizedName: "car", lastEventId: "ev1" });
+    expect(p.fields).toMatchObject({ schemaVersion: 2, openingAmount: 400, status: "active", normalizedName: "car", nameKey: "n_car", lastEventId: "ev1" });
     expect(p.version).toEqual({ kind: "increment" });
     expect(p.events[0]).toMatchObject({ id: "ev1__mig", type: "migrated", amountDelta: 0, createdAtMs: 999_999 });
     expect(p.events[1]).toMatchObject({ id: "ev1", type: "contribution", amountDelta: 100 });
@@ -152,6 +153,7 @@ describe("legacy upgrade on first write", () => {
   it("a legacy rename claims the new name and releases nothing", () => {
     const p = plan(buildEditGoal(legacy(), { name: "Bike" }, ctx(), [legacy()]));
     expect(p.claimNameKey).toBe("n_bike");
+    expect(p.fields.nameKey).toBe("n_bike");
     expect(p.releaseNameKey).toBeUndefined();
   });
 
@@ -269,6 +271,8 @@ describe("target, status, milestones, edits", () => {
     expect(p.claimNameKey).toBe("n_bike");
     expect(p.releaseNameKey).toBe("n_car");
     expect(buildEditGoal(v2(), { name: "Car" }, ctx(), [v2()])).toEqual({ ok: false, issues: ["no_change"] });
+    // The stored lock is what gets released, even if normalization rules changed since.
+    expect(plan(buildEditGoal(v2({ nameKey: "n_old" }), { name: "Bike" }, ctx(), [])).releaseNameKey).toBe("n_old");
   });
 
   it("a case-only rename keeps the same name lock", () => {

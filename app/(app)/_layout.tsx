@@ -196,6 +196,19 @@ function AppShellInner() {
                 animation: "slide_from_right",
               }}
             />
+            {/* SPENDLY-608: Save Goals list and detail. */}
+            <Stack.Screen
+              name="goals/index"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="goals/[id]"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
             <Stack.Screen
               name="goals/optimizer"
               options={{

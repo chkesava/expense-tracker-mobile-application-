@@ -121,6 +121,12 @@ export interface GoalV2Fields {
   version?: number;
   lastEventId?: string;
   normalizedName?: string;
+  /**
+   * Id of this goal's `goalNames` lock (`goalNameKey(name)`). Stored because
+   * rules cannot recompute NFKC + URI encoding; rules check the lock it names
+   * points back at this goal.
+   */
+  nameKey?: string;
   description?: string;
   iconKey?: GoalIconKey;
   image?: GoalImage | null;

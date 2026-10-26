@@ -13,6 +13,7 @@ import {
   type GoalSnapshot,
 } from "../types/goalFunding";
 import { isValidDateKey } from "./dates";
+import { isGoalInProgress } from "./goalModel";
 import { roundMoney } from "./money";
 
 export const GOAL_FUNDING_LIMITS = {
@@ -21,10 +22,14 @@ export const GOAL_FUNDING_LIMITS = {
   maxReturnPct: 30,
 } as const;
 
-/** Read-only snapshot of goals; the goal records themselves are never touched. */
+/**
+ * Read-only snapshot of goals; the goal records themselves are never touched.
+ * SPENDLY-608: only goals still being saved for (active or paused) are funded —
+ * completed, archived and cancelled goals drop out. Legacy goals are active.
+ */
 export function snapshotGoals(goals: readonly FinancialGoal[]): GoalSnapshot[] {
   return goals
-    .filter((g) => g.id && Number.isFinite(g.targetAmount))
+    .filter((g) => g.id && Number.isFinite(g.targetAmount) && isGoalInProgress(g))
     .map((g) => ({
       goalId: g.id,
       name: g.name,

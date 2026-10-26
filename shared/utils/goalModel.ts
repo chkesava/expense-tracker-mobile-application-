@@ -265,3 +265,12 @@ export function isGoalInProgress(goal: Pick<FinancialGoal, "status">): boolean {
   const status = goalStatus(goal);
   return status === "active" || status === "paused";
 }
+
+/**
+ * The Dashboard's active-goals section: in-progress goals only (closed goals
+ * must never look active), pinned first, then the user's own order.
+ */
+export function dashboardGoals(goals: readonly FinancialGoal[], limit: number): { shown: FinancialGoal[]; total: number } {
+  const open = sortGoals(goals.filter(isGoalInProgress), "manual");
+  return { shown: open.slice(0, limit), total: open.length };
+}

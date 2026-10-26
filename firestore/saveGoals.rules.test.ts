@@ -1,0 +1,348 @@
+import { readFileSync } from "node:fs";
+import {
+  assertFails,
+  assertSucceeds,
+  initializeTestEnvironment,
+  type RulesTestEnvironment,
+} from "@firebase/rules-unit-testing";
+import {
+  deleteDoc,
+  doc,
+  getDoc,
+  increment,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  writeBatch,
+  type Firestore,
+} from "firebase/firestore";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+
+import type { FinancialGoal } from "../shared/types/expense";
+import type { GoalEvent } from "../shared/types/goal";
+import {
+  buildAmountChange,
+  buildCorrection,
+  buildCreateGoal,
+  buildEditGoal,
+  buildSettingsChange,
+  buildStatusChange,
+  buildTargetChange,
+  goalWritePlanToOps,
+  type GoalWritePlan,
+  type GoalWriteResult,
+} from "../shared/utils/goalWrites";
+
+/**
+ * SPENDLY-608 — Save Goals rules (firestore.rules, "SPENDLY-606 Save Goals").
+ * Every write here is built by the real shared/utils/goalWrites builders, so
+ * these tests prove the app's writes pass and the forged ones fail.
+ */
+
+const PROJECT_ID = "spendly-save-goals";
+const OWNER = "u-owner";
+const OTHER = "u-other";
+
+let env: RulesTestEnvironment;
+
+beforeAll(async () => {
+  env = await initializeTestEnvironment({
+    projectId: PROJECT_ID,
+    firestore: {
+      rules: readFileSync("firestore.rules", "utf8"),
+      host: "127.0.0.1",
+      port: Number(process.env.FIRESTORE_EMULATOR_PORT ?? 8080),
+    },
+  });
+});
+
+afterAll(async () => {
+  await env?.cleanup();
+});
+
+beforeEach(async () => {
+  await env.clearFirestore();
+});
+
+const sentinels = { serverTimestamp, increment };
+let clock = 1_700_000_000_000;
+const ctx = (eventId: string) => ({ uid: OWNER, nowMs: (clock += 10), eventId });
+
+function plan(result: GoalWriteResult): GoalWritePlan {
+  if (!result.ok) throw new Error(`builder refused: ${result.issues.join(",")}`);
+  return result.plan;
+}
+
+function ownerDb(): Firestore {
+  return env.authenticatedContext(OWNER).firestore() as unknown as Firestore;
+}
+
+async function commit(db: Firestore, p: GoalWritePlan, uid = OWNER) {
+  const batch = writeBatch(db);
+  for (const op of goalWritePlanToOps(uid, p, sentinels)) {
+    const ref = doc(db, op.ref.path);
+    if (op.op === "set") batch.set(ref, op.data);
+    else if (op.op === "update") batch.update(ref, op.data as Record<string, unknown>);
+    else batch.delete(ref);
+  }
+  await batch.commit();
+}
+
+async function readGoal(id = "g1"): Promise<FinancialGoal> {
+  let out: FinancialGoal | undefined;
+  await env.withSecurityRulesDisabled(async (c) => {
+    const snap = await getDoc(doc(c.firestore() as unknown as Firestore, "users", OWNER, "financialGoals", id));
+    out = { id, ...(snap.data() as object) } as FinancialGoal;
+  });
+  return out!;
+}
+
+async function readEvent(id: string): Promise<GoalEvent> {
+  let out: GoalEvent | undefined;
+  await env.withSecurityRulesDisabled(async (c) => {
+    const snap = await getDoc(doc(c.firestore() as unknown as Firestore, "users", OWNER, "goalEvents", id));
+    out = { id, ...(snap.data() as object) } as GoalEvent;
+  });
+  return out!;
+}
+
+async function createGoal(id = "g1", name = "Car", target = 1000, initial = 0) {
+  await commit(ownerDb(), plan(buildCreateGoal({ name, targetAmount: target, initialAmount: initial }, { ...ctx(`${id}-c`), goalId: id }, [])));
+}
+
+describe("creating goals", () => {
+  it("accepts a goal built by buildCreateGoal", async () => {
+    await assertSucceeds(createGoal("g1", "Car", 1000, 250));
+    const g = await readGoal();
+    expect(g).toMatchObject({ schemaVersion: 2, version: 1, currentAmount: 250, openingAmount: 0, nameKey: "n_car" });
+  });
+
+  it("rejects a create without its name lock", async () => {
+    const p = plan(buildCreateGoal({ name: "Car", targetAmount: 1000 }, { ...ctx("e1"), goalId: "g1" }, []));
+    await assertFails(commit(ownerDb(), { ...p, claimNameKey: undefined }));
+  });
+
+  it("rejects a create whose opening event does not match the saved amount", async () => {
+    const p = plan(buildCreateGoal({ name: "Car", targetAmount: 1000, initialAmount: 100 }, { ...ctx("e1"), goalId: "g1" }, []));
+    await assertFails(commit(ownerDb(), { ...p, fields: { ...p.fields, currentAmount: 900 } }));
+  });
+
+  it("rejects a create without its created event", async () => {
+    const p = plan(buildCreateGoal({ name: "Car", targetAmount: 1000 }, { ...ctx("e1"), goalId: "g1" }, []));
+    await assertFails(commit(ownerDb(), { ...p, events: [] }));
+  });
+
+  it("rejects a duplicate name even when the client skips its own check", async () => {
+    await createGoal("g1", "Car");
+    // Different spelling, same normalized key.
+    const p = plan(buildCreateGoal({ name: "  CAR ", targetAmount: 500 }, { ...ctx("e2"), goalId: "g2" }, []));
+    await assertFails(commit(ownerDb(), p));
+  });
+
+  it("rejects unknown fields, a zero target and a bad status", async () => {
+    const p = plan(buildCreateGoal({ name: "Car", targetAmount: 1000 }, { ...ctx("e1"), goalId: "g1" }, []));
+    await assertFails(commit(ownerDb(), { ...p, fields: { ...p.fields, balance: 5 } }));
+    await assertFails(commit(ownerDb(), { ...p, fields: { ...p.fields, targetAmount: 0 } }));
+    await assertFails(commit(ownerDb(), { ...p, fields: { ...p.fields, status: "deleted" } }));
+  });
+});
+
+describe("amount changes", () => {
+  beforeEach(async () => {
+    await createGoal("g1", "Car", 1000, 400);
+  });
+
+  it("accepts contributions and reductions that come with their event", async () => {
+    await assertSucceeds(commit(ownerDb(), plan(buildAmountChange(await readGoal(), { kind: "contribution", amount: 500, reason: "bonus" }, ctx("a1")))));
+    await assertSucceeds(commit(ownerDb(), plan(buildAmountChange(await readGoal(), { kind: "reduction", amount: 100 }, ctx("a2")))));
+    expect((await readGoal()).currentAmount).toBe(800);
+    expect((await readGoal()).version).toBe(3);
+  });
+
+  it("rejects a forged summary amount with no event", async () => {
+    await assertFails(updateDoc(doc(ownerDb(), "users", OWNER, "financialGoals", "g1"), { currentAmount: increment(1_000_000), version: increment(1) }));
+    await assertFails(updateDoc(doc(ownerDb(), "users", OWNER, "financialGoals", "g1"), { currentAmount: 999 }));
+  });
+
+  it("rejects an event whose delta differs from the summary change", async () => {
+    const p = plan(buildAmountChange(await readGoal(), { kind: "contribution", amount: 100 }, ctx("a1")));
+    await assertFails(commit(ownerDb(), { ...p, amountDelta: 5000 }));
+  });
+
+  it("rejects a balance that would go negative, even from a forged plan", async () => {
+    const p = plan(buildAmountChange(await readGoal(), { kind: "reduction", amount: 400 }, ctx("a1")));
+    const forged = { ...p, amountDelta: -500, events: [{ ...p.events[0], amountDelta: -500 }] };
+    await assertFails(commit(ownerDb(), forged));
+  });
+
+  it("rejects replaying the same batch (idempotent by event id)", async () => {
+    const p = plan(buildAmountChange(await readGoal(), { kind: "contribution", amount: 100 }, ctx("same")));
+    await assertSucceeds(commit(ownerDb(), p));
+    await assertFails(commit(ownerDb(), p));
+    expect((await readGoal()).currentAmount).toBe(500);
+  });
+
+  it("applies two devices' contributions built from the same stale view", async () => {
+    const seen = await readGoal();
+    await assertSucceeds(commit(ownerDb(), plan(buildAmountChange(seen, { kind: "contribution", amount: 100 }, ctx("dev-a")))));
+    await assertSucceeds(commit(ownerDb(), plan(buildAmountChange(seen, { kind: "contribution", amount: 50 }, ctx("dev-b")))));
+    expect((await readGoal()).currentAmount).toBe(550);
+  });
+
+  it("rejects a stand-alone event carrying money", async () => {
+    await assertFails(
+      setDoc(doc(ownerDb(), "users", OWNER, "goalEvents", "stray"), {
+        goalId: "g1", type: "contribution", amountDelta: 100, actorUid: OWNER, createdAtMs: 1,
+      })
+    );
+  });
+
+  it("never lets an event be edited or deleted", async () => {
+    const id = "g1-c";
+    await assertFails(updateDoc(doc(ownerDb(), "users", OWNER, "goalEvents", id), { amountDelta: 0 }));
+    await assertFails(deleteDoc(doc(ownerDb(), "users", OWNER, "goalEvents", id)));
+  });
+
+  it("rejects an event claiming another user's identity", async () => {
+    const p = plan(buildAmountChange(await readGoal(), { kind: "contribution", amount: 10 }, ctx("a1")));
+    await assertFails(commit(ownerDb(), { ...p, events: [{ ...p.events[0], actorUid: OTHER }] }));
+  });
+});
+
+describe("corrections and reversals", () => {
+  beforeEach(async () => {
+    await createGoal("g1", "Car", 1000, 0);
+    await commit(ownerDb(), plan(buildAmountChange(await readGoal(), { kind: "contribution", amount: 500 }, ctx("c1"))));
+  });
+
+  it("accepts a correction and one reversal, and refuses a second reversal", async () => {
+    const original = await readEvent("c1");
+    await assertSucceeds(commit(ownerDb(), plan(buildCorrection(await readGoal(), original, [], { mode: "correct", amount: 300 }, ctx("fix")))));
+    const related = [await readEvent("fix")];
+    const reversal = plan(buildCorrection(await readGoal(), original, related, { mode: "reverse" }, ctx("rev")));
+    await assertSucceeds(commit(ownerDb(), reversal));
+    expect((await readGoal()).currentAmount).toBe(0);
+    // A second attempt from a stale device (which hasn't seen the reversal)
+    // reuses the derived id: the builder can't tell, but create-only refuses it.
+    const stale = { ...(await readGoal()), currentAmount: 1000 };
+    const again = plan(buildCorrection(stale, original, related, { mode: "reverse" }, ctx("rev2")));
+    await assertFails(commit(ownerDb(), again));
+    expect((await readGoal()).currentAmount).toBe(0);
+  });
+
+  it("rejects a reversal under a non-derived id and a correction of a non-amount event", async () => {
+    const original = await readEvent("c1");
+    const p = plan(buildCorrection(await readGoal(), original, [], { mode: "reverse" }, ctx("x")));
+    const renamed = { ...p, fields: { ...p.fields, lastEventId: "other" }, events: [{ ...p.events[0], id: "other" }] };
+    await assertFails(commit(ownerDb(), renamed));
+  });
+});
+
+describe("lifecycle", () => {
+  beforeEach(async () => {
+    await createGoal("g1", "Car", 1000, 1000);
+  });
+
+  it("follows the lifecycle and rejects contributions to a completed goal", async () => {
+    await assertSucceeds(commit(ownerDb(), plan(buildStatusChange(await readGoal(), "completed", ctx("s1")))));
+    const done = await readGoal();
+    expect(done.status).toBe("completed");
+    // The builder refuses; a hand-built forged write is refused by rules too.
+    const forged = plan(buildAmountChange({ ...done, status: "active" }, { kind: "contribution", amount: 1 }, ctx("s2")));
+    await assertFails(commit(ownerDb(), forged));
+    await assertSucceeds(commit(ownerDb(), plan(buildStatusChange(done, "archived", ctx("s3")))));
+    const archived = await readGoal();
+    expect(archived).toMatchObject({ status: "archived", statusBeforeArchive: "completed" });
+    // Archived restores only to where it came from.
+    const wrong = plan(buildStatusChange({ ...archived, statusBeforeArchive: "active" }, "active", ctx("s4")));
+    await assertFails(commit(ownerDb(), wrong));
+    await assertSucceeds(commit(ownerDb(), plan(buildStatusChange(archived, "completed", ctx("s5")))));
+  });
+
+  it("rejects completing a goal that has not reached its target", async () => {
+    await commit(ownerDb(), plan(buildTargetChange(await readGoal(), 5000, ctx("t1"))));
+    const g = await readGoal();
+    const p = plan(buildStatusChange({ ...g, currentAmount: 5000 }, "completed", ctx("t2")));
+    await assertFails(commit(ownerDb(), p));
+  });
+
+  it("rejects a stale edit from another device (literal version)", async () => {
+    const seen = await readGoal();
+    await assertSucceeds(commit(ownerDb(), plan(buildTargetChange(seen, 2000, ctx("v1")))));
+    await assertFails(commit(ownerDb(), plan(buildTargetChange(seen, 3000, ctx("v2")))));
+    expect((await readGoal()).targetAmount).toBe(2000);
+  });
+
+  it("allows settings without a version move but not a target hidden inside them", async () => {
+    await assertSucceeds(commit(ownerDb(), plan(buildSettingsChange(await readGoal(), { pinned: true, sortOrder: 5 }, ctx("p1")))));
+    const sneaky = plan(buildSettingsChange(await readGoal(), { pinned: false }, ctx("p2")));
+    await assertFails(commit(ownerDb(), { ...sneaky, fields: { ...sneaky.fields, targetAmount: 1 } }));
+  });
+
+  it("never deletes an audited goal", async () => {
+    await assertFails(deleteDoc(doc(ownerDb(), "users", OWNER, "financialGoals", "g1")));
+  });
+});
+
+describe("names", () => {
+  it("renames by claiming the new lock and releasing the old one", async () => {
+    await createGoal("g1", "Car");
+    await assertSucceeds(commit(ownerDb(), plan(buildEditGoal(await readGoal(), { name: "Bike" }, ctx("r1"), []))));
+    // The old name is free again.
+    await assertSucceeds(createGoal("g2", "Car"));
+  });
+
+  it("refuses to release a lock the goal still holds", async () => {
+    await createGoal("g1", "Car");
+    await assertFails(deleteDoc(doc(ownerDb(), "users", OWNER, "goalNames", "n_car")));
+  });
+
+  it("refuses to hijack another goal's lock", async () => {
+    await createGoal("g1", "Car");
+    await assertFails(setDoc(doc(ownerDb(), "users", OWNER, "goalNames", "n_car"), { goalId: "g2", createdAtMs: 1 }));
+  });
+});
+
+describe("legacy goals", () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      await setDoc(doc(c.firestore() as unknown as Firestore, "users", OWNER, "financialGoals", "g1"), {
+        name: "Car", targetAmount: 1000, currentAmount: 400, deadline: "", createdAt: 1,
+      });
+    });
+  });
+
+  it("still accepts the old write shape until the goal is upgraded", async () => {
+    await assertSucceeds(updateDoc(doc(ownerDb(), "users", OWNER, "financialGoals", "g1"), { currentAmount: increment(10) }));
+    await assertSucceeds(setDoc(doc(ownerDb(), "users", OWNER, "financialGoals", "g9"), { name: "Old app", targetAmount: 10, currentAmount: 0 }));
+  });
+
+  it("upgrades on first write, keeping the amount as the opening amount", async () => {
+    await assertSucceeds(commit(ownerDb(), plan(buildAmountChange(await readGoal(), { kind: "contribution", amount: 100 }, ctx("u1")))));
+    expect(await readGoal()).toMatchObject({ schemaVersion: 2, version: 1, openingAmount: 400, currentAmount: 500 });
+    // After the upgrade, the old shape is refused and so is delete.
+    await assertFails(updateDoc(doc(ownerDb(), "users", OWNER, "financialGoals", "g1"), { currentAmount: increment(10) }));
+    await assertFails(deleteDoc(doc(ownerDb(), "users", OWNER, "financialGoals", "g1")));
+  });
+
+  it("rejects an upgrade that rewrites the opening amount", async () => {
+    const p = plan(buildSettingsChange(await readGoal(), { pinned: true }, ctx("u1")));
+    await assertFails(commit(ownerDb(), { ...p, fields: { ...p.fields, openingAmount: 0 } }));
+  });
+
+  it("legacy goals stay deletable by installed builds", async () => {
+    await assertSucceeds(deleteDoc(doc(ownerDb(), "users", OWNER, "financialGoals", "g1")));
+  });
+});
+
+describe("isolation", () => {
+  it("another user can neither read nor write a goal, its events or its name lock", async () => {
+    await createGoal("g1", "Car", 1000, 100);
+    const other = env.authenticatedContext(OTHER).firestore() as unknown as Firestore;
+    await assertFails(getDoc(doc(other, "users", OWNER, "financialGoals", "g1")));
+    await assertFails(getDoc(doc(other, "users", OWNER, "goalEvents", "g1-c")));
+    await assertFails(getDoc(doc(other, "users", OWNER, "goalNames", "n_car")));
+    const p = plan(buildAmountChange(await readGoal(), { kind: "contribution", amount: 10 }, { uid: OTHER, nowMs: 1, eventId: "x" }));
+    await assertFails(commit(other, p, OWNER));
+  });
+});

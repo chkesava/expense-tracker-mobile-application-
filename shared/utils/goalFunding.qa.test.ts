@@ -137,8 +137,14 @@ describe("isolation", () => {
   });
 
   it("optimizer code writes only to goalFundingPlans", () => {
+    // SPENDLY-608: these folders also hold Save Goals, which does write goals
+    // (through goalStore, guarded by saveGoals.qa.test.ts). Only the optimizer's
+    // own files are held to "writes nothing but plans".
+    const optimizerFile = (f: string) => /optimizer|GoalPlan|GoalFunding|goalFunding/.test(f);
     const files = [
-      ...["app/(app)/goals", "components/goals", "services/goals"].flatMap((d) => readdirSync(d).map((f) => join(d, f))),
+      ...["app/(app)/goals", "components/goals", "services/goals"].flatMap((d) =>
+        readdirSync(d).filter(optimizerFile).map((f) => join(d, f))
+      ),
       "hooks/useGoalFunding.ts",
       "hooks/useGoalFundingPlans.ts",
       ...readdirSync("shared/utils").filter((f) => f.startsWith("goalFunding") && !f.includes(".test.")).map((f) => join("shared/utils", f)),

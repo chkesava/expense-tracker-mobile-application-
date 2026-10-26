@@ -73,10 +73,17 @@ function serializeOp(op: MutationOp): SerializedMutationOp {
   return { op: "update", path: op.ref.path, data };
 }
 
+/**
+ * Collections whose documents rules make create-only. Re-applying a batch that
+ * already landed would be an update there and fail the whole batch — with a
+ * misleading "not saved" toast — so replay checks the ack first (SPENDLY-608).
+ */
+const CREATE_ONLY_SEGMENTS = ["/ledgerEvents/", "/goalEvents/", "/goalNames/"];
+
 function opsAreNonIdempotent(ops: SerializedMutationOp[]): boolean {
   return ops.some((op) => {
     if (op.op === "delete") return false;
-    if (op.path.includes("/ledgerEvents/")) return true;
+    if (CREATE_ONLY_SEGMENTS.some((segment) => op.path.includes(segment))) return true;
     return encodedDataIsNonIdempotent(op.data);
   });
 }
