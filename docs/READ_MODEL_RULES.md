@@ -25,6 +25,7 @@ These rules sit beside `CLAUDE.md` (Spendly safety invariants) and `docs/AGENT_W
 ## 1. Writes: Firestore only
 
 - **R1.1** Write only to Firestore, through the existing services and providers. **Never write to Supabase** from the app, a Netlify function or an Edge function. The only Supabase writers are the sync job (`scripts/readmodel-sync.ts`) and the account-deletion purge.
+  - **Exception (SPENDLY-616):** the private Storage bucket `spendly-files` in this project holds Spendly's account documents and goal photos, written only through the `spendly-files` Edge Function (`docs/SPENDLY_DOCUMENTS_STORAGE.md`). These are the binaries themselves, not a copy: they are **not rebuildable** from Firestore, which keeps only their metadata and object key. No Postgres table is involved, and no other Supabase write is allowed.
 - **R1.2** Every new or changed write to a synced collection must **stamp `updatedAt`** (and `createdAt` on create) with a server timestamp (SPENDLY-571).
   - Incremental sync runs (manual, and the per-write push of SPENDLY-583) find changes by `createdAt`/`updatedAt`. A write without them reaches the read model only on the nightly full run.
   - Add a test that the writer sets both.

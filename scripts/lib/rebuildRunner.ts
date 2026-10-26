@@ -7,6 +7,7 @@ import {
   type FinancialStateInput,
 } from "../../shared/utils/reconciliation";
 import { todayDateKey } from "../../shared/utils/dates";
+import { planDebtCacheRepair } from "../../shared/utils/debtCacheRepair";
 
 /**
  * SPENDLY-499 — the one rebuild runner behind both CLIs
@@ -24,7 +25,13 @@ export type RebuildMode = "dryRun" | "apply";
 export type RebuildOptions = {
   mode: RebuildMode;
   /** Which derived state to rebuild. */
-  steps: { accounts: boolean; epf: boolean; dashboards: boolean };
+  steps: {
+    accounts: boolean;
+    epf: boolean;
+    dashboards: boolean;
+    /** SPENDLY-605: restamp borrowing/receivable caches that disagree with their rows. */
+    debtCaches?: boolean;
+  };
   /** Only this account (accounts step). */
   accountId?: string | null;
   /** Never touch these accounts (accounts step): left for a human, e.g. an ambiguous card. */
@@ -129,6 +136,7 @@ export type UserRebuildReport = {
   skipped: boolean;
   accountsNeedingWrite: number;
   dashboardsNeedingWrite: number;
+  debtCachesNeedingWrite: number;
   epfWritten: boolean;
   opsCommitted: number;
 };
@@ -145,6 +153,7 @@ export async function rebuildUser(db: Firestore, uid: string, options: RebuildOp
     skipped: !data,
     accountsNeedingWrite: 0,
     dashboardsNeedingWrite: 0,
+    debtCachesNeedingWrite: 0,
     epfWritten: false,
     opsCommitted: 0,
   };
@@ -267,6 +276,34 @@ export async function rebuildUser(db: Firestore, uid: string, options: RebuildOp
     log(`  ${report.dashboardsNeedingWrite} dashboard doc(s) need repair.`);
   }
 
+  if (options.steps.debtCaches) {
+    // SPENDLY-605: parents whose stored totals disagree with their repayment
+    // rows. Only the cache fields and updatedAt are written, so the read-model
+    // sync picks the correction up.
+    log(`--- Borrowing / receivable caches ---`);
+    const plans = planDebtCacheRepair(
+      {
+        borrowings: data.borrowings,
+        borrowingRepayments: data.borrowingRepayments,
+        receivables: data.receivables,
+        receivableRepayments: data.receivableRepayments,
+      },
+      today
+    );
+    for (const plan of plans) {
+      report.debtCachesNeedingWrite += 1;
+      log(`  [Variance] ${plan.kind} ${plan.id}`);
+      for (const line of plan.variances) log(`    - ${line}`);
+      if (!apply) continue;
+      const collection = plan.kind === "receivable" ? "receivables" : "borrowings";
+      await batch.update(db.doc(`users/${uid}/${collection}/${plan.id}`), {
+        ...plan.next,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+    log(`  ${report.debtCachesNeedingWrite} borrowing/receivable doc(s) need repair.`);
+  }
+
   await batch.flush();
   report.opsCommitted = batch.committed;
   log(apply ? `  Committed ${batch.committed} operation(s).` : `  [DRY RUN] nothing written.`);
@@ -278,9 +315,18 @@ export async function runRebuildCli(db: Firestore, argv: string[], steps: Rebuil
   const mode: RebuildMode = argv.includes("--apply") ? "apply" : "dryRun";
   const value = (flag: string) => argv.find((a) => a.startsWith(`${flag}=`))?.split("=")[1] ?? null;
   const uid = value("--uid");
+  // `--only=debtCaches` (comma-separated step names) narrows the run, so one
+  // repair can be applied without also applying every other step.
+  const only = (value("--only") ?? "").split(",").filter(Boolean);
+  const selected = Object.fromEntries(
+    Object.entries(steps).map(([name, on]) => [
+      name,
+      Boolean(on) && (only.length === 0 || only.includes(name)),
+    ])
+  ) as RebuildOptions["steps"];
   const options: RebuildOptions = {
     mode,
-    steps,
+    steps: selected,
     accountId: value("--accountId"),
     excludeAccountIds: (value("--excludeAccountId") ?? "").split(",").filter(Boolean),
     overrideZeros: argv.includes("--override-zeros"),

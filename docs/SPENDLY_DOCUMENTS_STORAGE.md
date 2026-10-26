@@ -10,6 +10,14 @@ phase GS-001 documents never happens here.
 
 Ticket: **SPENDLY-88**, under epic **SPENDLY-78**.
 
+> **Project (SPENDLY-616):** everything here runs in Spendly's own Supabase
+> project, the read-model one (`spmsgncjbnbkxvsbpqlu`,
+> `EXPO_PUBLIC_READMODEL_SUPABASE_URL`), **not** the Ganesh Seva project behind
+> `EXPO_PUBLIC_SUPABASE_URL`. Run Steps 1–2 in that project's SQL editor. This
+> is the one documented write exception in `docs/READ_MODEL_RULES.md` R1.1.
+> Earlier builds used the Ganesh project; see "Moving from the Ganesh project"
+> below.
+
 ---
 
 ## What is being stood up
@@ -89,6 +97,9 @@ something can reach these objects without going through the Edge Function.
 npm run supabase:deploy:spendly-files
 ```
 
+The script pins `--project-ref spmsgncjbnbkxvsbpqlu`, because the `supabase/`
+directory is linked to the Ganesh project and a bare deploy would land there.
+
 `--no-verify-jwt` is set, matching `ganesh-files`: the Authorization header
 carries a *Firebase* ID token, not a Supabase JWT, so Supabase's own
 verification would reject every legitimate request. The function does its own
@@ -155,7 +166,8 @@ nothing in production even if Steps 1–4 are complete.
 
 ## Save Goals images (SPENDLY-614)
 
-Goal photos use the same bucket and the same Edge Function, at
+Goal photos use the same bucket and the same Edge Function (in the read-model
+project, as everything here since SPENDLY-616), at
 `users/{uid}/goals/{goalId}/{imageId}/image.jpg`. The function proves ownership
 by reading `users/{uid}/financialGoals/{goalId}` as the caller (the same
 mechanism as accounts), and accepts only JPEG/PNG/WebP uploads for goal paths.
@@ -171,6 +183,24 @@ Replacing a photo uploads the new object, saves its metadata on the goal, and
 only then deletes the old object. If saving fails, the new object is deleted
 again. A cleanup that fails is logged and leaves an unreferenced object (no
 sweeper, as below).
+
+---
+
+## Moving from the Ganesh project (SPENDLY-616)
+
+Builds before SPENDLY-616 sent files to the `spendly-files` bucket and function
+in the Ganesh Seva project. Object paths are unchanged, so Firestore metadata
+needs no change. The order:
+
+1. Steps 1–3 above in the read-model project, plus the `FIREBASE_PROJECT_ID`
+   secret. Smoke-test (Step 4) against the read-model project URL.
+2. Ship a build with SPENDLY-616 (app release and web deploy).
+3. If real objects exist in the Ganesh bucket, copy them across with a dry run
+   first and explicit approval (not built yet; only needed if objects exist).
+   Until they are copied, those documents and photos will not open in new
+   builds.
+4. Old builds still call the Ganesh project. Remove the Ganesh bucket and
+   function only after old builds are gone and any copy is verified.
 
 ---
 

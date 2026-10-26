@@ -245,3 +245,23 @@ export function validatePayment(
 
   return { ok: true };
 }
+
+/**
+ * SPENDLY-605: the date a parent's stored cache is stamped as of.
+ *
+ * Summaries ignore payments dated after their as-of date, which is right for
+ * display but wrong for the cache: stamping "as of today" while writing a
+ * payment dated tomorrow (a future pick, or the form and the provider
+ * disagreeing about the timezone) dropped that very payment and left the
+ * parent showing the full amount owed. The cache covers every recorded
+ * payment, so it is stamped as of the latest of today and their dates.
+ */
+export function cacheStampDate(
+  today: string,
+  movements: readonly { date: string }[]
+): string {
+  return movements.reduce(
+    (latest, m) => (m.date > latest ? m.date : latest),
+    today
+  );
+}

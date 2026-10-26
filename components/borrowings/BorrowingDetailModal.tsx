@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Chip } from "@/components/ui/Chip";
 import { useAccounts } from "@/hooks/useAccounts";
+import { useSettings } from "@/providers/SettingsProvider";
 import type { AddRepaymentInput } from "@/hooks/useBorrowings";
 import { toast } from "@/lib/toast";
 import type {
@@ -82,7 +83,11 @@ export function BorrowingDetailModal({
   const [isEditing, setIsEditing] = useState(false);
   const [amount, setAmount] = useState("");
   const [paymentAccountId, setPaymentAccountId] = useState("");
-  const [date, setDate] = useState(todayDateKey());
+  // SPENDLY-605: the same "today" the provider stamps against (the settings
+  // timezone, not the device's), and no repayment dated after it.
+  const { settings } = useSettings();
+  const today = todayDateKey(settings.timezone);
+  const [date, setDate] = useState(today);
   const [note, setNote] = useState("");
   const [editLenderName, setEditLenderName] = useState("");
   const [editLenderType, setEditLenderType] = useState<LenderType>("OTHER");
@@ -97,12 +102,12 @@ export function BorrowingDetailModal({
       setIsEditing(false);
       setAmount("");
       setPaymentAccountId("");
-      setDate(todayDateKey());
+      setDate(today);
       setNote("");
       return;
     }
     if (startRepaying) setIsRepaying(true);
-  }, [visible, startRepaying]);
+  }, [visible, startRepaying, today]);
 
   // Keyed on the id, not the borrowing object: the snapshot hands back a fresh
   // object after every write, and depending on it would drop the user back into
@@ -149,7 +154,7 @@ export function BorrowingDetailModal({
   const resetRepaymentForm = () => {
     setAmount("");
     setPaymentAccountId("");
-    setDate(todayDateKey());
+    setDate(today);
     setNote("");
     setIsRepaying(false);
   };
@@ -159,6 +164,10 @@ export function BorrowingDetailModal({
 
     if (!isValidDateKey(date)) {
       toast.error("Pick a valid repayment date");
+      return;
+    }
+    if (date > today) {
+      toast.error("A repayment can't be dated in the future");
       return;
     }
 
@@ -531,7 +540,7 @@ export function BorrowingDetailModal({
               <Text style={[styles.label, { color: theme.colors.foreground }]}>
                 Date
               </Text>
-              <DateField value={date} onChange={setDate} accessibilityLabel="Repayment date" />
+              <DateField value={date} onChange={setDate} maxDate={today} accessibilityLabel="Repayment date" />
             </View>
 
             <View style={styles.group}>

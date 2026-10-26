@@ -106,7 +106,7 @@
     "env:copy-from-web": "node ./scripts/copy-env-from-web.mjs",
     "supabase:deploy:ganesh-files": "supabase functions deploy ganesh-files --no-verify-jwt",
     "supabase:logs:ganesh-files": "supabase functions logs ganesh-files",
-    "supabase:deploy:spendly-files": "supabase functions deploy spendly-files --no-verify-jwt",
+    "supabase:deploy:spendly-files": "supabase functions deploy spendly-files --no-verify-jwt --project-ref spmsgncjbnbkxvsbpqlu",
     "perf:verify": "node scripts/verify-performance-budgets.js",
     "release:verify": "node scripts/verify-environment.js && node scripts/verify-keystore.js && node scripts/verify-google-services.js && node scripts/verify-gradle.js && node scripts/verify-performance-budgets.js",
     "release:prepare": "node scripts/prepare-release.js",
