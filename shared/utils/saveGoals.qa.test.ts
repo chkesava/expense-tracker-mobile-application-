@@ -37,6 +37,18 @@ describe("Save Goals isolation", () => {
     }
   });
 
+  it("the dashboard, list and Money section never read goal history (FRD FR-09, SPENDLY-406)", () => {
+    for (const f of [
+      "components/dashboard/FinancialGoalsWidget.tsx",
+      "app/(app)/goals/index.tsx",
+      "components/goals/GoalCard.tsx",
+      "components/settings/SettingsSubmenus.tsx",
+    ]) {
+      const src = readFileSync(f, "utf8");
+      expect(src, f).not.toMatch(/useGoalHistory|useGoalAnalyticsEvents|goalEvents/);
+    }
+  });
+
   it("the old hard delete is gone from the goals hook", () => {
     const src = readFileSync("hooks/useFinancialGoals.ts", "utf8");
     expect(src).not.toMatch(/deleteDoc/);

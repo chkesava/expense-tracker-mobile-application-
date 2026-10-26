@@ -15,6 +15,7 @@ import {
   type AuditPage,
   type CashFlowMonth,
 } from "./analyticsSources";
+import { goalEventsPageFrom, supabaseGoalEventsPage, type GoalEventsPage, type GoalEventsQuery } from "./goalSources";
 import { supabaseJournalPage, type SupabaseCursor, type SupabasePage } from "./journalHistorySource";
 import { journalMonthRange, supabaseJournalMonth, type JournalCollection } from "./journalMonthSource";
 import { fromReadModelDoc } from "./readModelDoc";
@@ -62,6 +63,8 @@ export type ReadModelBackend = {
   auditPage<T>(cursor: AuditCursor, options: { targetDocId?: string; pageSize: number }): Promise<AuditPage<T>>;
   /** SPENDLY-513: active rows with these ids. */
   byIds<T extends { id?: string }>(collectionName: JournalCollection, ids: string[]): Promise<T[]>;
+  /** SPENDLY-611: goal events in a created-at range (optionally one goal), newest first, keyset paged. */
+  goalEventsPage(options: GoalEventsQuery): Promise<GoalEventsPage>;
   /** The stalest `last_synced_at` (ms) of these collections, or null if any was never synced. */
   lastSyncedAt(collections: string[]): Promise<number | null>;
 };
@@ -96,6 +99,7 @@ export function supabaseBackend(client: SupabaseClient): ReadModelBackend {
     cashFlow: (from, to) => supabaseCashFlow(client, from, to),
     auditPage: (cursor, options) => supabaseAuditPage(client, cursor, options),
     byIds: (c, ids) => supabaseByIds(client, c, ids),
+    goalEventsPage: (options) => supabaseGoalEventsPage(client, options),
     async lastSyncedAt(collections) {
       const { data, error } = await client.from("sync_status").select("collection, last_synced_at").in("collection", collections);
       if (error) throw new Error(error.message);
@@ -110,7 +114,7 @@ export type LoopbackKnobs = { fail?: boolean; lagMinutes?: number };
 
 export function loopbackBackend(db: Firestore, uid: string, knobs: LoopbackKnobs = {}, now: () => number = Date.now): ReadModelBackend {
   /** The collection as the read model would hold it: live rows, mapped and round-tripped. */
-  async function rows(collectionName: JournalCollection | "ledgerEvents"): Promise<ReadModelRow[]> {
+  async function rows(collectionName: JournalCollection | "ledgerEvents" | "goalEvents"): Promise<ReadModelRow[]> {
     if (knobs.fail) throw new Error("loopback read model: simulated outage (readModel.loopbackFail)");
     const spec = SPEC_BY_COLLECTION.get(collectionName)!;
     const snap = await getDocs(collection(db, "users", uid, collectionName));
@@ -176,6 +180,22 @@ export function loopbackBackend(db: Firestore, uid: string, knobs: LoopbackKnobs
     async byIds(collectionName, ids) {
       const wanted = new Set(ids);
       return (await rows(collectionName)).filter((r) => wanted.has(r.doc_id)).map((r) => toApp(r));
+    },
+    async goalEventsPage(options) {
+      // The SQL's rules over the mapped rows: live, dated, in range, keyset desc.
+      const from = new Date(options.fromMs).toISOString();
+      const to = new Date(options.toMs).toISOString();
+      const c = options.cursor;
+      const page = (await rows("goalEvents"))
+        .filter((r) => typeof r.created_at === "string" && r.created_at >= from && r.created_at < to)
+        .filter((r) => !options.goalId || r.goal_id === options.goalId)
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)) || b.doc_id.localeCompare(a.doc_id))
+        .filter((r) => !c || String(r.created_at) < c.createdAt || (r.created_at === c.createdAt && r.doc_id < c.docId))
+        .slice(0, options.pageSize);
+      return goalEventsPageFrom(
+        page.map((r) => ({ doc_id: r.doc_id, created_at: r.created_at as string, doc: r.doc as Record<string, unknown> })),
+        options.pageSize
+      );
     },
     async lastSyncedAt() {
       if (knobs.fail) throw new Error("loopback read model: simulated outage (readModel.loopbackFail)");

@@ -75,6 +75,7 @@ describe("isRestorableRoute", () => {
     // SPENDLY-608
     expect(isRestorableRoute("/goals")).toBe(true);
     expect(isRestorableRoute("/goals/abc")).toBe(true);
+    expect(isRestorableRoute("/goals/analytics")).toBe(true);
     expect(isRestorableRoute("/spending?month=2026-10&tab=trends")).toBe(true);
     expect(isRestorableRoute("/spending/Food?month=2026-10")).toBe(true);
     expect(isRestorableRoute("/budgets?month=2026-10&tab=trends")).toBe(true);

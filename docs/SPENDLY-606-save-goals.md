@@ -9,8 +9,8 @@
 | SPENDLY-607 | Architecture + backward-compatible data model | `feature/SPENDLY-607-goal-data-model` | Merged to epic (9b5c439e) |
 | SPENDLY-608 | Create/edit, lifecycle, Goals + Dashboard UI, goal/event/name rules | `feature/SPENDLY-608-goal-management-ui` | Merged to epic (b54bd78a) |
 | SPENDLY-609 | Contributions, reductions, corrections, audit history, read-model tables | `feature/SPENDLY-609-contributions-history` | Merged to epic (11392839) |
-| SPENDLY-610 | Milestones, completion, achievements | `feature/SPENDLY-610-milestones-completion` | Built, awaiting merge approval |
-| SPENDLY-611 | Analytics, charts, filters, CSV/PDF export (read path) | — | Not started |
+| SPENDLY-610 | Milestones, completion, achievements | `feature/SPENDLY-610-milestones-completion` | Merged to epic (65c7b588) |
+| SPENDLY-611 | Analytics, charts, filters, CSV/PDF export (read path) | `feature/SPENDLY-611-analytics-exports` | Built, awaiting merge approval |
 | SPENDLY-612 | Reminders, estimated completion | — | Not started |
 | SPENDLY-613 | Offline sync, idempotency, conflicts | — | Not started |
 | SPENDLY-614 | Security, images, biometric lock, accessibility | — | Not started |

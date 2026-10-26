@@ -43,6 +43,7 @@ describe("resolveAndroidBackAction", () => {
     // SPENDLY-608: the Goals list and a goal's page.
     expect(resolveAndroidBackAction("/goals")).toBe("pop");
     expect(resolveAndroidBackAction("/goals/abc")).toBe("pop");
+    expect(resolveAndroidBackAction("/goals/analytics")).toBe("pop");
     // SPENDLY-574 spending drill-downs.
     expect(resolveAndroidBackAction("/spending?month=2026-10")).toBe("pop");
     expect(resolveAndroidBackAction("/spending/Home%20%26%20Household?month=2026-10")).toBe("pop");
