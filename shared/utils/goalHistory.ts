@@ -10,6 +10,9 @@ import { GOAL_STATUS_LABELS } from "./goalMessages";
 /** Newest-first page size for a goal's history (cursor paged). */
 export const GOAL_HISTORY_PAGE_SIZE = 25;
 
+/** SPENDLY-610: the achievement timeline (FRD FR-07/08). */
+export const GOAL_ACHIEVEMENT_TYPES = ["milestone_reached", "completed"] as const satisfies readonly GoalEvent["type"][];
+
 /** FRD FR-03 quick amounts. */
 export const GOAL_QUICK_AMOUNTS = [100, 500, 1000] as const;
 

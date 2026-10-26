@@ -8,6 +8,7 @@ import {
   query,
   startAfter,
   where,
+  type QueryConstraint,
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 
@@ -18,9 +19,17 @@ import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath, logDirectRead, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
-import type { GoalEvent } from "@/shared/types/goal";
+import type { GoalEvent, GoalEventType } from "@/shared/types/goal";
 import { GOAL_HISTORY_PAGE_SIZE, sortGoalEvents } from "@/shared/utils/goalHistory";
 import { mergeEventPages, pageMayHaveMore, pushedOutRows } from "@/shared/utils/ledgerEventPages";
+
+/** goalId filter, optional type filter, newest first. */
+function historyConstraints(goalId: string, typesKey: string): QueryConstraint[] {
+  const out: QueryConstraint[] = [where("goalId", "==", goalId)];
+  if (typesKey) out.push(where("type", "in", typesKey.split(",")));
+  out.push(orderBy("createdAtMs", "desc"));
+  return out;
+}
 
 function toEvent(docSnap: QueryDocumentSnapshot): GoalEvent {
   return { ...(docSnap.data() as Omit<GoalEvent, "id">), id: docSnap.id };
@@ -39,8 +48,19 @@ function toEvent(docSnap: QueryDocumentSnapshot): GoalEvent {
  * Older pages move to the read-model path with the `goals` screen key in
  * SPENDLY-611.
  */
-export function useGoalHistory(goalId: string | undefined, options?: { enabled?: boolean }) {
+export function useGoalHistory(
+  goalId: string | undefined,
+  options?: {
+    enabled?: boolean;
+    /**
+     * SPENDLY-610: only these event types (e.g. achievements). Needs the
+     * `goalEvents (goalId, type, createdAtMs desc)` index.
+     */
+    types?: readonly GoalEventType[];
+  }
+) {
   const enabled = options?.enabled !== false && Boolean(goalId);
+  const typesKey = options?.types?.join(",") ?? "";
   const { user } = useAuth();
   const uid = user?.uid;
   const [live, setLive] = useState<GoalEvent[]>([]);
@@ -67,13 +87,8 @@ export function useGoalHistory(goalId: string | undefined, options?: { enabled?:
       return;
     }
     setLoading(true);
-    const path = `users/${uid}/goalEvents?goalId=${goalId}&limit=${GOAL_HISTORY_PAGE_SIZE}`;
-    const q = query(
-      collection(db, "users", uid, "goalEvents"),
-      where("goalId", "==", goalId),
-      orderBy("createdAtMs", "desc"),
-      limit(GOAL_HISTORY_PAGE_SIZE)
-    );
+    const path = `users/${uid}/goalEvents?goalId=${goalId}&types=${typesKey}&limit=${GOAL_HISTORY_PAGE_SIZE}`;
+    const q = query(collection(db, "users", uid, "goalEvents"), ...historyConstraints(goalId, typesKey), limit(GOAL_HISTORY_PAGE_SIZE));
     const unsubscribe = onSnapshot(
       q,
       { includeMetadataChanges: true },
@@ -106,7 +121,7 @@ export function useGoalHistory(goalId: string | undefined, options?: { enabled?:
       forgetSnapshotPath(path);
       unsubscribe();
     };
-  }, [uid, goalId, enabled, attempt, setError]);
+  }, [uid, goalId, typesKey, enabled, attempt, setError]);
 
   const loadMore = useCallback(async () => {
     const db = getFirestoreDb();
@@ -117,8 +132,7 @@ export function useGoalHistory(goalId: string | undefined, options?: { enabled?:
       const snap = await getDocs(
         query(
           collection(db, "users", uid, "goalEvents"),
-          where("goalId", "==", goalId),
-          orderBy("createdAtMs", "desc"),
+          ...historyConstraints(goalId, typesKey),
           startAfter(cursor),
           limit(GOAL_HISTORY_PAGE_SIZE)
         )
@@ -137,7 +151,7 @@ export function useGoalHistory(goalId: string | undefined, options?: { enabled?:
     } finally {
       setLoadingMore(false);
     }
-  }, [uid, goalId, loadingMore, hasMore]);
+  }, [uid, goalId, typesKey, loadingMore, hasMore]);
 
   const events = sortGoalEvents(mergeEventPages(live, older));
   return { events, pendingIds, loading, error, retry, hasMore, loadingMore, loadMore };

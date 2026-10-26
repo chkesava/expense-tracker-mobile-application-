@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { History } from "lucide-react-native";
 
@@ -5,12 +6,13 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { Section } from "@/components/dashboard/primitives";
 import { Button } from "@/components/ui/Button";
+import { Chip } from "@/components/ui/Chip";
 import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { useGoalHistory } from "@/hooks/useGoalHistory";
 import { useSettings } from "@/providers/SettingsProvider";
 import type { GoalEvent } from "@/shared/types/goal";
 import { formatDisplayDate } from "@/shared/utils/dateDisplay";
-import { canOfferCorrection, describeGoalEvent, fillAmounts } from "@/shared/utils/goalHistory";
+import { canOfferCorrection, describeGoalEvent, fillAmounts, GOAL_ACHIEVEMENT_TYPES } from "@/shared/utils/goalHistory";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 
@@ -35,7 +37,10 @@ export function GoalHistorySection({
   const surfaces = useSurfaces();
   const money = useGhostMoney(currency);
   const { settings } = useSettings();
-  const { events, pendingIds, loading, error, retry, hasMore, loadingMore, loadMore } = useGoalHistory(goalId);
+  const [filter, setFilter] = useState<"all" | "achievements">("all");
+  const { events, pendingIds, loading, error, retry, hasMore, loadingMore, loadMore } = useGoalHistory(goalId, {
+    types: filter === "achievements" ? GOAL_ACHIEVEMENT_TYPES : undefined,
+  });
   const meta = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
 
   let content;
@@ -44,7 +49,13 @@ export function GoalHistorySection({
   } else if (loading && events.length === 0) {
     content = <DashboardSkeleton variant="section" rows={3} />;
   } else if (events.length === 0) {
-    content = <Text style={meta}>No entries yet. Contributions, changes and milestones will appear here.</Text>;
+    content = (
+      <Text style={meta}>
+        {filter === "achievements"
+          ? "No achievements yet. Milestones and completion show up here."
+          : "No entries yet. Contributions, changes and milestones will appear here."}
+      </Text>
+    );
   } else {
     content = (
       <View>
@@ -92,12 +103,17 @@ export function GoalHistorySection({
 
   return (
     <Section title="History" icon={<History size={16} color={theme.colors.primary} />} iconTint={surfaces.wash(theme.colors.primary)}>
+      <View style={styles.filters} accessibilityRole="tablist">
+        <Chip label="All" size="sm" selected={filter === "all"} onPress={() => setFilter("all")} accessibilityRole="tab" />
+        <Chip label="Achievements" size="sm" selected={filter === "achievements"} onPress={() => setFilter("achievements")} accessibilityRole="tab" />
+      </View>
       {content}
     </Section>
   );
 }
 
 const styles = StyleSheet.create({
+  filters: { flexDirection: "row", gap: 8, marginBottom: 8 },
   row: { flexDirection: "row", gap: 12, paddingVertical: 10, alignItems: "flex-start" },
   main: { flex: 1, minWidth: 0, gap: 2 },
   side: { alignItems: "flex-end", gap: 2 },
