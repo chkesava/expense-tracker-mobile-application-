@@ -13,6 +13,12 @@ import {
 } from "firebase/firestore";
 
 import { useLoadFailure } from "@/hooks/useLoadFailure";
+import { isLocalTestMode } from "@/lib/env";
+import { goalCursorBelow, type GoalEventsCursor } from "@/lib/readModel/goalSources";
+import { readGoalHistoryPage } from "@/lib/readModel/goalsReadPath";
+import { useNetwork } from "@/providers/NetworkProvider";
+import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import { configuredReadModelMode } from "@/shared/utils/readModelMode";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
@@ -45,8 +51,9 @@ function toEvent(docSnap: QueryDocumentSnapshot): GoalEvent {
  * `loadMore` pages older events by cursor. Needs the
  * `goalEvents (goalId, createdAtMs desc)` index.
  *
- * Older pages move to the read-model path with the `goals` screen key in
- * SPENDLY-611.
+ * SPENDLY-611: with `system_settings/global.readModel.goals = "supabase"`,
+ * older pages come from the read model (below the realtime window), falling
+ * back to the Firestore cursor on any failure. The default is `firestore`.
  */
 export function useGoalHistory(
   goalId: string | undefined,
@@ -61,8 +68,11 @@ export function useGoalHistory(
 ) {
   const enabled = options?.enabled !== false && Boolean(goalId);
   const typesKey = options?.types?.join(",") ?? "";
-  const { user } = useAuth();
+  const { user, isDuress } = useAuth();
   const uid = user?.uid;
+  const { isOnline } = useNetwork();
+  const { settings } = useSystemSettings();
+  const readModelCursorRef = useRef<GoalEventsCursor | undefined>(undefined);
   const [live, setLive] = useState<GoalEvent[]>([]);
   const [older, setOlder] = useState<GoalEvent[]>([]);
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set());
@@ -78,6 +88,7 @@ export function useGoalHistory(
     const db = getFirestoreDb();
     liveRef.current = [];
     cursorRef.current = null;
+    readModelCursorRef.current = undefined;
     olderLoadedRef.current = false;
     setLive([]);
     setOlder([]);
@@ -123,10 +134,54 @@ export function useGoalHistory(
     };
   }, [uid, goalId, typesKey, enabled, attempt, setError]);
 
+  /**
+   * SPENDLY-611: in `supabase` mode older pages come from the read model,
+   * starting just below the realtime window (overlap is de-duplicated by id).
+   * False means "use the Firestore cursor" (other modes, a type filter, or a
+   * failure — after which the screen stays on Firestore this session).
+   */
+  const loadMoreFromReadModel = useCallback(async (): Promise<boolean> => {
+    const db = getFirestoreDb();
+    if (!db || !user || !goalId || typesKey) return false;
+    let cursor = readModelCursorRef.current;
+    if (cursor === undefined) {
+      const oldest = [...liveRef.current].sort((a, b) => a.createdAtMs - b.createdAtMs)[0];
+      if (!oldest) return false;
+      cursor = goalCursorBelow(oldest.createdAtMs);
+    }
+    const page = await readGoalHistoryPage({
+      db,
+      user,
+      goalId,
+      cursor,
+      pageSize: GOAL_HISTORY_PAGE_SIZE,
+      conditions: { setting: settings.readModel, online: isOnline, duress: isDuress, localTestMode: isLocalTestMode() },
+    });
+    if (!page) return false;
+    olderLoadedRef.current = true;
+    readModelCursorRef.current = page.next;
+    setOlder((prev) => mergeEventPages(prev, page.items));
+    setHasMore(!page.exhausted);
+    return true;
+  }, [user, goalId, typesKey, settings.readModel, isOnline, isDuress]);
+
   const loadMore = useCallback(async () => {
     const db = getFirestoreDb();
     const cursor = cursorRef.current;
-    if (!uid || !db || !goalId || loadingMore || !hasMore || !cursor) return;
+    if (!uid || !db || !goalId || loadingMore || !hasMore) return;
+    if (configuredReadModelMode(settings.readModel, "goals") === "supabase") {
+      setLoadingMore(true);
+      let served = false;
+      try {
+        served = await loadMoreFromReadModel();
+      } catch (failure) {
+        logError("goalHistory.loadMore.readModel", failure);
+      } finally {
+        setLoadingMore(false);
+      }
+      if (served) return;
+    }
+    if (!cursor) return;
     setLoadingMore(true);
     try {
       const snap = await getDocs(
@@ -151,7 +206,7 @@ export function useGoalHistory(
     } finally {
       setLoadingMore(false);
     }
-  }, [uid, goalId, typesKey, loadingMore, hasMore]);
+  }, [uid, goalId, typesKey, loadingMore, hasMore, settings.readModel, loadMoreFromReadModel]);
 
   const events = sortGoalEvents(mergeEventPages(live, older));
   return { events, pendingIds, loading, error, retry, hasMore, loadingMore, loadMore };

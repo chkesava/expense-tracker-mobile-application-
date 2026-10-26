@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { Redirect, useRouter, type Href } from "expo-router";
-import { ArrowUpDown, Calculator, Check, Plus, Target, WifiOff } from "lucide-react-native";
+import { ArrowUpDown, BarChart3, Calculator, Check, Plus, Target, WifiOff } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -97,6 +97,9 @@ export default function GoalsScreen() {
       onBack={() => (router.canGoBack() ? router.back() : router.replace("/dashboard" as Href))}
       rightElement={
         <View style={[styles.row, { gap: theme.space.xs }]}>
+          <Button variant="ghost" size="icon" onPress={() => router.push("/goals/analytics" as Href)} accessibilityLabel="Goal analytics and exports">
+            <BarChart3 size={20} color={theme.colors.primary} />
+          </Button>
           <Button variant="ghost" size="icon" onPress={() => router.push("/goals/optimizer" as Href)} accessibilityLabel="Plan how to fund your goals">
             <Calculator size={20} color={theme.colors.primary} />
           </Button>

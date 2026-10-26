@@ -204,6 +204,12 @@ function AppShellInner() {
               }}
             />
             <Stack.Screen
+              name="goals/analytics"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
               name="goals/[id]"
               options={{
                 animation: "slide_from_right",
