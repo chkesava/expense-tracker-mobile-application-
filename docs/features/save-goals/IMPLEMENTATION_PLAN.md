@@ -119,6 +119,7 @@ It sits at the top level per user (like `decisionEvents`), so analytics and expo
 - It is created in the same batch as the goal or rename. A rename deletes the old key; a case-only rename keeps it.
 - Rules make it create-only. A concurrent or offline duplicate fails at the server and is surfaced as a late failure.
 - It is not synced to the read model.
+- **SPENDLY-608:** the goal also stores its own `nameKey`, because rules can't recompute NFKC normalization and URI encoding. Rules check that `goalNames/{nameKey}` points back at the goal.
 
 ### 2.4 Integrity rules (mirrored by firestore.rules, SPENDLY-608/609)
 **Reconciliation:**

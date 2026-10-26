@@ -19,6 +19,7 @@ import { subscriptionFrequency, type Subscription } from "../types/subscription"
 import type { EpfContribution } from "../features/epf/types";
 import type { SipPlan } from "../features/sip/types";
 import { daysBetweenDateKeys, isValidDateKey, parseLocalDate } from "./dates";
+import { goalStatus } from "./goalModel";
 import { getInvestmentValuation } from "./investmentInterest";
 import { isActiveLedgerRow } from "./ledgerRow";
 import { roundMoney } from "./money";
@@ -223,6 +224,10 @@ export function goalEvents(goals: readonly FinancialGoal[], ctx: CalendarContext
   for (const g of goals) {
     const date = g.deadline ?? "";
     if (!g.id || !isValidDateKey(date) || !inRange(date, ctx.range)) continue;
+    // SPENDLY-608: archived and cancelled goals have no deadline to keep.
+    // Completed goals stay, shown as reached.
+    const status = goalStatus(g);
+    if (status === "archived" || status === "cancelled") continue;
     const reached = g.currentAmount >= g.targetAmount;
     out.push(
       event(ctx, {

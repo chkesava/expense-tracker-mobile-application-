@@ -46,6 +46,16 @@ describe("legacy ↔ v2 compatibility", () => {
     expect(goalEvents([upgraded], ctx)).toEqual(goalEvents([legacy], ctx));
   });
 
+  it("SPENDLY-608: closed goals leave the optimizer; archived/cancelled leave the calendar", () => {
+    const completed: FinancialGoal = { ...upgraded, status: "completed", currentAmount: 100000 };
+    const archived: FinancialGoal = { ...upgraded, id: "g2", status: "archived" };
+    const cancelled: FinancialGoal = { ...upgraded, id: "g3", status: "cancelled" };
+    const paused: FinancialGoal = { ...upgraded, id: "g4", status: "paused" };
+    expect(snapshotGoals([completed, archived, cancelled, paused]).map((s) => s.goalId)).toEqual(["g4"]);
+    expect(goalEvents([completed, archived, cancelled, paused], ctx).map((e) => e.refId)).toEqual(["g1", "g4"]);
+    expect(goalEvents([completed], ctx)[0]).toMatchObject({ state: "completed", subtitle: "Goal reached" });
+  });
+
   it("a v2 goal created without a target date keeps the empty-deadline contract", () => {
     const noDate: FinancialGoal = { ...upgraded, deadline: "" };
     expect(snapshotGoals([noDate])[0].targetDate).toBeUndefined();

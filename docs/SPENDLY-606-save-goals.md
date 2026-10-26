@@ -6,8 +6,8 @@
 
 | Story | Scope | Branch | State |
 |---|---|---|---|
-| SPENDLY-607 | Architecture + backward-compatible data model | `feature/SPENDLY-607-goal-data-model` | Built, awaiting merge approval |
-| SPENDLY-608 | Create/edit, lifecycle, Goals + Dashboard UI, summary/name rules | — | Not started |
+| SPENDLY-607 | Architecture + backward-compatible data model | `feature/SPENDLY-607-goal-data-model` | Merged to epic (9b5c439e) |
+| SPENDLY-608 | Create/edit, lifecycle, Goals + Dashboard UI, goal/event/name rules | `feature/SPENDLY-608-goal-management-ui` | Built, awaiting merge approval |
 | SPENDLY-609 | Contributions, reductions, corrections, audit history, read-model tables | — | Not started |
 | SPENDLY-610 | Milestones, completion, achievements | — | Not started |
 | SPENDLY-611 | Analytics, charts, filters, CSV/PDF export (read path) | — | Not started |
@@ -33,8 +33,13 @@
 - **Read model:** goals and goal events sync to Supabase (user requirement, 2026-10-26). Tables arrive in 609, read-path screens in 611, and current-state money stays on Firestore.
 - **"Push" reminders** means local notifications. Remote push depends on SPENDLY-222.
 
+- **Rules land with the first writer (608).** The `goalEvents`/`goalNames` rules and the summary↔event link moved into 608, because 608's create/edit writes already produce events. 609 adds the contribution UI, the timeline, the index and the read-model tables.
+- **`nameKey` on the summary.** Rules can't recompute NFKC + URI encoding, so the goal stores its lock key and rules check that the lock points back at it. Choosing a non-canonical key only weakens the user's own name uniqueness; it isn't a security issue.
+- **Screen flag:** `system_settings/global.enableSaveGoals`, off by default and on in `__DEV__` and the emulator. It gates screens only; writes always use the audited model.
+- **Ordering:** accessible up/down "Reorder" mode instead of drag-and-drop (no gesture library is installed; not worth adding).
+
 ## Production steps pending (each needs approval, after merge to main)
-- [ ] Firestore rules deploy (608, 609, 614)
+- [ ] **Firestore rules deploy BEFORE the next app release.** From 608 on, the app writes `goalEvents`/`goalNames`, which current production rules deny (608, 609, 614).
 - [ ] Firestore index `goalEvents (goalId, createdAtMs desc)`. Diff against live first (609).
 - [ ] Read-model migration, then the sync/push deploy, then a dry-run full sync (609)
 - [ ] `spendly-files` Edge Function deploy (614)

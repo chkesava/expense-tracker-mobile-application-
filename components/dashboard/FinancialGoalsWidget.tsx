@@ -14,9 +14,11 @@ import {
 } from "@/components/dashboard/primitives";
 import { Button } from "@/components/ui/Button";
 import { useFinancialGoals } from "@/hooks/useFinancialGoals";
+import { useSaveGoalsEnabled } from "@/hooks/useSaveGoalsEnabled";
 import { haptic } from "@/lib/haptics";
 import { useSettings } from "@/providers/SettingsProvider";
 import { formatDisplayDate } from "@/shared/utils/dateDisplay";
+import { dashboardGoals, goalProgress } from "@/shared/utils/goalModel";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export interface FinancialGoalsWidgetProps {
@@ -25,28 +27,38 @@ export interface FinancialGoalsWidgetProps {
 
 /**
  * Financial goals (SPENDLY-533): name, target date and a progress row per goal,
- * with saved / target as real amounts and the status spelled out. Same goals,
- * same two-goal preview and same routes as before.
+ * with saved / target as real amounts and the status spelled out.
+ *
+ * SPENDLY-608: the dedicated active-goals section. Only in-progress goals
+ * (active or paused), pinned first; completed, archived and cancelled goals
+ * never look active here. Reads summaries only — no goal history.
  */
 export const FinancialGoalsWidget = memo(function FinancialGoalsWidget({
   currency,
 }: FinancialGoalsWidgetProps) {
   const { goals, loading } = useFinancialGoals();
+  const saveGoals = useSaveGoalsEnabled();
   const router = useRouter();
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const { settings } = useSettings();
+  const { shown, total } = dashboardGoals(goals, 2);
 
   const openGoals = () => {
     void haptic.selection();
-    router.push("/settings/money" as never);
+    router.push((saveGoals ? "/goals" : "/settings/money") as never);
+  };
+
+  const openGoal = (id: string) => {
+    void haptic.selection();
+    router.push(`/goals/${id}` as never);
   };
 
   if (loading && goals.length === 0) {
     return <DashboardSkeleton variant="progress" rows={2} />;
   }
 
-  if (goals.length === 0) {
+  if (total === 0) {
     return (
       <Section
         title="Financial Goals"
@@ -78,20 +90,28 @@ export const FinancialGoalsWidget = memo(function FinancialGoalsWidget({
   return (
     <Section
       title="Financial Goals"
-      subtitle={`${goals.length} active savings ${goals.length === 1 ? "target" : "targets"}`}
+      subtitle={`${total} active savings ${total === 1 ? "target" : "targets"}`}
       icon={<Target size={16} color={theme.colors.success} strokeWidth={2.3} />}
       iconTint={surfaces.wash(theme.colors.success)}
-      action={<SectionAction label="Manage" onPress={openGoals} />}
+      action={<SectionAction label={saveGoals ? "All goals" : "Manage"} onPress={openGoals} />}
       contentStyle={styles.list}
     >
-      {goals.slice(0, 2).map((goal) => {
-        const current = goal.currentAmount || 0;
-        const target = goal.targetAmount || 1;
-        const pct = Math.min(100, Math.round((current / target) * 100));
-        const isComplete = current >= target;
+      {shown.map((goal) => {
+        const progress = goalProgress(goal);
+        const current = progress.saved;
+        const target = progress.target;
+        const pct = Math.floor(progress.percent);
+        const isComplete = progress.reached;
 
         return (
-          <View key={goal.id} style={styles.goal}>
+          <Pressable
+            key={goal.id}
+            style={styles.goal}
+            disabled={!saveGoals}
+            onPress={() => openGoal(goal.id)}
+            accessibilityRole={saveGoals ? "button" : undefined}
+            accessibilityHint={saveGoals ? "Opens the goal" : undefined}
+          >
             <View style={styles.goalTop}>
               <View style={styles.goalNameCol}>
                 <Text
@@ -131,7 +151,7 @@ export const FinancialGoalsWidget = memo(function FinancialGoalsWidget({
               trailing={`${pct}%`}
               accessibilityLabel={`${goal.name}, ${pct}% saved`}
             />
-          </View>
+          </Pressable>
         );
       })}
       {/* SPENDLY-218: plan how to fund these goals */}

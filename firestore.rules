@@ -32,7 +32,7 @@ service cloud.firestore {
     //   epfContributions, epfEstablishments, epfProfile, epfWageHistory,
     //   epfInterestEntries, epfReconciliations, epfTransferEvents,
     //   decisionEvents, decisions, epfTransfers, expenses, feeReviews,
-    //   feeSignalDismissals, financialGoals, focus,
+    //   feeSignalDismissals, financialGoals, focus, goalEvents, goalNames,
     //   holdings, incomes, investments, meta, portfolioOrders,
     //   portfolioSettings, portfolioSnapshots, portfolioTransactions,
     //   receivableRepayments, receivables, calendarReminders, goalFundingPlans, runwayOverrides, runwaySettings, spaces,
@@ -471,10 +471,241 @@ service cloud.firestore {
           && optionalYmd(d, 'interestStoppedDate');
       }
 
-      function goalWellFormed() {
+      // ---------------------------------------------------------------------
+      // SPENDLY-606 Save Goals (SPENDLY-608). Design and invariants:
+      // docs/features/save-goals/IMPLEMENTATION_PLAN.md §2.4. Mirrors
+      // shared/utils/goalWrites.ts + goalLifecycle.ts; contract-tested by
+      // shared/utils/goalModel.rules.contract.test.ts.
+      //
+      //   financialGoals/{id}  summary; schemaVersion 2 = has an audit log
+      //   goalEvents/{id}      append-only audit log (id = idempotency key)
+      //   goalNames/{key}      create-only unique-name lock
+      //
+      // Invariant kept write by write: openingAmount + Σ amountDelta ==
+      // currentAmount. Every change to currentAmount must come with a NEW
+      // event (lastEventId) carrying exactly that delta, and every event with a
+      // non-zero delta must be the one its goal links to. Amount writes use
+      // increment(), so these checks run on the value after the write and
+      // concurrent deltas from two devices both apply.
+      // ---------------------------------------------------------------------
+      function goalStatuses() {
+        return ['active', 'paused', 'completed', 'archived', 'cancelled'];
+      }
+
+      function goalEventTypes() {
+        return ['created', 'migrated', 'contribution', 'reduction', 'correction',
+                'reversal', 'target_changed', 'status_changed', 'edited',
+                'milestone_reached', 'milestone_lost', 'completed'];
+      }
+
+      function goalAmountEventTypes() {
+        return ['created', 'contribution', 'reduction', 'correction', 'reversal'];
+      }
+
+      // Statuses whose saved amount and target may change. Paused only
+      // silences reminders.
+      function goalOpenStatuses() {
+        return ['active', 'paused'];
+      }
+
+      // `archived` is handled separately: it restores to statusBeforeArchive.
+      function goalTransitions() {
+        return {
+          'active': ['paused', 'completed', 'cancelled', 'archived'],
+          'paused': ['active', 'completed', 'cancelled', 'archived'],
+          'completed': ['active', 'archived'],
+          'cancelled': ['active', 'archived']
+        };
+      }
+
+      function goalDocPath(goalId) {
+        return /databases/$(database)/documents/users/$(uid)/financialGoals/$(goalId);
+      }
+
+      function goalEventDocPath(eventId) {
+        return /databases/$(database)/documents/users/$(uid)/goalEvents/$(eventId);
+      }
+
+      function goalNameDocPath(key) {
+        return /databases/$(database)/documents/users/$(uid)/goalNames/$(key);
+      }
+
+      // Two-decimal amounts added with increment() can leave binary float dust.
+      function goalMoneyClose(a, b) {
+        return math.abs(a - b) < 0.001;
+      }
+
+      // The pre-Save-Goals shape. Installed builds keep writing it until users
+      // update, so it stays allowed on goals that were never upgraded.
+      function legacyGoalWellFormed() {
         let d = request.resource.data;
-        return optionalBoundedNonNeg(d, 'targetAmount')
+        return !d.keys().hasAny(['schemaVersion'])
+          && optionalBoundedNonNeg(d, 'targetAmount')
           && optionalBoundedNonNeg(d, 'currentAmount');
+      }
+
+      function goalV2Shape(d) {
+        return d.keys().hasOnly([
+            'name', 'normalizedName', 'nameKey', 'targetAmount', 'currentAmount',
+            'deadline', 'createdAt', 'updatedAt', 'schemaVersion', 'version',
+            'lastEventId', 'description', 'iconKey', 'image', 'status',
+            'statusBeforeArchive', 'startDate', 'minimumContribution', 'currency',
+            'pinned', 'sortOrder', 'openingAmount', 'lastContributionAtMs',
+            'completedAtMs', 'milestones', 'reminders', 'locked', 'createdAtMs'])
+          && d.keys().hasAll(['name', 'normalizedName', 'nameKey', 'targetAmount',
+            'currentAmount', 'deadline', 'schemaVersion', 'version',
+            'lastEventId', 'status', 'openingAmount'])
+          && d.name is string && d.name.size() >= 1 && d.name.size() <= 120
+          && d.normalizedName is string && d.normalizedName.size() >= 1
+          && d.normalizedName.size() <= 120
+          && d.nameKey is string && d.nameKey.matches('^n_.+$') && d.nameKey.size() <= 1400
+          && boundedNonNeg(d.targetAmount) && d.targetAmount > 0
+          && boundedNonNeg(d.currentAmount)
+          && d.deadline is string
+          && (d.deadline == '' || d.deadline.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'))
+          && d.schemaVersion == 2
+          && d.version is int && d.version >= 1
+          && d.lastEventId is string && d.lastEventId.size() >= 1
+          && d.lastEventId.size() <= 160
+          && d.status in goalStatuses()
+          && (!d.keys().hasAny(['statusBeforeArchive'])
+              || d.statusBeforeArchive in goalStatuses())
+          && boundedNonNeg(d.openingAmount)
+          && optionalText(d, 'description', 280)
+          && optionalText(d, 'iconKey', 32)
+          && optionalText(d, 'currency', 8)
+          && optionalYmd(d, 'startDate')
+          && optionalBoundedNonNeg(d, 'minimumContribution')
+          && (!d.keys().hasAny(['pinned']) || d.pinned is bool)
+          && (!d.keys().hasAny(['locked']) || d.locked is bool)
+          && optionalNumber(d, 'sortOrder')
+          && optionalNumber(d, 'lastContributionAtMs')
+          && optionalNumber(d, 'completedAtMs')
+          && optionalNumber(d, 'createdAtMs')
+          && (!d.keys().hasAny(['milestones'])
+              || (d.milestones is list && d.milestones.size() <= 10))
+          && optionalMap(d, 'reminders')
+          && (!d.keys().hasAny(['image']) || d.image == null || d.image is map);
+      }
+
+      // The event this write links to was created by this same batch.
+      function goalNewEvent(eventId) {
+        return !exists(goalEventDocPath(eventId)) && existsAfter(goalEventDocPath(eventId));
+      }
+
+      function goalNameLockHeld(goalId, key) {
+        return existsAfter(goalNameDocPath(key))
+          && getAfter(goalNameDocPath(key)).data.goalId == goalId;
+      }
+
+      function goalV2Create(goalId) {
+        let d = request.resource.data;
+        return goalV2Shape(d)
+          && d.version == 1
+          && d.openingAmount == 0
+          && d.status == 'active'
+          && goalNewEvent(d.lastEventId)
+          && getAfter(goalEventDocPath(d.lastEventId)).data.goalId == goalId
+          && getAfter(goalEventDocPath(d.lastEventId)).data.type == 'created'
+          && goalMoneyClose(getAfter(goalEventDocPath(d.lastEventId)).data.amountDelta, d.currentAmount)
+          && goalNameLockHeld(goalId, d.nameKey);
+      }
+
+      function goalTransitionOk(d, r, rStatus, ev) {
+        return ev.type in ['status_changed', 'completed']
+          && ev.statusBefore == rStatus
+          && ev.statusAfter == d.status
+          && ((ev.type == 'completed') == (d.status == 'completed'))
+          && ((rStatus == 'archived' && d.status == r.get('statusBeforeArchive', 'active'))
+              || (rStatus != 'archived' && d.status in goalTransitions()[rStatus]))
+          && (d.status != 'completed' || d.currentAmount >= d.targetAmount)
+          && (d.status != 'archived' || d.get('statusBeforeArchive', '') == rStatus);
+      }
+
+      // Amount, target, status, name and milestone changes: version moves by
+      // exactly one (a stale literal version is a rejected conflict) and a new
+      // event explains the change.
+      function goalVersionedUpdate(goalId, d, r, rVersion, rStatus) {
+        let ev = getAfter(goalEventDocPath(d.lastEventId)).data;
+        let rAmount = r.get('currentAmount', 0);
+        let amountChanged = d.currentAmount != rAmount;
+        let targetChanged = d.targetAmount != r.get('targetAmount', 0);
+        return d.version == rVersion + 1
+          && goalNewEvent(d.lastEventId)
+          && ev.goalId == goalId
+          && ((amountChanged
+                && rStatus in goalOpenStatuses()
+                && ev.type in ['contribution', 'reduction', 'correction', 'reversal']
+                && goalMoneyClose(ev.amountDelta, d.currentAmount - rAmount))
+              || (!amountChanged && ev.amountDelta == 0))
+          && (!targetChanged
+              || (rStatus in goalOpenStatuses()
+                  && ev.type == 'target_changed'
+                  && ev.targetBefore == r.get('targetAmount', 0)
+                  && ev.targetAfter == d.targetAmount))
+          && (d.status == rStatus || goalTransitionOk(d, r, rStatus, ev))
+          && (d.nameKey == r.get('nameKey', '') || goalNameLockHeld(goalId, d.nameKey));
+      }
+
+      function goalV2Update(goalId) {
+        let d = request.resource.data;
+        let r = resource.data;
+        let rVersion = r.get('version', 0);
+        let rStatus = r.get('status', 'active');
+        let upgrading = r.get('schemaVersion', 0) != 2;
+        let settingsOnly = d.diff(r).affectedKeys()
+          .hasOnly(['pinned', 'sortOrder', 'reminders', 'locked', 'image', 'updatedAt']);
+        return goalV2Shape(d)
+          // A legacy goal's whole saved amount becomes its immutable opening amount.
+          && ((upgrading && goalMoneyClose(d.openingAmount, r.get('currentAmount', 0)))
+              || (!upgrading
+                  && d.openingAmount == r.openingAmount
+                  && d.get('createdAtMs', null) == r.get('createdAtMs', null)))
+          && ((!upgrading && settingsOnly && d.version == rVersion)
+              || goalVersionedUpdate(goalId, d, r, rVersion, rStatus));
+      }
+
+      function goalEventWellFormed(eventId) {
+        let d = request.resource.data;
+        let isCorrection = d.type in ['correction', 'reversal'];
+        return d.keys().hasOnly([
+            'goalId', 'type', 'amountDelta', 'reason', 'note', 'correctionOf',
+            'targetBefore', 'targetAfter', 'statusBefore', 'statusAfter',
+            'milestoneId', 'milestoneAmount', 'changedFields', 'actorUid',
+            'createdAtMs', 'createdAt', 'updatedAt'])
+          && d.keys().hasAll(['goalId', 'type', 'amountDelta', 'actorUid', 'createdAtMs'])
+          && d.goalId is string && d.goalId.size() >= 1 && d.goalId.size() <= 128
+          && d.type in goalEventTypes()
+          && boundedNumber(d.amountDelta)
+          && d.actorUid == request.auth.uid
+          && d.createdAtMs is number
+          && (!d.keys().hasAny(['reason'])
+              || d.reason in ['salary', 'savings', 'bonus', 'gift', 'other'])
+          && optionalText(d, 'note', 500)
+          && optionalText(d, 'milestoneId', 24)
+          && optionalBoundedNonNeg(d, 'milestoneAmount')
+          && optionalBoundedNonNeg(d, 'targetBefore')
+          && optionalBoundedNonNeg(d, 'targetAfter')
+          && (!d.keys().hasAny(['statusBefore']) || d.statusBefore in goalStatuses())
+          && (!d.keys().hasAny(['statusAfter']) || d.statusAfter in goalStatuses())
+          && (!d.keys().hasAny(['changedFields'])
+              || (d.changedFields is list && d.changedFields.size() <= 20))
+          // The goal must exist (after this batch) and be on the audited schema.
+          && getAfter(goalDocPath(d.goalId)).data.get('schemaVersion', 0) == 2
+          // A non-zero delta is only valid as the event its goal's own write
+          // links to — so the summary moved by exactly this much.
+          && (d.amountDelta == 0
+              || (d.type in goalAmountEventTypes()
+                  && getAfter(goalDocPath(d.goalId)).data.lastEventId == eventId))
+          && (isCorrection == d.keys().hasAny(['correctionOf']))
+          && (!isCorrection
+              || (d.correctionOf is string
+                  && exists(goalEventDocPath(d.correctionOf))
+                  && get(goalEventDocPath(d.correctionOf)).data.goalId == d.goalId
+                  && get(goalEventDocPath(d.correctionOf)).data.type
+                       in ['created', 'contribution', 'reduction']))
+          // One reversal per event, ever: the id is derived and events are create-only.
+          && (d.type != 'reversal' || eventId == d.correctionOf + '__rev');
       }
 
       function investmentWellFormed() {
@@ -687,8 +918,32 @@ service cloud.firestore {
         allow create, update: if isOwner(uid) && receivableWellFormed();
       }
       match /financialGoals/{id} {
-        allow read, delete: if isOwner(uid);
-        allow create, update: if isOwner(uid) && goalWellFormed();
+        allow read: if isOwner(uid);
+        // No permanent deletion once a goal has an audit log (FRD FR-06).
+        // Account deletion runs through the Admin SDK and is unaffected.
+        allow delete: if isOwner(uid) && resource.data.get('schemaVersion', 0) != 2;
+        allow create: if isOwner(uid) && (legacyGoalWellFormed() || goalV2Create(id));
+        allow update: if isOwner(uid)
+          && ((resource.data.get('schemaVersion', 0) != 2 && legacyGoalWellFormed())
+              || goalV2Update(id));
+      }
+      match /goalEvents/{eventId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && goalEventWellFormed(eventId);
+        allow update, delete: if false;
+      }
+      match /goalNames/{key} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(['goalId', 'createdAtMs'])
+          && request.resource.data.goalId is string
+          && request.resource.data.createdAtMs is number
+          && getAfter(goalDocPath(request.resource.data.goalId)).data.get('nameKey', '') == key;
+        allow update: if false;
+        // Released only by the rename that moves the goal to another key.
+        allow delete: if isOwner(uid)
+          && (!existsAfter(goalDocPath(resource.data.goalId))
+              || getAfter(goalDocPath(resource.data.goalId)).data.get('nameKey', '') != key);
       }
       match /investments/{id} {
         allow read, delete: if isOwner(uid);

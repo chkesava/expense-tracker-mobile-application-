@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { FinancialGoal } from "../types/expense";
 import {
   cleanGoalName,
+  dashboardGoals,
   goalNameKey,
   goalOpeningAmount,
   goalProgress,
@@ -134,6 +135,22 @@ describe("progress", () => {
 
   it("survives corrupt values", () => {
     expect(goalProgress(goal({ currentAmount: Number.NaN, targetAmount: 0 }))).toEqual({ saved: 0, target: 0, remaining: 0, surplus: 0, percent: 0, reached: false });
+  });
+});
+
+describe("dashboardGoals", () => {
+  it("shows only in-progress goals, pinned first, and counts them", () => {
+    const goals = [
+      goal({ id: "a", sortOrder: 1 }),
+      goal({ id: "b", sortOrder: 2, pinned: true }),
+      goal({ id: "c", sortOrder: 0, status: "completed" }),
+      goal({ id: "d", sortOrder: 0, status: "archived" }),
+      goal({ id: "e", sortOrder: 3, status: "paused" }),
+      goal({ id: "f", sortOrder: 0, status: "cancelled" }),
+    ];
+    const { shown, total } = dashboardGoals(goals, 2);
+    expect(shown.map((g) => g.id)).toEqual(["b", "a"]);
+    expect(total).toBe(3);
   });
 });
 

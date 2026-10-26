@@ -159,13 +159,15 @@ function withUpgrade(goal: FinancialGoal, plan: GoalWritePlan, ctx: GoalWriteCon
     ...plan.fields,
   };
   if (!("normalizedName" in fields)) fields.normalizedName = normalizeGoalName(goal.name ?? "");
+  const claimNameKey = plan.claimNameKey ?? goalNameKey(goal.name ?? "");
+  fields.nameKey = claimNameKey;
   if (!("lastEventId" in fields)) fields.lastEventId = migrated.id;
   return {
     ...plan,
     fields,
     version: plan.version.kind === "increment" ? plan.version : { kind: "expect", next: 1 },
     events: [migrated, ...plan.events],
-    claimNameKey: plan.claimNameKey ?? goalNameKey(goal.name ?? ""),
+    claimNameKey,
   };
 }
 
@@ -216,6 +218,7 @@ export function buildCreateGoal(
   const fields = stripUndefined({
     name,
     normalizedName: normalizeGoalName(name),
+    nameKey: goalNameKey(name),
     targetAmount: input.targetAmount,
     currentAmount: initial,
     deadline: input.targetDate ?? "",
@@ -277,11 +280,13 @@ export function buildEditGoal(
       fields.name = name;
       changed.push("name");
       const nextKey = goalNameKey(name);
-      const prevKey = goalNameKey(goal.name ?? "");
+      // Release the lock the goal actually holds, not a recomputed one.
+      const prevKey = goal.nameKey ?? goalNameKey(goal.name ?? "");
       fields.normalizedName = normalizeGoalName(name);
       // Case/space-only renames keep the same lock.
       if (nextKey !== prevKey) {
         claimNameKey = nextKey;
+        fields.nameKey = nextKey;
         // A legacy goal never claimed its old name, so there is nothing to release.
         if (!isLegacyGoal(goal)) releaseNameKey = prevKey;
       }
