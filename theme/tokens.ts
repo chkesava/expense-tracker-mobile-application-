@@ -339,39 +339,49 @@ export const darkColors: ColorTokens = {
 };
 
 /**
- * Midnight Emerald (SPENDLY-532) — the premium fintech preset. Unlike the
- * light/dark palettes it owns its accent: emerald for primary actions and
- * positive values, a soft red only for negatives, a cool blue for info.
+ * Midnight Slate (SPENDLY-617, replacing SPENDLY-532's emerald) — the Expense
+ * preset. Six blue-greys carry the whole surface and the brand:
+ *
+ *   #06141B background · #11212D cards · #253745 raised surfaces and borders
+ *   #4A5C6A lines only (too faint for text) · #9BA8AB secondary text
+ *   #CCD0CF primary text and the accent
+ *
+ * Colour is kept only where it means something about money: green for money
+ * in and gains, red for losses, overspend and destructive actions, amber for
+ * warnings, blue for info and plain spending.
+ *
+ * The theme id stays `midnight-emerald` so saved preferences need no
+ * migration; only the label and the values changed.
  */
-export const midnightEmeraldColors: ColorTokens = {
-  background: "#080D0D",
-  foreground: "#F5F8F6",
-  card: "#101A18",
-  cardForeground: "#F5F8F6",
-  primary: "#35E889",
-  primaryForeground: "#04130C",
-  secondary: "#151D1B",
-  secondaryForeground: "#F5F8F6",
-  muted: "#151D1B",
-  mutedForeground: "#9CAAA5",
+export const midnightSlateColors: ColorTokens = {
+  background: "#06141B",
+  foreground: "#CCD0CF",
+  card: "#11212D",
+  cardForeground: "#CCD0CF",
+  primary: "#CCD0CF",
+  primaryForeground: "#06141B",
+  secondary: "#253745",
+  secondaryForeground: "#CCD0CF",
+  muted: "#253745",
+  mutedForeground: "#9BA8AB",
   destructive: "#FF7777",
   destructiveForeground: "#1A0707",
   success: "#35E889",
   successForeground: "#04130C",
   warning: "#F5C451",
   warningForeground: "#1C1407",
-  border: "#233A30",
-  tint: "#35E889",
-  tabIconDefault: "#6F7F79",
-  tabIconSelected: "#35E889",
-  primaryContainer: "#0F3A26",
-  onPrimaryContainer: "#B8F7D5",
-  secondaryContainer: "#17241F",
-  onSecondaryContainer: "#DCE7E2",
-  surfaceVariant: "#151D1B",
-  onSurfaceVariant: "#B5C2BD",
-  outline: "#2E4A3D",
-  outlineVariant: "#1C2B25",
+  border: "#253745",
+  tint: "#CCD0CF",
+  tabIconDefault: "#9BA8AB",
+  tabIconSelected: "#CCD0CF",
+  primaryContainer: "#253745",
+  onPrimaryContainer: "#CCD0CF",
+  secondaryContainer: "#1A2B38",
+  onSecondaryContainer: "#CCD0CF",
+  surfaceVariant: "#253745",
+  onSurfaceVariant: "#9BA8AB",
+  outline: "#4A5C6A",
+  outlineVariant: "#253745",
   scrim: "rgba(0, 0, 0, 0.72)",
   info: "#78B8FF",
   infoForeground: "#06111F",
@@ -379,7 +389,7 @@ export const midnightEmeraldColors: ColorTokens = {
 
 /**
  * SPENDLY-604: the Expense app is always dark. Every screen under the Expense
- * shell renders in this palette, whatever theme the user has saved; Ganesh
+ * shell renders in this palette (Midnight Slate since SPENDLY-617), whatever theme the user has saved; Ganesh
  * Seva and Nutrition still follow the saved theme.
  */
 export const EXPENSE_THEME_NAME: ThemeName = "midnight-emerald";
@@ -646,7 +656,7 @@ export function createTheme(
     return {
       name,
       accentColor,
-      colors: { ...midnightEmeraldColors },
+      colors: { ...midnightSlateColors },
       space,
       radius,
       typography,
@@ -654,14 +664,16 @@ export function createTheme(
       elevation,
       iconSize,
       chart: {
+        // Category series carry no money meaning, so they leave out the
+        // green and red reserved for gains and losses (SPENDLY-617).
         categorical: [
-          "#35E889",
           "#78B8FF",
           "#F5C451",
           "#B794F6",
-          "#F28CC0",
           "#4FD1C5",
-          "#FF7777",
+          "#F28CC0",
+          "#CCD0CF",
+          "#FF9F6B",
         ],
         positive: "#35E889",
         negative: "#FF7777",
@@ -712,7 +724,7 @@ export const THEME_LABELS: Record<ThemeName, string> = {
   dark: "Dark",
   midnight: "Midnight",
   "midnight-olive": "Midnight Olive",
-  "midnight-emerald": "Midnight Emerald",
+  "midnight-emerald": "Midnight Slate",
   "vintage-parchment": "Vintage Parchment",
   "sakura-bloom": "Sakura Bloom",
   cyberpunk: "Cyberpunk",

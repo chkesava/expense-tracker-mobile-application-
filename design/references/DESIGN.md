@@ -14,25 +14,25 @@ Purpose: Shared design contract for Claude Code when implementing dashboard and 
 ## 2. Visual direction
 
 **Product feel:** premium fintech, calm, precise, data-forward, accessible.  
-**Primary direction:** Midnight Emerald for redesigned dark surfaces. Preserve an existing light theme if the app already supports one; do not force dark colors into a light-mode screen.  
+**Primary direction:** Midnight Slate (SPENDLY-617; replaced Midnight Emerald) for redesigned dark surfaces. Preserve an existing light theme if the app already supports one; do not force dark colors into a light-mode screen.  
 **Avoid:** uncontrolled gradients, heavy glass blur, random accent colors, oversized shadows, excessive nested cards, decorative charts with no meaning, and new UI kits that duplicate existing components.
 
 ### Core dark palette
 
+Six blue-greys carry surfaces, text and brand. Colour appears only where it means something.
+
 | Token | Hex | Usage |
 |---|---|---|
-| `background` | `#080D0D` | Main dark screen background |
-| `surface` | `#101A18` | Primary cards and grouped content |
-| `surfaceElevated` | `#151D1B` | Elevated cards, menus, sheets |
-| `accent` | `#35E889` | Primary actions, positive highlights, selected state |
-| `accentSecondary` | `#78B8FF` | Secondary interactive data series |
-| `textPrimary` | `#F5F8F6` | Primary text on dark surfaces |
-| `textSecondary` | `#9CAAA5` | Supporting labels and metadata |
-| `border` | `#233A30` | Subtle separators and outlines |
-| `positive` | `#35E889` | Positive movement/income only where semantically correct |
-| `negative` | `#FF7777` | Expense loss/negative movement/over-budget states |
-| `warning` | `#FFC56B` | At-risk or caution state |
-| `info` | `#78B8FF` | Informational state |
+| `background` | `#06141B` | Main dark screen background |
+| `surface` | `#11212D` | Primary cards and grouped content |
+| `surfaceElevated` | `#253745` | Chips, raised surfaces, selected containers, borders |
+| `line` | `#4A5C6A` | Outlines and dividers only (too faint for text or icons) |
+| `textSecondary` | `#9BA8AB` | Supporting labels, metadata, inactive icons |
+| `textPrimary` / `accent` | `#CCD0CF` | Primary text, primary buttons (dark label `#06141B`), selected state |
+| `positive` | `#35E889` | Money in, gains, success only |
+| `negative` | `#FF7777` | Losses, over-budget, destructive actions only |
+| `warning` | `#F5C451` | At-risk or caution state |
+| `info` | `#78B8FF` | Informational state, plain spending, secondary data series |
 
 ### Light-mode compatibility
 
@@ -40,7 +40,7 @@ If the current screen is using the established light dashboard, do not replace i
 
 ### Color semantics
 
-- Emerald is the primary brand/selection color, not a default fill for every chart or decoration.
+- Slate `#CCD0CF` is the brand/selection color. Green and red are reserved for money meaning (gains/losses) and status; never use them for selection, branding or decoration.
 - Use red for negative financial movement, over-budget or destructive actions—not for ordinary neutral labels.
 - Use amber for warning/near-limit states.
 - Keep chart series colors stable across all screens. Reuse existing chart palette if defined; otherwise use a restrained, color-blind-considerate set and map categories consistently.

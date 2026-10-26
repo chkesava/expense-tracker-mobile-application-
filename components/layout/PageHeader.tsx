@@ -8,7 +8,8 @@ import {
 } from "react-native";
 import { ArrowLeft } from "lucide-react-native";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { themeOwnsAccent, themeUsesDarkPalette } from "@/theme/tokens";
+import { withAlpha } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
@@ -52,6 +53,11 @@ export function PageHeader({
 }: PageHeaderProps) {
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
+  // SPENDLY-617: the Expense preset tints with its own accent; every other
+  // theme (Nutrition, Ganesh Seva) keeps the green it always had.
+  const ownTint = themeOwnsAccent(themeName) ? theme.colors.primary : null;
+  const tint = (alpha: number, dark: string, light: string) =>
+    ownTint ? withAlpha(ownTint, alpha) : isDark ? dark : light;
   const isUnderline = tabVariant === "underline";
   const activeColor = theme.colors.success;
 
@@ -86,14 +92,10 @@ export function PageHeader({
                 {
                   backgroundColor:
                     iconBackgroundColor ??
-                    (isDark
-                      ? "rgba(52, 179, 122, 0.14)"
-                      : "rgba(37, 150, 90, 0.1)"),
+                    tint(0.14, "rgba(52, 179, 122, 0.14)", "rgba(37, 150, 90, 0.1)"),
                   borderColor:
                     iconBorderColor ??
-                    (isDark
-                      ? "rgba(52, 179, 122, 0.28)"
-                      : "rgba(37, 150, 90, 0.18)"),
+                    tint(0.28, "rgba(52, 179, 122, 0.28)", "rgba(37, 150, 90, 0.18)"),
                 },
               ]}
             >
@@ -162,15 +164,13 @@ export function PageHeader({
                     key={tab.id}
                     onPress={() => handleTabPress(tab.id)}
                     android_ripple={{
-                      color: isDark ? "rgba(52,179,122,0.16)" : "rgba(37,150,90,0.12)",
+                      color: tint(0.16, "rgba(52,179,122,0.16)", "rgba(37,150,90,0.12)"),
                       borderless: false,
                     }}
                     style={({ pressed }) => [
                       styles.underlineTab,
                       isActive && {
-                        backgroundColor: isDark
-                          ? "rgba(52, 179, 122, 0.16)"
-                          : "rgba(37, 150, 90, 0.1)",
+                        backgroundColor: tint(0.16, "rgba(52, 179, 122, 0.16)", "rgba(37, 150, 90, 0.1)"),
                       },
                       pressed && { opacity: 0.8 },
                     ]}
