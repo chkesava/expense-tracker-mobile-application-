@@ -13,6 +13,7 @@ import type {
 import {
   accrueInterest,
   allocateInterestFirst,
+  cacheStampDate,
   describeInterestTerms,
   elapsedMonths,
   monthlyRateOf,
@@ -77,6 +78,60 @@ export function repaymentsUpTo(
     .filter((r) => r.date <= asOfDate)
     .slice()
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
+/**
+ * SPENDLY-605: the as-of date for stamping this borrowing's stored cache, so
+ * the cache counts every recorded repayment, including one dated after today.
+ */
+export function borrowingCacheAsOfDate(
+  borrowingId: string | undefined,
+  repayments: BorrowingRepayment[],
+  today: string
+): string {
+  return cacheStampDate(today, repaymentsFor(borrowingId, repayments));
+}
+
+export interface BorrowingRepaymentTotals {
+  totalPaid: number;
+  principalPaid: number;
+}
+
+/** Per-borrowing sums of every repayment row, built once per pass. */
+export function borrowingRepaymentTotals(
+  repayments: BorrowingRepayment[]
+): Map<string, BorrowingRepaymentTotals> {
+  const totals = new Map<string, BorrowingRepaymentTotals>();
+  for (const r of repayments) {
+    if (!r.borrowingId) continue;
+    const t = totals.get(r.borrowingId) ?? { totalPaid: 0, principalPaid: 0 };
+    t.totalPaid = roundMoney(t.totalPaid + (r.amount || 0));
+    t.principalPaid = roundMoney(t.principalPaid + principalComponentOf(r));
+    totals.set(r.borrowingId, t);
+  }
+  return totals;
+}
+
+/**
+ * SPENDLY-605: true when the stored cache disagrees with the repayment rows,
+ * so the SPENDLY-434 fast path must not be trusted for this borrowing. A
+ * borrowing with no rows yet is never judged: the repayment listener mounts
+ * later and delivers its whole set at once.
+ */
+export function borrowingCacheDrifted(
+  borrowing: Borrowing,
+  totals: Map<string, BorrowingRepaymentTotals>
+): boolean {
+  const rows = borrowing.id ? totals.get(borrowing.id) : undefined;
+  if (!rows) return false;
+  if (roundMoney(borrowing.totalPaid ?? 0) !== rows.totalPaid) return true;
+  if ((borrowing.interestRate || 0) === 0) {
+    const expected = roundMoney(
+      Math.max(0, borrowing.principalAmount - rows.principalPaid)
+    );
+    if (roundMoney(borrowing.totalOutstanding ?? 0) !== expected) return true;
+  }
+  return false;
 }
 
 /**
@@ -268,7 +323,7 @@ export function buildBorrowingUpdatePayload(
   const next = summarizeBorrowing(
     { ...existing, ...updates },
     repayments,
-    asOfDate
+    borrowingCacheAsOfDate(existing.id, repayments, asOfDate)
   );
   return {
     ok: true,
@@ -330,6 +385,7 @@ export function summarizeBorrowings(
   repayments: BorrowingRepayment[],
   asOfDate: string
 ): BorrowingPortfolioSummary {
+  const totals = borrowingRepaymentTotals(repayments);
   return borrowings.reduce<BorrowingPortfolioSummary>(
     (acc, borrowing) => {
       // SPENDLY-434: Fast path using materialized fields.
@@ -339,8 +395,14 @@ export function summarizeBorrowings(
       let repaid = borrowing.totalPaid;
       let status = borrowing.status;
 
-      if (totalOut === undefined || repaid === undefined || (borrowing.interestRate || 0) > 0) {
-        // Fallback for non-backfilled records, or dynamic interest accrual
+      if (
+        totalOut === undefined ||
+        repaid === undefined ||
+        (borrowing.interestRate || 0) > 0 ||
+        borrowingCacheDrifted(borrowing, totals)
+      ) {
+        // Fallback for non-backfilled records, dynamic interest accrual, or a
+        // cache that disagrees with its repayment rows (SPENDLY-605)
         const summary = summarizeBorrowing(borrowing, repayments, asOfDate);
         totalOut = summary.totalOutstanding;
         interest = summary.interestAccrued;

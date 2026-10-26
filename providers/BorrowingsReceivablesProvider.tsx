@@ -49,6 +49,9 @@ import type { Borrowing, BorrowingRepayment } from "@/shared/types/borrowing";
 import type { Receivable, ReceivableRepayment } from "@/shared/types/receivable";
 import {
   allocateRepayment,
+  borrowingCacheAsOfDate,
+  borrowingCacheDrifted,
+  borrowingRepaymentTotals,
   buildBorrowingUpdatePayload,
   denormalizedBorrowingCacheFields,
   summarizeBorrowing,
@@ -60,6 +63,9 @@ import {
   allocateReceivableRepayment,
   buildReceivableUpdatePayload,
   denormalizedReceivableCacheFields,
+  receivableCacheAsOfDate,
+  receivableCacheDrifted,
+  receivableRepaymentTotals,
   roundMoney,
   summarizeReceivable,
   summarizeReceivables,
@@ -472,10 +478,17 @@ export function BorrowingsReceivablesProvider({
 
   const borrowingSummaries = useMemo(() => {
     const map = new Map<string, BorrowingSummary>();
+    const totals = borrowingRepaymentTotals(borrowingRepayments);
     for (const borrowing of borrowings) {
       if (!borrowing.id) continue;
-      
-      if (borrowing.totalOutstanding !== undefined && borrowing.totalPaid !== undefined && (borrowing.interestRate || 0) === 0) {
+
+      // SPENDLY-605: a cache that disagrees with its rows is not trusted.
+      if (
+        borrowing.totalOutstanding !== undefined &&
+        borrowing.totalPaid !== undefined &&
+        (borrowing.interestRate || 0) === 0 &&
+        !borrowingCacheDrifted(borrowing, totals)
+      ) {
         // SPENDLY-434: O(1) Fast path
         map.set(borrowing.id, {
           borrowingId: borrowing.id,
@@ -703,20 +716,23 @@ export function BorrowingsReceivablesProvider({
       try {
         const ref = doc(collection(db, "users", uid, "borrowingRepayments"));
 
+        const nextRepayments: BorrowingRepayment[] = [
+          ...borrowingRepayments,
+          {
+            id: ref.id,
+            borrowingId: input.borrowingId,
+            amount: input.amount,
+            principalComponent: allocation.principalComponent,
+            interestComponent: allocation.interestComponent,
+            date: input.date,
+          },
+        ];
+        // SPENDLY-605: stamped as of the latest repayment date when that is
+        // after today, so the cache never drops the repayment being written.
         const nextSummary = summarizeBorrowing(
           borrowing,
-          [
-            ...borrowingRepayments,
-            {
-              id: ref.id,
-              borrowingId: input.borrowingId,
-              amount: input.amount,
-              principalComponent: allocation.principalComponent,
-              interestComponent: allocation.interestComponent,
-              date: input.date,
-            },
-          ],
-          today
+          nextRepayments,
+          borrowingCacheAsOfDate(input.borrowingId, nextRepayments, today)
         );
 
         // Repayment + recomputed parent totals commit atomically. Two separate
@@ -783,10 +799,11 @@ export function BorrowingsReceivablesProvider({
         const ops: MutationOp[] = [{ op: "delete", ref: repaymentRef }];
 
         if (borrowing) {
+          const remaining = borrowingRepayments.filter((r) => r.id !== repaymentId);
           const nextSummary = summarizeBorrowing(
             borrowing,
-            borrowingRepayments.filter((r) => r.id !== repaymentId),
-            today
+            remaining,
+            borrowingCacheAsOfDate(borrowingId, remaining, today)
           );
           ops.push({
             op: "update",
@@ -830,10 +847,17 @@ export function BorrowingsReceivablesProvider({
 
   const receivableSummaries = useMemo(() => {
     const map = new Map<string, ReceivableSummary>();
+    const totals = receivableRepaymentTotals(receivableRepayments);
     for (const receivable of receivables) {
       if (!receivable.id) continue;
 
-      if (receivable.outstandingAmount !== undefined && receivable.totalReceived !== undefined && (receivable.interestRate || 0) === 0) {
+      // SPENDLY-605: a cache that disagrees with its rows is not trusted.
+      if (
+        receivable.outstandingAmount !== undefined &&
+        receivable.totalReceived !== undefined &&
+        (receivable.interestRate || 0) === 0 &&
+        !receivableCacheDrifted(receivable, totals)
+      ) {
         // SPENDLY-434: O(1) Fast path
         map.set(receivable.id, {
           receivableId: receivable.id,
@@ -1098,20 +1122,24 @@ export function BorrowingsReceivablesProvider({
       try {
         const ref = doc(collection(db, "users", uid, "receivableRepayments"));
 
+        const nextRepayments: ReceivableRepayment[] = [
+          ...receivableRepayments,
+          {
+            id: ref.id,
+            receivableId: input.receivableId,
+            amount: input.amount,
+            principalComponent: allocation.principalComponent,
+            interestComponent: allocation.interestComponent,
+            date: input.date,
+          },
+        ];
+        // SPENDLY-605: stamping as of `today` dropped a repayment dated after
+        // it, writing the row but leaving the parent at ₹0 received. The cache
+        // is stamped as of the latest repayment date instead.
         const nextSummary = summarizeReceivable(
           receivable,
-          [
-            ...receivableRepayments,
-            {
-              id: ref.id,
-              receivableId: input.receivableId,
-              amount: input.amount,
-              principalComponent: allocation.principalComponent,
-              interestComponent: allocation.interestComponent,
-              date: input.date,
-            },
-          ],
-          today
+          nextRepayments,
+          receivableCacheAsOfDate(input.receivableId, nextRepayments, today)
         );
 
         // Repayment + recomputed parent totals commit atomically. Two separate
@@ -1178,10 +1206,11 @@ export function BorrowingsReceivablesProvider({
         const ops: MutationOp[] = [{ op: "delete", ref: repaymentRef }];
 
         if (receivable) {
+          const remaining = receivableRepayments.filter((r) => r.id !== repaymentId);
           const nextSummary = summarizeReceivable(
             receivable,
-            receivableRepayments.filter((r) => r.id !== repaymentId),
-            today
+            remaining,
+            receivableCacheAsOfDate(receivableId, remaining, today)
           );
           ops.push({
             op: "update",

@@ -16,6 +16,7 @@ import { receivableInterestTerms } from "../types/receivable";
 import {
   accrueInterest,
   allocateInterestFirst,
+  cacheStampDate,
   describeInterestTerms,
   validatePayment,
   type PaymentAllocation,
@@ -96,6 +97,67 @@ export function repaymentsUpTo(
     .filter((r) => r.date <= asOfDate)
     .slice()
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
+/**
+ * SPENDLY-605: the as-of date for stamping this receivable's stored cache, so
+ * the cache counts every recorded repayment, including one dated after today.
+ */
+export function receivableCacheAsOfDate(
+  receivableId: string | undefined,
+  repayments: ReceivableRepayment[],
+  today: string
+): string {
+  return cacheStampDate(today, repaymentsFor(receivableId, repayments));
+}
+
+export interface ReceivableRepaymentTotals {
+  totalReceived: number;
+  principalReceived: number;
+}
+
+/** Per-receivable sums of every repayment row, built once per pass. */
+export function receivableRepaymentTotals(
+  repayments: ReceivableRepayment[]
+): Map<string, ReceivableRepaymentTotals> {
+  const totals = new Map<string, ReceivableRepaymentTotals>();
+  for (const r of repayments) {
+    if (!r.receivableId) continue;
+    const t = totals.get(r.receivableId) ?? {
+      totalReceived: 0,
+      principalReceived: 0,
+    };
+    t.totalReceived = roundMoney(t.totalReceived + (r.amount || 0));
+    t.principalReceived = roundMoney(t.principalReceived + principalComponentOf(r));
+    totals.set(r.receivableId, t);
+  }
+  return totals;
+}
+
+/**
+ * SPENDLY-605: true when the stored cache disagrees with the repayment rows,
+ * so the SPENDLY-434 fast path must not be trusted for this receivable.
+ *
+ * Only a receivable that has rows can be judged: the repayment listener
+ * mounts after the parents and delivers its whole set at once, so "no rows
+ * yet" means "not loaded", not "nothing received".
+ */
+export function receivableCacheDrifted(
+  receivable: Receivable,
+  totals: Map<string, ReceivableRepaymentTotals>
+): boolean {
+  const rows = receivable.id ? totals.get(receivable.id) : undefined;
+  if (!rows) return false;
+  if (roundMoney(receivable.totalReceived ?? 0) !== rows.totalReceived) {
+    return true;
+  }
+  if ((receivable.interestRate || 0) === 0) {
+    const expected = roundMoney(
+      Math.max(0, receivable.originalAmount - rows.principalReceived)
+    );
+    if (roundMoney(receivable.outstandingAmount ?? 0) !== expected) return true;
+  }
+  return false;
 }
 
 export interface ReceivableSummary {
@@ -283,7 +345,7 @@ export function buildReceivableUpdatePayload(
   const next = summarizeReceivable(
     { ...existing, ...updates },
     repayments,
-    asOfDate
+    receivableCacheAsOfDate(existing.id, repayments, asOfDate)
   );
   return {
     ok: true,
@@ -345,6 +407,7 @@ export function summarizeReceivables(
   repayments: ReceivableRepayment[],
   asOfDate: string
 ): ReceivablePortfolioSummary {
+  const totals = receivableRepaymentTotals(repayments);
   return receivables.reduce<ReceivablePortfolioSummary>(
     (acc, receivable) => {
       // SPENDLY-434: Fast path using materialized fields.
@@ -354,8 +417,14 @@ export function summarizeReceivables(
       let outstandingAmount = receivable.outstandingAmount;
       let status = receivable.status;
 
-      if (totalReceived === undefined || outstandingAmount === undefined || (receivable.interestRate || 0) > 0) {
-        // Fallback for non-backfilled records, or dynamic interest accrual
+      if (
+        totalReceived === undefined ||
+        outstandingAmount === undefined ||
+        (receivable.interestRate || 0) > 0 ||
+        receivableCacheDrifted(receivable, totals)
+      ) {
+        // Fallback for non-backfilled records, dynamic interest accrual, or a
+        // cache that disagrees with its repayment rows (SPENDLY-605)
         const summary = summarizeReceivable(receivable, repayments, asOfDate);
         totalReceived = summary.totalReceived;
         interestAccrued = summary.interestAccrued;

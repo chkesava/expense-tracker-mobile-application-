@@ -7,7 +7,7 @@ vi.mock("firebase-admin/firestore", () => ({
   },
 }));
 
-import { listUserIds, MAX_BATCH_OPS, rebuildUser } from "./lib/rebuildRunner";
+import { listUserIds, MAX_BATCH_OPS, rebuildUser, runRebuildCli } from "./lib/rebuildRunner";
 
 type Rows = Record<string, Record<string, unknown>[]>;
 
@@ -145,5 +145,75 @@ describe("rebuild runner (SPENDLY-499)", () => {
     });
     expect(writes.length).toBeGreaterThan(0);
     expect(writes.some((w) => /financialSummaries\/(netWorth|investments)$/.test(w.path))).toBe(false);
+  });
+});
+
+describe("rebuild runner — debt caches (SPENDLY-605)", () => {
+  // The stored state the bug left: a ₹1,195 repayment row, a parent still
+  // stamped ₹0 received / ₹1,195 outstanding. r2 is consistent and must not move.
+  const users = () => ({
+    u1: {
+      receivables: [
+        {
+          id: "r1", originalAmount: 1195, lentDate: "2026-10-01", dueDate: "2026-10-15",
+          status: "OVERDUE", interestRate: 0, totalReceived: 0, outstandingAmount: 1195,
+        },
+        {
+          id: "r2", originalAmount: 500, lentDate: "2026-10-01", status: "ACTIVE",
+          interestRate: 0, totalReceived: 0, outstandingAmount: 500,
+        },
+      ],
+      receivableRepayments: [
+        { id: "p1", receivableId: "r1", amount: 1195, principalComponent: 1195, interestComponent: 0, receivedAccountId: "sbi", date: "2026-10-22" },
+      ],
+    },
+  });
+
+  it("reports the drifted receivable and writes nothing in dry-run", async () => {
+    const lines: string[] = [];
+    const { db, commits, writes } = fakeDb(users());
+    const report = await rebuildUser(db, "u1", {
+      mode: "dryRun",
+      steps: { accounts: false, epf: false, dashboards: false, debtCaches: true },
+      log: (l) => lines.push(l),
+      today: "2026-10-24",
+    });
+    expect(report.debtCachesNeedingWrite).toBe(1);
+    expect(commits).toEqual([]);
+    expect(writes).toEqual([]);
+    expect(lines.some((l) => l.includes("receivable r1"))).toBe(true);
+    expect(lines.some((l) => l.includes("totalReceived: 0 → 1195"))).toBe(true);
+  });
+
+  it("restamps only the drifted parent on --apply", async () => {
+    const { db, writes } = fakeDb(users());
+    await rebuildUser(db, "u1", {
+      mode: "apply",
+      steps: { accounts: false, epf: false, dashboards: false, debtCaches: true },
+      log: () => {},
+      today: "2026-10-24",
+    });
+    expect(writes).toHaveLength(1);
+    expect(writes[0].path).toBe("users/u1/receivables/r1");
+    expect(writes[0].data).toMatchObject({
+      totalReceived: 1195,
+      outstandingAmount: 0,
+      status: "FULLY_SETTLED",
+      settledDate: "2026-10-22",
+      updatedAt: "NOW",
+    });
+  });
+
+  it("--only=debtCaches applies nothing but the debt caches", async () => {
+    const data = users() as Record<string, Rows>;
+    data.u1.accounts = [{ id: "a", typeId: "tb", currentBalance: 5 }];
+    data.u1.accountTypes = [{ id: "tb", name: "Bank Account" }];
+    const { db, writes } = fakeDb(data);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await runRebuildCli(db, ["--uid=u1", "--only=debtCaches", "--apply"], {
+      accounts: true, epf: true, dashboards: true, debtCaches: true,
+    });
+    log.mockRestore();
+    expect(writes.map((w) => w.path)).toEqual(["users/u1/receivables/r1"]);
   });
 });
