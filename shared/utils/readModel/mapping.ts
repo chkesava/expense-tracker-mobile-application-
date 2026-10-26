@@ -152,6 +152,34 @@ export const READ_MODEL_TABLES: TableSpec[] = [
       f("sort_order", "sortOrder", "integer"),
     ],
   },
+  // SPENDLY-609 (Save Goals, migration 20261029000000). `current_amount` is for
+  // parity only — a goal's saved amount is current-state money and is always
+  // read from Firestore (READ_MODEL_RULES R4).
+  {
+    table: "financial_goals",
+    collection: "financialGoals",
+    fields: [
+      f("name", "name", "text"),
+      f("status", "status", "text"),
+      f("target_amount", "targetAmount", "money"),
+      f("current_amount", "currentAmount", "money"),
+      f("deadline", "deadline", "date"),
+      f("created_at", "createdAtMs", "timestamp"),
+      f("pinned", "pinned", "boolean"),
+    ],
+  },
+  {
+    table: "goal_events",
+    collection: "goalEvents",
+    fields: [
+      f("goal_id", "goalId", "text"),
+      f("type", "type", "text"),
+      f("amount_delta", "amountDelta", "money"),
+      f("reason", "reason", "text"),
+      f("correction_of", "correctionOf", "text"),
+      f("created_at", "createdAtMs", "timestamp"),
+    ],
+  },
 ];
 
 export const SPEC_BY_COLLECTION = new Map(READ_MODEL_TABLES.map((s) => [s.collection, s]));

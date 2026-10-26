@@ -9,7 +9,10 @@ import { LoadingState } from "@/components/common/LoadingState";
 import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
 import { ProgressIndicator } from "@/components/dashboard/ProgressIndicator";
 import { Section } from "@/components/dashboard/primitives";
+import { GoalAmountSheet, type AmountSheetKind } from "@/components/goals/GoalAmountSheet";
+import { GoalCorrectionSheet } from "@/components/goals/GoalCorrectionSheet";
 import { GoalFormSheet, type GoalFormSubmit } from "@/components/goals/GoalFormSheet";
+import { GoalHistorySection } from "@/components/goals/GoalHistorySection";
 import { GoalIcon } from "@/components/goals/GoalIcon";
 import { GoalTargetSheet } from "@/components/goals/GoalTargetSheet";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -20,7 +23,10 @@ import { useFinancialGoals } from "@/hooks/useFinancialGoals";
 import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { useSaveGoalsEnabled } from "@/hooks/useSaveGoalsEnabled";
 import { appDialog } from "@/lib/appDialog";
+import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
+import { newGoalEventId } from "@/services/goals/goalStore";
+import type { GoalEvent } from "@/shared/types/goal";
 import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { actionTarget, availableGoalActions, type GoalAction } from "@/shared/utils/goalLifecycle";
 import { GOAL_ACTION_DONE, GOAL_ACTION_LABELS, GOAL_STATUS_LABELS, goalActionNeedsConfirm } from "@/shared/utils/goalMessages";
@@ -38,7 +44,8 @@ const CONFIRM_COPY: Partial<Record<GoalAction, string>> = {
  * One goal (SPENDLY-608): progress with remaining/surplus, details, the
  * confirmed target change and the lifecycle actions its state allows. There
  * is no delete — archive keeps the goal and its history (FRD FR-06).
- * Contributions and the history timeline arrive with SPENDLY-609.
+ * SPENDLY-609: add / take out money, and the cursor-paged history timeline
+ * with correct / reverse on each amount entry.
  */
 export default function GoalDetailScreen() {
   const enabled = useSaveGoalsEnabled();
@@ -50,12 +57,17 @@ export default function GoalDetailScreen() {
   const currency = useDisplayCurrency();
   const money = useGhostMoney(currency);
   const { settings } = useSettings();
-  const { goals, loading, error, retry, editGoal, changeTarget, changeStatus, updateSettings } = useFinancialGoals();
+  const { goals, loading, error, retry, editGoal, changeTarget, changeStatus, updateSettings, recordAmountChange, correctEvent } =
+    useFinancialGoals();
+  const { user } = useAuth();
   const goal = useMemo(() => goals.find((g) => g.id === id), [goals, id]);
   const [busy, setBusy] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [targetOpen, setTargetOpen] = useState(false);
   const [targetSuggestion, setTargetSuggestion] = useState<number | undefined>();
+  const [amountSheet, setAmountSheet] = useState<AmountSheetKind | null>(null);
+  const [correcting, setCorrecting] = useState<GoalEvent | null>(null);
+  const newKey = () => (user ? newGoalEventId(user.uid) : `${Date.now()}`);
 
   if (!enabled) return <Redirect href={"/settings/money" as Href} />;
 
@@ -181,6 +193,22 @@ export default function GoalDetailScreen() {
               accessibilityLabel={`${pct}% of the target saved`}
             />
             {p.remaining > 0 ? <Text style={meta}>{money(p.remaining)} left to save</Text> : null}
+            {inProgress ? (
+              <View style={[styles.row, { gap: theme.space.sm }]}>
+                <Button variant="primary" onPress={() => setAmountSheet("contribution")} style={styles.flex} accessibilityLabel={`Add money to ${goal.name}`}>
+                  Add money
+                </Button>
+                <Button
+                  variant="secondary"
+                  onPress={() => setAmountSheet("reduction")}
+                  disabled={p.saved <= 0}
+                  style={styles.flex}
+                  accessibilityLabel={`Take money out of ${goal.name}`}
+                >
+                  Take out
+                </Button>
+              </View>
+            ) : null}
             {p.surplus > 0 ? (
               <View style={[styles.callout, { backgroundColor: surfaces.wash(theme.colors.success), borderRadius: theme.radius.md }]}>
                 <Text style={[body, { fontFamily: theme.fontFamily.semibold }]}>Saved above target: {money(p.surplus)}</Text>
@@ -214,6 +242,8 @@ export default function GoalDetailScreen() {
             </View>
           </View>
         ) : null}
+
+        <GoalHistorySection goalId={goal.id} currency={currency} canCorrect={inProgress} onCorrect={setCorrecting} />
 
         <Section title="Details">
           <View style={{ gap: theme.space.xs }}>
@@ -258,11 +288,29 @@ export default function GoalDetailScreen() {
         onClose={() => setTargetOpen(false)}
         onConfirm={(t) => changeTarget(goal, t)}
       />
+      <GoalAmountSheet
+        isOpen={amountSheet !== null}
+        kind={amountSheet ?? "contribution"}
+        goal={goal}
+        currency={currency}
+        newKey={newKey}
+        onClose={() => setAmountSheet(null)}
+        onSubmit={(input, key) => recordAmountChange(goal, input, key)}
+      />
+      <GoalCorrectionSheet
+        isOpen={correcting !== null}
+        event={correcting}
+        currency={currency}
+        newKey={newKey}
+        onClose={() => setCorrecting(null)}
+        onSubmit={(input, key) => (correcting ? correctEvent(goal, correcting, input, key) : Promise.resolve(false))}
+      />
     </PageShell>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   row: { flexDirection: "row", alignItems: "center", gap: 8 },
   amounts: { flexDirection: "row", alignItems: "baseline", gap: 6, flexWrap: "wrap" },
   callout: { padding: 12, gap: 8 },

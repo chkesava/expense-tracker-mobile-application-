@@ -7,8 +7,8 @@
 | Story | Scope | Branch | State |
 |---|---|---|---|
 | SPENDLY-607 | Architecture + backward-compatible data model | `feature/SPENDLY-607-goal-data-model` | Merged to epic (9b5c439e) |
-| SPENDLY-608 | Create/edit, lifecycle, Goals + Dashboard UI, goal/event/name rules | `feature/SPENDLY-608-goal-management-ui` | Built, awaiting merge approval |
-| SPENDLY-609 | Contributions, reductions, corrections, audit history, read-model tables | — | Not started |
+| SPENDLY-608 | Create/edit, lifecycle, Goals + Dashboard UI, goal/event/name rules | `feature/SPENDLY-608-goal-management-ui` | Merged to epic (b54bd78a) |
+| SPENDLY-609 | Contributions, reductions, corrections, audit history, read-model tables | `feature/SPENDLY-609-contributions-history` | Built, awaiting merge approval |
 | SPENDLY-610 | Milestones, completion, achievements | — | Not started |
 | SPENDLY-611 | Analytics, charts, filters, CSV/PDF export (read path) | — | Not started |
 | SPENDLY-612 | Reminders, estimated completion | — | Not started |
@@ -41,6 +41,7 @@
 ## Production steps pending (each needs approval, after merge to main)
 - [ ] **Firestore rules deploy BEFORE the next app release.** From 608 on, the app writes `goalEvents`/`goalNames`, which current production rules deny (608, 609, 614).
 - [ ] Firestore index `goalEvents (goalId, createdAtMs desc)`. Diff against live first (609).
-- [ ] Read-model migration, then the sync/push deploy, then a dry-run full sync (609)
+- [ ] **Read-model migration `20261029000000` before** any sync/push run that knows the goal tables, then a dry-run full sync (609)
+- [ ] Read-model drills (need PostgREST) before the production migration (609)
 - [ ] `spendly-files` Edge Function deploy (614)
 - [ ] Release build, then enable the `enableSaveGoals` flag in stages (615)

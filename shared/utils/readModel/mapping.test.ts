@@ -52,6 +52,36 @@ describe("read-model mapping (SPENDLY-506)", () => {
     expect(row.doc).toMatchObject({ note: "kept in doc", createdAt: new Date(1_790_000_000_000).toISOString() });
   });
 
+  it("SPENDLY-609: maps a goal, including a legacy one with an empty deadline and no status", () => {
+    const goals = SPEC_BY_COLLECTION.get("financialGoals")!;
+    const v2 = mapDocument(goals, "u1", {
+      id: "g1",
+      updateTime: UPDATE_TIME,
+      data: { name: "Car", status: "active", targetAmount: 1000, currentAmount: 250.5, deadline: "2027-01-01", createdAtMs: 1_790_000_000_000, pinned: true, nameKey: "n_car" },
+    });
+    expect(v2).toMatchObject({
+      source_path: "users/u1/financialGoals/g1", mapping_status: "mapped", name: "Car", status: "active",
+      target_amount: 1000, current_amount: 250.5, deadline: "2027-01-01", created_at: new Date(1_790_000_000_000).toISOString(), pinned: true,
+    });
+    expect(v2.doc).toMatchObject({ nameKey: "n_car" });
+    const legacy = mapDocument(goals, "u1", { id: "g0", updateTime: UPDATE_TIME, data: { name: "Old", targetAmount: 10, currentAmount: 0, deadline: "" } });
+    expect(legacy).toMatchObject({ mapping_status: "mapped", status: null, deadline: null, created_at: null, pinned: null });
+  });
+
+  it("SPENDLY-609: maps a goal event; a bad amount makes the row unmapped, never dropped", () => {
+    const events = SPEC_BY_COLLECTION.get("goalEvents")!;
+    const ok = mapDocument(events, "u1", {
+      id: "ev1",
+      updateTime: UPDATE_TIME,
+      data: { goalId: "g1", type: "correction", amountDelta: -450, reason: "other", correctionOf: "c1", createdAtMs: 1_790_000_000_000, note: "typo" },
+    });
+    expect(ok).toMatchObject({ goal_id: "g1", type: "correction", amount_delta: -450, reason: "other", correction_of: "c1", mapping_status: "mapped" });
+    expect(ok.doc).toMatchObject({ note: "typo" });
+    const bad = mapDocument(events, "u1", { id: "ev2", updateTime: UPDATE_TIME, data: { goalId: "g1", type: "contribution", amountDelta: "lots" } });
+    expect(bad).toMatchObject({ mapping_status: "unmapped", amount_delta: null, goal_id: null });
+    expect(bad.doc).toMatchObject({ amountDelta: "lots" });
+  });
+
   it("derives month from the date when the row has none", () => {
     const row = mapDocument(expenses, "u1", { id: "e", updateTime: UPDATE_TIME, data: { amount: 1, date: "2026-08-15" } });
     expect(row.month).toBe("2026-08");
