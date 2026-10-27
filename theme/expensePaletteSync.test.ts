@@ -19,22 +19,29 @@ describe("Expense palette sync ordering (SPENDLY-618)", () => {
   });
 
   describe("user-doc snapshot", () => {
-    it("applies when no local write is pending", () => {
-      expect(acceptRemotePalette("midnight-plum", null)).toBe("midnight-plum");
+    it("applies when loaded and no local write is pending", () => {
+      expect(acceptRemotePalette("midnight-plum", null, true)).toBe("midnight-plum");
+    });
+
+    it("ignores the document until it has loaded for the signed-in account", () => {
+      // Mid account switch the provider still holds the previous account's data.
+      expect(acceptRemotePalette("midnight-plum", null, false)).toBeNull();
+    });
+
+    it("resets to Slate when the loaded account has no saved palette", () => {
+      expect(acceptRemotePalette(undefined, null, true)).toBe("midnight-emerald");
+      expect(acceptRemotePalette("light", null, true)).toBe("midnight-emerald");
     });
 
     it("skips an older snapshot while a newer selection is being written", () => {
       // Picked Forest, then Cocoa; the Forest snapshot lands late.
-      expect(acceptRemotePalette("midnight-forest", "midnight-cocoa")).toBeNull();
+      expect(acceptRemotePalette("midnight-forest", "midnight-cocoa", true)).toBeNull();
+      // Nor does a snapshot without the field reset a pending selection.
+      expect(acceptRemotePalette(undefined, "midnight-cocoa", true)).toBeNull();
     });
 
     it("applies the snapshot that matches the pending selection (A → B → A)", () => {
-      expect(acceptRemotePalette("midnight-emerald", "midnight-emerald")).toBe("midnight-emerald");
-    });
-
-    it("ignores missing or unknown values", () => {
-      expect(acceptRemotePalette(undefined, null)).toBeNull();
-      expect(acceptRemotePalette("light", null)).toBeNull();
+      expect(acceptRemotePalette("midnight-emerald", "midnight-emerald", true)).toBe("midnight-emerald");
     });
   });
 });
@@ -50,18 +57,18 @@ describe("pending palette tracker (SPENDLY-618)", () => {
     pending.complete(b);
     expect(pending.pendingFor("u1")).toBe("midnight-emerald");
     // A stale Forest snapshot is still rejected.
-    expect(acceptRemotePalette("midnight-forest", pending.pendingFor("u1"))).toBeNull();
+    expect(acceptRemotePalette("midnight-forest", pending.pendingFor("u1"), true)).toBeNull();
 
     pending.complete(a2);
     expect(pending.pendingFor("u1")).toBeNull();
-    expect(acceptRemotePalette("midnight-forest", pending.pendingFor("u1"))).toBe("midnight-forest");
+    expect(acceptRemotePalette("midnight-forest", pending.pendingFor("u1"), true)).toBe("midnight-forest");
   });
 
   it("never blocks another account's palette", () => {
     const pending = createPendingPalette();
     pending.begin("account-a", "midnight-plum");
     expect(pending.pendingFor("account-b")).toBeNull();
-    expect(acceptRemotePalette("midnight-cocoa", pending.pendingFor("account-b"))).toBe("midnight-cocoa");
+    expect(acceptRemotePalette("midnight-cocoa", pending.pendingFor("account-b"), true)).toBe("midnight-cocoa");
     expect(pending.pendingFor("account-a")).toBe("midnight-plum");
   });
 });

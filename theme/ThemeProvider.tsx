@@ -105,7 +105,7 @@ function resolveInitialExpensePalette(): ExpensePaletteName {
 export function AppThemeProvider({ children }: { children: ReactNode }) {
   const system = useSystemColorScheme();
   const { realUser } = useAuth();
-  const { data } = useUserDoc();
+  const { data, loading: userDocLoading, error: userDocError } = useUserDoc();
 
   const [themeMode, setThemeModeState] = useState<ThemeMode>("system");
   const [themeName, setThemeNameState] = useState<ThemeName>(() =>
@@ -178,7 +178,9 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
     }
     const palette = acceptRemotePalette(
       (data as Record<string, unknown>)?.expensePalette,
-      pendingPalette.pendingFor(realUser?.uid ?? null)
+      pendingPalette.pendingFor(realUser?.uid ?? null),
+      // Only a document read for the signed-in account (not the previous one mid-switch).
+      Boolean(realUser) && !userDocLoading && !userDocError
     );
     if (palette) {
       paletteResolved.current = true;
@@ -190,7 +192,7 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
     if (mode === "system" || mode === "light" || mode === "dark" || mode === "custom") {
       setThemeModeState(mode);
     }
-  }, [data, pendingPalette, realUser]);
+  }, [data, pendingPalette, realUser, userDocLoading, userDocError]);
 
   // Handle system appearance changes when in system mode
   useEffect(() => {

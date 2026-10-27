@@ -1,4 +1,4 @@
-import { isExpensePaletteName, type ExpensePaletteName } from "./tokens";
+import { isExpensePaletteName, resolveExpensePalette, type ExpensePaletteName } from "./tokens";
 
 /**
  * SPENDLY-618: ordering rules for the Expense palette preference, which has
@@ -16,15 +16,25 @@ export function acceptStoredPalette(stored: unknown, alreadyResolved: boolean): 
 }
 
 /**
- * A user-document snapshot applies unless a local selection is still being
- * written and the snapshot disagrees with it. That snapshot is older than the
- * selection, or a change from another device that the pending write is about
- * to overwrite.
+ * The palette a user-document snapshot sets, or null to leave it unchanged.
+ *
+ * - Nothing applies until the document has loaded for the signed-in account.
+ *   During an account switch the provider briefly still holds the previous
+ *   account's data, and a failed read says nothing about the value.
+ * - While a local selection is still being written, only a snapshot that
+ *   agrees with it applies. Others are older than the selection, or a change
+ *   from another device that the pending write is about to overwrite.
+ * - A loaded document with no saved palette means Slate, so one account's
+ *   choice never carries over to another account.
  */
-export function acceptRemotePalette(remote: unknown, pending: ExpensePaletteName | null): ExpensePaletteName | null {
-  if (!isExpensePaletteName(remote)) return null;
-  if (pending !== null && remote !== pending) return null;
-  return remote;
+export function acceptRemotePalette(
+  remote: unknown,
+  pending: ExpensePaletteName | null,
+  loaded: boolean
+): ExpensePaletteName | null {
+  if (!loaded) return null;
+  if (pending !== null) return remote === pending ? pending : null;
+  return resolveExpensePalette(remote);
 }
 
 /**
