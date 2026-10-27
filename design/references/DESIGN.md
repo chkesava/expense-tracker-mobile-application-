@@ -19,12 +19,13 @@ Purpose: Shared design contract for Claude Code when implementing dashboard and 
 
 ### Core dark palette
 
-Six blue-greys carry surfaces, text and brand. Colour appears only where it means something.
+Six core blue-greys carry surfaces, text and brand, plus one in-between container shade (`#1A2B38`). Colour appears only where it means something.
 
 | Token | Hex | Usage |
 |---|---|---|
 | `background` | `#06141B` | Main dark screen background |
 | `surface` | `#11212D` | Primary cards and grouped content |
+| `container` | `#1A2B38` | Intermediate container shade (`secondaryContainer`), between surface and elevated |
 | `surfaceElevated` | `#253745` | Chips, raised surfaces, selected containers, borders |
 | `line` | `#4A5C6A` | Outlines and dividers only (too faint for text or icons) |
 | `textSecondary` | `#9BA8AB` | Supporting labels, metadata, inactive icons |

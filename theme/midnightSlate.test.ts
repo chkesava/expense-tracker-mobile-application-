@@ -52,14 +52,17 @@ describe("Midnight Slate theme (SPENDLY-617, was Midnight Emerald SPENDLY-532)",
     expect(ratio(fg, bg)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("uses the six slate colours for every non-semantic token", () => {
-    const SLATE = ["#06141B", "#11212D", "#1A2B38", "#253745", "#4A5C6A", "#9BA8AB", "#CCD0CF"];
+  it("uses the six core slate colours, plus the #1A2B38 container step, for every non-semantic token", () => {
+    const SLATE = ["#06141B", "#11212D", "#253745", "#4A5C6A", "#9BA8AB", "#CCD0CF"];
+    const CONTAINER_STEP = "#1A2B38";
+    expect(c.secondaryContainer).toBe(CONTAINER_STEP);
     const semantic = new Set([
       "destructive", "destructiveForeground", "success", "successForeground",
       "warning", "warningForeground", "info", "infoForeground", "scrim",
     ]);
     for (const [token, value] of Object.entries(c)) {
-      if (!semantic.has(token)) expect(SLATE, token).toContain(value);
+      if (semantic.has(token) || token === "secondaryContainer") continue;
+      expect(SLATE, token).toContain(value);
     }
     expect(c.background).toBe("#06141B");
     expect(c.card).toBe("#11212D");

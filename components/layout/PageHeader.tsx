@@ -59,7 +59,8 @@ export function PageHeader({
   const tint = (alpha: number, dark: string, light: string) =>
     ownTint ? withAlpha(ownTint, alpha) : isDark ? dark : light;
   const isUnderline = tabVariant === "underline";
-  const activeColor = theme.colors.success;
+  // Green means money/status in the Expense preset, so its active tab uses the accent.
+  const activeColor = ownTint ?? theme.colors.success;
 
   const handleTabPress = (tabId: string) => {
     if (tabId === activeTab) return;

@@ -346,6 +346,9 @@ export const darkColors: ColorTokens = {
  *   #4A5C6A lines only (too faint for text) · #9BA8AB secondary text
  *   #CCD0CF primary text and the accent
  *
+ * plus one in-between step, #1A2B38, for secondaryContainer so nested
+ * containers don't flatten into the cards.
+ *
  * Colour is kept only where it means something about money: green for money
  * in and gains, red for losses, overspend and destructive actions, amber for
  * warnings, blue for info and plain spending.
