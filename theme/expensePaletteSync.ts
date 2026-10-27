@@ -26,3 +26,31 @@ export function acceptRemotePalette(remote: unknown, pending: ExpensePaletteName
   if (pending !== null && remote !== pending) return null;
   return remote;
 }
+
+/**
+ * The newest local selection while its write is in flight, scoped to the
+ * account that made it. Signing in as another account never blocks that
+ * account's own palette. Only the newest selection's write clears the
+ * marker, so an older write finishing first (A → B → A) leaves the newest
+ * selection protected.
+ */
+export function createPendingPalette() {
+  let generation = 0;
+  let pending: { uid: string | null; palette: ExpensePaletteName; generation: number } | null = null;
+  return {
+    /** Records a selection; returns the token to pass to `complete`. */
+    begin(uid: string | null, palette: ExpensePaletteName): number {
+      generation += 1;
+      pending = { uid, palette, generation };
+      return generation;
+    },
+    /** A write finished; clears the marker only if it was the newest. */
+    complete(token: number): void {
+      if (pending?.generation === token) pending = null;
+    },
+    /** The palette still being written for `uid`, or null. */
+    pendingFor(uid: string | null): ExpensePaletteName | null {
+      return pending && pending.uid === uid ? pending.palette : null;
+    },
+  };
+}

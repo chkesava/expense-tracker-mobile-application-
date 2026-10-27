@@ -18,7 +18,7 @@ import { commitWrite } from "@/lib/firestoreWrite";
 import { useAuth } from "@/providers/AuthProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import { memoryStorage, setSharedStorage } from "@/shared/storage/memoryStorage";
-import { acceptRemotePalette, acceptStoredPalette } from "./expensePaletteSync";
+import { acceptRemotePalette, acceptStoredPalette, createPendingPalette } from "./expensePaletteSync";
 import {
   ACCENT_STORAGE_KEY,
   THEME_STORAGE_KEY,
@@ -120,9 +120,8 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
   // SPENDLY-618: true once the user doc or a selection has set the palette,
   // so the slower startup AsyncStorage read cannot replace it.
   const paletteResolved = useRef(false);
-  // The newest local selection while its write is in flight, and its generation.
-  const pendingPalette = useRef<ExpensePaletteName | null>(null);
-  const paletteGeneration = useRef(0);
+  // The newest local selection while its write is in flight, per account.
+  const [pendingPalette] = useState(createPendingPalette);
   const [shellThemeName, setShellThemeName] = useState<ThemeName | null>(null);
   const shellTheme = useMemo<ShellThemeValue>(
     () => ({ name: shellThemeName, setName: setShellThemeName }),
@@ -179,7 +178,7 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
     }
     const palette = acceptRemotePalette(
       (data as Record<string, unknown>)?.expensePalette,
-      pendingPalette.current
+      pendingPalette.pendingFor(realUser?.uid ?? null)
     );
     if (palette) {
       paletteResolved.current = true;
@@ -191,7 +190,7 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
     if (mode === "system" || mode === "light" || mode === "dark" || mode === "custom") {
       setThemeModeState(mode);
     }
-  }, [data]);
+  }, [data, pendingPalette, realUser]);
 
   // Handle system appearance changes when in system mode
   useEffect(() => {
@@ -290,8 +289,7 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
   const setExpensePalette = useCallback(
     (palette: ExpensePaletteName) => {
       paletteResolved.current = true;
-      const generation = ++paletteGeneration.current;
-      pendingPalette.current = palette;
+      const token = pendingPalette.begin(realUser?.uid ?? null, palette);
       setExpensePaletteState(palette);
       try {
         memoryStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
@@ -301,11 +299,9 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       void AsyncStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
 
       // Only the newest selection's write clears the marker (handles A → B → A).
-      void persistThemeFields({ expensePalette: palette }).finally(() => {
-        if (paletteGeneration.current === generation) pendingPalette.current = null;
-      });
+      void persistThemeFields({ expensePalette: palette }).finally(() => pendingPalette.complete(token));
     },
-    [persistThemeFields]
+    [pendingPalette, persistThemeFields, realUser]
   );
 
   const toggleTheme = useCallback(() => {
