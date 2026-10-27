@@ -46,21 +46,24 @@ export function acceptRemotePalette(
  */
 export function createPendingPalette() {
   let generation = 0;
-  let pending: { uid: string | null; palette: ExpensePaletteName; generation: number } | null = null;
+  // One record per account, so switching accounts mid-write keeps each pending.
+  const pending = new Map<string | null, { palette: ExpensePaletteName; generation: number }>();
   return {
     /** Records a selection; returns the token to pass to `complete`. */
     begin(uid: string | null, palette: ExpensePaletteName): number {
       generation += 1;
-      pending = { uid, palette, generation };
+      pending.set(uid, { palette, generation });
       return generation;
     },
-    /** A write finished; clears the marker only if it was the newest. */
+    /** A write finished; clears its account's marker only if it was that account's newest. */
     complete(token: number): void {
-      if (pending?.generation === token) pending = null;
+      for (const [uid, entry] of pending) {
+        if (entry.generation === token) pending.delete(uid);
+      }
     },
     /** The palette still being written for `uid`, or null. */
     pendingFor(uid: string | null): ExpensePaletteName | null {
-      return pending && pending.uid === uid ? pending.palette : null;
+      return pending.get(uid)?.palette ?? null;
     },
   };
 }

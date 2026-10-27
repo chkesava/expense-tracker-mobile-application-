@@ -71,4 +71,16 @@ describe("pending palette tracker (SPENDLY-618)", () => {
     expect(acceptRemotePalette("midnight-cocoa", pending.pendingFor("account-b"), true)).toBe("midnight-cocoa");
     expect(pending.pendingFor("account-a")).toBe("midnight-plum");
   });
+
+  it("keeps each account's pending write when switching accounts mid-write", () => {
+    const pending = createPendingPalette();
+    const a = pending.begin("account-a", "midnight-plum");
+    const b = pending.begin("account-b", "midnight-forest");
+    // Back on A before A's write ran: A's older cached snapshot is still rejected.
+    expect(acceptRemotePalette("midnight-cocoa", pending.pendingFor("account-a"), true)).toBeNull();
+    pending.complete(b);
+    expect(pending.pendingFor("account-a")).toBe("midnight-plum");
+    pending.complete(a);
+    expect(pending.pendingFor("account-a")).toBeNull();
+  });
 });
