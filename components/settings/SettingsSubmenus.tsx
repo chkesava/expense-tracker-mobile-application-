@@ -7,7 +7,9 @@ import {
   ScrollView,
   TextInput,
 } from "react-native";
+import { useRouter, type Href } from "expo-router";
 import {
+  Archive,
   Trash2,
   Plus,
   Pencil,
@@ -37,6 +39,9 @@ import {
 import { useCategorizationRules } from "@/hooks/useCategorizationRules";
 import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
 import { useFinancialGoals } from "@/hooks/useFinancialGoals";
+import { useSaveGoalsEnabled } from "@/hooks/useSaveGoalsEnabled";
+import { useUnlockedGoalIds } from "@/lib/goalLockSession";
+import { isGoalInProgress, parseGoalAmount } from "@/shared/utils/goalModel";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useAccounts } from "@/hooks/useAccounts";
 import { CategoryPicker } from "@/components/categories/CategoryPicker";
@@ -593,35 +598,49 @@ export function CategoryBudgetsManager() {
 export function FinancialGoalsManager() {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
-  const { goals, addGoal, deleteGoal } = useFinancialGoals();
+  const { goals: allGoals, createGoal, deleteGoal } = useFinancialGoals();
+  // SPENDLY-608: only goals still being saved for; closed goals live on the Goals screen.
+  const goals = allGoals.filter(isGoalInProgress);
+  const saveGoals = useSaveGoalsEnabled();
+  const unlockedIds = useUnlockedGoalIds();
+  const router = useRouter();
   const { celebrateMilestone } = useCelebration();
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
   const [current, setCurrent] = useState("");
   const [deadline, setDeadline] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const handleAdd = () => {
-    const tgt = Number(target);
-    const cur = Number(current);
+  const handleAdd = async () => {
+    if (saving) return;
+    const tgt = parseGoalAmount(target);
+    const cur = current.trim() ? parseGoalAmount(current) : 0;
     if (!name.trim() || isNaN(tgt) || tgt <= 0) return;
     haptic.medium().catch(() => undefined);
-    void addGoal(name.trim(), tgt, cur, deadline);
-    celebrateMilestone("milestone_first_goal", {
-      title: "First Goal Created!",
-      subtitle: "Every dream begins with a target. Keep going!",
-      badgeEmoji: "✨",
-      pointsEarned: 50,
-    });
-    setName("");
-    setTarget("");
-    setCurrent("");
-    setDeadline("");
+    setSaving(true);
+    try {
+      const ok = await createGoal({ name, targetAmount: tgt, initialAmount: cur, targetDate: deadline || undefined });
+      if (!ok) return;
+      celebrateMilestone("milestone_first_goal", {
+        title: "First Goal Created!",
+        subtitle: "Every dream begins with a target. Keep going!",
+        badgeEmoji: "✨",
+        pointsEarned: 50,
+      });
+      setName("");
+      setTarget("");
+      setCurrent("");
+      setDeadline("");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDelete = (id?: string) => {
+  // Goals are never deleted (SPENDLY-608): this archives, keeping the history.
+  const handleArchive = (id?: string) => {
     if (!id) return;
     haptic.light().catch(() => undefined);
-    deleteGoal(id);
+    void deleteGoal(id);
   };
 
   return (
@@ -631,6 +650,11 @@ export function FinancialGoalsManager() {
       icon={Target}
     >
       <View style={{ gap: 14 }}>
+        {saveGoals ? (
+          <Button variant="secondary" onPress={() => router.push("/goals" as Href)} style={{ height: 48, borderRadius: 12 }}>
+            Open Goals
+          </Button>
+        ) : null}
         <Input
           label="Goal Name"
           placeholder="e.g. Emergency Fund, Vacation, New Laptop"
@@ -657,8 +681,9 @@ export function FinancialGoalsManager() {
         <DateField label="Deadline (optional)" value={deadline} onChange={setDeadline} clearable placeholder="No deadline" />
 
         <Button
-          onPress={handleAdd}
-          disabled={!name.trim() || !target}
+          onPress={() => void handleAdd()}
+          disabled={!name.trim() || !target || saving}
+          loading={saving}
           style={{ height: 48, borderRadius: 12 }}
         >
           Add Goal
@@ -695,39 +720,46 @@ export function FinancialGoalsManager() {
                     <Text style={{ color: theme.colors.foreground, fontWeight: "800", fontSize: 14 }}>
                       {g.name}
                     </Text>
-                    <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 3 }}>
-                      <Amount value={g.currentAmount} ghostable /> / <Amount value={g.targetAmount} ghostable /> ({pct}%)
-                      {g.deadline ? ` · ${g.deadline}` : ""}
-                    </Text>
+                    {g.locked && !unlockedIds.has(g.id) ? (
+                      // SPENDLY-614: locked goals show no amounts until unlocked on this device.
+                      <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 3 }}>Locked</Text>
+                    ) : (
+                      <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 3 }}>
+                        <Amount value={g.currentAmount} ghostable /> / <Amount value={g.targetAmount} ghostable /> ({pct}%)
+                        {g.deadline ? ` · ${g.deadline}` : ""}
+                      </Text>
+                    )}
 
-                    {/* Mini Progress Bar */}
-                    <View
-                      style={[
-                        styles.goalProgressBarBg,
-                        { backgroundColor: surfaces.control },
-                      ]}
-                    >
+                    {/* Mini Progress Bar (hidden while locked: it would reveal progress) */}
+                    {g.locked && !unlockedIds.has(g.id) ? null : (
                       <View
                         style={[
-                          styles.goalProgressBarFill,
-                          {
-                            backgroundColor: theme.colors.primary,
-                            width: `${pct}%`,
-                          },
+                          styles.goalProgressBarBg,
+                          { backgroundColor: surfaces.control },
                         ]}
-                      />
-                    </View>
+                      >
+                        <View
+                          style={[
+                            styles.goalProgressBarFill,
+                            {
+                              backgroundColor: theme.colors.primary,
+                              width: `${pct}%`,
+                            },
+                          ]}
+                        />
+                      </View>
+                    )}
                   </View>
 
-                  {/* 48x48dp Touch Target Delete Button */}
+                  {/* 48x48dp touch target. Archive, not delete: history is kept. */}
                   <Button
                     variant="ghost"
                     size="icon"
-                    onPress={() => handleDelete(g.id)}
-                    accessibilityLabel={`Delete goal ${g.name}`}
+                    onPress={() => handleArchive(g.id)}
+                    accessibilityLabel={`Archive goal ${g.name}`}
                     style={styles.touchActionBtn}
                   >
-                    <Trash2 size={18} color={theme.colors.destructive} />
+                    <Archive size={18} color={theme.colors.mutedForeground} />
                   </Button>
                 </View>
               );

@@ -23,7 +23,7 @@ import { generateKeyPairSync, createSign } from "node:crypto";
 const TABLES = [
   "expenses", "incomes", "ledger_events", "accounts", "account_types",
   "account_transfers", "account_entries", "account_payments",
-  "credit_card_bills", "categories", "sync_status",
+  "credit_card_bills", "categories", "financial_goals", "goal_events", "sync_status",
 ];
 const PROJECT = "expenseapp-27f94";
 

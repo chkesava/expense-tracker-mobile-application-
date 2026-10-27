@@ -391,6 +391,10 @@ async function seed() {
     }
   }
   writer.set(userRef.collection('portfolioSettings').doc('config'), toFirestore(data.portfolioSettings));
+  // SPENDLY-608: Spendly Test (a release build) shows the Save Goals screens
+  // only when the admin flag is on. The seeded goals stay in the legacy shape
+  // on purpose, so the first edit exercises the upgrade path.
+  writer.set(db.collection('system_settings').doc('global'), { enableSaveGoals: true }, { merge: true });
   await writer.close();
 
   const counts = Object.entries(data.collections).map(([name, docs]) => `${name}: ${docs.length}`);

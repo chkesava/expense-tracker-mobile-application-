@@ -25,8 +25,10 @@ export type ReadModelMode = (typeof READ_MODEL_MODES)[number];
  * - `cashFlow` (SPENDLY-513): the dashboard chart's older months.
  * - `audit` (SPENDLY-513): ledger audit history.
  * - `cashback` (SPENDLY-513): cashback history's linked purchases.
+ * - `goals` (SPENDLY-611): Save Goals analytics, exports and older goal
+ *   history pages. A goal's saved amount never moves (current state, R4).
  */
-export const READ_MODEL_SCREENS = ["journal", "insights", "cashFlow", "audit", "cashback"] as const;
+export const READ_MODEL_SCREENS = ["journal", "insights", "cashFlow", "audit", "cashback", "goals"] as const;
 export type ReadModelScreen = (typeof READ_MODEL_SCREENS)[number];
 
 /** The configured mode for a screen; anything missing or unknown is `firestore`. */

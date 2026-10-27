@@ -1,0 +1,56 @@
+# SPENDLY-606: Save Goals (epic tracker)
+
+**Epic branch:** `feature/SPENDLY-606-save-goals`, cut from `main` at `f16f2be2`.
+**FRD:** `docs/Spendly_Save_Goals_FRD_v1.0(1).md`
+**Plan and architecture:** `docs/features/save-goals/IMPLEMENTATION_PLAN.md`
+
+| Story | Scope | Branch | State |
+|---|---|---|---|
+| SPENDLY-607 | Architecture + backward-compatible data model | `feature/SPENDLY-607-goal-data-model` | Merged to epic (9b5c439e) |
+| SPENDLY-608 | Create/edit, lifecycle, Goals + Dashboard UI, goal/event/name rules | `feature/SPENDLY-608-goal-management-ui` | Merged to epic (b54bd78a) |
+| SPENDLY-609 | Contributions, reductions, corrections, audit history, read-model tables | `feature/SPENDLY-609-contributions-history` | Merged to epic (11392839) |
+| SPENDLY-610 | Milestones, completion, achievements | `feature/SPENDLY-610-milestones-completion` | Merged to epic (65c7b588) |
+| SPENDLY-611 | Analytics, charts, filters, CSV/PDF export (read path) | `feature/SPENDLY-611-analytics-exports` | Merged to epic (c139541c) |
+| SPENDLY-612 | Reminders, estimated completion | `feature/SPENDLY-612-reminders-estimates` | Merged to epic (0b7ac1a3) |
+| SPENDLY-613 | Offline sync, idempotency, conflicts | `feature/SPENDLY-613-offline-sync` | Merged to epic (bc92ac51) |
+| SPENDLY-614 | Security, images, biometric lock, accessibility | `feature/SPENDLY-614-security-images-a11y` | Merged to epic (251827ea) |
+| SPENDLY-615 | QA, performance, staged rollout | `feature/SPENDLY-615-qa-rollout` | Built, awaiting merge approval |
+
+**Worktree:** from 615 on, the epic lives in `C:\dev\worktrees\spendly-606`, because the main checkout is in use by SPENDLY-616.
+
+## Decisions
+- **Extend, don't replace.** `financialGoals` stays the summary and every new field is optional. The audit log is `users/{uid}/goalEvents`, and unique names are enforced by `users/{uid}/goalNames`.
+- **Firestore rules are the trusted boundary.** Cloud Functions aren't available on the Spark plan.
+  - Amount changes are `increment()` + `version: increment(1)` + a linked event, checked against the post-write value.
+  - Target, status and name edits use a literal expected version, so stale edits are rejected rather than merged.
+- **Idempotency:** event ids are client keys minted once per submit. Events are create-only, and derived events use derived ids.
+- **Legacy goals:** lazy upgrade on first write (`openingAmount = currentAmount`, plus a `migrated` event). No bulk backfill.
+- **Statuses:**
+  - Paused goals accept contributions.
+  - Completed, archived and cancelled goals reject all amount changes.
+  - Reopening is the way to fix a completed goal.
+- **No delete** for upgraded goals.
+- **Milestones:** reached state is derived, never stored. Crossings are recorded with deterministic ids.
+- **No `resultingAmount` on events** (deviation from FRD §6; see the plan, §2.4).
+- **Read model:** goals and goal events sync to Supabase (user requirement, 2026-10-26). Tables arrive in 609, read-path screens in 611, and current-state money stays on Firestore.
+- **"Push" reminders** means local notifications. Remote push depends on SPENDLY-222.
+
+- **Rules land with the first writer (608).** The `goalEvents`/`goalNames` rules and the summary↔event link moved into 608, because 608's create/edit writes already produce events. 609 adds the contribution UI, the timeline, the index and the read-model tables.
+- **`nameKey` on the summary.** Rules can't recompute NFKC + URI encoding, so the goal stores its lock key and rules check that the lock points back at it. Choosing a non-canonical key only weakens the user's own name uniqueness; it isn't a security issue.
+- **Screen flag:** `system_settings/global.enableSaveGoals`, off by default and on in `__DEV__` and the emulator. It gates screens only; writes always use the audited model.
+- **Ordering:** accessible up/down "Reorder" mode instead of drag-and-drop (no gesture library is installed; not worth adding).
+
+- **Staged rollout:** `enableSaveGoalsFor` (a uid allowlist) and then `enableSaveGoals`, both admin-only in `system_settings/global` (615). Full order, monitoring and rollback: `docs/features/save-goals/ROLLOUT.md`.
+
+## Open items found during the epic
+- **`delete-account` has no storage phase.** Account documents (SPENDLY-88) and goal photos outlive account deletion. This is pre-existing and needs its own ticket.
+- **SPENDLY-616 conflicts.** It changes the same `spendly-files` handler and client files as 614; resolve the conflict when the second of the two reaches main.
+- **Device QA:** see the checklist in `ROLLOUT.md` §5.
+
+## Production steps pending (each needs approval, after merge to main; order in ROLLOUT.md §1)
+- [ ] **Firestore rules deploy BEFORE the next app release.** From 608 on, the app writes `goalEvents`/`goalNames`, which current production rules deny (608, 609, 614).
+- [ ] Firestore indexes `goalEvents (goalId, createdAtMs desc)` (609) and `goalEvents (goalId, type, createdAtMs desc)` (610). Diff against live first.
+- [ ] **Read-model migration `20261029000000` before** any sync/push run that knows the goal tables, then a dry-run full sync (609)
+- [ ] Read-model drills (need PostgREST) before the production migration (609)
+- [ ] `spendly-files` Edge Function deploy (614)
+- [ ] Release build, then enable the `enableSaveGoals` flag in stages (615)

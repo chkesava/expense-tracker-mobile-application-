@@ -82,6 +82,8 @@ export type ExpenseReferenceData = {
   goals: FinancialGoal[];
   goalsLoading: boolean;
   goalsError: LoadFailure | null;
+  /** SPENDLY-613: goals with a write not yet acknowledged by the server. */
+  pendingGoalIds: ReadonlySet<string>;
   retryGoals: () => void;
   registerGoalsSubscriber: () => () => void;
 };
@@ -111,6 +113,7 @@ export function ExpenseReferenceDataProvider({
   const [rules, setRules] = useState<CategorizationRule[]>([]);
   const [budgets, setBudgets] = useState<CategoryBudget[]>([]);
   const [goals, setGoals] = useState<FinancialGoal[]>([]);
+  const [pendingGoalIds, setPendingGoalIds] = useState<ReadonlySet<string>>(() => new Set());
 
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [subscriptionsLoading, setSubscriptionsLoading] = useState(true);
@@ -538,12 +541,24 @@ export function ExpenseReferenceDataProvider({
     setGoalsLoading(true);
     const path = `users/${uid}/financialGoals`;
     perfEvent("firestore_listener_start", { collection: "financialGoals" });
+    let seenFirst = false;
     const unsub = onSnapshot(
       query(
         collection(db, "users", uid, "financialGoals"),
         orderBy("createdAt", "asc")
       ),
+      // SPENDLY-613: metadata changes too, so a goal's "waiting to sync"
+      // state clears when the server acknowledges the write.
+      { includeMetadataChanges: true },
       (snap) => {
+        const pending = snap.docs.filter((d) => d.metadata.hasPendingWrites).map((d) => d.id);
+        setPendingGoalIds((prev) =>
+          prev.size === pending.length && pending.every((id) => prev.has(id)) ? prev : new Set(pending)
+        );
+        // Metadata-only events (pending → synced, cache → server) change no
+        // goal and cost no reads: don't rebuild goals or count them as reads.
+        if (seenFirst && snap.docChanges().length === 0) return;
+        seenFirst = true;
         logQuerySnapshot(path, snap, { feature: "reference", queryShape: "financialGoals" });
         perfEvent("firestore_first_snapshot", {
           collection: "financialGoals",
@@ -679,6 +694,7 @@ export function ExpenseReferenceDataProvider({
       goals,
       goalsLoading,
       goalsError,
+      pendingGoalIds,
       retryGoals,
       registerGoalsSubscriber,
     }),
@@ -707,6 +723,7 @@ export function ExpenseReferenceDataProvider({
       goals,
       goalsLoading,
       goalsError,
+      pendingGoalIds,
       retryGoals,
       registerGoalsSubscriber,
     ]

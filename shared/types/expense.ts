@@ -1,4 +1,5 @@
 import { PARENT_CATEGORY_NAMES } from "../data/categoryTaxonomy";
+import type { GoalV2Fields } from "./goal";
 
 /** Top-level category names from the hierarchical taxonomy. */
 export const CATEGORIES = PARENT_CATEGORY_NAMES;
@@ -403,7 +404,13 @@ export interface CategoryBudget {
   createdAt?: unknown;
 }
 
-export interface FinancialGoal {
+/**
+ * `users/{uid}/financialGoals/{id}` — the goal summary. The first six fields are
+ * the original contract every consumer reads (optimizer, calendar, widget,
+ * decision links); `deadline` is the optional target date ("" = none).
+ * Save Goals (SPENDLY-606) adds only optional fields — see shared/types/goal.ts.
+ */
+export interface FinancialGoal extends GoalV2Fields {
   id: string;
   name: string;
   targetAmount: number;
