@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { useFinancialGoals } from "@/hooks/useFinancialGoals";
-import { useSaveGoalsEnabled } from "@/hooks/useSaveGoalsEnabled";
+import { useSaveGoalsFlag } from "@/hooks/useSaveGoalsEnabled";
 import { useSettings } from "@/providers/SettingsProvider";
 import { cancelGoalNotifications, reconcileGoalNotifications } from "@/services/goals/goalReminderScheduler";
 import { todayDateKey } from "@/shared/utils/dates";
@@ -17,7 +17,7 @@ import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
  * inactivity alerts move with each contribution, with no polling.
  */
 export function GoalReminderSync() {
-  const saveGoals = useSaveGoalsEnabled();
+  const { enabled: saveGoals, loading: flagLoading } = useSaveGoalsFlag();
   const [ready, setReady] = useState(false);
   useEffect(() => scheduleIdleWork(() => setReady(true)), []);
   const { settings } = useSettings();
@@ -29,7 +29,9 @@ export function GoalReminderSync() {
   const planKey = useMemo(() => JSON.stringify(plan.map((n) => [n.id, n.time, n.title])), [plan]);
 
   useEffect(() => {
-    if (!ready) return;
+    // Until system_settings loads the flag reads "off"; acting on that would
+    // cancel every goal reminder on each launch.
+    if (!ready || flagLoading) return;
     // Debounced so a burst of snapshot updates schedules once.
     const t = setTimeout(() => {
       if (!saveGoals || !anyWanted) void cancelGoalNotifications();
@@ -37,7 +39,7 @@ export function GoalReminderSync() {
     }, 1000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, planKey, saveGoals, anyWanted, settings.timezone]);
+  }, [ready, flagLoading, planKey, saveGoals, anyWanted, settings.timezone]);
 
   return null;
 }

@@ -15,6 +15,7 @@ Part of SPENDLY-606. Tracker: `docs/SPENDLY-606-save-goals.md`. Rollout runbook:
 - **Runbook:** `docs/features/save-goals/ROLLOUT.md`, covering the production order (rules before release; migration before sync), staged rollout, monitoring signals, read-cost table and how to measure it, the device QA checklist, rollback levels and limitations.
 
 ## Acceptance criteria → evidence
+
 | AC | Evidence |
 |---|---|
 | Existing goals and the Goal Funding Optimizer keep working | `goalLegacyCompat.test.ts` (optimizer snapshot and calendar identical for legacy and v2; closed goals leave both). The optimizer's own QA suite still passes. Legacy writes are still accepted by rules on un-upgraded goals |

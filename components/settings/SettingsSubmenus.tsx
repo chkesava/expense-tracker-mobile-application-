@@ -730,23 +730,25 @@ export function FinancialGoalsManager() {
                       </Text>
                     )}
 
-                    {/* Mini Progress Bar */}
-                    <View
-                      style={[
-                        styles.goalProgressBarBg,
-                        { backgroundColor: surfaces.control },
-                      ]}
-                    >
+                    {/* Mini Progress Bar (hidden while locked: it would reveal progress) */}
+                    {g.locked && !unlockedIds.has(g.id) ? null : (
                       <View
                         style={[
-                          styles.goalProgressBarFill,
-                          {
-                            backgroundColor: theme.colors.primary,
-                            width: `${pct}%`,
-                          },
+                          styles.goalProgressBarBg,
+                          { backgroundColor: surfaces.control },
                         ]}
-                      />
-                    </View>
+                      >
+                        <View
+                          style={[
+                            styles.goalProgressBarFill,
+                            {
+                              backgroundColor: theme.colors.primary,
+                              width: `${pct}%`,
+                            },
+                          ]}
+                        />
+                      </View>
+                    )}
                   </View>
 
                   {/* 48x48dp touch target. Archive, not delete: history is kept. */}

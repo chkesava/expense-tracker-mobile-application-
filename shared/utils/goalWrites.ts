@@ -157,6 +157,8 @@ function withUpgrade(goal: FinancialGoal, plan: GoalWritePlan, ctx: GoalWriteCon
     schemaVersion: GOAL_SCHEMA_VERSION,
     openingAmount: roundMoney(Math.max(0, Number(goal.currentAmount) || 0)),
     status: goalStatus(goal),
+    // v2 requires a string deadline; a legacy goal may lack one ("" = none).
+    deadline: typeof goal.deadline === "string" ? goal.deadline : "",
     ...plan.fields,
   };
   if (!("normalizedName" in fields)) fields.normalizedName = normalizeGoalName(goal.name ?? "");
@@ -196,7 +198,8 @@ function validateDetails(input: Partial<GoalInput>, target: number): GoalIssue[]
   if (input.startDate && input.targetDate && isValidDateKey(input.startDate) && isValidDateKey(input.targetDate) && input.startDate > input.targetDate) {
     issues.push("dates_out_of_order");
   }
-  if (input.minimumContribution !== undefined) {
+  // 0 means "no minimum" (how an edit clears it).
+  if (input.minimumContribution !== undefined && input.minimumContribution !== 0) {
     if (validatePositiveAmount(input.minimumContribution).length > 0 || input.minimumContribution > target) issues.push("minimum_invalid");
   }
   return issues;
@@ -310,7 +313,7 @@ export function buildEditGoal(
     fields.deadline = patch.targetDate;
     changed.push("targetDate");
   }
-  if (patch.minimumContribution !== undefined && patch.minimumContribution !== goal.minimumContribution) {
+  if (patch.minimumContribution !== undefined && patch.minimumContribution !== (goal.minimumContribution ?? 0)) {
     fields.minimumContribution = patch.minimumContribution;
     changed.push("minimumContribution");
   }

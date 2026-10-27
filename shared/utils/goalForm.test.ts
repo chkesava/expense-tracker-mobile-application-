@@ -47,5 +47,7 @@ describe("parseGoalForm", () => {
   it("round-trips an existing goal", () => {
     const values = goalFormFromGoal({ id: "g", name: "Car", targetAmount: 900, currentAmount: 0, deadline: "", minimumContribution: 50, iconKey: "car" });
     expect(values).toMatchObject({ name: "Car", target: "900", minimum: "50", iconKey: "car", targetDate: "" });
+    // A cleared minimum is stored as 0 and shows as an empty field.
+    expect(goalFormFromGoal({ id: "g", name: "Car", targetAmount: 900, currentAmount: 0, deadline: "", minimumContribution: 0 }).minimum).toBe("");
   });
 });

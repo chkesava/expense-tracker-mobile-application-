@@ -64,7 +64,10 @@ export function GoalFormSheet({
     setErrors({});
     setSaving(false);
     inFlight.current = false;
-  }, [isOpen, goal]);
+    // Keyed on the goal id, not the object: a snapshot (pending → synced, a
+    // write from another device) must not wipe what the user is typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, goal?.id]);
 
   const set = (field: GoalFormField) => (text: string) => {
     setValues((v) => ({ ...v, [field]: text }));

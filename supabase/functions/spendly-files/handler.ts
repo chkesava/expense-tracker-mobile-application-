@@ -176,7 +176,10 @@ export async function checkOwnership(
 ): Promise<OwnerCheck> {
   const uid = uidFromToken(idToken);
   if (!uid) return "unauthenticated";
-  if (uid !== owner.uid) return "denied";
+  // Duress mode (SPENDLY-22) keeps its data under `<uid>_duress` while the
+  // token still carries the real uid; Firestore rules treat both as the same
+  // signed-in person, and the read below still proves the document is theirs.
+  if (owner.uid !== uid && owner.uid !== `${uid}_duress`) return "denied";
 
   const url =
     `https://firestore.googleapis.com/v1/projects/${deps.firebaseProjectId}` +

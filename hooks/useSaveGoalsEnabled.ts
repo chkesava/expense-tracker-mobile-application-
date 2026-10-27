@@ -17,7 +17,19 @@ import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { saveGoalsEnabled } from "@/shared/utils/saveGoalsFlag";
 
 export function useSaveGoalsEnabled(): boolean {
-  const { settings } = useSystemSettings();
+  return useSaveGoalsFlag().enabled;
+}
+
+/**
+ * The flag plus whether `system_settings` is still loading. The provider
+ * starts from defaults (flag off), so anything that acts on "off" — a route
+ * redirect, cancelling reminders — must wait for `loading` to clear.
+ */
+export function useSaveGoalsFlag(): { enabled: boolean; loading: boolean } {
+  const { settings, loading } = useSystemSettings();
   const { user } = useAuth();
-  return saveGoalsEnabled(settings, typeof __DEV__ !== "undefined" && __DEV__, user?.uid);
+  return {
+    enabled: saveGoalsEnabled(settings, typeof __DEV__ !== "undefined" && __DEV__, user?.uid),
+    loading,
+  };
 }

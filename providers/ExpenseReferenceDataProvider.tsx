@@ -541,6 +541,7 @@ export function ExpenseReferenceDataProvider({
     setGoalsLoading(true);
     const path = `users/${uid}/financialGoals`;
     perfEvent("firestore_listener_start", { collection: "financialGoals" });
+    let seenFirst = false;
     const unsub = onSnapshot(
       query(
         collection(db, "users", uid, "financialGoals"),
@@ -550,6 +551,14 @@ export function ExpenseReferenceDataProvider({
       // state clears when the server acknowledges the write.
       { includeMetadataChanges: true },
       (snap) => {
+        const pending = snap.docs.filter((d) => d.metadata.hasPendingWrites).map((d) => d.id);
+        setPendingGoalIds((prev) =>
+          prev.size === pending.length && pending.every((id) => prev.has(id)) ? prev : new Set(pending)
+        );
+        // Metadata-only events (pending → synced, cache → server) change no
+        // goal and cost no reads: don't rebuild goals or count them as reads.
+        if (seenFirst && snap.docChanges().length === 0) return;
+        seenFirst = true;
         logQuerySnapshot(path, snap, { feature: "reference", queryShape: "financialGoals" });
         perfEvent("firestore_first_snapshot", {
           collection: "financialGoals",
@@ -558,10 +567,6 @@ export function ExpenseReferenceDataProvider({
         });
         setGoals(
           snap.docs.map((d) => ({ id: d.id, ...d.data() } as FinancialGoal))
-        );
-        const pending = snap.docs.filter((d) => d.metadata.hasPendingWrites).map((d) => d.id);
-        setPendingGoalIds((prev) =>
-          prev.size === pending.length && pending.every((id) => prev.has(id)) ? prev : new Set(pending)
         );
         setGoalsError(null);
         setGoalsLoading(false);

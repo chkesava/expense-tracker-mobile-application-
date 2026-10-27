@@ -163,6 +163,23 @@ describe("goal images (SPENDLY-614)", () => {
     expect((await handleSpendlyFiles(request({ operation: "upload", path: GOAL_IMG, contentType: "image/png", declaredSize: MAX_UPLOAD_BYTES + 1 }), deps)).status).toBe(413);
   });
 
+  it("accepts the caller's duress tree, and only theirs", async () => {
+    const DURESS_IMG = `users/${OWNER}_duress/goals/g1/img1/image.jpg`;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      return url.includes(`/documents/users/${OWNER}_duress/financialGoals/g1`)
+        ? new Response(JSON.stringify({ name: "projects/p/databases/(default)/documents/x" }), { status: 200 })
+        : new Response("{}", { status: 404 });
+    });
+    const { deps } = makeDeps(ONE_ACCOUNT);
+    const d = { ...deps, fetch: fetchMock as unknown as typeof fetch };
+    expect((await handleSpendlyFiles(request({ operation: "download", path: DURESS_IMG }), d)).status).toBe(200);
+    expect(String(fetchMock.mock.calls[0][0])).toContain(`/documents/users/${OWNER}_duress/financialGoals/g1`);
+    fetchMock.mockClear();
+    expect((await handleSpendlyFiles(request({ operation: "download", path: `users/${OTHER}_duress/goals/g1/img1/image.jpg` }), d)).status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("deletes a goal image the caller owns", async () => {
     const { deps } = goalDeps();
     const res = await handleSpendlyFiles(request({ operation: "delete", path: GOAL_IMG }), deps);

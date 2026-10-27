@@ -57,7 +57,9 @@ export function GoalRemindersSheet({
     setSaving(false);
     inFlight.current = false;
     void goalNotificationPermission().then(setPermission);
-  }, [isOpen, goal]);
+    // Keyed on the goal id so a snapshot doesn't reset the edit in progress.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, goal.id]);
 
   const set = (patch: Partial<GoalReminders>) => setR((prev) => ({ ...prev, ...patch }));
 

@@ -36,7 +36,7 @@ import { Button } from "@/components/ui/Button";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useFinancialGoals } from "@/hooks/useFinancialGoals";
 import { useGhostMoney } from "@/hooks/useGhostMoney";
-import { useSaveGoalsEnabled } from "@/hooks/useSaveGoalsEnabled";
+import { useSaveGoalsFlag } from "@/hooks/useSaveGoalsEnabled";
 import { appDialog } from "@/lib/appDialog";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -63,7 +63,7 @@ const CONFIRM_COPY: Partial<Record<GoalAction, string>> = {
  * with correct / reverse on each amount entry.
  */
 export default function GoalDetailScreen() {
-  const enabled = useSaveGoalsEnabled();
+  const { enabled, loading: flagLoading } = useSaveGoalsFlag();
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const router = useRouter();
@@ -108,7 +108,12 @@ export default function GoalDetailScreen() {
   const hidden = useGoalHidden(goal);
   const deviceAuth = useDeviceAuth();
 
-  if (!enabled) return <Redirect href={"/settings/money" as Href} />;
+  // Wait for system_settings before acting on "off", so a deep link isn't
+  // redirected by the default (flag off) before the first snapshot.
+  if (!enabled) {
+    if (flagLoading) return <PageShell scrollable={false}><LoadingState variant="spinner" /></PageShell>;
+    return <Redirect href={"/settings/money" as Href} />;
+  }
 
   const back = () => (router.canGoBack() ? router.back() : router.replace("/goals" as Href));
   const header = (
@@ -250,7 +255,8 @@ export default function GoalDetailScreen() {
       iconKey: v.iconKey,
       startDate: v.startDate ?? "",
       targetDate: v.targetDate ?? "",
-      minimumContribution: v.minimumContribution,
+      // An empty field clears the minimum; it's stored as 0 (rules refuse null).
+      minimumContribution: v.minimumContribution ?? 0,
     });
 
   const detailRow = (label: string, value: string) => (

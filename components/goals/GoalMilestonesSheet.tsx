@@ -41,7 +41,9 @@ export function GoalMilestonesSheet({
     setErrors({});
     setSaving(false);
     inFlight.current = false;
-  }, [isOpen, goal]);
+    // Keyed on the goal id so a snapshot doesn't reset the edit in progress.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, goal.id]);
 
   const update = (id: string, patch: Partial<MilestoneFormRow>) => {
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));

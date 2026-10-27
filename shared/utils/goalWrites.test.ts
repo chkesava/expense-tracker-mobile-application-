@@ -157,6 +157,14 @@ describe("legacy upgrade on first write", () => {
     expect(p.releaseNameKey).toBeUndefined();
   });
 
+  it("gives a legacy goal without a deadline the v2 empty deadline", () => {
+    const { deadline: _drop, ...noDeadline } = legacy();
+    expect(plan(buildSettingsChange(noDeadline as FinancialGoal, { pinned: true }, ctx())).fields.deadline).toBe("");
+    // An existing deadline is kept, and an edit's own target date still wins.
+    expect(plan(buildAmountChange(legacy(), { kind: "contribution", amount: 1 }, ctx())).fields.deadline).toBe("2027-01-01");
+    expect(plan(buildEditGoal(noDeadline as FinancialGoal, { targetDate: "2028-01-01" }, ctx(), [])).fields.deadline).toBe("2028-01-01");
+  });
+
   it("reconciles before and after the upgrade", () => {
     const store: Store = new Map([[`users/${UID}/financialGoals/g1`, { ...legacy() }]]);
     expect(reconcileGoal(readGoal(store), readEvents(store)).ok).toBe(true);
@@ -273,6 +281,14 @@ describe("target, status, milestones, edits", () => {
     expect(buildEditGoal(v2(), { name: "Car" }, ctx(), [v2()])).toEqual({ ok: false, issues: ["no_change"] });
     // The stored lock is what gets released, even if normalization rules changed since.
     expect(plan(buildEditGoal(v2({ nameKey: "n_old" }), { name: "Bike" }, ctx(), [])).releaseNameKey).toBe("n_old");
+  });
+
+  it("clearing the minimum contribution stores 0, and 0 on a goal without one is no change", () => {
+    const p = plan(buildEditGoal(v2({ minimumContribution: 500 }), { minimumContribution: 0 }, ctx(), [v2()]));
+    expect(p.fields.minimumContribution).toBe(0);
+    expect(p.events[0]).toMatchObject({ changedFields: ["minimumContribution"] });
+    expect(buildEditGoal(v2(), { minimumContribution: 0 }, ctx(), [v2()])).toEqual({ ok: false, issues: ["no_change"] });
+    expect(buildEditGoal(v2(), { minimumContribution: -1 }, ctx(), [v2()])).toMatchObject({ ok: false, issues: ["minimum_invalid"] });
   });
 
   it("a case-only rename keeps the same name lock", () => {

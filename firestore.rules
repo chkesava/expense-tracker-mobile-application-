@@ -697,7 +697,9 @@ service cloud.firestore {
           && d.goalId is string && d.goalId.size() >= 1 && d.goalId.size() <= 128
           && d.type in goalEventTypes()
           && boundedNumber(d.amountDelta)
-          && d.actorUid == request.auth.uid
+          // Either uid of the signed-in person (duress mode writes as
+          // `<uid>_duress`, as the owned-path check at the top allows).
+          && (d.actorUid == request.auth.uid || d.actorUid == request.auth.uid + '_duress')
           && d.createdAtMs is number
           && (!d.keys().hasAny(['reason'])
               || d.reason in ['salary', 'savings', 'bonus', 'gift', 'other'])

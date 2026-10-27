@@ -67,7 +67,8 @@ export function goalFormFromGoal(goal: FinancialGoal): GoalFormValues {
     iconKey: goal.iconKey ?? "piggy-bank",
     startDate: goal.startDate ?? "",
     targetDate: goal.deadline ?? "",
-    minimum: goal.minimumContribution !== undefined ? String(goal.minimumContribution) : "",
+    // 0 is how a cleared minimum is stored (rules don't accept null).
+    minimum: goal.minimumContribution ? String(goal.minimumContribution) : "",
   };
 }
 

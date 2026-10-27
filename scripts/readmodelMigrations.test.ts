@@ -19,14 +19,14 @@ function createdTables(source: string): string[] {
 }
 
 /**
- * Tables named by any `foreach … loop` whose body enables RLS. Later
- * migrations (e.g. SPENDLY-609 goals) add their own loop, so every such loop
- * counts, not just the first one in the file.
+ * Tables named by any `foreach … loop` whose body enables RLS and revokes
+ * client grants. Later migrations (e.g. SPENDLY-609 goals) add their own
+ * loop, so every such loop counts, not just the first one in the file.
  */
 function rlsLoopTables(source: string): string[] {
   const loops = [...source.matchAll(/foreach t in array array\[([\s\S]*?)\] loop([\s\S]*?)end loop/gi)];
   return loops
-    .filter((m) => /enable row level security/i.test(m[2]))
+    .filter((m) => /enable row level security/i.test(m[2]) && /revoke all on table/i.test(m[2]))
     .flatMap((m) => [...m[1].matchAll(/'([a-z_]+)'/g)].map((t) => t[1]));
 }
 

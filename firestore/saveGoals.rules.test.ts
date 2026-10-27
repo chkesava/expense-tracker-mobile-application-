@@ -472,6 +472,30 @@ describe("legacy goals", () => {
   it("legacy goals stay deletable by installed builds", async () => {
     await assertSucceeds(deleteDoc(doc(ownerDb(), "users", OWNER, "financialGoals", "g1")));
   });
+
+  it("upgrades a legacy goal that never had a deadline", async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      await setDoc(doc(c.firestore() as unknown as Firestore, "users", OWNER, "financialGoals", "g2"), {
+        name: "Bike", targetAmount: 500, currentAmount: 50, createdAt: 1,
+      });
+    });
+    await assertSucceeds(commit(ownerDb(), plan(buildAmountChange(await readGoal("g2"), { kind: "contribution", amount: 10 }, ctx("nd1")))));
+    expect(await readGoal("g2")).toMatchObject({ schemaVersion: 2, deadline: "", currentAmount: 60 });
+  });
+});
+
+describe("duress mode", () => {
+  // The duress session writes to `<uid>_duress` while the token keeps the
+  // real uid, so its events carry the duress uid as the actor.
+  const DURESS = `${OWNER}_duress`;
+  const duressCtx = (eventId: string) => ({ ...ctx(eventId), uid: DURESS });
+
+  it("accepts goal writes in the duress tree, and still refuses someone else as the actor", async () => {
+    const p = plan(buildCreateGoal({ name: "Car", targetAmount: 1000, initialAmount: 100 }, { ...duressCtx("d1"), goalId: "g1" }, []));
+    expect(p.events[0].actorUid).toBe(DURESS);
+    await assertFails(commit(ownerDb(), { ...p, events: [{ ...p.events[0], actorUid: `${OTHER}_duress` }] }, DURESS));
+    await assertSucceeds(commit(ownerDb(), p, DURESS));
+  });
 });
 
 describe("history queries (SPENDLY-609)", () => {

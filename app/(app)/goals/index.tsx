@@ -6,6 +6,7 @@ import { ArrowUpDown, BarChart3, Calculator, Check, Plus, Target, WifiOff } from
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingState } from "@/components/common/LoadingState";
 import { Modal } from "@/components/common/Modal";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { GoalCard } from "@/components/goals/GoalCard";
@@ -21,7 +22,7 @@ import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useFinancialGoals } from "@/hooks/useFinancialGoals";
-import { useSaveGoalsEnabled } from "@/hooks/useSaveGoalsEnabled";
+import { useSaveGoalsFlag } from "@/hooks/useSaveGoalsEnabled";
 import { useCelebration } from "@/providers/CelebrationProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
 import type { FinancialGoal } from "@/shared/types/expense";
@@ -37,7 +38,7 @@ import { useTheme } from "@/theme/ThemeProvider";
  * order. Summaries only — one shared listener, no history reads.
  */
 export default function GoalsScreen() {
-  const enabled = useSaveGoalsEnabled();
+  const { enabled, loading: flagLoading } = useSaveGoalsFlag();
   const { theme } = useTheme();
   const router = useRouter();
   const currency = useDisplayCurrency();
@@ -90,7 +91,12 @@ export default function GoalsScreen() {
     return ok;
   };
 
-  if (!enabled) return <Redirect href={"/settings/money" as Href} />;
+  // Wait for system_settings before acting on "off", so a deep link isn't
+  // redirected by the default (flag off) before the first snapshot.
+  if (!enabled) {
+    if (flagLoading) return <PageShell scrollable={false}><LoadingState variant="spinner" /></PageShell>;
+    return <Redirect href={"/settings/money" as Href} />;
+  }
 
   const header = (
     <PageHeader

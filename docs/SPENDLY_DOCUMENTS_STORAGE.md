@@ -52,7 +52,9 @@ the requested path, refuses immediately if it is not the caller's own uid, then
 asks Firestore — *as the caller* — for the account document that path names.
 Firestore verifies the token signature and applies the personal-tree rules, so a
 forged or expired token gets a 401 and a valid token for someone else's account
-gets nothing back. Only then is a short-lived signed URL minted.
+gets nothing back. Only then is a short-lived signed URL minted. A duress
+session's own tree, `users/{uid}_duress/...`, counts as the caller's, as it
+does in the Firestore rules; the same Firestore read still has to succeed.
 
 ---
 

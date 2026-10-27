@@ -6,6 +6,7 @@ import { BarChart3 } from "lucide-react-native";
 import { BarChart } from "@/components/charts/BarChart";
 import { DateField } from "@/components/common/DateField";
 import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingState } from "@/components/common/LoadingState";
 import { ReadModelFreshnessBadge } from "@/components/common/ReadModelFreshnessBadge";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
@@ -20,7 +21,7 @@ import { useFinancialGoals } from "@/hooks/useFinancialGoals";
 import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { useGoalAnalyticsEvents } from "@/hooks/useGoalAnalyticsEvents";
 import { useReadModelFreshness } from "@/hooks/useReadModelFreshness";
-import { useSaveGoalsEnabled } from "@/hooks/useSaveGoalsEnabled";
+import { useSaveGoalsFlag } from "@/hooks/useSaveGoalsEnabled";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { useUnlockedGoalIds } from "@/lib/goalLockSession";
 import { toast } from "@/lib/toast";
@@ -64,7 +65,7 @@ const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Se
  * the chart has a plain-text alternative.
  */
 export default function GoalAnalyticsScreen() {
-  const enabled = useSaveGoalsEnabled();
+  const { enabled, loading: flagLoading } = useSaveGoalsFlag();
   const { theme } = useTheme();
   const router = useRouter();
   const currency = useDisplayCurrency();
@@ -102,7 +103,12 @@ export default function GoalAnalyticsScreen() {
     [preset, current, scope]
   );
 
-  if (!enabled) return <Redirect href={"/settings/money" as Href} />;
+  // Wait for system_settings before acting on "off", so a deep link isn't
+  // redirected by the default (flag off) before the first snapshot.
+  if (!enabled) {
+    if (flagLoading) return <PageShell scrollable={false}><LoadingState variant="spinner" /></PageShell>;
+    return <Redirect href={"/settings/money" as Href} />;
+  }
 
   const meta = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs };
   const body = { color: theme.colors.foreground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.sm };
