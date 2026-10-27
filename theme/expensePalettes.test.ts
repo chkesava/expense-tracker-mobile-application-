@@ -8,6 +8,7 @@ import {
   EXPENSE_PALETTE_SWATCHES,
   EXPENSE_THEME_NAME,
   THEME_LABELS,
+  THEME_NAMES,
   createTheme,
   expensePaletteColors,
   isExpensePaletteName,
@@ -109,5 +110,24 @@ describe("Expense palettes (SPENDLY-618)", () => {
       expect(chart.categorical).toContain(c.foreground);
       expect(new Set(chart.categorical).size).toBe(chart.categorical.length);
     });
+  });
+});
+
+describe("theme list (SPENDLY-619)", () => {
+  it("keeps only light/dark (Ganesh Seva, Nutrition) and the four Expense palettes", () => {
+    expect(THEME_NAMES).toEqual([
+      "light",
+      "dark",
+      "midnight-emerald",
+      "midnight-forest",
+      "midnight-plum",
+      "midnight-cocoa",
+    ]);
+  });
+
+  it("ignores a stored value naming a removed preset", () => {
+    for (const removed of ["midnight", "midnight-olive", "cyberpunk", "sakura-bloom", "glass-3d", "claymorphism"]) {
+      expect(isThemeName(removed)).toBe(false);
+    }
   });
 });

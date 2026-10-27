@@ -1,54 +1,32 @@
 /**
- * Design tokens — light & dark palettes.
- * Named themes beyond light/dark map onto these palettes (full CSS themes later).
+ * Design tokens. `light` and `dark` serve Ganesh Seva and Nutrition; the four
+ * `midnight-*` themes are the Expense palettes (SPENDLY-618). The other
+ * presets were removed in SPENDLY-619; a stored value naming one is ignored.
  */
 
 export type ThemeName =
   | "light"
   | "dark"
-  | "midnight"
-  | "midnight-olive"
   | "midnight-emerald"
   | "midnight-forest"
   | "midnight-plum"
-  | "midnight-cocoa"
-  | "vintage-parchment"
-  | "sakura-bloom"
-  | "cyberpunk"
-  | "nordic"
-  | "deep-sea"
-  | "glass-3d"
-  | "claymorphism";
+  | "midnight-cocoa";
 
 export const THEME_NAMES: ThemeName[] = [
   "light",
   "dark",
-  "midnight",
-  "midnight-olive",
   "midnight-emerald",
   "midnight-forest",
   "midnight-plum",
   "midnight-cocoa",
-  "vintage-parchment",
-  "sakura-bloom",
-  "cyberpunk",
-  "nordic",
-  "deep-sea",
-  "glass-3d",
-  "claymorphism",
 ];
 
 const DARK_APPEARANCE: ReadonlySet<ThemeName> = new Set([
   "dark",
-  "midnight",
-  "midnight-olive",
   "midnight-emerald",
   "midnight-forest",
   "midnight-plum",
   "midnight-cocoa",
-  "cyberpunk",
-  "deep-sea",
-  "glass-3d",
 ]);
 
 export function isThemeName(value: unknown): value is ThemeName {
@@ -864,17 +842,8 @@ export const ACCENT_STORAGE_KEY = "expense-tracker-accent-color";
 export const THEME_LABELS: Record<ThemeName, string> = {
   light: "Light",
   dark: "Dark",
-  midnight: "Midnight",
-  "midnight-olive": "Midnight Olive",
   "midnight-emerald": "Midnight Slate",
   "midnight-forest": "Midnight Forest",
   "midnight-plum": "Midnight Plum",
   "midnight-cocoa": "Midnight Cocoa",
-  "vintage-parchment": "Vintage Parchment",
-  "sakura-bloom": "Sakura Bloom",
-  cyberpunk: "Cyberpunk",
-  nordic: "Nordic",
-  "deep-sea": "Deep Sea",
-  "glass-3d": "Glass 3D",
-  claymorphism: "Claymorphism",
 };
