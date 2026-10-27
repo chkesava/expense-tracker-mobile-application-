@@ -9,6 +9,7 @@ import {
   EXPENSE_THEME_NAME,
   THEME_LABELS,
   THEME_NAMES,
+  normalizeThemeMode,
   createTheme,
   expensePaletteColors,
   isExpensePaletteName,
@@ -129,5 +130,24 @@ describe("theme list (SPENDLY-619)", () => {
     for (const removed of ["midnight", "midnight-olive", "cyberpunk", "sakura-bloom", "glass-3d", "claymorphism"]) {
       expect(isThemeName(removed)).toBe(false);
     }
+  });
+});
+
+describe("theme mode normalisation (SPENDLY-619)", () => {
+  it("turns a removed preset's custom mode into system", () => {
+    expect(normalizeThemeMode("custom", "cyberpunk")).toBe("system");
+    expect(normalizeThemeMode("custom", undefined)).toBe("system");
+  });
+
+  it("keeps custom for a theme that still exists, and the plain modes as they are", () => {
+    expect(normalizeThemeMode("custom", "midnight-plum")).toBe("custom");
+    expect(normalizeThemeMode("light", "cyberpunk")).toBe("light");
+    expect(normalizeThemeMode("dark", null)).toBe("dark");
+    expect(normalizeThemeMode("system", "nordic")).toBe("system");
+  });
+
+  it("rejects unknown modes", () => {
+    expect(normalizeThemeMode("auto", "light")).toBeNull();
+    expect(normalizeThemeMode(undefined, "light")).toBeNull();
   });
 });

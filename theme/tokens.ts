@@ -158,6 +158,17 @@ export type TypeScaleTokens = {
 
 export type ThemeMode = "system" | "light" | "dark" | "custom";
 
+/**
+ * A saved theme mode, or null if it isn't one. SPENDLY-619: "custom" only
+ * makes sense with a theme that still exists. A preset removed in 619 is
+ * ignored, so its "custom" mode becomes "system" and the app follows the
+ * device's light/dark setting again.
+ */
+export function normalizeThemeMode(mode: unknown, theme: unknown): ThemeMode | null {
+  if (mode === "custom") return isThemeName(theme) ? "custom" : "system";
+  return mode === "system" || mode === "light" || mode === "dark" ? mode : null;
+}
+
 export type ThemeTokens = {
   name: ThemeName;
   accentColor: AccentColorName;

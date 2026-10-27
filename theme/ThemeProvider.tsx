@@ -25,6 +25,7 @@ import {
   createTheme,
   isAccentColorName,
   isThemeName,
+  normalizeThemeMode,
   resolveExpensePalette,
   themeUsesDarkPalette,
   type AccentColorName,
@@ -143,9 +144,8 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
           setThemeNameState(storedTheme);
           memoryStorage.setItem(THEME_STORAGE_KEY, storedTheme);
         }
-        if (storedMode === "system" || storedMode === "light" || storedMode === "dark" || storedMode === "custom") {
-          setThemeModeState(storedMode);
-        }
+        const mode = normalizeThemeMode(storedMode, storedTheme);
+        if (mode) setThemeModeState(mode);
         if (isAccentColorName(storedAccent)) {
           setAccentColorState(storedAccent);
           memoryStorage.setItem(ACCENT_STORAGE_KEY, storedAccent);
@@ -188,8 +188,8 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       memoryStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
       void AsyncStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
     }
-    const mode = (data as Record<string, unknown>)?.themeMode;
-    if (mode === "system" || mode === "light" || mode === "dark" || mode === "custom") {
+    const mode = normalizeThemeMode((data as Record<string, unknown>)?.themeMode, data?.theme);
+    if (mode) {
       setThemeModeState(mode);
     }
   }, [data, pendingPalette, realUser, userDocLoading, userDocError]);
