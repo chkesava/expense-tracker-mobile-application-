@@ -123,6 +123,9 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
   const paletteResolved = useRef(false);
   // SPENDLY-619: same for the theme name and mode.
   const themeResolved = useRef(false);
+  // The current device appearance, for async callbacks that outlive a render.
+  const systemRef = useRef(system);
+  systemRef.current = system;
   // The newest local selection while its write is in flight, per account.
   const [pendingPalette] = useState(createPendingPalette);
   const [shellThemeName, setShellThemeName] = useState<ThemeName | null>(null);
@@ -144,7 +147,7 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         // The oldest source: skipped once the user doc or a selection has set
         // the theme. The name is derived from the mode, so they always agree.
-        const pref = themeResolved.current ? null : resolveThemePreference(storedMode, storedTheme, system);
+        const pref = themeResolved.current ? null : resolveThemePreference(storedMode, storedTheme, systemRef.current);
         if (pref) {
           setThemeNameState(pref.name);
           memoryStorage.setItem(THEME_STORAGE_KEY, pref.name);
@@ -183,6 +186,10 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       memoryStorage.setItem(ACCENT_STORAGE_KEY, acc);
       void AsyncStorage.setItem(ACCENT_STORAGE_KEY, acc);
     }
+  }, [data, system]);
+
+  // SPENDLY-618: palette sync, kept apart so a device appearance change does not rerun it.
+  useEffect(() => {
     const palette = acceptRemotePalette(
       (data as Record<string, unknown>)?.expensePalette,
       pendingPalette.pendingFor(realUser?.uid ?? null),
@@ -195,7 +202,7 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       memoryStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
       void AsyncStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
     }
-  }, [data, pendingPalette, realUser, userDocLoading, userDocError, system]);
+  }, [data, pendingPalette, realUser, userDocLoading, userDocError]);
 
   // Handle system appearance changes when in system mode
   useEffect(() => {
