@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -123,9 +124,12 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
   const paletteResolved = useRef(false);
   // SPENDLY-619: same for the theme name and mode.
   const themeResolved = useRef(false);
-  // The current device appearance, for async callbacks that outlive a render.
+  // The committed device appearance, for async callbacks that outlive a render.
+  // Written in a layout effect so a discarded render can never leave its value.
   const systemRef = useRef(system);
-  systemRef.current = system;
+  useLayoutEffect(() => {
+    systemRef.current = system;
+  }, [system]);
   // The newest local selection while its write is in flight, per account.
   const [pendingPalette] = useState(createPendingPalette);
   const [shellThemeName, setShellThemeName] = useState<ThemeName | null>(null);
