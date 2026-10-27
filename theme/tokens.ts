@@ -169,6 +169,25 @@ export function normalizeThemeMode(mode: unknown, theme: unknown): ThemeMode | n
   return mode === "system" || mode === "light" || mode === "dark" ? mode : null;
 }
 
+/**
+ * The theme a saved preference resolves to, with the theme name always
+ * derived from the mode, so the two can never disagree: `system` follows
+ * the device, `light`/`dark` are themselves, `custom` keeps its (valid)
+ * theme. A valid theme with no valid mode is kept as it is. Null when
+ * neither is usable.
+ */
+export function resolveThemePreference(
+  mode: unknown,
+  theme: unknown,
+  system: string | null | undefined
+): { mode: ThemeMode | null; name: ThemeName } | null {
+  const normalized = normalizeThemeMode(mode, theme);
+  if (normalized === "system") return { mode: normalized, name: system === "dark" ? "dark" : "light" };
+  if (normalized === "light" || normalized === "dark") return { mode: normalized, name: normalized };
+  if (normalized === "custom") return { mode: normalized, name: theme as ThemeName };
+  return isThemeName(theme) ? { mode: null, name: theme } : null;
+}
+
 export type ThemeTokens = {
   name: ThemeName;
   accentColor: AccentColorName;

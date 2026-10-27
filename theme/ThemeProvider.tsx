@@ -25,7 +25,7 @@ import {
   createTheme,
   isAccentColorName,
   isThemeName,
-  normalizeThemeMode,
+  resolveThemePreference,
   resolveExpensePalette,
   themeUsesDarkPalette,
   type AccentColorName,
@@ -121,6 +121,8 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
   // SPENDLY-618: true once the user doc or a selection has set the palette,
   // so the slower startup AsyncStorage read cannot replace it.
   const paletteResolved = useRef(false);
+  // SPENDLY-619: same for the theme name and mode.
+  const themeResolved = useRef(false);
   // The newest local selection while its write is in flight, per account.
   const [pendingPalette] = useState(createPendingPalette);
   const [shellThemeName, setShellThemeName] = useState<ThemeName | null>(null);
@@ -140,12 +142,14 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
     ])
       .then(([storedTheme, storedMode, storedAccent, storedPalette]) => {
         if (cancelled) return;
-        if (isThemeName(storedTheme)) {
-          setThemeNameState(storedTheme);
-          memoryStorage.setItem(THEME_STORAGE_KEY, storedTheme);
+        // The oldest source: skipped once the user doc or a selection has set
+        // the theme. The name is derived from the mode, so they always agree.
+        const pref = themeResolved.current ? null : resolveThemePreference(storedMode, storedTheme, system);
+        if (pref) {
+          setThemeNameState(pref.name);
+          memoryStorage.setItem(THEME_STORAGE_KEY, pref.name);
+          if (pref.mode) setThemeModeState(pref.mode);
         }
-        const mode = normalizeThemeMode(storedMode, storedTheme);
-        if (mode) setThemeModeState(mode);
         if (isAccentColorName(storedAccent)) {
           setAccentColorState(storedAccent);
           memoryStorage.setItem(ACCENT_STORAGE_KEY, storedAccent);
@@ -165,10 +169,13 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
 
   // Sync theme from shared user doc listener
   useEffect(() => {
-    if (isThemeName(data?.theme)) {
-      setThemeNameState(data.theme);
-      memoryStorage.setItem(THEME_STORAGE_KEY, data.theme);
-      void AsyncStorage.setItem(THEME_STORAGE_KEY, data.theme);
+    const pref = resolveThemePreference((data as Record<string, unknown>)?.themeMode, data?.theme, system);
+    if (pref) {
+      themeResolved.current = true;
+      setThemeNameState(pref.name);
+      memoryStorage.setItem(THEME_STORAGE_KEY, pref.name);
+      void AsyncStorage.setItem(THEME_STORAGE_KEY, pref.name);
+      if (pref.mode) setThemeModeState(pref.mode);
     }
     if (isAccentColorName((data as Record<string, unknown>)?.accentColor)) {
       const acc = (data as Record<string, unknown>).accentColor as AccentColorName;
@@ -188,11 +195,7 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       memoryStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
       void AsyncStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
     }
-    const mode = normalizeThemeMode((data as Record<string, unknown>)?.themeMode, data?.theme);
-    if (mode) {
-      setThemeModeState(mode);
-    }
-  }, [data, pendingPalette, realUser, userDocLoading, userDocError]);
+  }, [data, pendingPalette, realUser, userDocLoading, userDocError, system]);
 
   // Handle system appearance changes when in system mode
   useEffect(() => {
@@ -231,6 +234,7 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
 
   const setThemeName = useCallback(
     (name: ThemeName) => {
+      themeResolved.current = true;
       const derivedMode: ThemeMode =
         name === "light" ? "light" : name === "dark" ? "dark" : "custom";
       setThemeNameState(name);
@@ -254,6 +258,7 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
 
   const setThemeMode = useCallback(
     (mode: ThemeMode) => {
+      themeResolved.current = true;
       setThemeModeState(mode);
       let targetTheme: ThemeName = themeName;
       if (mode === "system") {
