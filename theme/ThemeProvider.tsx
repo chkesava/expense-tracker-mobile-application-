@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -18,13 +19,21 @@ import { commitWrite } from "@/lib/firestoreWrite";
 import { useAuth } from "@/providers/AuthProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import { memoryStorage, setSharedStorage } from "@/shared/storage/memoryStorage";
-import { acceptRemotePalette, acceptStoredPalette, createPendingPalette } from "./expensePaletteSync";
+import {
+  acceptRemotePalette,
+  acceptStoredPalette,
+  createPendingPalette,
+  createPendingWrites,
+  isStaleWhilePending,
+  themeWriteKey,
+} from "./expensePaletteSync";
 import {
   ACCENT_STORAGE_KEY,
   THEME_STORAGE_KEY,
   createTheme,
   isAccentColorName,
   isThemeName,
+  resolveThemePreference,
   resolveExpensePalette,
   themeUsesDarkPalette,
   type AccentColorName,
@@ -120,8 +129,19 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
   // SPENDLY-618: true once the user doc or a selection has set the palette,
   // so the slower startup AsyncStorage read cannot replace it.
   const paletteResolved = useRef(false);
+  // SPENDLY-619: same for the theme name and mode.
+  const themeResolved = useRef(false);
+  // The committed device appearance, for async callbacks that outlive a render.
+  // Written in a layout effect so a discarded render can never leave its value.
+  const systemRef = useRef(system);
+  useLayoutEffect(() => {
+    systemRef.current = system;
+  }, [system]);
   // The newest local selection while its write is in flight, per account.
   const [pendingPalette] = useState(createPendingPalette);
+  // SPENDLY-619: the same protection for theme (mode + name) and accent writes.
+  const [pendingTheme] = useState(() => createPendingWrites<string>());
+  const [pendingAccent] = useState(() => createPendingWrites<AccentColorName>());
   const [shellThemeName, setShellThemeName] = useState<ThemeName | null>(null);
   const shellTheme = useMemo<ShellThemeValue>(
     () => ({ name: shellThemeName, setName: setShellThemeName }),
@@ -139,12 +159,13 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
     ])
       .then(([storedTheme, storedMode, storedAccent, storedPalette]) => {
         if (cancelled) return;
-        if (isThemeName(storedTheme)) {
-          setThemeNameState(storedTheme);
-          memoryStorage.setItem(THEME_STORAGE_KEY, storedTheme);
-        }
-        if (storedMode === "system" || storedMode === "light" || storedMode === "dark" || storedMode === "custom") {
-          setThemeModeState(storedMode);
+        // The oldest source: skipped once the user doc or a selection has set
+        // the theme. The name is derived from the mode, so they always agree.
+        const pref = themeResolved.current ? null : resolveThemePreference(storedMode, storedTheme, systemRef.current);
+        if (pref) {
+          setThemeNameState(pref.name);
+          memoryStorage.setItem(THEME_STORAGE_KEY, pref.name);
+          if (pref.mode) setThemeModeState(pref.mode);
         }
         if (isAccentColorName(storedAccent)) {
           setAccentColorState(storedAccent);
@@ -165,17 +186,29 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
 
   // Sync theme from shared user doc listener
   useEffect(() => {
-    if (isThemeName(data?.theme)) {
-      setThemeNameState(data.theme);
-      memoryStorage.setItem(THEME_STORAGE_KEY, data.theme);
-      void AsyncStorage.setItem(THEME_STORAGE_KEY, data.theme);
+    const uid = realUser?.uid ?? null;
+    const remoteMode = (data as Record<string, unknown>)?.themeMode;
+    // Skip a snapshot older than a theme selection still being written.
+    const staleTheme = isStaleWhilePending(themeWriteKey(remoteMode, data?.theme), pendingTheme.pendingFor(uid));
+    const pref = staleTheme ? null : resolveThemePreference(remoteMode, data?.theme, system);
+    if (pref) {
+      themeResolved.current = true;
+      setThemeNameState(pref.name);
+      memoryStorage.setItem(THEME_STORAGE_KEY, pref.name);
+      void AsyncStorage.setItem(THEME_STORAGE_KEY, pref.name);
+      if (pref.mode) setThemeModeState(pref.mode);
     }
-    if (isAccentColorName((data as Record<string, unknown>)?.accentColor)) {
+    const remoteAccent = (data as Record<string, unknown>)?.accentColor;
+    if (isAccentColorName(remoteAccent) && !isStaleWhilePending(remoteAccent, pendingAccent.pendingFor(uid))) {
       const acc = (data as Record<string, unknown>).accentColor as AccentColorName;
       setAccentColorState(acc);
       memoryStorage.setItem(ACCENT_STORAGE_KEY, acc);
       void AsyncStorage.setItem(ACCENT_STORAGE_KEY, acc);
     }
+  }, [data, system, realUser, pendingTheme, pendingAccent]);
+
+  // SPENDLY-618: palette sync, kept apart so a device appearance change does not rerun it.
+  useEffect(() => {
     const palette = acceptRemotePalette(
       (data as Record<string, unknown>)?.expensePalette,
       pendingPalette.pendingFor(realUser?.uid ?? null),
@@ -187,10 +220,6 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       setExpensePaletteState(palette);
       memoryStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
       void AsyncStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
-    }
-    const mode = (data as Record<string, unknown>)?.themeMode;
-    if (mode === "system" || mode === "light" || mode === "dark" || mode === "custom") {
-      setThemeModeState(mode);
     }
   }, [data, pendingPalette, realUser, userDocLoading, userDocError]);
 
@@ -231,6 +260,7 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
 
   const setThemeName = useCallback(
     (name: ThemeName) => {
+      themeResolved.current = true;
       const derivedMode: ThemeMode =
         name === "light" ? "light" : name === "dark" ? "dark" : "custom";
       setThemeNameState(name);
@@ -247,13 +277,15 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       // next cold start.
       void AsyncStorage.setItem(THEME_MODE_STORAGE_KEY, derivedMode);
 
-      void persistThemeFields({ theme: name, themeMode: derivedMode });
+      const token = pendingTheme.begin(realUser?.uid ?? null, themeWriteKey(derivedMode, name));
+      void persistThemeFields({ theme: name, themeMode: derivedMode }).finally(() => pendingTheme.complete(token));
     },
-    [persistThemeFields]
+    [pendingTheme, persistThemeFields, realUser]
   );
 
   const setThemeMode = useCallback(
     (mode: ThemeMode) => {
+      themeResolved.current = true;
       setThemeModeState(mode);
       let targetTheme: ThemeName = themeName;
       if (mode === "system") {
@@ -268,9 +300,10 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       void AsyncStorage.setItem(THEME_MODE_STORAGE_KEY, mode);
       void AsyncStorage.setItem(THEME_STORAGE_KEY, targetTheme);
 
-      void persistThemeFields({ theme: targetTheme, themeMode: mode });
+      const token = pendingTheme.begin(realUser?.uid ?? null, themeWriteKey(mode, targetTheme));
+      void persistThemeFields({ theme: targetTheme, themeMode: mode }).finally(() => pendingTheme.complete(token));
     },
-    [persistThemeFields, system, themeName]
+    [pendingTheme, persistThemeFields, realUser, system, themeName]
   );
 
   const setAccentColor = useCallback(
@@ -283,9 +316,10 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       }
       void AsyncStorage.setItem(ACCENT_STORAGE_KEY, accent);
 
-      void persistThemeFields({ accentColor: accent });
+      const token = pendingAccent.begin(realUser?.uid ?? null, accent);
+      void persistThemeFields({ accentColor: accent }).finally(() => pendingAccent.complete(token));
     },
-    [persistThemeFields]
+    [pendingAccent, persistThemeFields, realUser]
   );
 
   const setExpensePalette = useCallback(

@@ -8,6 +8,9 @@ import {
   EXPENSE_PALETTE_SWATCHES,
   EXPENSE_THEME_NAME,
   THEME_LABELS,
+  THEME_NAMES,
+  normalizeThemeMode,
+  resolveThemePreference,
   createTheme,
   expensePaletteColors,
   isExpensePaletteName,
@@ -109,5 +112,68 @@ describe("Expense palettes (SPENDLY-618)", () => {
       expect(chart.categorical).toContain(c.foreground);
       expect(new Set(chart.categorical).size).toBe(chart.categorical.length);
     });
+  });
+});
+
+describe("theme list (SPENDLY-619)", () => {
+  it("keeps only light/dark (Ganesh Seva, Nutrition) and the four Expense palettes", () => {
+    expect(THEME_NAMES).toEqual([
+      "light",
+      "dark",
+      "midnight-emerald",
+      "midnight-forest",
+      "midnight-plum",
+      "midnight-cocoa",
+    ]);
+  });
+
+  it("ignores a stored value naming a removed preset", () => {
+    for (const removed of ["midnight", "midnight-olive", "cyberpunk", "sakura-bloom", "glass-3d", "claymorphism"]) {
+      expect(isThemeName(removed)).toBe(false);
+    }
+  });
+});
+
+describe("theme mode normalisation (SPENDLY-619)", () => {
+  it("turns a removed preset's custom mode into system", () => {
+    expect(normalizeThemeMode("custom", "cyberpunk")).toBe("system");
+    expect(normalizeThemeMode("custom", undefined)).toBe("system");
+  });
+
+  it("keeps custom for a theme that still exists, and the plain modes as they are", () => {
+    expect(normalizeThemeMode("custom", "midnight-plum")).toBe("custom");
+    expect(normalizeThemeMode("light", "cyberpunk")).toBe("light");
+    expect(normalizeThemeMode("dark", null)).toBe("dark");
+    expect(normalizeThemeMode("system", "nordic")).toBe("system");
+  });
+
+  it("rejects unknown modes", () => {
+    expect(normalizeThemeMode("auto", "light")).toBeNull();
+    expect(normalizeThemeMode(undefined, "light")).toBeNull();
+  });
+});
+
+describe("theme preference resolution (SPENDLY-619)", () => {
+  it("derives the name from the mode so they never disagree", () => {
+    expect(resolveThemePreference("system", "light", "dark")).toEqual({ mode: "system", name: "dark" });
+    expect(resolveThemePreference("system", "dark", "light")).toEqual({ mode: "system", name: "light" });
+    // A removed preset stuck with a plain mode takes the mode's theme.
+    expect(resolveThemePreference("light", "cyberpunk", "dark")).toEqual({ mode: "light", name: "light" });
+    expect(resolveThemePreference("dark", "light", "light")).toEqual({ mode: "dark", name: "dark" });
+  });
+
+  it("sends a removed preset with custom mode back to the device appearance", () => {
+    expect(resolveThemePreference("custom", "cyberpunk", "dark")).toEqual({ mode: "system", name: "dark" });
+    expect(resolveThemePreference("custom", "nordic", null)).toEqual({ mode: "system", name: "light" });
+  });
+
+  it("keeps a valid custom theme, and a valid theme with no mode", () => {
+    expect(resolveThemePreference("custom", "midnight-plum", "light")).toEqual({ mode: "custom", name: "midnight-plum" });
+    expect(resolveThemePreference(undefined, "dark", "light")).toEqual({ mode: null, name: "dark" });
+  });
+
+  it("returns null when nothing usable is saved", () => {
+    expect(resolveThemePreference(undefined, "cyberpunk", "dark")).toBeNull();
+    expect(resolveThemePreference(null, null, "dark")).toBeNull();
   });
 });

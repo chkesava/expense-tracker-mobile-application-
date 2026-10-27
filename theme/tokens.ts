@@ -1,54 +1,32 @@
 /**
- * Design tokens — light & dark palettes.
- * Named themes beyond light/dark map onto these palettes (full CSS themes later).
+ * Design tokens. `light` and `dark` serve Ganesh Seva and Nutrition; the four
+ * `midnight-*` themes are the Expense palettes (SPENDLY-618). The other
+ * presets were removed in SPENDLY-619; a stored value naming one is ignored.
  */
 
 export type ThemeName =
   | "light"
   | "dark"
-  | "midnight"
-  | "midnight-olive"
   | "midnight-emerald"
   | "midnight-forest"
   | "midnight-plum"
-  | "midnight-cocoa"
-  | "vintage-parchment"
-  | "sakura-bloom"
-  | "cyberpunk"
-  | "nordic"
-  | "deep-sea"
-  | "glass-3d"
-  | "claymorphism";
+  | "midnight-cocoa";
 
 export const THEME_NAMES: ThemeName[] = [
   "light",
   "dark",
-  "midnight",
-  "midnight-olive",
   "midnight-emerald",
   "midnight-forest",
   "midnight-plum",
   "midnight-cocoa",
-  "vintage-parchment",
-  "sakura-bloom",
-  "cyberpunk",
-  "nordic",
-  "deep-sea",
-  "glass-3d",
-  "claymorphism",
 ];
 
 const DARK_APPEARANCE: ReadonlySet<ThemeName> = new Set([
   "dark",
-  "midnight",
-  "midnight-olive",
   "midnight-emerald",
   "midnight-forest",
   "midnight-plum",
   "midnight-cocoa",
-  "cyberpunk",
-  "deep-sea",
-  "glass-3d",
 ]);
 
 export function isThemeName(value: unknown): value is ThemeName {
@@ -179,6 +157,36 @@ export type TypeScaleTokens = {
 };
 
 export type ThemeMode = "system" | "light" | "dark" | "custom";
+
+/**
+ * A saved theme mode, or null if it isn't one. SPENDLY-619: "custom" only
+ * makes sense with a theme that still exists. A preset removed in 619 is
+ * ignored, so its "custom" mode becomes "system" and the app follows the
+ * device's light/dark setting again.
+ */
+export function normalizeThemeMode(mode: unknown, theme: unknown): ThemeMode | null {
+  if (mode === "custom") return isThemeName(theme) ? "custom" : "system";
+  return mode === "system" || mode === "light" || mode === "dark" ? mode : null;
+}
+
+/**
+ * The theme a saved preference resolves to, with the theme name always
+ * derived from the mode, so the two can never disagree: `system` follows
+ * the device, `light`/`dark` are themselves, `custom` keeps its (valid)
+ * theme. A valid theme with no valid mode is kept as it is. Null when
+ * neither is usable.
+ */
+export function resolveThemePreference(
+  mode: unknown,
+  theme: unknown,
+  system: string | null | undefined
+): { mode: ThemeMode | null; name: ThemeName } | null {
+  const normalized = normalizeThemeMode(mode, theme);
+  if (normalized === "system") return { mode: normalized, name: system === "dark" ? "dark" : "light" };
+  if (normalized === "light" || normalized === "dark") return { mode: normalized, name: normalized };
+  if (normalized === "custom") return { mode: normalized, name: theme as ThemeName };
+  return isThemeName(theme) ? { mode: null, name: theme } : null;
+}
 
 export type ThemeTokens = {
   name: ThemeName;
@@ -864,17 +872,8 @@ export const ACCENT_STORAGE_KEY = "expense-tracker-accent-color";
 export const THEME_LABELS: Record<ThemeName, string> = {
   light: "Light",
   dark: "Dark",
-  midnight: "Midnight",
-  "midnight-olive": "Midnight Olive",
   "midnight-emerald": "Midnight Slate",
   "midnight-forest": "Midnight Forest",
   "midnight-plum": "Midnight Plum",
   "midnight-cocoa": "Midnight Cocoa",
-  "vintage-parchment": "Vintage Parchment",
-  "sakura-bloom": "Sakura Bloom",
-  cyberpunk: "Cyberpunk",
-  nordic: "Nordic",
-  "deep-sea": "Deep Sea",
-  "glass-3d": "Glass 3D",
-  claymorphism: "Claymorphism",
 };
