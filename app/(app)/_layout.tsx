@@ -18,7 +18,7 @@ import { GlassBlurScope, GlassBlurTarget } from "@/components/ui/GlassSurface";
 import { OverlayProvider } from "@gluestack-ui/core/overlay/creator";
 import { NavigationBar } from "expo-navigation-bar";
 import { navigationBarStyleFor } from "@/lib/navigationBarStyle";
-import { EXPENSE_THEME_NAME, themeUsesDarkPalette } from "@/theme/tokens";
+import { themeUsesDarkPalette } from "@/theme/tokens";
 import { SetupWizardModal } from "@/components/onboarding/SetupWizardModal";
 import { useAndroidBackHandler } from "@/hooks/useAndroidBackHandler";
 import { useAppShortcutHandler } from "@/hooks/useAppShortcutHandler";
@@ -384,10 +384,12 @@ function AppShellInner() {
  * render outside this layout and keep following it).
  */
 export default function AppLayout() {
+  // SPENDLY-618: the user's Expense palette (Midnight Slate by default).
+  const { expensePalette } = useTheme();
   // Root-level alerts and toasts render above this layout; match them too.
-  useRegisterShellTheme(EXPENSE_THEME_NAME);
+  useRegisterShellTheme(expensePalette);
   return (
-    <ThemeOverride themeName={EXPENSE_THEME_NAME}>
+    <ThemeOverride themeName={expensePalette}>
       <StatusBar style="light" />
       <ProtectedAppLayout />
     </ThemeOverride>

@@ -23,21 +23,29 @@ import {
   THEME_STORAGE_KEY,
   createTheme,
   isAccentColorName,
+  isExpensePaletteName,
   isThemeName,
+  resolveExpensePalette,
   themeUsesDarkPalette,
   type AccentColorName,
+  type ExpensePaletteName,
   type ThemeName,
   type ThemeTokens,
 } from "./tokens";
 
 export type ThemeMode = "system" | "light" | "dark" | "custom";
 export const THEME_MODE_STORAGE_KEY = "expense-tracker-theme-mode";
+/** SPENDLY-618: the Expense app's own palette, separate from the saved theme. */
+export const EXPENSE_PALETTE_STORAGE_KEY = "expense-tracker-palette";
 
 type ThemeContextValue = {
   theme: ThemeTokens;
   themeName: ThemeName;
   themeMode: ThemeMode;
   accentColor: AccentColorName;
+  /** SPENDLY-618: the palette the Expense shell renders in. */
+  expensePalette: ExpensePaletteName;
+  setExpensePalette: (palette: ExpensePaletteName) => void;
   setThemeName: (name: ThemeName) => void;
   setThemeMode: (mode: ThemeMode) => void;
   setAccentColor: (accent: AccentColorName) => void;
@@ -82,6 +90,14 @@ function resolveInitialAccent(): AccentColorName {
   return "indigo";
 }
 
+function resolveInitialExpensePalette(): ExpensePaletteName {
+  try {
+    return resolveExpensePalette(memoryStorage.getItem(EXPENSE_PALETTE_STORAGE_KEY));
+  } catch {
+    return resolveExpensePalette(null);
+  }
+}
+
 /**
  * Theme provider — AsyncStorage + Firestore `users/{uid}`.
  * Must sit under AuthProvider + UserDocProvider.
@@ -98,6 +114,9 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
   const [accentColor, setAccentColorState] = useState<AccentColorName>(() =>
     resolveInitialAccent()
   );
+  const [expensePalette, setExpensePaletteState] = useState<ExpensePaletteName>(() =>
+    resolveInitialExpensePalette()
+  );
   const [shellThemeName, setShellThemeName] = useState<ThemeName | null>(null);
   const shellTheme = useMemo<ShellThemeValue>(
     () => ({ name: shellThemeName, setName: setShellThemeName }),
@@ -111,8 +130,9 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       AsyncStorage.getItem(THEME_STORAGE_KEY),
       AsyncStorage.getItem(THEME_MODE_STORAGE_KEY),
       AsyncStorage.getItem(ACCENT_STORAGE_KEY),
+      AsyncStorage.getItem(EXPENSE_PALETTE_STORAGE_KEY),
     ])
-      .then(([storedTheme, storedMode, storedAccent]) => {
+      .then(([storedTheme, storedMode, storedAccent, storedPalette]) => {
         if (cancelled) return;
         if (isThemeName(storedTheme)) {
           setThemeNameState(storedTheme);
@@ -124,6 +144,10 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
         if (isAccentColorName(storedAccent)) {
           setAccentColorState(storedAccent);
           memoryStorage.setItem(ACCENT_STORAGE_KEY, storedAccent);
+        }
+        if (isExpensePaletteName(storedPalette)) {
+          setExpensePaletteState(storedPalette);
+          memoryStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, storedPalette);
         }
       })
       .catch(() => undefined);
@@ -145,6 +169,12 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       setAccentColorState(acc);
       memoryStorage.setItem(ACCENT_STORAGE_KEY, acc);
       void AsyncStorage.setItem(ACCENT_STORAGE_KEY, acc);
+    }
+    const palette = (data as Record<string, unknown>)?.expensePalette;
+    if (isExpensePaletteName(palette)) {
+      setExpensePaletteState(palette);
+      memoryStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
+      void AsyncStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
     }
     const mode = (data as Record<string, unknown>)?.themeMode;
     if (mode === "system" || mode === "light" || mode === "dark" || mode === "custom") {
@@ -246,6 +276,21 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
     [persistThemeFields]
   );
 
+  const setExpensePalette = useCallback(
+    (palette: ExpensePaletteName) => {
+      setExpensePaletteState(palette);
+      try {
+        memoryStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
+      } catch {
+        /* ignore */
+      }
+      void AsyncStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
+
+      void persistThemeFields({ expensePalette: palette });
+    },
+    [persistThemeFields]
+  );
+
   const toggleTheme = useCallback(() => {
     setThemeName(
       themeName === "dark" || themeName === "light"
@@ -262,12 +307,14 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       themeName,
       themeMode,
       accentColor,
+      expensePalette,
+      setExpensePalette,
       setThemeName,
       setThemeMode,
       setAccentColor,
       toggleTheme,
     }),
-    [themeName, themeMode, accentColor, setThemeName, setThemeMode, setAccentColor, toggleTheme]
+    [themeName, themeMode, accentColor, expensePalette, setExpensePalette, setThemeName, setThemeMode, setAccentColor, toggleTheme]
   );
 
   return (
