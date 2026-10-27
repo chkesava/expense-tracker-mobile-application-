@@ -26,7 +26,7 @@ begin
   foreach t in array array[
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
-    'credit_card_bills', 'categories'
+    'credit_card_bills', 'categories', 'financial_goals', 'goal_events'
   ] loop
     execute format(
       $sql$insert into public.%I (uid, doc_id, doc, source_path, source_update_time, source_deleted) values
@@ -63,7 +63,7 @@ begin
   foreach t in array array[
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
-    'credit_card_bills', 'categories'
+    'credit_card_bills', 'categories', 'financial_goals', 'goal_events'
   ] loop
     return query execute format('select %L::text, r.uid, r.doc_id from public.%I r', t, t);
   end loop;
@@ -83,8 +83,8 @@ begin
   if wrong is not null then
     raise exception 'user A saw rows that are not theirs or are tombstoned: %', wrong;
   end if;
-  if (select count(*) from rls_test.visible()) <> 20 then
-    raise exception 'user A should see 2 rows in each of 10 tables, saw %', (select count(*) from rls_test.visible());
+  if (select count(*) from rls_test.visible()) <> 24 then
+    raise exception 'user A should see 2 rows in each of 12 tables (Wave 1 + SPENDLY-609 goals), saw %', (select count(*) from rls_test.visible());
   end if;
   if (select count(*) from public.sync_status) <> 1
      or exists (select 1 from public.sync_status s where s.uid <> 'user-a') then
@@ -98,7 +98,7 @@ do $$ begin perform set_config('request.jwt.claims', rls_test.claims('{"sub": "u
 do $$
 begin
   if exists (select 1 from rls_test.visible() v where v.uid <> 'user-b')
-     or (select count(*) from rls_test.visible()) <> 10 then
+     or (select count(*) from rls_test.visible()) <> 12 then
     raise exception 'user B isolation failed';
   end if;
 end
@@ -153,7 +153,7 @@ begin
   foreach t in array array[
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
-    'credit_card_bills', 'categories', 'sync_status',
+    'credit_card_bills', 'categories', 'financial_goals', 'goal_events', 'sync_status',
     'sync_runs', 'sync_checkpoints', 'sync_failures'
   ] loop
     -- Column-free (or last-column) statements, so the probe fails on
@@ -244,7 +244,7 @@ begin
   foreach t in array array[
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
-    'credit_card_bills', 'categories',
+    'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
     'sync_runs', 'sync_status', 'sync_checkpoints', 'sync_failures',
     'v_cash_flow_by_month'
   ] loop

@@ -5,6 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { AddActionSheet } from "@/components/AddActionSheet";
 import { AddTransactionModal } from "@/components/AddTransactionModal";
 import { CalendarNotificationSync } from "@/components/calendar/CalendarNotificationSync";
+import { GoalReminderSync } from "@/components/goals/GoalReminderSync";
 import { GlobalAddModals } from "@/components/GlobalAddModals";
 import { BottomNav } from "@/components/BottomNav";
 import { Header } from "@/components/Header";
@@ -196,6 +197,25 @@ function AppShellInner() {
                 animation: "slide_from_right",
               }}
             />
+            {/* SPENDLY-608: Save Goals list and detail. */}
+            <Stack.Screen
+              name="goals/index"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="goals/analytics"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="goals/[id]"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
             <Stack.Screen
               name="goals/optimizer"
               options={{
@@ -348,6 +368,7 @@ function AppShellInner() {
         <GlobalAddModals />
         {/* SPENDLY-184: keeps calendar notifications in step with the data */}
         <CalendarNotificationSync />
+        <GoalReminderSync />
         <SetupWizardModal />
         </OverlayProvider>
       </View>

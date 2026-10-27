@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { Sparkles, Trophy, X } from "lucide-react-native";
 import Animated, {
   cancelAnimation,
@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/Button";
 import { haptic } from "@/lib/haptics";
 import { useCelebration } from "@/providers/CelebrationProvider";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useMotionReduced } from "@/theme/motion";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 
 export function CelebrationOverlay() {
@@ -28,8 +29,20 @@ export function CelebrationOverlay() {
 
   const emojiScale = useSharedValue(0.5);
   const glowPulse = useSharedValue(1);
+  const motionReduced = useMotionReduced();
+  // Still card for events that opt in (SPENDLY-610) when reduced motion is on.
+  const still = Boolean(currentCelebration?.respectReducedMotion && motionReduced);
 
   useEffect(() => {
+    if (currentCelebration && still) {
+      cancelAnimation(glowPulse);
+      glowPulse.value = 1;
+      emojiScale.value = 1;
+      AccessibilityInfo.announceForAccessibility(
+        [currentCelebration.title, currentCelebration.subtitle].filter(Boolean).join(". ")
+      );
+      return;
+    }
     if (currentCelebration) {
       void haptic.success();
 
@@ -56,7 +69,7 @@ export function CelebrationOverlay() {
       cancelAnimation(glowPulse);
       glowPulse.value = 1;
     }
-  }, [currentCelebration, emojiScale, glowPulse]);
+  }, [currentCelebration, emojiScale, glowPulse, still]);
 
   // Safety net: stop the repeating animation if the overlay itself ever unmounts.
   useEffect(() => {
@@ -83,11 +96,13 @@ export function CelebrationOverlay() {
     >
       <View style={styles.backdrop}>
         {/* Subtle Particle Confetti Burst */}
-        <ConfettiCannon count={45} />
+        {still ? null : <ConfettiCannon count={45} />}
 
         <Animated.View
-          entering={ZoomIn.springify().damping(12).stiffness(180)}
-          exiting={FadeOut.duration(150)}
+          entering={still ? undefined : ZoomIn.springify().damping(12).stiffness(180)}
+          exiting={still ? undefined : FadeOut.duration(150)}
+          accessibilityViewIsModal
+          accessibilityLiveRegion="polite"
           style={[
             styles.card,
             theme.elevation[4],
@@ -155,7 +170,7 @@ export function CelebrationOverlay() {
           {/* Points / XP Pill */}
           {currentCelebration.pointsEarned ? (
             <Animated.View
-              entering={FadeIn.delay(200).duration(300)}
+              entering={still ? undefined : FadeIn.delay(200).duration(300)}
               style={[
                 styles.pointsPill,
                 {

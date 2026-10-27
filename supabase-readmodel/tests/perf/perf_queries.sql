@@ -42,7 +42,7 @@ begin
            (select string_agg(distinct x #>> '{}', ', ') from jsonb_path_query(plan, 'strict $.**."Index Name"') x),
            (select string_agg(distinct r #>> '{}', ', ')
               from jsonb_path_query(plan, 'strict $.** ? (@."Node Type" == "Seq Scan")."Relation Name"') r
-             where r #>> '{}' in ('expenses', 'incomes', 'ledger_events', 'account_payments'));
+             where r #>> '{}' in ('expenses', 'incomes', 'ledger_events', 'account_payments', 'goal_events'));
 end
 $$;
 grant execute on function perf.measure(text, text, integer) to authenticated;
@@ -117,6 +117,24 @@ insert into perf_results select * from perf.measure('linked purchases by id (sup
   select doc_id, doc from public.expenses
   where source_deleted = false and soft_deleted_at is null
     and doc_id in ('e001499','e002998','e004497','e005996','e007495','e008994','e010493','e011992','e013491','e014990','e016489','e017988','e019487','e020986','e022485','e023984','e025483','e026982','e028481','e029980') $q$);
+
+-- SPENDLY-609 Save Goals. Shapes match the SPENDLY-611 read path: older pages
+-- of one goal's history, and analytics/exports chunked by date range.
+insert into perf_results select * from perf.measure('goal history, one goal x5000 events, deep keyset (goal history page)', $q$
+  select doc_id, created_at, doc from public.goal_events
+  where source_deleted = false and goal_id = 'g0001' and created_at is not null
+    and (created_at < '2023-06-01T00:00:00.000Z' or (created_at = '2023-06-01T00:00:00.000Z' and doc_id < ''))
+  order by created_at desc, doc_id desc limit 25 $q$);
+
+insert into perf_results select * from perf.measure('goal analytics, one quarter chunk (goal analytics)', $q$
+  select doc_id, created_at, doc from public.goal_events
+  where source_deleted = false and created_at >= '2024-01-01T00:00:00.000Z' and created_at < '2024-04-01T00:00:00.000Z'
+  order by created_at desc, doc_id desc limit 500 $q$);
+
+insert into perf_results select * from perf.measure('goals with status filter (goal analytics)', $q$
+  select doc_id, name, status, target_amount, doc from public.financial_goals
+  where source_deleted = false and status in ('completed', 'archived')
+  order by doc_id limit 1000 $q$);
 
 insert into perf_results select * from perf.measure('freshness (lastSyncedAt)', $q$
   select collection, last_synced_at from public.sync_status where collection in ('expenses', 'incomes') $q$);

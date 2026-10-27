@@ -52,7 +52,9 @@ the requested path, refuses immediately if it is not the caller's own uid, then
 asks Firestore — *as the caller* — for the account document that path names.
 Firestore verifies the token signature and applies the personal-tree rules, so a
 forged or expired token gets a 401 and a valid token for someone else's account
-gets nothing back. Only then is a short-lived signed URL minted.
+gets nothing back. Only then is a short-lived signed URL minted. A duress
+session's own tree, `users/{uid}_duress/...`, counts as the caller's, as it
+does in the Firestore rules; the same Firestore read still has to succeed.
 
 ---
 
@@ -164,6 +166,28 @@ nothing in production even if Steps 1–4 are complete.
 
 ---
 
+## Save Goals images (SPENDLY-614)
+
+Goal photos use the same bucket and the same Edge Function (in the read-model
+project, as everything here since SPENDLY-616), at
+`users/{uid}/goals/{goalId}/{imageId}/image.jpg`. The function proves ownership
+by reading `users/{uid}/financialGoals/{goalId}` as the caller (the same
+mechanism as accounts), and accepts only JPEG/PNG/WebP uploads for goal paths.
+The client normalises every photo to a JPEG with the longest edge at most
+1600 px before upload.
+
+**Deploy:** redeploy the function (Step 3) so it accepts goal paths, then the
+Firestore rules (Step 5). The rules check that a goal's `image.path` is the
+caller's own image for that goal. No bucket changes: its MIME list and 10 MB
+limit already cover images.
+
+Replacing a photo uploads the new object, saves its metadata on the goal, and
+only then deletes the old object. If saving fails, the new object is deleted
+again. A cleanup that fails is logged and leaves an unreferenced object (no
+sweeper, as below).
+
+---
+
 ## Moving from the Ganesh project (SPENDLY-616)
 
 Builds before SPENDLY-616 sent files to the `spendly-files` bucket and function
@@ -179,6 +203,8 @@ needs no change. The order:
    builds.
 4. Old builds still call the Ganesh project. Remove the Ganesh bucket and
    function only after old builds are gone and any copy is verified.
+
+---
 
 ## What is deliberately not here
 

@@ -3,11 +3,14 @@ import { describe, expect, it } from "vitest";
 import { MAX_PUSH_REFS, parsePushRequest, PUSHABLE_COLLECTIONS, pushRefFromPath } from "./pushRefs";
 
 describe("push refs (SPENDLY-583)", () => {
-  it("pushable collections are exactly the synced (Wave 1) ones", () => {
+  it("pushable collections are exactly the synced ones (Wave 1 + SPENDLY-609 goals)", () => {
     expect([...PUSHABLE_COLLECTIONS].sort()).toEqual([
       "accountEntries", "accountPayments", "accountTransfers", "accountTypes", "accounts",
-      "categories", "creditCardBills", "expenses", "incomes", "ledgerEvents",
+      "categories", "creditCardBills", "expenses", "financialGoals", "goalEvents", "incomes", "ledgerEvents",
     ]);
+    // The name lock is not data and is never pushed.
+    expect(pushRefFromPath("users/u1/goalNames/n_car", "u1")).toBeNull();
+    expect(pushRefFromPath("users/u1/goalEvents/ev1", "u1")).toEqual({ collection: "goalEvents", docId: "ev1" });
   });
 
   it("turns the signed-in user's synced document paths into refs, and nothing else", () => {

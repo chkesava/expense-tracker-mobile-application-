@@ -32,6 +32,7 @@ import { READ_MODEL_SCREENS } from "@/shared/utils/readModelMode";
 import { readModelFreshness, READ_MODEL_FALLBACK_LABEL } from "@/shared/utils/readModelFreshness";
 
 import { readAuditPage, readCashbackLinkedExpenses, readCashFlowHistory, readInsightsMonth } from "./analyticsReadPath";
+import { readGoalEventsInRange } from "./goalsReadPath";
 import { readJournalMatches, readJournalMonth, readJournalPage } from "./journalReadPath";
 import { createReadPath, type ReadPath } from "./readPath";
 import { readModelPath, setReadModelPathForTests } from "./screenReadPath";
@@ -68,6 +69,14 @@ describe("drill D3: the read model is down, every screen in supabase mode (SPEND
     // cashFlow: the bounded summary-doc read serves the chart.
     expect(await readCashFlowHistory({ ...base, fromMonth: "2026-03", toMonth: "2026-06", firestore: firestoreCashFlow })).toMatchObject({ servedBy: "firestore" });
     expect(firestoreCashFlow).toHaveBeenCalledTimes(1);
+    // goals (SPENDLY-611): analytics fall back to the bounded Firestore range read, with no overlay.
+    const firestoreGoals = vi.fn(async () => ({ events: [], truncated: false }));
+    const recentGoals = vi.fn(async () => []);
+    expect(
+      await readGoalEventsInRange({ ...base, fromMs: 0, toMs: 1, firestore: firestoreGoals, recent: recentGoals })
+    ).toMatchObject({ servedBy: "firestore", events: [] });
+    expect(firestoreGoals).toHaveBeenCalledTimes(1);
+    expect(recentGoals).not.toHaveBeenCalled();
 
     for (const screen of READ_MODEL_SCREENS) {
       expect(readModelPath().fellBack(screen)).toBe(true);

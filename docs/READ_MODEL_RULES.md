@@ -58,7 +58,7 @@ These rules sit beside `CLAUDE.md` (Spendly safety invariants) and `docs/AGENT_W
   - `resolveReadModelBackend(screen, …)` in `lib/readModel/screenReadPath.ts`, plus `readModelPath().read(...)`;
   - a new key in `READ_MODEL_SCREENS` (`shared/utils/readModelMode.ts`).
 
-  The existing ones are `journal`, `insights`, `cashFlow`, `audit` and `cashback`.
+  The existing ones are `journal`, `insights`, `cashFlow`, `audit`, `cashback` and `goals` (SPENDLY-611).
 - **R3.2** The default is `firestore`, and in `firestore` mode the screen must behave **exactly as before**, with no read-model connection. Prove it with a test that pins the Firestore query and asserts that `connect` isn't called.
 - **R3.3** The Firestore source must be **bounded** (a date range, a `limit`, a cursor page). It is the fallback, so an outage can't turn into an unbounded read.
 - **R3.4** Each source needs:

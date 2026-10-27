@@ -7,6 +7,9 @@ import { useBorrowings } from "@/hooks/useBorrowings";
 import { useCalendarReminders } from "@/hooks/useCalendarReminders";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { useFinancialGoals } from "@/hooks/useFinancialGoals";
+import { useSaveGoalsEnabled } from "@/hooks/useSaveGoalsEnabled";
+import { goalInboxItems } from "@/shared/utils/goalReminders";
 import { useReceivables } from "@/hooks/useReceivables";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
 import { logError } from "@/lib/errors";
@@ -73,6 +76,9 @@ export function RemindersInboxProvider({ children }: { children: ReactNode }) {
   const { bills } = useCreditCardBills({ enabled: ready });
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
+  // SPENDLY-612: in-app goal reminders (work without push permission and on web).
+  const saveGoals = useSaveGoalsEnabled();
+  const { goals } = useFinancialGoals({ enabled: ready && saveGoals });
 
   const cardNames = useMemo(() => {
     const typeName = new Map(accountTypes.map((t) => [t.id, t.name]));
@@ -91,8 +97,22 @@ export function RemindersInboxProvider({ children }: { children: ReactNode }) {
       ...borrowingEvents(borrowings, ctx),
       ...receivableEvents(receivables, ctx),
     ];
-    return dueInboxItems(events, today);
-  }, [ready, today, currency, reminders, bills, cardNames, subscriptions, borrowings, receivables]);
+    const goalItems: InboxItem[] = saveGoals
+      ? goalInboxItems(goals, today).map((g) => ({
+          id: g.id,
+          kind: "due",
+          source: "goal",
+          title: g.title,
+          subtitle: g.subtitle,
+          amount: null,
+          currency,
+          date: g.date,
+          tone: g.tone,
+          href: g.href,
+        }))
+      : [];
+    return [...dueInboxItems(events, today), ...goalItems];
+  }, [ready, today, currency, reminders, bills, cardNames, subscriptions, borrowings, receivables, saveGoals, goals]);
 
   const [seenIds, setSeenIds] = useState<string[]>([]);
   useEffect(() => {

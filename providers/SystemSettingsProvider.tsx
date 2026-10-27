@@ -26,6 +26,13 @@ export type SystemSettings = {
   allowDataExport: boolean;
   enableInvestments: boolean;
   /**
+   * SPENDLY-606 Save Goals screens (Goals list/detail). Off until the staged
+   * rollout turns it on; see hooks/useSaveGoalsEnabled.ts.
+   */
+  enableSaveGoals?: boolean;
+  /** SPENDLY-615: staged rollout — uids that see Save Goals before everyone. */
+  enableSaveGoalsFor?: string[];
+  /**
    * SPENDLY-511: per-screen read source, e.g. `{ journal: "supabase" }`.
    * Missing or unknown values mean `firestore` (shared/utils/readModelMode.ts).
    */
