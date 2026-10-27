@@ -15,14 +15,17 @@ import { signedCurrencyPrefix } from "@/shared/utils/formatCurrency";
 import {
   MIN_POINTS_FOR_TREND,
   NET_WORTH_PERIODS,
+  netWorthRecorderMessage,
   netWorthTrend,
   type NetWorthPeriod,
+  type NetWorthRecorderStatus,
   type NetWorthPoint,
 } from "@/shared/utils/netWorthHistory";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces, withAlpha } from "@/theme/surfaces";
 
 const PERIOD_LABELS: Record<NetWorthPeriod, string> = {
+  "1W": "Past week",
   "1M": "Past month",
   "3M": "3 months",
   "6M": "6 months",
@@ -30,6 +33,7 @@ const PERIOD_LABELS: Record<NetWorthPeriod, string> = {
 };
 
 const PERIOD_WORDS: Record<NetWorthPeriod, string> = {
+  "1W": "over the past week",
   "1M": "over the past month",
   "3M": "over 3 months",
   "6M": "over 6 months",
@@ -54,6 +58,7 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
   todayKey,
   historyLoading,
   historyFailed,
+  recorder,
 }: {
   netWorth: UnifiedNetWorthSummary;
   currency: string;
@@ -61,6 +66,8 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
   todayKey: string;
   historyLoading: boolean;
   historyFailed: boolean;
+  /** SPENDLY-620: whether today's point is saved, and why not. */
+  recorder: NetWorthRecorderStatus;
 }) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
@@ -275,11 +282,26 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
               {historyFailed
                 ? "Couldn't load your net-worth history."
                 : points.length < MIN_POINTS_FOR_TREND
-                  ? "Trend appears after a few days of history."
+                  ? `Trend appears after ${MIN_POINTS_FOR_TREND} saved days (${points.length} so far).`
                   : "Not enough history in this period yet."}
             </Text>
           )}
         </View>
+
+        {historyLoading || historyFailed ? null : (
+          <Text
+            style={[
+              styles.status,
+              {
+                color: recorder.state === "blocked" || recorder.state === "failed" ? theme.colors.warning : theme.colors.mutedForeground,
+                fontFamily: theme.fontFamily.regular,
+              },
+            ]}
+            testID="net-worth-recorder-status"
+          >
+            {netWorthRecorderMessage(recorder)}
+          </Text>
+        )}
 
         <View style={[styles.footer, { borderTopColor: withAlpha(theme.colors.foreground, 0.1) }]}>
           <FooterFigure label="Assets" ghost={ghost} value={compactAmount(netWorth.totalAssets, currency)} />
@@ -386,6 +408,10 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     lineHeight: 17,
     marginTop: 2,
+  },
+  status: {
+    fontSize: 11.5,
+    lineHeight: 15,
   },
   changeRow: {
     flexDirection: "row",

@@ -112,8 +112,7 @@ export type NetWorthSnapshotBlocker =
   | "offline"
   | "loading"
   | "valuationsLoading"
-  | "missingQuotes"
-  | "partialLedger"
+  | "untrustedBalances"
   | "invalidValues";
 
 export type SnapshotReadiness = {
@@ -121,10 +120,8 @@ export type SnapshotReadiness = {
   isOnline: boolean;
   loading: boolean;
   secondaryLoading?: boolean;
-  /** Holdings valued at their average buy price because no live quote arrived. */
-  holdingsMissingQuote: number;
-  /** SPENDLY-413: the liquid total may be off while the ledger is still a staged page. */
-  liquidBalanceMayBePartial: boolean;
+  /** SPENDLY-620: accounts whose stored balance is missing or awaiting reconciliation. */
+  untrustedBalanceAccounts: number;
   totalNetWorth: number;
   totalAssets: number;
   totalLiabilities: number;
@@ -132,10 +129,19 @@ export type SnapshotReadiness = {
 
 /**
  * Why a snapshot must not be recorded right now (empty = record it). A
- * snapshot is never taken from a partial valuation: while any source is still
- * loading, a holding is priced from its cost instead of the market, the cash
- * ledger may be incomplete, the device is offline (cached data may be stale),
- * or the session is the duress decoy.
+ * snapshot is never taken while any source (quotes included) is still
+ * loading, an account's stored balance is missing or awaiting reconciliation,
+ * the device is offline (cached data may be stale), or the session is the
+ * duress decoy.
+ *
+ * SPENDLY-620: every blocker here must be able to clear on its own or by a
+ * user action. Two that could not were removed:
+ * - the staged-ledger flag (SPENDLY-413) — the roll-up reads each account's
+ *   stored balance, never the loaded ledger, so it never affected the value,
+ *   yet it stayed set for anyone with 300+ transactions;
+ * - missing quotes — once quotes have loaded, a holding with no quote is
+ *   recorded at cost, exactly as the headline shows it, instead of blocking
+ *   every day for as long as its quote is unavailable.
  */
 export function snapshotBlockers(input: SnapshotReadiness): NetWorthSnapshotBlocker[] {
   const blockers: NetWorthSnapshotBlocker[] = [];
@@ -143,8 +149,7 @@ export function snapshotBlockers(input: SnapshotReadiness): NetWorthSnapshotBloc
   if (!input.isOnline) blockers.push("offline");
   if (input.loading) blockers.push("loading");
   if (input.secondaryLoading) blockers.push("valuationsLoading");
-  if (input.holdingsMissingQuote > 0) blockers.push("missingQuotes");
-  if (input.liquidBalanceMayBePartial) blockers.push("partialLedger");
+  if (input.untrustedBalanceAccounts > 0) blockers.push("untrustedBalances");
   if (
     !boundedFinite(input.totalNetWorth) ||
     !boundedFinite(input.totalAssets) ||
@@ -153,6 +158,57 @@ export function snapshotBlockers(input: SnapshotReadiness): NetWorthSnapshotBloc
     blockers.push("invalidValues");
   }
   return blockers;
+}
+
+export type NetWorthRecorderState = "saved" | "waiting" | "blocked" | "failed";
+
+export type NetWorthRecorderStatus = {
+  state: NetWorthRecorderState;
+  blockers: NetWorthSnapshotBlocker[];
+};
+
+/**
+ * SPENDLY-620: what the card says about today's point. "waiting" covers the
+ * blockers that clear on their own (loading, settling); "blocked" is one the
+ * user has to act on or wait out (offline, untrusted balance, bad values).
+ */
+export function netWorthRecorderStatus(input: {
+  recordedToday: boolean;
+  historyLoading: boolean;
+  failed: boolean;
+  blockers: readonly NetWorthSnapshotBlocker[];
+}): NetWorthRecorderStatus {
+  const blockers = [...input.blockers];
+  if (input.recordedToday) return { state: "saved", blockers: [] };
+  // Until history loads we can't tell whether today is already recorded.
+  if (input.historyLoading) return { state: "waiting", blockers };
+  if (input.failed) return { state: "failed", blockers };
+  const lasting = blockers.filter((b) => b !== "loading" && b !== "valuationsLoading");
+  if (lasting.length > 0) return { state: "blocked", blockers: lasting };
+  return { state: "waiting", blockers };
+}
+
+const BLOCKER_TEXT: Record<NetWorthSnapshotBlocker, string> = {
+  duress: "not available in this session",
+  offline: "you're offline",
+  loading: "your accounts are still loading",
+  valuationsLoading: "investment prices are still loading",
+  untrustedBalances: "an account balance is pending reconciliation (open Accounts and rebuild it)",
+  invalidValues: "a total couldn't be valued",
+};
+
+/** SPENDLY-620: the one line the card shows about today's point. */
+export function netWorthRecorderMessage(status: NetWorthRecorderStatus): string {
+  switch (status.state) {
+    case "saved":
+      return "Today's net worth is saved.";
+    case "failed":
+      return "Couldn't save today's net worth — it will retry.";
+    case "blocked":
+      return `Today's net worth isn't saved: ${BLOCKER_TEXT[status.blockers[0]]}.`;
+    default:
+      return "Saving today's net worth…";
+  }
 }
 
 /**
@@ -216,9 +272,19 @@ export function hasPointOn(points: readonly NetWorthPoint[], dateKey: string): b
   return points.some((p) => p.date === dateKey);
 }
 
-export type NetWorthPeriod = "1M" | "3M" | "6M" | "1Y";
-export const NET_WORTH_PERIODS: readonly NetWorthPeriod[] = ["1M", "3M", "6M", "1Y"];
-const PERIOD_MONTHS: Record<NetWorthPeriod, number> = { "1M": 1, "3M": 3, "6M": 6, "1Y": 12 };
+export type NetWorthPeriod = "1W" | "1M" | "3M" | "6M" | "1Y";
+export const NET_WORTH_PERIODS: readonly NetWorthPeriod[] = ["1W", "1M", "3M", "6M", "1Y"];
+const PERIOD_MONTHS: Record<Exclude<NetWorthPeriod, "1W">, number> = { "1M": 1, "3M": 3, "6M": 6, "1Y": 12 };
+
+/** `dateKey` moved back by whole days. */
+export function daysBefore(dateKey: string, days: number): string {
+  const d = parseLocalDate(dateKey);
+  return toKey(new Date(d.getFullYear(), d.getMonth(), d.getDate() - days));
+}
+
+function periodStart(todayKey: string, period: NetWorthPeriod): string {
+  return period === "1W" ? daysBefore(todayKey, 7) : monthsBefore(todayKey, PERIOD_MONTHS[period]);
+}
 
 export type NetWorthTrend = {
   /** Points to draw: the baseline, then every recorded day after it, thinned to `MAX_CHART_POINTS`. */
@@ -245,7 +311,7 @@ export function netWorthTrend(
   period: NetWorthPeriod,
   todayKey: string
 ): NetWorthTrend {
-  const start = monthsBefore(todayKey, PERIOD_MONTHS[period]);
+  const start = periodStart(todayKey, period);
   const upToToday = points.filter((p) => p.date <= todayKey);
   const before = upToToday.filter((p) => p.date <= start);
   const inside = upToToday.filter((p) => p.date > start);

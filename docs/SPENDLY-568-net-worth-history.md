@@ -37,8 +37,7 @@ Path: `users/{uid}/netWorthHistory/{YYYY-MM}`, with one document per month:
   - in duress mode;
   - while offline (cached data may be stale);
   - while the core or secondary net-worth sources are loading;
-  - while any holding has no live quote, because `composeNetWorth` would price it at its average buy price. This is the new `holdingsMissingQuote` count on `UnifiedNetWorthSummary`.
-  - while `liquidBalanceMayBePartial` is set (SPENDLY-413);
+  - while any account's stored balance (or card outstanding) is missing or `needs_reconciliation` (`untrustedBalanceAccounts`, SPENDLY-620);
   - when any value is non-finite or out of bounds;
 - the values stay unchanged for 2.5 s, so a late quote isn't caught mid-update.
 
@@ -104,3 +103,10 @@ This adds a new collection that the client reads and writes, so per `docs/AFTER_
 - **Snapshots are taken only on the dashboard.** A user who never opens it records nothing; there is no scheduled job.
 - **Not every source can report a failure.** Loans, card bills, receivables, entries, payments and transfers don't expose a load error to `useUnifiedNetWorth`. If one of their listeners failed while still reporting "loaded", a snapshot could be taken from incomplete data. The other guards make this unlikely, but it isn't impossible.
 - **No Android device QA yet.**
+
+## SPENDLY-620 fix: the trend never recorded
+Two of the original blockers could stay set indefinitely, so no point was ever written:
+- **`liquidBalanceMayBePartial`** (SPENDLY-413) stays true for anyone with 300+ transactions and a bank account without `balanceAsOfDate`, because the full ledger is no longer auto-loaded (SPENDLY-409). `composeNetWorth` reads each account's stored `currentBalance` and never replays the ledger, so the flag never affected the value. It is now only the card's info note. The snapshot instead waits on `untrustedBalanceAccounts`, which the user can clear by rebuilding the balance from Accounts.
+- **Missing quotes** blocked every day while any holding's quote was unavailable. Now the recorder waits until quotes finish loading (`secondaryLoading`), then records an unquoted holding at cost, the same value the headline shows.
+
+The card shows one status line under the trend (`netWorthRecorderStatus` / `netWorthRecorderMessage`): saved, saving, the blocking reason, or a failed write. A failed write is retried after 60 s instead of being dropped for the session. A **1W** period was added. Rules and the stored shape are unchanged. Missed days are not backfilled.

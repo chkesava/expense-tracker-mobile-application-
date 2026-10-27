@@ -25,6 +25,7 @@ import type { Investment } from "@/shared/types/investment";
 import type { Holding } from "@/shared/features/portfolio/types";
 import {
   accountNeedsFullLedgerHistory,
+  storedBalanceTrusted,
   type OpenCreditBillSlice,
 } from "@/shared/utils/accountBalance";
 import { getAccountKind } from "@/shared/utils/accountKind";
@@ -102,6 +103,12 @@ export interface NetWorthTotals {
    * above are NOT adjusted for this — it's a transparency flag, not a fix.
    */
   liquidBalanceMayBePartial: boolean;
+  /**
+   * SPENDLY-620: accounts whose stored balance (or card outstanding) is
+   * missing or flagged `needs_reconciliation`, so the totals above may not be
+   * real yet. Gates net-worth history, not the displayed figures.
+   */
+  untrustedBalanceAccounts: number;
 }
 
 /**
@@ -149,10 +156,12 @@ export function composeNetWorth(inputs: NetWorthInputs): NetWorthTotals {
   let bankOverdraftLiabilities = 0;
   let creditCardLiabilities = 0;
   let liquidBalanceMayBePartial = false;
+  let untrustedBalanceAccounts = 0;
 
   accounts.forEach((a) => {
     const typeName = typeMap.get(a.typeId) || "";
     const kind = getAccountKind(typeName);
+    if (!storedBalanceTrusted(a, kind === "credit")) untrustedBalanceAccounts += 1;
 
     if (kind === "credit") {
       creditCardLiabilities += a.currentOutstanding ?? 0;
@@ -209,6 +218,7 @@ export function composeNetWorth(inputs: NetWorthInputs): NetWorthTotals {
     borrowingLiabilities,
     receivableAssets,
     liquidBalanceMayBePartial,
+    untrustedBalanceAccounts,
     totalLiabilities,
     totalNetWorth,
   };

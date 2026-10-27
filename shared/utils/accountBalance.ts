@@ -138,6 +138,24 @@ export function accountNeedsFullLedgerHistory(
   return effectiveBalanceAsOfDate(account.balanceAsOfDate, [], today) === undefined;
 }
 
+/**
+ * SPENDLY-620: whether the materialized figure the net-worth roll-up reads
+ * (`currentBalance`, or `currentOutstanding` for a card) can be recorded as
+ * history. Ledger completeness is irrelevant here — the roll-up never replays
+ * the ledger — but a figure that is missing or flagged `needs_reconciliation`
+ * (SPENDLY-436) is not yet the account's real balance.
+ */
+export function storedBalanceTrusted(account: Account, isCreditCard: boolean): boolean {
+  if (
+    account.balanceReconciliationStatus === "needs_reconciliation" ||
+    account.summaryReconciliationStatus === "needs_reconciliation"
+  ) {
+    return false;
+  }
+  const value = isCreditCard ? account.currentOutstanding : account.currentBalance;
+  return typeof value === "number" && Number.isFinite(value);
+}
+
 export function computeBankBalance(
   account: Account,
   expenses: Expense[],

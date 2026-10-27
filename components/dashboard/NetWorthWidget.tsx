@@ -53,8 +53,9 @@ export interface NetWorthWidgetProps {
  * The dashboard's net-worth card (SPENDLY-532, Visual First since
  * SPENDLY-566): net worth with the privacy switch beside it, then assets and
  * liabilities. Every figure is a field of the one `useUnifiedNetWorth` summary
- * — nothing here adds, nets or projects values. No trend or change figure is
- * shown because no net-worth history exists to draw one from.
+ * — nothing here adds, nets or projects values. The trend and change come
+ * from the daily points recorded below (SPENDLY-568), and the card says
+ * whether today's point is saved (SPENDLY-620).
  */
 export const NetWorthWidget = memo(function NetWorthWidget({ netWorth, currency }: NetWorthWidgetProps) {
   const { settings } = useSettings();
@@ -62,7 +63,7 @@ export const NetWorthWidget = memo(function NetWorthWidget({ netWorth, currency 
   // SPENDLY-568: history is read only here, where the trend renders, and
   // today's point is recorded from this same summary once it is complete.
   const history = useNetWorthHistory(todayKey);
-  useNetWorthSnapshotRecorder({ summary: netWorth, todayKey, history });
+  const recorder = useNetWorthSnapshotRecorder({ summary: netWorth, todayKey, history });
 
   // First load: a placeholder shaped like the card, so nothing jumps when the
   // totals land (SPENDLY-533).
@@ -80,6 +81,7 @@ export const NetWorthWidget = memo(function NetWorthWidget({ netWorth, currency 
       todayKey={todayKey}
       historyLoading={history.loading}
       historyFailed={Boolean(history.error)}
+      recorder={recorder}
     />
   );
 });
