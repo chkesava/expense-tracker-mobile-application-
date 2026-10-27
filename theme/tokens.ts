@@ -9,6 +9,9 @@ export type ThemeName =
   | "midnight"
   | "midnight-olive"
   | "midnight-emerald"
+  | "midnight-forest"
+  | "midnight-plum"
+  | "midnight-cocoa"
   | "vintage-parchment"
   | "sakura-bloom"
   | "cyberpunk"
@@ -23,6 +26,9 @@ export const THEME_NAMES: ThemeName[] = [
   "midnight",
   "midnight-olive",
   "midnight-emerald",
+  "midnight-forest",
+  "midnight-plum",
+  "midnight-cocoa",
   "vintage-parchment",
   "sakura-bloom",
   "cyberpunk",
@@ -37,6 +43,9 @@ const DARK_APPEARANCE: ReadonlySet<ThemeName> = new Set([
   "midnight",
   "midnight-olive",
   "midnight-emerald",
+  "midnight-forest",
+  "midnight-plum",
+  "midnight-cocoa",
   "cyberpunk",
   "deep-sea",
   "glass-3d",
@@ -391,15 +400,145 @@ export const midnightSlateColors: ColorTokens = {
 };
 
 /**
- * SPENDLY-604: the Expense app is always dark. Every screen under the Expense
- * shell renders in this palette (Midnight Slate since SPENDLY-617), whatever theme the user has saved; Ganesh
- * Seva and Nutrition still follow the saved theme.
+ * SPENDLY-618: a six-colour dark palette, darkest first, plus the derived
+ * steps it needs. Every Expense palette maps onto the tokens the same way as
+ * Midnight Slate, so screens never special-case a palette:
+ *
+ *   background · card · step (secondaryContainer) · raised (secondary, muted,
+ *   surfaceVariant) · edge (border, outlineVariant, primaryContainer) ·
+ *   line (outline only) · muted text · text and accent
+ *
+ * `raised` is the palette's third colour unless that is too light for muted
+ * text at 4.5:1, in which case it is a darker mix of card and third colour.
+ * Money and status colours are shared by every palette (SPENDLY-617).
  */
-export const EXPENSE_THEME_NAME: ThemeName = "midnight-emerald";
+export type ExpensePaletteSpec = {
+  background: string;
+  card: string;
+  step: string;
+  raised: string;
+  edge: string;
+  line: string;
+  mutedText: string;
+  text: string;
+};
+
+export function expensePaletteColors(p: ExpensePaletteSpec): ColorTokens {
+  return {
+    background: p.background,
+    foreground: p.text,
+    card: p.card,
+    cardForeground: p.text,
+    primary: p.text,
+    primaryForeground: p.background,
+    secondary: p.raised,
+    secondaryForeground: p.text,
+    muted: p.raised,
+    mutedForeground: p.mutedText,
+    destructive: "#FF7777",
+    destructiveForeground: "#1A0707",
+    success: "#35E889",
+    successForeground: "#04130C",
+    warning: "#F5C451",
+    warningForeground: "#1C1407",
+    border: p.edge,
+    tint: p.text,
+    tabIconDefault: p.mutedText,
+    tabIconSelected: p.text,
+    primaryContainer: p.edge,
+    onPrimaryContainer: p.text,
+    secondaryContainer: p.step,
+    onSecondaryContainer: p.text,
+    surfaceVariant: p.raised,
+    onSurfaceVariant: p.mutedText,
+    outline: p.line,
+    outlineVariant: p.edge,
+    scrim: "rgba(0, 0, 0, 0.72)",
+    info: "#78B8FF",
+    infoForeground: "#06111F",
+  };
+}
+
+/** Forest: #051F20 #0B2B26 #163832 #235347 #8EB69B #DAF1DE. */
+export const midnightForestColors = expensePaletteColors({
+  background: "#051F20",
+  card: "#0B2B26",
+  step: "#11322C",
+  raised: "#163832",
+  edge: "#163832",
+  line: "#235347",
+  mutedText: "#8EB69B",
+  text: "#DAF1DE",
+});
+
+/** Plum: #17151C #292531 #45404F #716879 #AAA2B3 #E2DDE7. #45404F is too light under muted text, so raised is #373340. */
+export const midnightPlumColors = expensePaletteColors({
+  background: "#17151C",
+  card: "#292531",
+  step: "#302C39",
+  raised: "#373340",
+  edge: "#45404F",
+  line: "#716879",
+  mutedText: "#AAA2B3",
+  text: "#E2DDE7",
+});
+
+/** Cocoa: #211B1A #382A28 #60433D #916B60 #C1A094 #E8D8CE. #60433D is too light under muted text, so raised is #483430. */
+export const midnightCocoaColors = expensePaletteColors({
+  background: "#211B1A",
+  card: "#382A28",
+  step: "#402F2C",
+  raised: "#483430",
+  edge: "#60433D",
+  line: "#916B60",
+  mutedText: "#C1A094",
+  text: "#E8D8CE",
+});
+
+/**
+ * SPENDLY-604: the Expense app is always dark. Every screen under the Expense
+ * shell renders in the user's Expense palette (SPENDLY-618), Midnight Slate by
+ * default, whatever theme they saved; Ganesh Seva and Nutrition still follow
+ * the saved theme.
+ */
+export const EXPENSE_THEME_NAME: ExpensePaletteName = "midnight-emerald";
+
+export type ExpensePaletteName = "midnight-emerald" | "midnight-forest" | "midnight-plum" | "midnight-cocoa";
+
+export const EXPENSE_PALETTE_NAMES: ExpensePaletteName[] = [
+  "midnight-emerald",
+  "midnight-forest",
+  "midnight-plum",
+  "midnight-cocoa",
+];
+
+export const EXPENSE_PALETTE_COLORS: Record<ExpensePaletteName, ColorTokens> = {
+  "midnight-emerald": midnightSlateColors,
+  "midnight-forest": midnightForestColors,
+  "midnight-plum": midnightPlumColors,
+  "midnight-cocoa": midnightCocoaColors,
+};
+
+/** The six source colours of each palette, darkest first, for the picker swatches. */
+export const EXPENSE_PALETTE_SWATCHES: Record<ExpensePaletteName, readonly string[]> = {
+  "midnight-emerald": ["#06141B", "#11212D", "#253745", "#4A5C6A", "#9BA8AB", "#CCD0CF"],
+  "midnight-forest": ["#051F20", "#0B2B26", "#163832", "#235347", "#8EB69B", "#DAF1DE"],
+  "midnight-plum": ["#17151C", "#292531", "#45404F", "#716879", "#AAA2B3", "#E2DDE7"],
+  "midnight-cocoa": ["#211B1A", "#382A28", "#60433D", "#916B60", "#C1A094", "#E8D8CE"],
+};
+
+export function isExpensePaletteName(value: unknown): value is ExpensePaletteName {
+  return typeof value === "string" && (EXPENSE_PALETTE_NAMES as string[]).includes(value);
+}
+
+/** A stored value, or the default when it is missing or unknown. */
+export function resolveExpensePalette(value: unknown): ExpensePaletteName {
+  return isExpensePaletteName(value) ? value : EXPENSE_THEME_NAME;
+}
 
 /** Presets that ship their own accent; the accent picker does not apply. */
 export function themeOwnsAccent(name: ThemeName): boolean {
-  return name === "midnight-emerald";
+  return isExpensePaletteName(name);
 }
 
 export type AccentColorName =
@@ -659,7 +798,7 @@ export function createTheme(
     return {
       name,
       accentColor,
-      colors: { ...midnightSlateColors },
+      colors: { ...EXPENSE_PALETTE_COLORS[name as ExpensePaletteName] },
       space,
       radius,
       typography,
@@ -677,7 +816,7 @@ export function createTheme(
           "#F28CC0",
           "#CCD0CF",
           "#FF9F6B",
-        ],
+        ].map((hex) => (hex === "#CCD0CF" ? EXPENSE_PALETTE_COLORS[name as ExpensePaletteName].foreground : hex)),
         positive: "#35E889",
         negative: "#FF7777",
       },
@@ -728,6 +867,9 @@ export const THEME_LABELS: Record<ThemeName, string> = {
   midnight: "Midnight",
   "midnight-olive": "Midnight Olive",
   "midnight-emerald": "Midnight Slate",
+  "midnight-forest": "Midnight Forest",
+  "midnight-plum": "Midnight Plum",
+  "midnight-cocoa": "Midnight Cocoa",
   "vintage-parchment": "Vintage Parchment",
   "sakura-bloom": "Sakura Bloom",
   cyberpunk: "Cyberpunk",

@@ -18,26 +18,34 @@ import { commitWrite } from "@/lib/firestoreWrite";
 import { useAuth } from "@/providers/AuthProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import { memoryStorage, setSharedStorage } from "@/shared/storage/memoryStorage";
+import { acceptRemotePalette, acceptStoredPalette, createPendingPalette } from "./expensePaletteSync";
 import {
   ACCENT_STORAGE_KEY,
   THEME_STORAGE_KEY,
   createTheme,
   isAccentColorName,
   isThemeName,
+  resolveExpensePalette,
   themeUsesDarkPalette,
   type AccentColorName,
+  type ExpensePaletteName,
   type ThemeName,
   type ThemeTokens,
 } from "./tokens";
 
 export type ThemeMode = "system" | "light" | "dark" | "custom";
 export const THEME_MODE_STORAGE_KEY = "expense-tracker-theme-mode";
+/** SPENDLY-618: the Expense app's own palette, separate from the saved theme. */
+export const EXPENSE_PALETTE_STORAGE_KEY = "expense-tracker-palette";
 
 type ThemeContextValue = {
   theme: ThemeTokens;
   themeName: ThemeName;
   themeMode: ThemeMode;
   accentColor: AccentColorName;
+  /** SPENDLY-618: the palette the Expense shell renders in. */
+  expensePalette: ExpensePaletteName;
+  setExpensePalette: (palette: ExpensePaletteName) => void;
   setThemeName: (name: ThemeName) => void;
   setThemeMode: (mode: ThemeMode) => void;
   setAccentColor: (accent: AccentColorName) => void;
@@ -82,6 +90,14 @@ function resolveInitialAccent(): AccentColorName {
   return "indigo";
 }
 
+function resolveInitialExpensePalette(): ExpensePaletteName {
+  try {
+    return resolveExpensePalette(memoryStorage.getItem(EXPENSE_PALETTE_STORAGE_KEY));
+  } catch {
+    return resolveExpensePalette(null);
+  }
+}
+
 /**
  * Theme provider — AsyncStorage + Firestore `users/{uid}`.
  * Must sit under AuthProvider + UserDocProvider.
@@ -89,7 +105,7 @@ function resolveInitialAccent(): AccentColorName {
 export function AppThemeProvider({ children }: { children: ReactNode }) {
   const system = useSystemColorScheme();
   const { realUser } = useAuth();
-  const { data } = useUserDoc();
+  const { data, loading: userDocLoading, error: userDocError } = useUserDoc();
 
   const [themeMode, setThemeModeState] = useState<ThemeMode>("system");
   const [themeName, setThemeNameState] = useState<ThemeName>(() =>
@@ -98,6 +114,14 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
   const [accentColor, setAccentColorState] = useState<AccentColorName>(() =>
     resolveInitialAccent()
   );
+  const [expensePalette, setExpensePaletteState] = useState<ExpensePaletteName>(() =>
+    resolveInitialExpensePalette()
+  );
+  // SPENDLY-618: true once the user doc or a selection has set the palette,
+  // so the slower startup AsyncStorage read cannot replace it.
+  const paletteResolved = useRef(false);
+  // The newest local selection while its write is in flight, per account.
+  const [pendingPalette] = useState(createPendingPalette);
   const [shellThemeName, setShellThemeName] = useState<ThemeName | null>(null);
   const shellTheme = useMemo<ShellThemeValue>(
     () => ({ name: shellThemeName, setName: setShellThemeName }),
@@ -111,8 +135,9 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       AsyncStorage.getItem(THEME_STORAGE_KEY),
       AsyncStorage.getItem(THEME_MODE_STORAGE_KEY),
       AsyncStorage.getItem(ACCENT_STORAGE_KEY),
+      AsyncStorage.getItem(EXPENSE_PALETTE_STORAGE_KEY),
     ])
-      .then(([storedTheme, storedMode, storedAccent]) => {
+      .then(([storedTheme, storedMode, storedAccent, storedPalette]) => {
         if (cancelled) return;
         if (isThemeName(storedTheme)) {
           setThemeNameState(storedTheme);
@@ -124,6 +149,11 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
         if (isAccentColorName(storedAccent)) {
           setAccentColorState(storedAccent);
           memoryStorage.setItem(ACCENT_STORAGE_KEY, storedAccent);
+        }
+        const palette = acceptStoredPalette(storedPalette, paletteResolved.current);
+        if (palette) {
+          setExpensePaletteState(palette);
+          memoryStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
         }
       })
       .catch(() => undefined);
@@ -146,11 +176,23 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       memoryStorage.setItem(ACCENT_STORAGE_KEY, acc);
       void AsyncStorage.setItem(ACCENT_STORAGE_KEY, acc);
     }
+    const palette = acceptRemotePalette(
+      (data as Record<string, unknown>)?.expensePalette,
+      pendingPalette.pendingFor(realUser?.uid ?? null),
+      // Only a document read for the signed-in account (not the previous one mid-switch).
+      Boolean(realUser) && !userDocLoading && !userDocError
+    );
+    if (palette) {
+      paletteResolved.current = true;
+      setExpensePaletteState(palette);
+      memoryStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
+      void AsyncStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
+    }
     const mode = (data as Record<string, unknown>)?.themeMode;
     if (mode === "system" || mode === "light" || mode === "dark" || mode === "custom") {
       setThemeModeState(mode);
     }
-  }, [data]);
+  }, [data, pendingPalette, realUser, userDocLoading, userDocError]);
 
   // Handle system appearance changes when in system mode
   useEffect(() => {
@@ -246,6 +288,24 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
     [persistThemeFields]
   );
 
+  const setExpensePalette = useCallback(
+    (palette: ExpensePaletteName) => {
+      paletteResolved.current = true;
+      const token = pendingPalette.begin(realUser?.uid ?? null, palette);
+      setExpensePaletteState(palette);
+      try {
+        memoryStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
+      } catch {
+        /* ignore */
+      }
+      void AsyncStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
+
+      // Only the newest selection's write clears the marker (handles A → B → A).
+      void persistThemeFields({ expensePalette: palette }).finally(() => pendingPalette.complete(token));
+    },
+    [pendingPalette, persistThemeFields, realUser]
+  );
+
   const toggleTheme = useCallback(() => {
     setThemeName(
       themeName === "dark" || themeName === "light"
@@ -262,12 +322,14 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       themeName,
       themeMode,
       accentColor,
+      expensePalette,
+      setExpensePalette,
       setThemeName,
       setThemeMode,
       setAccentColor,
       toggleTheme,
     }),
-    [themeName, themeMode, accentColor, setThemeName, setThemeMode, setAccentColor, toggleTheme]
+    [themeName, themeMode, accentColor, expensePalette, setExpensePalette, setThemeName, setThemeMode, setAccentColor, toggleTheme]
   );
 
   return (

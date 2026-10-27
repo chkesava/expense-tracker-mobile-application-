@@ -35,6 +35,19 @@ Six core blue-greys carry surfaces, text and brand, plus one in-between containe
 | `warning` | `#F5C451` | At-risk or caution state |
 | `info` | `#78B8FF` | Informational state, plain spending, secondary data series |
 
+### Selectable palettes (SPENDLY-618)
+
+Users pick the Expense palette in Settings → Appearance. Slate (above) is the default; Forest, Plum and Cocoa map onto the same tokens through `expensePaletteColors` in `theme/tokens.ts`, so screens never special-case a palette.
+
+| Palette | Six colours (darkest first) |
+|---|---|
+| Slate | `#06141B` `#11212D` `#253745` `#4A5C6A` `#9BA8AB` `#CCD0CF` |
+| Forest | `#051F20` `#0B2B26` `#163832` `#235347` `#8EB69B` `#DAF1DE` |
+| Plum | `#17151C` `#292531` `#45404F` `#716879` `#AAA2B3` `#E2DDE7` |
+| Cocoa | `#211B1A` `#382A28` `#60433D` `#916B60` `#C1A094` `#E8D8CE` |
+
+Plum and Cocoa's third colour is too light for secondary text, so their raised surface is a darker derived shade (`#373340`, `#483430`). Money and status colours are identical in every palette. Always style through tokens, never palette hex values.
+
 ### Light-mode compatibility
 
 If the current screen is using the established light dashboard, do not replace it unexpectedly. Derive equivalent tokens from the existing theme. Use near-white surfaces, dark text, subtle borders, and restrained accent tints. Theme colors must come from central tokens—not hardcoded per-screen values.
