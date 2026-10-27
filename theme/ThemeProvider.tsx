@@ -18,12 +18,12 @@ import { commitWrite } from "@/lib/firestoreWrite";
 import { useAuth } from "@/providers/AuthProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import { memoryStorage, setSharedStorage } from "@/shared/storage/memoryStorage";
+import { acceptRemotePalette, acceptStoredPalette } from "./expensePaletteSync";
 import {
   ACCENT_STORAGE_KEY,
   THEME_STORAGE_KEY,
   createTheme,
   isAccentColorName,
-  isExpensePaletteName,
   isThemeName,
   resolveExpensePalette,
   themeUsesDarkPalette,
@@ -117,6 +117,12 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
   const [expensePalette, setExpensePaletteState] = useState<ExpensePaletteName>(() =>
     resolveInitialExpensePalette()
   );
+  // SPENDLY-618: true once the user doc or a selection has set the palette,
+  // so the slower startup AsyncStorage read cannot replace it.
+  const paletteResolved = useRef(false);
+  // The newest local selection while its write is in flight, and its generation.
+  const pendingPalette = useRef<ExpensePaletteName | null>(null);
+  const paletteGeneration = useRef(0);
   const [shellThemeName, setShellThemeName] = useState<ThemeName | null>(null);
   const shellTheme = useMemo<ShellThemeValue>(
     () => ({ name: shellThemeName, setName: setShellThemeName }),
@@ -145,9 +151,10 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
           setAccentColorState(storedAccent);
           memoryStorage.setItem(ACCENT_STORAGE_KEY, storedAccent);
         }
-        if (isExpensePaletteName(storedPalette)) {
-          setExpensePaletteState(storedPalette);
-          memoryStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, storedPalette);
+        const palette = acceptStoredPalette(storedPalette, paletteResolved.current);
+        if (palette) {
+          setExpensePaletteState(palette);
+          memoryStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
         }
       })
       .catch(() => undefined);
@@ -170,8 +177,12 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       memoryStorage.setItem(ACCENT_STORAGE_KEY, acc);
       void AsyncStorage.setItem(ACCENT_STORAGE_KEY, acc);
     }
-    const palette = (data as Record<string, unknown>)?.expensePalette;
-    if (isExpensePaletteName(palette)) {
+    const palette = acceptRemotePalette(
+      (data as Record<string, unknown>)?.expensePalette,
+      pendingPalette.current
+    );
+    if (palette) {
+      paletteResolved.current = true;
       setExpensePaletteState(palette);
       memoryStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
       void AsyncStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
@@ -278,6 +289,9 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
 
   const setExpensePalette = useCallback(
     (palette: ExpensePaletteName) => {
+      paletteResolved.current = true;
+      const generation = ++paletteGeneration.current;
+      pendingPalette.current = palette;
       setExpensePaletteState(palette);
       try {
         memoryStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
@@ -286,7 +300,10 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       }
       void AsyncStorage.setItem(EXPENSE_PALETTE_STORAGE_KEY, palette);
 
-      void persistThemeFields({ expensePalette: palette });
+      // Only the newest selection's write clears the marker (handles A → B → A).
+      void persistThemeFields({ expensePalette: palette }).finally(() => {
+        if (paletteGeneration.current === generation) pendingPalette.current = null;
+      });
     },
     [persistThemeFields]
   );
