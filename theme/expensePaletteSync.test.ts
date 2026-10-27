@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { acceptRemotePalette, acceptStoredPalette, createPendingPalette } from "./expensePaletteSync";
+import {
+  acceptRemotePalette,
+  acceptStoredPalette,
+  createPendingPalette,
+  createPendingWrites,
+  isStaleWhilePending,
+  themeWriteKey,
+} from "./expensePaletteSync";
 
 describe("Expense palette sync ordering (SPENDLY-618)", () => {
   describe("startup AsyncStorage read", () => {
@@ -82,5 +89,34 @@ describe("pending palette tracker (SPENDLY-618)", () => {
     expect(pending.pendingFor("account-a")).toBe("midnight-plum");
     pending.complete(a);
     expect(pending.pendingFor("account-a")).toBeNull();
+  });
+});
+
+describe("theme and accent write ordering (SPENDLY-619)", () => {
+  it("skips a theme snapshot older than a pending selection, then syncs normally", () => {
+    const pending = createPendingWrites<string>();
+    const token = pending.begin("u1", themeWriteKey("light", "light"));
+    // An older snapshot still carries dark.
+    expect(isStaleWhilePending(themeWriteKey("dark", "dark"), pending.pendingFor("u1"))).toBe(true);
+    // The snapshot reflecting the selection applies.
+    expect(isStaleWhilePending(themeWriteKey("light", "light"), pending.pendingFor("u1"))).toBe(false);
+    pending.complete(token);
+    // Once written, later remote changes (another device) sync as usual.
+    expect(isStaleWhilePending(themeWriteKey("dark", "dark"), pending.pendingFor("u1"))).toBe(false);
+  });
+
+  it("skips an accent snapshot older than a pending accent selection", () => {
+    const pending = createPendingWrites<"indigo" | "rose">();
+    const token = pending.begin("u1", "rose");
+    expect(isStaleWhilePending("indigo", pending.pendingFor("u1"))).toBe(true);
+    expect(isStaleWhilePending("rose", pending.pendingFor("u1"))).toBe(false);
+    pending.complete(token);
+    expect(isStaleWhilePending("indigo", pending.pendingFor("u1"))).toBe(false);
+  });
+
+  it("never blocks another account", () => {
+    const pending = createPendingWrites<string>();
+    pending.begin("account-a", themeWriteKey("light", "light"));
+    expect(isStaleWhilePending(themeWriteKey("dark", "dark"), pending.pendingFor("account-b"))).toBe(false);
   });
 });

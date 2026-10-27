@@ -44,15 +44,15 @@ export function acceptRemotePalette(
  * marker, so an older write finishing first (A → B → A) leaves the newest
  * selection protected.
  */
-export function createPendingPalette() {
+export function createPendingWrites<T extends string>() {
   let generation = 0;
   // One record per account, so switching accounts mid-write keeps each pending.
-  const pending = new Map<string | null, { palette: ExpensePaletteName; generation: number }>();
+  const pending = new Map<string | null, { value: T; generation: number }>();
   return {
     /** Records a selection; returns the token to pass to `complete`. */
-    begin(uid: string | null, palette: ExpensePaletteName): number {
+    begin(uid: string | null, value: T): number {
       generation += 1;
-      pending.set(uid, { palette, generation });
+      pending.set(uid, { value, generation });
       return generation;
     },
     /** A write finished; clears its account's marker only if it was that account's newest. */
@@ -61,9 +61,28 @@ export function createPendingPalette() {
         if (entry.generation === token) pending.delete(uid);
       }
     },
-    /** The palette still being written for `uid`, or null. */
-    pendingFor(uid: string | null): ExpensePaletteName | null {
-      return pending.get(uid)?.palette ?? null;
+    /** The value still being written for `uid`, or null. */
+    pendingFor(uid: string | null): T | null {
+      return pending.get(uid)?.value ?? null;
     },
   };
+}
+
+export function createPendingPalette() {
+  return createPendingWrites<ExpensePaletteName>();
+}
+
+/**
+ * SPENDLY-619: the same rule for any user-doc preference (theme + mode,
+ * accent). While a local selection is being written, a snapshot that
+ * disagrees with it is older, so it is skipped. Otherwise remote changes
+ * apply as normal.
+ */
+export function isStaleWhilePending(remote: unknown, pending: string | null): boolean {
+  return pending !== null && remote !== pending;
+}
+
+/** The pending key for a theme selection: mode and name together. */
+export function themeWriteKey(mode: unknown, theme: unknown): string {
+  return `${String(mode)}|${String(theme)}`;
 }
