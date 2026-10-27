@@ -11,13 +11,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RotateCcw, X } from "lucide-react-native";
 
 import {
-  insightAccents,
-  insightSurface,
+  useInsightAccents,
+  useInsightSurface,
 } from "@/components/analytics/insightsTheme";
 import { haptic } from "@/lib/haptics";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useTheme } from "@/theme/ThemeProvider";
-import { themeUsesDarkPalette } from "@/theme/tokens";
+import { withAlpha } from "@/theme/surfaces";
 
 import { Input } from "@/components/ui/Input";
 export type DatePreset = "all" | "this_month" | "last_30_days" | "this_year";
@@ -47,10 +47,11 @@ export function FilterSheetModal({
   onApply,
   availableCategories,
 }: FilterSheetModalProps) {
-  const { theme, themeName } = useTheme();
-  const isDark = themeUsesDarkPalette(themeName);
-  const surface = insightSurface(isDark);
-  const accents = insightAccents(isDark);
+  const { theme } = useTheme();
+  // SPENDLY-617: selection follows the theme accent, not a fixed green.
+  const surface = useInsightSurface();
+  const accents = useInsightAccents();
+  const selectedBorder = withAlpha(accents.accent, 0.45);
   const insets = useSafeAreaInsets();
   const { accounts } = useAccounts();
 
@@ -109,12 +110,8 @@ export function FilterSheetModal({
       style={({ pressed }) => [
         styles.chip,
         {
-          backgroundColor: selected ? accents.greenDim : surface.inset,
-          borderColor: selected
-            ? isDark
-              ? "rgba(74, 222, 128, 0.45)"
-              : "rgba(22, 163, 74, 0.32)"
-            : surface.insetBorder,
+          backgroundColor: selected ? accents.accentDim : surface.inset,
+          borderColor: selected ? selectedBorder : surface.insetBorder,
         },
         pressed && styles.pressed,
       ]}
@@ -123,7 +120,7 @@ export function FilterSheetModal({
         style={[
           styles.chipText,
           {
-            color: selected ? accents.green : theme.colors.foreground,
+            color: selected ? accents.accent : theme.colors.foreground,
             fontWeight: selected ? "700" : "500",
           },
         ]}
@@ -324,15 +321,13 @@ export function FilterSheetModal({
               style={({ pressed }) => [
                 styles.footerBtn,
                 {
-                  backgroundColor: accents.greenDim,
-                  borderColor: isDark
-                    ? "rgba(74, 222, 128, 0.45)"
-                    : "rgba(22, 163, 74, 0.32)",
+                  backgroundColor: accents.accentDim,
+                  borderColor: selectedBorder,
                 },
                 pressed && styles.pressed,
               ]}
             >
-              <Text style={[styles.footerBtnText, { color: accents.green }]}>
+              <Text style={[styles.footerBtnText, { color: accents.accent }]}>
                 Apply Filters
               </Text>
             </Pressable>

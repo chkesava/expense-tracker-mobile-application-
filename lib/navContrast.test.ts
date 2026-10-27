@@ -146,9 +146,10 @@ describe("accent tile (SPENDLY-561)", () => {
         expect(lens.top.alpha).toBeGreaterThan(lens.bottom.alpha);
       }
     }
-    // Midnight Emerald keeps its emerald tile (SPENDLY-533).
+    // The Expense preset tints with its own accent: slate since SPENDLY-617
+    // (emerald under SPENDLY-533).
     expect(accentLens(createTheme("midnight-emerald", "indigo").colors.primary).top.rgb).toEqual([
-      53, 232, 137,
+      204, 208, 207,
     ]);
   });
 

@@ -2,7 +2,6 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Calendar, ChevronRight } from "lucide-react-native";
 
 import {
-  ACCOUNT_GREEN,
   ACCOUNT_RED,
   CARD_ORANGE,
 } from "@/components/accounts/accountScreenTheme";
@@ -88,8 +87,9 @@ export function BillingCycleCard({
       accessibilityLabel={`${rangeLabel}, ${statusLabel}`}
     >
       <View style={styles.row}>
-        <View style={styles.iconWrap}>
-          <Calendar size={16} color="#FFFFFF" strokeWidth={2.2} />
+        {/* SPENDLY-617: decorative, so it takes the theme accent, not money green. */}
+        <View style={[styles.iconWrap, { backgroundColor: theme.colors.primaryContainer }]}>
+          <Calendar size={16} color={theme.colors.onPrimaryContainer} strokeWidth={2.2} />
         </View>
         <View style={styles.copy}>
           <Text
@@ -190,7 +190,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: ACCOUNT_GREEN,
     alignItems: "center",
     justifyContent: "center",
   },
