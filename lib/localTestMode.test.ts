@@ -8,6 +8,7 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { isUrlAllowedInTestMode } from "@/lib/networkGuard";
+import { planAccountRebuild } from "@/shared/utils/reconciliation";
 
 const require = createRequire(import.meta.url);
 const { localTestBuildBlocker, LOCAL_TEST_ENV_KEY } = require("../scripts/common.js") as {
@@ -211,8 +212,7 @@ describe("seed-emulator.js", () => {
     expect(userDoc.onboarding).toMatchObject({ welcomeCompleted: true, onboardingDismissed: true, setupStartedAt: "" });
   });
 
-  it("SPENDLY-620: seeds the stored balance an in-app Rebuild would write", async () => {
-    const { planAccountRebuild } = await import("@/shared/utils/reconciliation");
+  it("SPENDLY-620: seeds the stored balance an in-app Rebuild would write", () => {
     const today = new Date(2026, 8, 26, 12);
     const { collections } = seedModule.buildDemoData(today);
     const typeName = new Map(collections.accountTypes.map((t) => [t.id, t.data.name as string]));
