@@ -199,7 +199,11 @@ describe("netWorthRecorderStatus (SPENDLY-620)", () => {
   it("reports a lasting blocker with its reason", () => {
     const status = netWorthRecorderStatus({ ...base, blockers: ["loading", "untrustedBalances"] });
     expect(status).toEqual({ state: "blocked", blockers: ["untrustedBalances"] });
-    expect(netWorthRecorderMessage(status)).toMatch(/pending reconciliation/);
+    expect(netWorthRecorderMessage(status)).toMatch(/needs a rebuild/);
+    expect(netWorthRecorderMessage({ ...status, accountNames: ["HDFC"] })).toBe(
+      "Today's net worth isn't saved: HDFC has no confirmed balance. Open Accounts → Edit → Rebuild."
+    );
+    expect(netWorthRecorderMessage({ ...status, accountNames: ["A", "B", "C", "D"] })).toMatch(/A, B \+2 more have/);
     expect(netWorthRecorderMessage(netWorthRecorderStatus({ ...base, blockers: ["offline"] }))).toMatch(/offline/);
   });
 

@@ -98,15 +98,18 @@ export function useNetWorthSnapshotRecorder({
     return () => clearTimeout(timer);
   }, [failed]);
 
+  const namesKey = JSON.stringify(summary.untrustedBalanceAccountNames);
   return useMemo(
-    () =>
-      netWorthRecorderStatus({
+    () => ({
+      ...netWorthRecorderStatus({
         recordedToday,
         historyLoading: history.loading,
         failed,
         blockers: blockerKey ? (blockerKey.split(",") as typeof blockers) : [],
       }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- blockerKey stands in for blockers
-    [recordedToday, history.loading, failed, blockerKey]
+      accountNames: JSON.parse(namesKey) as string[],
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the keys stand in for the arrays
+    [recordedToday, history.loading, failed, blockerKey, namesKey]
   );
 }

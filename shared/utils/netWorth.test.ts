@@ -339,6 +339,7 @@ describe("untrustedBalanceAccounts (SPENDLY-620)", () => {
       })
     );
     expect(result.untrustedBalanceAccounts).toBe(2);
+    expect(result.untrustedBalanceAccountNames).toEqual(["a", "c"]);
   });
 
   it("counts a missing or non-finite stored balance", () => {

@@ -109,6 +109,8 @@ export interface NetWorthTotals {
    * real yet. Gates net-worth history, not the displayed figures.
    */
   untrustedBalanceAccounts: number;
+  /** Names of those accounts, so the card can say which one to rebuild. */
+  untrustedBalanceAccountNames: string[];
 }
 
 /**
@@ -156,12 +158,12 @@ export function composeNetWorth(inputs: NetWorthInputs): NetWorthTotals {
   let bankOverdraftLiabilities = 0;
   let creditCardLiabilities = 0;
   let liquidBalanceMayBePartial = false;
-  let untrustedBalanceAccounts = 0;
+  const untrustedBalanceAccountNames: string[] = [];
 
   accounts.forEach((a) => {
     const typeName = typeMap.get(a.typeId) || "";
     const kind = getAccountKind(typeName);
-    if (!storedBalanceTrusted(a, kind === "credit")) untrustedBalanceAccounts += 1;
+    if (!storedBalanceTrusted(a, kind === "credit")) untrustedBalanceAccountNames.push(a.name);
 
     if (kind === "credit") {
       creditCardLiabilities += a.currentOutstanding ?? 0;
@@ -218,7 +220,8 @@ export function composeNetWorth(inputs: NetWorthInputs): NetWorthTotals {
     borrowingLiabilities,
     receivableAssets,
     liquidBalanceMayBePartial,
-    untrustedBalanceAccounts,
+    untrustedBalanceAccounts: untrustedBalanceAccountNames.length,
+    untrustedBalanceAccountNames,
     totalLiabilities,
     totalNetWorth,
   };

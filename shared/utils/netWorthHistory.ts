@@ -165,6 +165,8 @@ export type NetWorthRecorderState = "saved" | "waiting" | "blocked" | "failed";
 export type NetWorthRecorderStatus = {
   state: NetWorthRecorderState;
   blockers: NetWorthSnapshotBlocker[];
+  /** Accounts behind an `untrustedBalances` blocker, named in the message. */
+  accountNames?: string[];
 };
 
 /**
@@ -193,7 +195,7 @@ const BLOCKER_TEXT: Record<NetWorthSnapshotBlocker, string> = {
   offline: "you're offline",
   loading: "your accounts are still loading",
   valuationsLoading: "investment prices are still loading",
-  untrustedBalances: "an account balance is pending reconciliation (open Accounts and rebuild it)",
+  untrustedBalances: "an account balance needs a rebuild",
   invalidValues: "a total couldn't be valued",
 };
 
@@ -204,8 +206,14 @@ export function netWorthRecorderMessage(status: NetWorthRecorderStatus): string 
       return "Today's net worth is saved.";
     case "failed":
       return "Couldn't save today's net worth — it will retry.";
-    case "blocked":
+    case "blocked": {
+      const names = status.accountNames ?? [];
+      if (status.blockers[0] === "untrustedBalances" && names.length > 0) {
+        const list = names.length > 2 ? `${names.slice(0, 2).join(", ")} +${names.length - 2} more` : names.join(" and ");
+        return `Today's net worth isn't saved: ${list} ${names.length === 1 ? "has" : "have"} no confirmed balance. Open Accounts → Edit → Rebuild.`;
+      }
       return `Today's net worth isn't saved: ${BLOCKER_TEXT[status.blockers[0]]}.`;
+    }
     default:
       return "Saving today's net worth…";
   }
