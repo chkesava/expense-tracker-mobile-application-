@@ -211,6 +211,27 @@ describe("seed-emulator.js", () => {
     expect(userDoc.onboarding).toMatchObject({ welcomeCompleted: true, onboardingDismissed: true, setupStartedAt: "" });
   });
 
+  it("SPENDLY-620: seeds the stored balance an in-app Rebuild would write", async () => {
+    const { planAccountRebuild } = await import("@/shared/utils/reconciliation");
+    const today = new Date(2026, 8, 26, 12);
+    const { collections } = seedModule.buildDemoData(today);
+    const typeName = new Map(collections.accountTypes.map((t) => [t.id, t.data.name as string]));
+    const rows = (name: string) => collections[name].map((row) => ({ id: row.id, ...row.data })) as never[];
+    const empty = { payments: [], transfers: [], entries: [], borrowings: [], borrowingRepayments: [], receivables: [], receivableRepayments: [], bills: [] };
+
+    for (const { id, data } of collections.accounts) {
+      const account = { id, ...data } as never;
+      const sources = {
+        ...empty,
+        expenses: rows("expenses").filter((e: { accountId: string }) => e.accountId === id),
+        incomes: rows("incomes").filter((i: { accountId: string }) => i.accountId === id),
+      };
+      const plan = planAccountRebuild(account, typeName.get(data.typeId as string) ?? "", sources, "2026-09-26");
+      expect(plan.variances, id).toEqual([]);
+      expect(plan.needsWrite, id).toBe(false);
+    }
+  });
+
   it("writes the dashboard summaries the seeded rows add up to", () => {
     const today = new Date(2026, 8, 26, 12);
     const { collections } = seedModule.buildDemoData(today);
