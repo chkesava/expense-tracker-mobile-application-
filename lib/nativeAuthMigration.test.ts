@@ -30,7 +30,7 @@ describe("resolveNativeAuthMigration (SPENDLY-636)", () => {
     disk.clear();
   });
 
-  it("stays off until SPENDLY-638 enables native auth", () => {
+  it("is off on web and in tests (native builds resolve nativeAuthFlag.native.ts)", () => {
     expect(NATIVE_AUTH_ENABLED).toBe(false);
   });
 

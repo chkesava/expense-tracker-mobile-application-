@@ -34,6 +34,10 @@ const SHARED_PLUGINS = [
   // listed in app.json.
   "expo-image",
   "@react-native-google-signin/google-signin",
+  // SPENDLY-638: native Firebase SDKs (durable Firestore cache, native Auth).
+  // Also listed in app.json.
+  "@react-native-firebase/app",
+  "@react-native-firebase/auth",
   [
     "expo-notifications",
     {
@@ -204,7 +208,7 @@ function applyLocalTestBuild(config) {
     android: {
       ...android,
       package: `${android.package}${LOCAL_TEST_SUFFIX}`,
-      // SPENDLY-634 spike: the native Firebase SDK needs a services file at
+      // SPENDLY-634/638: the native Firebase SDK needs a services file at
       // build time. This one names only the `demo-spendly` emulator project.
       googleServicesFile: "./google-services.localtest.json",
     },
@@ -215,9 +219,6 @@ function applyLocalTestBuild(config) {
     plugins: [
       ...(config.plugins || []),
       ["./plugins/withLocalTestCleartext", { host: emulatorHost }],
-      // SPENDLY-634 spike: native Firebase in Spendly Test only.
-      "@react-native-firebase/app",
-      "@react-native-firebase/auth",
     ],
   };
 }

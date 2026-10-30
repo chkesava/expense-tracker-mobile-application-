@@ -3,14 +3,15 @@
  * move to the native Firebase SDK (decision logic:
  * `shared/utils/nativeAuthMigration.ts`).
  *
- * Off until SPENDLY-638 sets `NATIVE_AUTH_ENABLED` for native platforms; the
- * hook then reads the leftover JS-SDK session record, shows the note on the
+ * On for native builds since SPENDLY-638 (`lib/nativeAuthFlag.native.ts`):
+ * the hook reads the leftover JS-SDK session record, shows the note on the
  * sign-in screen, and removes the record once it is no longer needed.
  */
 
 import { useCallback, useEffect, useState } from "react";
 
 import { env, isLocalTestMode } from "@/lib/env";
+import { NATIVE_AUTH_ENABLED } from "@/lib/nativeAuthFlag";
 import { logWarning } from "@/lib/errors";
 import {
   legacyAuthSessionKey,
@@ -18,8 +19,7 @@ import {
   type NativeAuthMigrationDecision,
 } from "@/shared/utils/nativeAuthMigration";
 
-/** SPENDLY-638 flips this (native only) together with the SDK swap. */
-export const NATIVE_AUTH_ENABLED = false;
+export { NATIVE_AUTH_ENABLED };
 
 const NOTICE_DISMISSED_KEY = "spendly.nativeAuthMigration.noticeDismissed.v1";
 

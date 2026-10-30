@@ -9,15 +9,12 @@ import { contractProblems, moduleExports, namesImportedFrom } from "@/lib/testin
  *
  * Web/JS-SDK-only names are allowed solely where SPENDLY-638 replaces them
  * with a native flow:
- * - `getReactNativePersistence`: JS SDK session storage; the native SDK
- *   persists its own session (`createAuth.native.ts` goes away).
  * - `RecaptchaVerifier`: Ganesh's browser-based phone sign-in; native uses
  *   the SDK's own phone verification.
  * - `reauthenticateWithPopup`: web Google re-auth; native re-authenticates
  *   with a Google credential instead.
  */
 const JS_ONLY: Record<string, readonly string[]> = {
-  getReactNativePersistence: ["lib/createAuth.native.ts"],
   RecaptchaVerifier: ["app/(ganesh-auth)/login.tsx", "app/ganesh-phone-auth.tsx", "lib/ganeshPhoneAuth.ts"],
   reauthenticateWithPopup: ["lib/reauthenticate.ts"],
 };
