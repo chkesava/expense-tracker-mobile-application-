@@ -32,6 +32,8 @@ const FUNCTIONS = (module.exports.FUNCTIONS = [
   "crypto",
   // SPENDLY-558: historical OHLCV series for the stock chart.
   "stock-history",
+  // SPENDLY-642: indices and market status for the Markets tab.
+  "market-overview",
   // SPENDLY-505: gives a signed-in user the role Supabase's read model needs.
   "readmodel-claims",
   // SPENDLY-583: copies a user's just-saved documents to the read model.
