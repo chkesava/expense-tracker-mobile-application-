@@ -99,6 +99,27 @@ describe("app.config.js test app", () => {
     expect(JSON.stringify(cfg.plugins)).not.toContain("withLocalTestCleartext");
   });
 
+  it("ships a demo-only services file in the test app (SPENDLY-634)", () => {
+    const services = JSON.parse(
+      readFileSync(resolve(__dirname, "../google-services.localtest.json"), "utf8")
+    ) as {
+      project_info: { project_id: string };
+      client: { client_info: { android_client_info: { package_name: string } }; api_key: { current_key: string }[] }[];
+    };
+    const production = JSON.parse(readFileSync(resolve(__dirname, "../google-services.json"), "utf8")) as {
+      project_info: { project_id: string };
+      client: { api_key: { current_key: string }[] }[];
+    };
+    expect(services.project_info.project_id.startsWith("demo-")).toBe(true);
+    expect(services.client.map((c) => c.client_info.android_client_info.package_name)).toEqual([
+      "com.example.expensetracker.localtest",
+    ]);
+    const productionKeys = new Set(production.client.flatMap((c) => c.api_key.map((k) => k.current_key)));
+    for (const key of services.client.flatMap((c) => c.api_key.map((k) => k.current_key))) {
+      expect(productionKeys.has(key)).toBe(false);
+    }
+  });
+
   it("returns the combined config object itself when nothing is set", () => {
     vi.stubEnv("EXPO_PUBLIC_PRODUCT", "");
     vi.stubEnv("EXPO_PUBLIC_FIREBASE_EMULATOR_HOST", "");
@@ -111,7 +132,8 @@ describe("app.config.js test app", () => {
     vi.stubEnv("EXPO_PUBLIC_FIREBASE_EMULATOR_HOST", EMULATOR);
     const cfg = appConfig({ config: base() });
     expect(cfg.android.package).toBe("com.example.expensetracker.localtest");
-    expect(cfg.android.googleServicesFile).toBeUndefined();
+    // SPENDLY-634: a demo-only services file, never the production one.
+    expect(cfg.android.googleServicesFile).toBe("./google-services.localtest.json");
     expect(cfg.name).toBe("Spendly Test");
     expect(cfg.scheme).toBe("spendly-test");
     expect(JSON.stringify(cfg.plugins)).toContain("withLocalTestCleartext");
