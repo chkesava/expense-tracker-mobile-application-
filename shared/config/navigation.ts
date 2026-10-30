@@ -202,10 +202,24 @@ export const VAULT_HUB_TAB_IDS = [
 
 export const INVESTMENT_HUB_TAB_IDS = [
   "investments",
+  // SPENDLY-645: market overview (indices, status, NIFTY 50 movers).
+  "markets",
   "portfolio",
   "sip",
   "epf",
 ] as const;
+
+/**
+ * Sub-tabs of the Stocks (`portfolio`) tab, reachable as
+ * `/investments?tab=portfolio&sub=<id>` (SPENDLY-645: the Markets tab links
+ * straight to the watchlist and alerts).
+ */
+export const PORTFOLIO_SUB_TAB_IDS = ["holdings", "watchlist", "orders", "alerts", "charts"] as const;
+export type PortfolioSubTabId = (typeof PORTFOLIO_SUB_TAB_IDS)[number];
+
+export function parsePortfolioSubTab(raw: string | undefined): PortfolioSubTabId | null {
+  return raw && (PORTFOLIO_SUB_TAB_IDS as readonly string[]).includes(raw) ? (raw as PortfolioSubTabId) : null;
+}
 
 /**
  * Old `/ledger?tab=` values that now live on Vaults or Investments.
