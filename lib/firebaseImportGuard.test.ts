@@ -5,8 +5,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * SPENDLY-635/636 — Firestore and Auth are imported through `@/lib/firestore`
- * and `@/lib/auth` only, so the native build swaps in @react-native-firebase
+ * SPENDLY-635/636/637 — Firestore, Auth and Storage are imported through
+ * `@/lib/firestore`, `@/lib/auth` and `@/lib/storage` only, so the native build swaps in @react-native-firebase
  * in one place (SPENDLY-638). A direct `firebase/firestore` or
  * `firebase/auth` import would silently keep that module on the JS SDK: the
  * memory-only cache, and a signed-in user the native rules never see.
@@ -22,6 +22,7 @@ const ALLOWED_DIRS = ["firestore/", "scripts/"];
 const GUARDED = [
   { module: "firebase/firestore", adapter: "lib/firestore.ts" },
   { module: "firebase/auth", adapter: "lib/auth.ts" },
+  { module: "firebase/storage", adapter: "lib/storage.ts" },
 ] as const;
 
 function directImports(module: string, adapter: string): string[] {
@@ -48,7 +49,7 @@ function directImports(module: string, adapter: string): string[] {
   return offenders;
 }
 
-describe("Firebase import guard (SPENDLY-635/636)", () => {
+describe("Firebase import guard (SPENDLY-635/636/637)", () => {
   for (const { module, adapter } of GUARDED) {
     it(`app code never imports ${module} directly`, () => {
       expect(directImports(module, adapter)).toEqual([]);
