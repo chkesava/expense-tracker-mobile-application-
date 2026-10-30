@@ -51,6 +51,7 @@ import { UserDocProvider, useUserDoc } from "@/providers/UserDocProvider";
 import { WorkspaceProvider, useWorkspace } from "@/providers/WorkspaceProvider";
 import { AppThemeProvider, ShellThemeScope, useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette, THEME_STORAGE_KEY } from "@/theme/tokens";
+import { runRnfbSpike } from "@/lib/rnfbSpike";
 
 // Uncaught throws / unhandled rejections — installed before any provider mounts.
 installGlobalErrorHandlers();
@@ -271,6 +272,10 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
 }
 
 export default function RootLayout() {
+  // SPENDLY-634 spike probe: Spendly Test only, logs `[rnfb-spike]`.
+  useEffect(() => {
+    runRnfbSpike();
+  }, []);
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       {/* Outermost net: a throw inside any provider still paints a usable screen. */}

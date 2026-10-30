@@ -202,6 +202,9 @@ function applyLocalTestBuild(config) {
     android: {
       ...android,
       package: `${android.package}${LOCAL_TEST_SUFFIX}`,
+      // SPENDLY-634 spike: the native Firebase SDK needs a services file at
+      // build time. This one names only the `demo-spendly` emulator project.
+      googleServicesFile: "./google-services.localtest.json",
     },
     ios: ios.bundleIdentifier
       ? { ...ios, bundleIdentifier: `${ios.bundleIdentifier}${LOCAL_TEST_SUFFIX}` }
@@ -210,6 +213,9 @@ function applyLocalTestBuild(config) {
     plugins: [
       ...(config.plugins || []),
       ["./plugins/withLocalTestCleartext", { host: emulatorHost }],
+      // SPENDLY-634 spike: native Firebase in Spendly Test only.
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
     ],
   };
 }
