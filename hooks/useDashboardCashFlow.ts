@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, getDocs, query, where, onSnapshot, type Firestore } from "@/lib/firestore";
+import { collection, documentId, getDocs, query, where, onSnapshot, type Firestore } from "@/lib/firestore";
 import { getFirestoreDb } from "@/lib/firebase";
 import { logWarning } from "@/lib/errors";
 import { useAuth } from "@/providers/AuthProvider";
@@ -25,8 +25,8 @@ async function readSummaryDocs(db: Firestore, uid: string, fromMonth: string, to
   const snap = await getDocs(
     query(
       collection(db, "users", uid, "financialSummaries"),
-      where("__name__", ">=", `dashboard_${fromMonth}`),
-      where("__name__", "<=", `dashboard_${toMonth}`)
+      where(documentId(), ">=", `dashboard_${fromMonth}`),
+      where(documentId(), "<=", `dashboard_${toMonth}`)
     )
   );
   logDirectRead(`users/${uid}/financialSummaries`, snap.docs.length, snap.metadata.fromCache ? "cache" : "server", {
@@ -81,8 +81,8 @@ export function useDashboardCashFlow(activeMonth: string, count: number = 6) {
     const ref = collection(db, "users", uid, "financialSummaries");
     const q = query(
       ref,
-      where("__name__", ">=", `dashboard_${startMonth}`),
-      where("__name__", "<=", `dashboard_${activeMonth}`)
+      where(documentId(), ">=", `dashboard_${startMonth}`),
+      where(documentId(), "<=", `dashboard_${activeMonth}`)
     );
 
     const unsubscribe = onSnapshot(

@@ -24,6 +24,7 @@ import {
   increment,
   serverTimestamp,
 } from "@/lib/firestore";
+import { NATIVE_ARRAY_ELEMENTS_KEY } from "@/lib/firestoreNativeKeys";
 
 export const FIRESTORE_SENTINEL_KEY = "__spendlyFv";
 
@@ -120,12 +121,50 @@ function encodeFieldValue(value: object, methodName: string): EncodedSentinel | 
   }
 }
 
+/**
+ * SPENDLY-638: a native-SDK (`@react-native-firebase/firestore`) FieldValue.
+ * Its constructor assigns `_type` and `_elements` as own properties (not
+ * minified: the native bridge reads them). Array transforms carry their
+ * elements pre-serialised, so `lib/firestore.native.ts` keeps the plain ones
+ * under `NATIVE_ARRAY_ELEMENTS_KEY`.
+ */
+function encodeNativeFieldValue(value: object): EncodedSentinel | null {
+  if (!Object.prototype.hasOwnProperty.call(value, "_type")) return null;
+  if (!Object.prototype.hasOwnProperty.call(value, "_elements")) return null;
+  const native = value as { _type: unknown; _elements: unknown; [NATIVE_ARRAY_ELEMENTS_KEY]?: unknown };
+  switch (native._type) {
+    case "timestamp":
+      return { [FIRESTORE_SENTINEL_KEY]: "serverTimestamp" };
+    case "delete":
+      return { [FIRESTORE_SENTINEL_KEY]: "deleteField" };
+    case "increment":
+      if (typeof native._elements !== "number") {
+        throw new Error("Write outbox cannot serialise increment");
+      }
+      return { [FIRESTORE_SENTINEL_KEY]: "increment", n: native._elements };
+    case "array_union":
+    case "array_remove": {
+      const elements = native[NATIVE_ARRAY_ELEMENTS_KEY];
+      const kind = native._type === "array_union" ? "arrayUnion" : "arrayRemove";
+      if (!Array.isArray(elements)) {
+        throw new Error(`Write outbox cannot serialise ${kind}`);
+      }
+      return { [FIRESTORE_SENTINEL_KEY]: kind, values: elements.map(encodeFirestoreData) };
+    }
+    default:
+      return null;
+  }
+}
+
 function encodeSentinel(value: object): EncodedSentinel | null {
   const methodName = (value as MethodNamed)[METHOD_NAME_KEY];
   if (typeof methodName === "string") {
     const encoded = encodeFieldValue(value, methodName);
     if (encoded) return encoded;
   }
+
+  const native = encodeNativeFieldValue(value);
+  if (native) return native;
 
   const fake = value as {
     __serverTimestamp?: unknown;

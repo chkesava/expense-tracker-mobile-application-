@@ -16,8 +16,8 @@ Found during SPENDLY-632.
 | SPENDLY-634 | Spike: @react-native-firebase go/no-go | GO on 24.0.0; merged into epic (06435450, test fix 492f0523) |
 | SPENDLY-635 | Firestore platform adapter + import codemod | Merged into epic (84569ea3) |
 | SPENDLY-636 | Native auth adapter + session migration | Merged into epic (334d5bec) |
-| SPENDLY-637 | Native Storage, Functions, App Check | Done on story branch, awaiting review |
-| SPENDLY-638 | Native Firestore init: persistence, emulator, clear on sign-out | To Do |
+| SPENDLY-637 | Native Storage, Functions, App Check | Merged into epic (5ac6d6d4) |
+| SPENDLY-638 | Native cutover: Firestore, Auth, Storage on the native SDKs | Done on story branch, device-verified, awaiting review |
 | SPENDLY-639 | Offline / outbox / freshness integrity | To Do |
 | SPENDLY-640 | Measure, device QA (3 apps), staged release | To Do |
 | SPENDLY-641 | Keep or retire the SPENDLY-632 dashboard snapshot | To Do |
@@ -31,7 +31,7 @@ Found during SPENDLY-632.
 - The `commitMutations` outbox stays as a second net; retiring it is a later, separate decision.
 - **@react-native-firebase pinned to 24.0.0** (see spike finding 1).
 - `shared/` mutation helpers import field values from `@/lib/firestore` (resolved per platform) instead of emitting descriptors (SPENDLY-635).
-- The outbox encoder (`lib/firestoreSentinel.ts`) must learn the native `FieldValue` shape before native is switched on (SPENDLY-638/639).
+- The outbox encoder (`lib/firestoreSentinel.ts`) reads native `FieldValue`s; `lib/firestore.native.ts` keeps array-transform elements for it (SPENDLY-638). Outbox × native queue replay is verified in SPENDLY-639.
 
 ## SPENDLY-634 spike results (2026-10-30)
 
