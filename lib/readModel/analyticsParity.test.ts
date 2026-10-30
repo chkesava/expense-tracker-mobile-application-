@@ -1,4 +1,4 @@
-import { Timestamp } from "firebase/firestore";
+import { Timestamp } from "@/lib/firestore";
 import { describe, expect, it } from "vitest";
 
 import { fullLedgerFixture } from "@/shared/__fixtures__/readModel/fullLedger";

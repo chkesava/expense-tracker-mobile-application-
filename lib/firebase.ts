@@ -36,7 +36,7 @@ import {
   terminate,
   waitForPendingWrites,
   type Firestore,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 import { connectStorageEmulator, getStorage, type FirebaseStorage } from "firebase/storage";
 import { getFunctions, type Functions } from "firebase/functions";
 import { Platform } from "react-native";

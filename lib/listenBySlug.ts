@@ -18,7 +18,7 @@ import {
   type DocumentData,
   type Firestore,
   type Unsubscribe,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 export function listenBySlugWithQueryFallback(
   db: Firestore,

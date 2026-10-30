@@ -10,7 +10,7 @@ import {
   updateDoc,
   where,
   writeBatch,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 import { stageMutationOps } from "@/lib/stageMutationOps";
 import { dashboardOpsForRelabel, type DashboardRelabel } from "@/shared/utils/dashboardMutations";
 

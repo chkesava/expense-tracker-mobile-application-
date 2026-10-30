@@ -13,8 +13,8 @@ Found during SPENDLY-632.
 
 | Key | Story | State |
 |---|---|---|
-| SPENDLY-634 | Spike: @react-native-firebase go/no-go | **Done on story branch — GO (with conditions)**, awaiting review |
-| SPENDLY-635 | Firestore platform adapter + import codemod | To Do |
+| SPENDLY-634 | Spike: @react-native-firebase go/no-go | GO on 24.0.0; merged into epic (06435450, test fix 492f0523) |
+| SPENDLY-635 | Firestore platform adapter + import codemod | Done on story branch, awaiting review |
 | SPENDLY-636 | Native auth adapter + session migration | To Do |
 | SPENDLY-637 | Native Storage, Functions, App Check | To Do |
 | SPENDLY-638 | Native Firestore init: persistence, emulator, clear on sign-out | To Do |
@@ -27,6 +27,8 @@ Found during SPENDLY-632.
 - Session migration default: one re-sign-in after the update; custom-token bridge only if the owner asks (SPENDLY-636).
 - The `commitMutations` outbox stays as a second net; retiring it is a later, separate decision.
 - **@react-native-firebase pinned to 24.0.0** (see spike finding 1).
+- `shared/` mutation helpers import field values from `@/lib/firestore` (resolved per platform) instead of emitting descriptors (SPENDLY-635).
+- The outbox encoder (`lib/firestoreSentinel.ts`) must learn the native `FieldValue` shape before native is switched on (SPENDLY-638/639).
 
 ## SPENDLY-634 spike results (2026-10-30)
 

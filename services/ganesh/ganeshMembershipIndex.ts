@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc, type Firestore } from "firebase/firestore";
+import { doc, getDoc, setDoc, type Firestore } from "@/lib/firestore";
 
 import { logError } from "@/lib/errors";
 import { commitWrite } from "@/lib/firestoreWrite";

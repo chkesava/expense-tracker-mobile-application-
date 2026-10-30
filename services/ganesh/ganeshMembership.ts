@@ -11,7 +11,7 @@ import {
   getDoc,
   getDocs,
   type Firestore,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import type { GaneshActor } from "@/services/ganesh/ganeshWrites";
 import {

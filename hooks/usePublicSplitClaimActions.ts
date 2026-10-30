@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useState } from "react";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc } from "@/lib/firestore";
 
 import { isPermissionError, friendlyErrorMessage, logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";

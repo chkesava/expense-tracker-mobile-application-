@@ -1,4 +1,4 @@
-import { increment, serverTimestamp } from "firebase/firestore";
+import { increment, serverTimestamp } from "@/lib/firestore";
 import type { MutationOp } from "@/shared/types/mutations";
 
 export type EpfSummaryDelta = {

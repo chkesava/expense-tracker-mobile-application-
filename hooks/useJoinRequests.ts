@@ -1,4 +1,4 @@
-import { where } from "firebase/firestore";
+import { where } from "@/lib/firestore";
 
 import { useSharedOrLocalCollection } from "@/hooks/ganesh/useSharedOrLocalCollection";
 import { useGaneshData } from "@/providers/GaneshDataProvider";

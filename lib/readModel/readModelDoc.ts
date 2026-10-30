@@ -1,4 +1,4 @@
-import { Timestamp } from "firebase/firestore";
+import { Timestamp } from "@/lib/firestore";
 
 /**
  * SPENDLY-512 — a read-model row back as the app object Firestore would have

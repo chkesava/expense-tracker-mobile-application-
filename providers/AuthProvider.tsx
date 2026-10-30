@@ -25,7 +25,7 @@ import {
   type User,
   type UserCredential,
 } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc } from "@/lib/firestore";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { clearDashboardSnapshot } from "@/lib/dashboardSnapshotStore";

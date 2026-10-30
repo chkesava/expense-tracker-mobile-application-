@@ -9,7 +9,7 @@ import {
   startAfter,
   where,
   type QueryDocumentSnapshot,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { friendlyErrorMessage, logError } from "@/lib/errors";

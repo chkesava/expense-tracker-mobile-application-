@@ -7,7 +7,7 @@ import {
   limit,
   orderBy,
   query,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { getFirebaseAuth, getFirestoreDb } from "@/lib/firebase";
 import { summaryDoc } from "@/shared/utils/ganeshPaths";

@@ -1,4 +1,4 @@
-import { collection, getDocs, orderBy, query, type Firestore } from "firebase/firestore";
+import { collection, getDocs, orderBy, query, type Firestore } from "@/lib/firestore";
 
 import type { Festival } from "@/shared/types/ganesh";
 import { pickFestivalFromList } from "@/shared/utils/ganeshFestivalSession";

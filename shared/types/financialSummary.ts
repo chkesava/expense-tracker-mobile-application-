@@ -1,4 +1,4 @@
-import { FieldValue, Timestamp } from "firebase/firestore";
+import { FieldValue, Timestamp } from "@/lib/firestore";
 
 /**
  * SPENDLY-499: `financialSummaries/netWorth` and `financialSummaries/investments`

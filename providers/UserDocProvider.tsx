@@ -11,7 +11,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { doc, onSnapshot, type DocumentData } from "firebase/firestore";
+import { doc, onSnapshot, type DocumentData } from "@/lib/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";

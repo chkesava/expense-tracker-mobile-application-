@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot } from "@/lib/firestore";
 
 import { useGaneshCollection } from "@/hooks/ganesh/useGaneshCollection";
 import { useSharedOrLocalCollection } from "@/hooks/ganesh/useSharedOrLocalCollection";
