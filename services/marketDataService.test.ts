@@ -199,3 +199,66 @@ describe("fetchStockHistory (SPENDLY-558)", () => {
     await expect(fetchStockHistory("KPITTECH.NS", "1D", { signal: controller.signal })).rejects.toBe(abort);
   });
 });
+
+describe("fetchMarketOverview (SPENDLY-644)", () => {
+  let fetchMarketOverview: typeof import("./marketDataService").fetchMarketOverview;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    process.env.EXPO_PUBLIC_MARKET_API_URL = BASE;
+    ({ fetchMarketOverview } = await import("./marketDataService"));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.EXPO_PUBLIC_MARKET_API_URL;
+  });
+
+  const overview = {
+    success: true,
+    schemaVersion: 1,
+    provider: "yahoo",
+    fetchedAt: "2026-10-30T10:05:00.000Z",
+    stale: false,
+    status: { state: "closed", sessionStart: null, sessionEnd: null, lastTradeAt: "2026-10-30T10:01:11.000Z" },
+    indices: [],
+    movers: { available: false, reason: "LOW_COVERAGE" },
+  };
+
+  it("reads /api/market-overview from the market API base", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(overview));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchMarketOverview()).resolves.toEqual(overview);
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toBe(`${BASE}/api/market-overview`);
+  });
+
+  it("carries the server's typed code on failure", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ success: false, code: "THROTTLED", message: "x" }, 429)));
+    await expect(fetchMarketOverview()).rejects.toMatchObject({
+      name: "MarketDataError",
+      code: "THROTTLED",
+      status: 429,
+      message: expect.stringMatching(/busy/i),
+    });
+  });
+
+  it("throws on an upstream error without a body", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 502, json: async () => { throw new SyntaxError("x"); } }) as unknown as Response));
+    await expect(fetchMarketOverview()).rejects.toMatchObject({ status: 502, code: undefined });
+  });
+
+  it("treats a success body of the wrong shape as malformed", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ success: true, indices: [] })));
+    await expect(fetchMarketOverview()).rejects.toMatchObject({ code: "MALFORMED" });
+  });
+
+  it("reports its own timeout as TIMEOUT but passes a caller's cancellation through", async () => {
+    const abort = Object.assign(new Error("aborted"), { name: "AbortError" });
+    vi.stubGlobal("fetch", vi.fn(async () => { throw abort; }));
+    await expect(fetchMarketOverview()).rejects.toMatchObject({ code: "TIMEOUT" });
+
+    const controller = new AbortController();
+    controller.abort();
+    await expect(fetchMarketOverview({ signal: controller.signal })).rejects.toBe(abort);
+  });
+});

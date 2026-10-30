@@ -23,6 +23,9 @@ const CHART_PATH = [
   // SPENDLY-643: NIFTY 50 movers.
   "shared/utils/marketMovers.ts",
   "shared/data/nifty50.ts",
+  // SPENDLY-644: market overview client.
+  "lib/marketOverviewCache.ts",
+  "hooks/useMarketOverview.ts",
   "netlify/functions/market-overview.ts",
 ];
 
