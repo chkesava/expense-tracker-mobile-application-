@@ -26,6 +26,10 @@ const CHART_PATH = [
   // SPENDLY-644: market overview client.
   "lib/marketOverviewCache.ts",
   "hooks/useMarketOverview.ts",
+  // SPENDLY-645: Markets tab.
+  "shared/utils/marketsView.ts",
+  "components/markets/MarketsDashboard.tsx",
+  "components/markets/MarketParts.tsx",
   "netlify/functions/market-overview.ts",
 ];
 

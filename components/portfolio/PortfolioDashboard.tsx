@@ -10,6 +10,7 @@ import {
 
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { usePortfolioColors } from "@/components/portfolio/portfolioColors";
+import type { PortfolioSubTabId } from "@/shared/config/navigation";
 import { Chip } from "@/components/ui/Chip";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { OnboardingFlow } from "@/components/portfolio/OnboardingFlow";
@@ -38,7 +39,7 @@ import { withAlpha } from "@/theme/surfaces";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 
-type PortfolioSubTab = "holdings" | "watchlist" | "orders" | "alerts" | "charts";
+type PortfolioSubTab = PortfolioSubTabId;
 
 function PortfolioDashboardSkeleton() {
   return (
@@ -49,15 +50,28 @@ function PortfolioDashboardSkeleton() {
   );
 }
 
-export function PortfolioDashboard({ listHeader }: { listHeader?: ReactNode }) {
+export function PortfolioDashboard({
+  listHeader,
+  initialSubTab,
+}: {
+  listHeader?: ReactNode;
+  /** SPENDLY-645: open on this sub-tab (deep link or a Markets shortcut). */
+  initialSubTab?: PortfolioSubTab;
+}) {
   return (
     <PortfolioDataProvider>
-      <PortfolioDashboardInner listHeader={listHeader} />
+      <PortfolioDashboardInner listHeader={listHeader} initialSubTab={initialSubTab} />
     </PortfolioDataProvider>
   );
 }
 
-function PortfolioDashboardInner({ listHeader }: { listHeader?: ReactNode }) {
+function PortfolioDashboardInner({
+  listHeader,
+  initialSubTab,
+}: {
+  listHeader?: ReactNode;
+  initialSubTab?: PortfolioSubTab;
+}) {
   const { theme } = useTheme();
   const portfolioColors = usePortfolioColors();
   const listBottomPadding = usePageListBottomPadding();
@@ -83,7 +97,10 @@ function PortfolioDashboardInner({ listHeader }: { listHeader?: ReactNode }) {
     cancelOrder,
   } = usePortfolio();
 
-  const [subTab, setSubTab] = useState<PortfolioSubTab>("holdings");
+  const [subTab, setSubTab] = useState<PortfolioSubTab>(initialSubTab ?? "holdings");
+  useEffect(() => {
+    if (initialSubTab) setSubTab(initialSubTab);
+  }, [initialSubTab]);
   const [isCashModalOpen, setIsCashModalOpen] = useState(false);
 
   const symbolRequests = useMemo(

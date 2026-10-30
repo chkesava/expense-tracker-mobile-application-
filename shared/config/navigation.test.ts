@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   CORE_NAV_ITEMS,
+  INVESTMENT_HUB_TAB_IDS,
+  PORTFOLIO_SUB_TAB_IDS,
+  parsePortfolioSubTab,
   LEDGER_GROUPS,
   LEDGER_HUB_TAB_IDS,
   LEDGER_SECTIONS,
@@ -243,5 +246,21 @@ describe("Money hub sections", () => {
       );
       expect(members.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("Investments hub tabs (SPENDLY-645)", () => {
+  it("includes the Markets tab next to Stocks", () => {
+    expect(INVESTMENT_HUB_TAB_IDS).toEqual(["investments", "markets", "portfolio", "sip", "epf"]);
+    expect(isNavItemActive("/investments?tab=markets", "investments")).toBe(true);
+    expect(resolveAndroidBackAction("/investments?tab=markets")).toBe("home");
+  });
+
+  it("parses the Stocks sub-tab deep link and ignores unknown values", () => {
+    expect(PORTFOLIO_SUB_TAB_IDS).toContain("watchlist");
+    expect(parsePortfolioSubTab("watchlist")).toBe("watchlist");
+    expect(parsePortfolioSubTab("alerts")).toBe("alerts");
+    expect(parsePortfolioSubTab("bogus")).toBeNull();
+    expect(parsePortfolioSubTab(undefined)).toBeNull();
   });
 });
