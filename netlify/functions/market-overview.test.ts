@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { NIFTY50, NIFTY50_AS_OF } from "../../shared/data/nifty50";
 import { SESSION_END_SEC, SESSION_START_SEC, indexChart } from "../../shared/utils/marketOverview.fixtures";
 import { __resetMarketOverviewCacheForTests, handler, overallErrorCode } from "./market-overview";
 
@@ -26,13 +27,43 @@ const MIN = 60_000;
 const OPEN_NOW = new Date(SESSION_START_SEC * 1000 + 120 * MIN);
 const OPEN_TRADE_SEC = SESSION_START_SEC + 7_100;
 
-/** fetch that answers each index from `bySymbol`, or with a chart for it. */
-function yahoo(bySymbol: Record<string, () => Response | Promise<Response>> = {}, tradeSec = OPEN_TRADE_SEC) {
+const isSpark = (url: unknown) => String(url).includes("/v8/finance/spark?");
+const sparkSymbols = (url: unknown) =>
+  new URL(String(url)).searchParams.get("symbols")!.split(",");
+
+/** Change % per stock: its position in NIFTY50 minus 25, so ranks are predictable. */
+const pctFor = (symbol: string) => NIFTY50.findIndex((s) => s.symbol === symbol) - 25;
+
+/** A spark payload pricing `symbols` at 100 × (1 + pct/100) on a baseline of 100. */
+function sparkPayload(symbols: string[], tradeSec = OPEN_TRADE_SEC) {
+  return Object.fromEntries(
+    symbols.map((symbol) => [
+      symbol,
+      { symbol, timestamp: [tradeSec], close: [100 + pctFor(symbol)], chartPreviousClose: 100, previousClose: null },
+    ])
+  );
+}
+
+type Answer = () => Response | Promise<Response>;
+
+/**
+ * fetch that answers each index from `bySymbol` (or with a chart for it), and
+ * each spark batch from `sparkBatches[i]` (or by pricing every symbol).
+ */
+function yahoo(bySymbol: Record<string, Answer> = {}, tradeSec = OPEN_TRADE_SEC, sparkBatches: Record<number, Answer> = {}) {
   return vi.fn(async (url: unknown) => {
+    if (isSpark(url)) {
+      const symbols = sparkSymbols(url);
+      const batch = Math.floor(NIFTY50.findIndex((s) => s.symbol === symbols[0]) / 20);
+      return sparkBatches[batch] ? sparkBatches[batch]() : upstream(sparkPayload(symbols, tradeSec));
+    }
     const symbol = symbolOf(url);
     return bySymbol[symbol] ? bySymbol[symbol]() : upstream(indexChart(symbol, { tradeSec }));
   });
 }
+
+const chartCalls = (mock: ReturnType<typeof vi.fn>) => mock.mock.calls.filter((c) => !isSpark(c[0]));
+const sparkCalls = (mock: ReturnType<typeof vi.fn>) => mock.mock.calls.filter((c) => isSpark(c[0]));
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -55,8 +86,8 @@ describe("market-overview", () => {
     const res = await handler(get());
 
     expect(res.statusCode).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(fetchMock.mock.calls.map((c) => String(c[0]))).toEqual([
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    expect(chartCalls(fetchMock).map((c) => String(c[0]))).toEqual([
       "https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEI?range=1d&interval=1d",
       "https://query1.finance.yahoo.com/v8/finance/chart/%5EBSESN?range=1d&interval=1d",
       "https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEBANK?range=1d&interval=1d",
@@ -69,7 +100,7 @@ describe("market-overview", () => {
       stale: false,
       fetchedAt: OPEN_NOW.toISOString(),
       status: { state: "open", lastTradeAt: new Date(OPEN_TRADE_SEC * 1000).toISOString() },
-      movers: { available: false, reason: "DISABLED" },
+      movers: { available: true, universe: "NIFTY50", universeAsOf: NIFTY50_AS_OF, coverage: 1 },
     });
     expect(dto.indices.map((i: { symbol: string }) => i.symbol)).toEqual(["^NSEI", "^BSESN", "^NSEBANK"]);
     for (const index of dto.indices) {
@@ -104,7 +135,7 @@ describe("market-overview", () => {
 
     const again = await handler(get());
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
     expect(again.headers["Netlify-CDN-Cache-Control"]).toContain("s-maxage=30,");
   });
 
@@ -178,7 +209,54 @@ describe("market-overview", () => {
     const [a, b] = await Promise.all([handler(get()), handler(get())]);
     expect(a.statusCode).toBe(200);
     expect(b.statusCode).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  it("ranks NIFTY 50 movers from three spark batches of at most 20", async () => {
+    const fetchMock = yahoo();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const dto = body(await handler(get()));
+
+    expect(sparkCalls(fetchMock).map((c) => sparkSymbols(c[0]).length)).toEqual([20, 20, 10]);
+    expect(sparkCalls(fetchMock).flatMap((c) => sparkSymbols(c[0])).sort()).toEqual(NIFTY50.map((s) => s.symbol).sort());
+    const symbolsAt = (...i: number[]) => i.map((n) => NIFTY50[n].symbol);
+    expect(dto.movers.gainers.map((m: { symbol: string }) => m.symbol)).toEqual(symbolsAt(49, 48, 47, 46, 45));
+    expect(dto.movers.losers.map((m: { symbol: string }) => m.symbol)).toEqual(symbolsAt(0, 1, 2, 3, 4));
+    expect(dto.movers.gainers[0]).toMatchObject({ price: 124, previousClose: 100, changePercent: 24, currency: "INR" });
+    expect(dto.movers.asOf).toBe(new Date(OPEN_TRADE_SEC * 1000).toISOString());
+    expect(dto.movers.gainers[0].name).toBe(NIFTY50[49].name);
+  });
+
+  it("keeps movers when the 10-stock batch fails (80% still priced)", async () => {
+    vi.stubGlobal("fetch", yahoo({}, OPEN_TRADE_SEC, { 2: () => upstream({}, 500) }));
+    const dto = body(await handler(get()));
+    expect(dto.movers).toMatchObject({ available: true, coverage: 0.8 });
+  });
+
+  it("reports movers unavailable, not the whole response, when a 20-stock batch fails", async () => {
+    vi.stubGlobal("fetch", yahoo({}, OPEN_TRADE_SEC, { 0: () => Promise.reject(new TypeError("fetch failed")) }));
+    const res = await handler(get());
+    expect(res.statusCode).toBe(200);
+    expect(body(res).movers).toEqual({ available: false, reason: "UPSTREAM" });
+    expect(body(res).indices).toHaveLength(3);
+  });
+
+  it("treats a spark error body as a failed batch", async () => {
+    const err = () => upstream({ spark: { result: null, error: { code: "Bad Request" } } });
+    vi.stubGlobal("fetch", yahoo({}, OPEN_TRADE_SEC, { 0: err, 1: err }));
+    expect(body(await handler(get())).movers).toEqual({ available: false, reason: "UPSTREAM" });
+  });
+
+  it("returns movers alone when every index fails", async () => {
+    const down = () => upstream({}, 500);
+    vi.stubGlobal("fetch", yahoo({ "^NSEI": down, "^BSESN": down, "^NSEBANK": down }));
+    const res = await handler(get());
+    expect(res.statusCode).toBe(200);
+    const dto = body(res);
+    expect(dto.indices).toEqual([]);
+    expect(dto.status.state).toBe("unknown");
+    expect(dto.movers.available).toBe(true);
   });
 
   it("rejects anything but GET", async () => {

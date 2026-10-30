@@ -188,7 +188,7 @@ Tapping an index or a mover opens a read-only sheet with `StockChartCard` for th
 | Risk | Mitigation |
 |---|---|
 | Yahoo changes or blocks the unofficial endpoints | Stale-if-error, per-module unavailable states and typed error codes. The provider sits behind one function, so it can be swapped. |
-| The NIFTY 50 list goes stale | `NIFTY50_AS_OF` is shown in the docs, and a test fails if it's more than 7 months old. That reminder test is optional; the user decides. |
+| The NIFTY 50 list goes stale | The API reports `NIFTY50_AS_OF` as `movers.universeAsOf`, and the file header gives the regeneration steps for each NSE rebalance. There's no clock-based test, because it would break `npm test` for unrelated work (decided in SPENDLY-643). |
 | Netlify credits are low, and the endpoint only goes live after a web deploy | It ships dark: the tab shows "unavailable" until the function is deployed. The user decides when to deploy. SPENDLY-621 (Cloudflare Pages) wouldn't serve Netlify functions. |
 | Function time limit (10 s) with 6 upstream calls | Calls run in parallel with a short timeout, and the CDN coalesces concurrent misses. |
 | Users reading index values as real-time | The screen always shows "as of" and never says "live". It mentions possible delay. |

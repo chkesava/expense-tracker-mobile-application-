@@ -4,7 +4,7 @@
 - **Epic branch:** `feature/SPENDLY-622-market-dashboard`, cut from `origin/main` at `ed57efe2` on 2026-10-30
 - **Worktree:** `C:\dev\worktrees\spendly-622`
 - **Plan:** [SPENDLY-622-plan.md](SPENDLY-622-plan.md)
-- **State:** Story 1 (SPENDLY-642) merged into the feature branch. Story 2 (SPENDLY-643) is next and waits for approval.
+- **State:** 642 merged into the feature branch. 643 built and tested on its branch; awaiting approval to merge.
 
 ## Overview
 The dashboard is a Groww-style market overview inside the Expense app's Investments hub. It shows:
@@ -30,7 +30,7 @@ The data comes through a new Netlify function. The app never calls Yahoo itself.
 | # | Story (proposed) | Jira | Branch | State |
 |---|---|---|---|---|
 | 1 | Market-data audit and `/api/market-overview` for indices and market status | SPENDLY-642 | `feature/SPENDLY-642-market-overview-api` | Merged into feature branch |
-| 2 | NIFTY 50 gainers and losers (spark batch, coverage gate) | SPENDLY-643 | | Not started |
+| 2 | NIFTY 50 gainers and losers (spark batch, coverage gate) | SPENDLY-643 | `feature/SPENDLY-643-market-movers` | Built, tested; awaiting merge approval |
 | 3 | Client service, hook and offline last-good snapshot | SPENDLY-644 | | Not started |
 | 4 | Markets tab UI and its states | SPENDLY-645 | | Not started |
 | 5 | Read-only instrument sheet (tap an index or mover to see its chart) | SPENDLY-646 | | Not started |
@@ -39,6 +39,10 @@ The data comes through a new Netlify function. The app never calls Yahoo itself.
 - **2026-10-30, audit result:** Yahoo's batch quote endpoint (`v7/finance/quote`) returns 401 without a crumb, so it can't be used. Yahoo's predefined `day_gainers` screener ignores `region=IN` and returns US stocks, so it isn't a valid source for Indian movers. The plan therefore computes movers itself, over a pinned list of NIFTY 50 stocks (see plan §2).
 - **2026-10-30, "most active" is hidden in v1:** spark returns no volume. Getting volume would take one chart call per stock (50 calls), which isn't worth it for v1. AC3 allows hiding it.
 
+- **2026-10-30, SPENDLY-643:**
+  - The NIFTY 50 list comes from NSE's official CSV.
+  - There's no clock-based staleness test; the list's date is reported as `movers.universeAsOf`.
+  - A response with movers but no indices is still 200.
 - **2026-10-30, user went with the defaults:**
   - The dashboard is a **Markets** tab in the Investments hub.
   - The stories are created in Jira as Subtasks 642 to 646.
