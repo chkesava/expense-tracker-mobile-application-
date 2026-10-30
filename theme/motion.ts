@@ -36,6 +36,14 @@ export function entranceDelay(index: number): number {
   return Math.min(Math.max(0, index) * entrance.stagger, entrance.maxDelay);
 }
 
+/**
+ * SPENDLY-632: when a card's entrance is over and its resting state is
+ * committed by React (`DashboardEntrance`), with a small margin.
+ */
+export function entranceSettleMs(index: number): number {
+  return entranceDelay(index) + entrance.duration + 80;
+}
+
 /** Progress bars, counters and chart growth. */
 export const valueMotion = {
   /** Width / height growth of bars and meters. */

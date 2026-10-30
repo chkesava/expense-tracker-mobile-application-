@@ -25,6 +25,23 @@ Follow-up epic: **SPENDLY-633** (durable native Firestore cache).
    offline). On a cold start with no cache they simply last as long as the
    server round trip (cause 1), which matches the screenshots.
 
+4. **Blank dashboard (found on device, 2026-10-30).** On an Android cold
+   start every card under the greeting stayed invisible permanently (the
+   ticket's first screenshot). Logcat: ~180 `Reanimated:
+   synchronouslyUpdateUIProps failed for tag N … RetryableMountingLayerException:
+   Unable to find SurfaceMountingManager for tag` within 3 s of launch
+   (~47,700 log lines with stacks). `DashboardEntrance` starts each card at
+   opacity 0 and fades it in; Reanimated 4.5.1 on RN 0.86 pushes those frames
+   down its synchronous-props path, which fails while the native views are
+   not mounted yet, final `opacity: 1` included, and nothing re-applies it.
+   Fix: `DashboardEntrance` drops the animated style once the entrance is
+   over (`entranceSettleMs`), so React commits the resting state through the
+   normal mount path. Verified on device (CPH2661, Spendly Test): before, 0
+   cards in the view tree 40 s after launch; after, all cards present on 5/5
+   cold starts. Reanimated still logs the failed fast-path updates (now
+   harmless here); other Reanimated mount animations elsewhere in the app may
+   be exposed to the same library issue.
+
 Not changed, after inspection:
 - **Bottom clearance:** `PageShell` already pads by `useSpendlyBottomClearance({ withFab: true })`
   (nav + FAB + safe-area inset, covered by `lib/spendlyBottomClearance.test.ts`).
@@ -40,6 +57,7 @@ Not changed, after inspection:
 | Progressive net worth waits on accounts + account types only (`netWorthLoading`). Totals are identical; the partial-ledger note still shows while the ledger is incomplete. Non-progressive callers unchanged. | `shared/utils/netWorth.ts`, `hooks/useUnifiedNetWorth.ts` |
 | **Last-seen dashboard snapshot** — display-only copy of the six dashboard period summaries and the net-worth totals, per user + month, in AsyncStorage. Shown per section only while that section's live data is loading, under a "Showing figures saved … · updating…" label. Saved only from a settled, complete picture (summaries loaded without error, net worth incl. valuations loaded). | `shared/utils/dashboardSnapshot.ts`, `lib/dashboardSnapshotStore.ts`, `hooks/useDashboardSnapshot.ts`, `app/(app)/dashboard.tsx` |
 | Cleared on sign-out; never read or written in duress; ignored if malformed, another user/month, or > 7 days old. | `providers/AuthProvider.tsx`, `shared/utils/dashboardSnapshot.ts` |
+| Entrance fades can no longer leave a card invisible (cause 4). | `components/dashboard/DashboardEntrance.tsx`, `theme/motion.ts` |
 | Cold-start perf marks: `dashboard_snapshot_shown`, `dashboard_networth_ready`, `dashboard_networth_complete`, `dashboard_summaries_ready`, `dashboard_recent_ready` (plus existing `dashboard_mounted`, `dashboard_data_ready`, `dashboard_hydrated`). | `app/(app)/dashboard.tsx` |
 
 ### Invariants kept
