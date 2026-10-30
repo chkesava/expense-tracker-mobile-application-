@@ -21,6 +21,12 @@ describe("normalizeStockSymbol", () => {
     expect(normalizeStockSymbol("aapl")).toBe("AAPL");
   });
 
+  it("passes index symbols through without an exchange suffix (SPENDLY-642)", () => {
+    expect(normalizeStockSymbol("^nsei")).toBe("^NSEI");
+    expect(normalizeStockSymbol(" ^BSESN ")).toBe("^BSESN");
+    expect(normalizeStockSymbol("^NSEBANK")).toBe("^NSEBANK");
+  });
+
   it("rejects an empty symbol", () => {
     expect(normalizeStockSymbol("  ")).toBeNull();
     expect(normalizeStockSymbol(null)).toBeNull();

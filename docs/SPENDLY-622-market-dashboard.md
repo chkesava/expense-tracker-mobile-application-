@@ -4,7 +4,7 @@
 - **Epic branch:** `feature/SPENDLY-622-market-dashboard`, cut from `origin/main` at `ed57efe2` on 2026-10-30
 - **Worktree:** `C:\dev\worktrees\spendly-622`
 - **Plan:** [SPENDLY-622-plan.md](SPENDLY-622-plan.md)
-- **State:** Story 1 (SPENDLY-642) in progress.
+- **State:** Story 1 (SPENDLY-642) built and tested on its branch; awaiting approval to merge.
 
 ## Overview
 The dashboard is a Groww-style market overview inside the Expense app's Investments hub. It shows:
@@ -29,7 +29,7 @@ The data comes through a new Netlify function. The app never calls Yahoo itself.
 ## Story tracker
 | # | Story (proposed) | Jira | Branch | State |
 |---|---|---|---|---|
-| 1 | Market-data audit and `/api/market-overview` for indices and market status | SPENDLY-642 | `feature/SPENDLY-642-market-overview-api` | In progress |
+| 1 | Market-data audit and `/api/market-overview` for indices and market status | SPENDLY-642 | `feature/SPENDLY-642-market-overview-api` | Built, tested; awaiting merge approval |
 | 2 | NIFTY 50 gainers and losers (spark batch, coverage gate) | SPENDLY-643 | | Not started |
 | 3 | Client service, hook and offline last-good snapshot | SPENDLY-644 | | Not started |
 | 4 | Markets tab UI and its states | SPENDLY-645 | | Not started |

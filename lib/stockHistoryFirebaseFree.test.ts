@@ -18,6 +18,9 @@ const CHART_PATH = [
   "netlify/functions/stock-history.ts",
   "netlify/functions/_stockHistoryProvider.ts",
   "netlify/functions/_historyCache.ts",
+  // SPENDLY-642: market overview.
+  "shared/utils/marketOverview.ts",
+  "netlify/functions/market-overview.ts",
 ];
 
 const FIREBASE_IMPORT = /from\s+["'](firebase(\/[^"']*)?|firebase-admin(\/[^"']*)?|@\/lib\/firebase[^"']*|@react-native-firebase\/[^"']*|@\/lib\/commitMutations)["']/;

@@ -37,6 +37,19 @@ describe("stock", () => {
     expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain("/v8/finance/chart/KPITTECH.NS?");
   });
 
+  it("asks Yahoo for an index symbol as-is, without a .NS suffix (SPENDLY-642)", async () => {
+    const fetchMock = vi.fn(async () =>
+      upstream({ chart: { result: [{ meta: { symbol: "^NSEI", regularMarketPrice: 23053.1, chartPreviousClose: 22698.8 } }] } })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await stock(get({ symbol: "^nsei" }));
+
+    expect(res.statusCode).toBe(200);
+    expect(body(res)).toMatchObject({ symbol: "^NSEI", price: 23053.1 });
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain("/v8/finance/chart/%5ENSEI?");
+  });
+
   it("maps a Yahoo 404 to a 404", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => upstream({}, 404)));
     const res = await stock(get({ symbol: "NOPE.NS" }));

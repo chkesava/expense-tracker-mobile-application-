@@ -160,3 +160,91 @@ export interface StockHistoryErrorDTO {
   code: StockHistoryErrorCode;
   message: string;
 }
+
+// --- SPENDLY-622: market overview (indices, status, movers) ---------------
+
+/** The benchmark indices the market overview shows, in display order. */
+export type MarketIndexSymbol = "^NSEI" | "^BSESN" | "^NSEBANK";
+
+/** One benchmark index. Every figure is the provider's; nothing is filled in. */
+export interface IndexQuoteDTO {
+  symbol: MarketIndexSymbol;
+  name: string;
+  currency: string;
+  price: number;
+  previousClose: number;
+  change: number;
+  changePercent: number;
+  dayHigh: number | null;
+  dayLow: number | null;
+  /** The provider's last trade time for this index (ISO). */
+  asOf: string;
+}
+
+export type MarketState = "open" | "closed" | "unknown";
+
+/**
+ * Whether NSE/BSE is trading. `state` is the server's verdict when it built
+ * the payload; the session window and last trade let a client work it out
+ * again against its own clock, so a cached "open" cannot outlive the session.
+ */
+export interface MarketStatusDTO {
+  state: MarketState;
+  /** Today's regular session (ISO), when the provider reported one. */
+  sessionStart: string | null;
+  sessionEnd: string | null;
+  /** The newest trade time across the indices (ISO). */
+  lastTradeAt: string | null;
+}
+
+/** One stock in a movers list (SPENDLY-643). */
+export interface MoverDTO {
+  symbol: string;
+  name: string;
+  price: number;
+  previousClose: number;
+  change: number;
+  changePercent: number;
+  asOf: string;
+  currency: "INR";
+}
+
+export type MoversUnavailableReason = "LOW_COVERAGE" | "UPSTREAM" | "DISABLED";
+
+export type MoversDTO =
+  | {
+      available: true;
+      universe: "NIFTY50";
+      /** Date the pinned constituent list was last checked (YYYY-MM-DD). */
+      universeAsOf: string;
+      /** Share of the universe that priced, 0..1. */
+      coverage: number;
+      gainers: MoverDTO[];
+      losers: MoverDTO[];
+      asOf: string;
+    }
+  | { available: false; reason: MoversUnavailableReason };
+
+/** `GET /api/market-overview` success body. */
+export interface MarketOverviewDTO {
+  success: true;
+  schemaVersion: 1;
+  provider: "yahoo";
+  /** When the server fetched it from the provider (ISO). */
+  fetchedAt: string;
+  /** True when the server served its last good copy because the provider failed. */
+  stale: boolean;
+  status: MarketStatusDTO;
+  /** Only the indices that returned a usable price, in display order. */
+  indices: IndexQuoteDTO[];
+  movers: MoversDTO;
+}
+
+export type MarketOverviewErrorCode = "BAD_REQUEST" | "THROTTLED" | "TIMEOUT" | "UPSTREAM" | "MALFORMED";
+
+/** `GET /api/market-overview` failure body. */
+export interface MarketOverviewErrorDTO {
+  success: false;
+  code: MarketOverviewErrorCode;
+  message: string;
+}
