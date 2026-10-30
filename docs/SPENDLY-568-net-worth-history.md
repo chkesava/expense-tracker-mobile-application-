@@ -48,14 +48,14 @@ The write itself:
 
 ## UI
 `components/dashboard/NetWorthTrend.tsx` sits inside the dashboard's `NetWorthHeroCard` through a new `trend` slot. The Money hub's copy of the card is unchanged and reads nothing new.
-- **Period chips:** 1M / 3M / 6M / 1Y.
+- **Period chips:** 1W / 1M / 3M / 6M / 1Y (1W added in SPENDLY-620).
 - **Change line:** "Up/Down/No change", then the signed amount in whole rupees, the percentage, and "this month" / "over 3 months" / … The words and an arrow carry the direction as well as the colour.
   - The change is measured from the last recorded day on or before the period start.
   - With shorter history it reads "since {first recorded day}" instead of claiming the full period.
 - **Line:** the recorded days are joined, with gaps left as gaps. Long series are thinned evenly to 60 points.
   - This uses the existing `SpendingCurveChart` with two new opt-in props: `tightDomain` (fit the scale to the data rather than to zero) and `dots="ends"`.
   - Its tooltip amount is now `ghostable` everywhere.
-- **Empty state:** with fewer than 3 recorded days, the card says "Trend appears after a few days of history." No line is drawn.
+- **Empty state:** with fewer than 3 recorded days, the card says "Trend appears after 3 saved days (N so far)." No line is drawn. A status line underneath says whether today's point is saved (SPENDLY-620).
 - **Load failure:** a one-line message.
 - **Ghost mode:** hides the change amount, the percentage and the tooltip. The line's shape stays, but it has no axis values.
 
@@ -84,7 +84,7 @@ The write itself:
 - `npm run typecheck:shared` and `npx tsc -p tsconfig.json --noEmit`: clean.
 - `npm run test:rules`: 28 files, 555 tests passed, including the 6 new `netWorthHistory` tests.
 - **Web, against the Firebase emulator as the demo user (Midnight Emerald):**
-  - With no history, the empty state shows. With the seeded holdings, **no snapshot was written**: test mode blocks live quotes, so the `missingQuotes` blocker held, as intended.
+  - With no history, the empty state shows. With the seeded holdings, **no snapshot was written**: test mode blocks live quotes, so the `missingQuotes` blocker held. (SPENDLY-620 removed that blocker; unquoted holdings are now recorded at cost once quotes finish loading.)
   - After removing the holdings in the emulator, today's point was written once (`2026-10/points/22`), in the exact shape the rules allow.
   - With synthetic past days seeded into the emulator only:
     - 1M showed "Up +₹9,745 (+10.8%) this month" with the line;
@@ -99,7 +99,7 @@ This adds a new collection that the client reads and writes, so per `docs/AFTER_
 
 ## Not done / known limitations
 - **No backfill.** History starts the first day a complete valuation is seen after release. A backfill would need its own dry run, variance report and approval.
-- **Users who hold stocks get snapshots only on days live quotes load.** If quotes are down, that day has no point.
+- **Holdings without a live quote are recorded at cost** once quotes finish loading (SPENDLY-620), the same value the headline shows. Before that fix they blocked the snapshot every day.
 - **Snapshots are taken only on the dashboard.** A user who never opens it records nothing; there is no scheduled job.
 - **Not every source can report a failure.** Loans, card bills, receivables, entries, payments and transfers don't expose a load error to `useUnifiedNetWorth`. If one of their listeners failed while still reporting "loaded", a snapshot could be taken from incomplete data. The other guards make this unlikely, but it isn't impossible.
 - **No Android device QA yet.**

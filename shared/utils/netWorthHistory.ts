@@ -173,6 +173,10 @@ export type NetWorthRecorderStatus = {
  * SPENDLY-620: what the card says about today's point. "waiting" covers the
  * blockers that clear on their own (loading, settling); "blocked" is one the
  * user has to act on or wait out (offline, untrusted balance, bad values).
+ *
+ * Duress is never surfaced: naming it would tell whoever is looking that this
+ * is the decoy session. It reads as an ordinary "saving" state, while blockers
+ * a normal session can also hit (offline, …) still show.
  */
 export function netWorthRecorderStatus(input: {
   recordedToday: boolean;
@@ -185,13 +189,14 @@ export function netWorthRecorderStatus(input: {
   // Until history loads we can't tell whether today is already recorded.
   if (input.historyLoading) return { state: "waiting", blockers };
   if (input.failed) return { state: "failed", blockers };
-  const lasting = blockers.filter((b) => b !== "loading" && b !== "valuationsLoading");
+  const visible = blockers.filter((b) => b !== "duress");
+  const lasting = visible.filter((b) => b !== "loading" && b !== "valuationsLoading");
   if (lasting.length > 0) return { state: "blocked", blockers: lasting };
-  return { state: "waiting", blockers };
+  return { state: "waiting", blockers: visible };
 }
 
 const BLOCKER_TEXT: Record<NetWorthSnapshotBlocker, string> = {
-  duress: "not available in this session",
+  duress: "your accounts are still loading",
   offline: "you're offline",
   loading: "your accounts are still loading",
   valuationsLoading: "investment prices are still loading",

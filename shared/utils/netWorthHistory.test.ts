@@ -207,6 +207,14 @@ describe("netWorthRecorderStatus (SPENDLY-620)", () => {
     expect(netWorthRecorderMessage(netWorthRecorderStatus({ ...base, blockers: ["offline"] }))).toMatch(/offline/);
   });
 
+  it("never reveals the duress session", () => {
+    const status = netWorthRecorderStatus({ ...base, blockers: ["duress"] });
+    expect(status).toEqual({ state: "waiting", blockers: [] });
+    expect(netWorthRecorderMessage(status)).toBe(netWorthRecorderMessage(netWorthRecorderStatus(base)));
+    // A blocker a normal session can also hit still shows.
+    expect(netWorthRecorderStatus({ ...base, blockers: ["duress", "offline"] })).toEqual({ state: "blocked", blockers: ["offline"] });
+  });
+
   it("reports a failed write", () => {
     expect(netWorthRecorderStatus({ ...base, failed: true }).state).toBe("failed");
   });
