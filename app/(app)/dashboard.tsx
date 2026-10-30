@@ -18,6 +18,7 @@ import { SpendingOverviewCard } from "@/components/dashboard/SpendingOverviewCar
 import { SetupChecklistWidget } from "@/components/dashboard/SetupChecklistWidget";
 import {
   DASH_RADIUS,
+  MetaLabel,
   useSurfaces,
 } from "@/components/dashboard/primitives";
 import { LazyMount } from "@/components/common/LazyMount";
@@ -29,6 +30,7 @@ import { sampleScrollFps, perfEvent, perfMark } from "@/lib/perf";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useDashboardCashFlow } from "@/hooks/useDashboardCashFlow";
+import { useDashboardSnapshot } from "@/hooks/useDashboardSnapshot";
 import { useReadModelFreshness } from "@/hooks/useReadModelFreshness";
 import { ReadModelFreshnessBadge } from "@/components/common/ReadModelFreshnessBadge";
 import { useExpenses } from "@/hooks/useExpenses";
@@ -56,6 +58,11 @@ import { getNextRenewalDate } from "@/shared/utils/subscriptionProcessor";
 import { useTheme } from "@/theme/ThemeProvider";
 import { SideDrawer } from "@/components/SideDrawer";
 import { dashboardMonthLabel } from "@/shared/utils/dashboardLabels";
+import {
+  snapshotAgeLabel,
+  snapshotNetWorthSummary,
+  snapshotPeriodSummaries,
+} from "@/shared/utils/dashboardSnapshot";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { GridItem, ResponsiveGrid } from "@/components/layout/ResponsiveGrid";
 
@@ -99,11 +106,44 @@ export default function DashboardScreen() {
   // One listener for the six-month window; the active and previous months are
   // read from it rather than from two more per-month doc listeners.
   const {
-    summaries: cashFlowSummaries,
-    chartMonths: cashFlowChartMonths,
+    summaries: liveCashFlowSummaries,
+    chartMonths: liveCashFlowChartMonths,
     loading: activeLoading,
     error: financeError,
   } = useDashboardCashFlow(activeMonth, 6);
+
+  // SPENDLY-566: one net-worth summary for the card and the account cards.
+  // It reads providers the app already holds; no listener of its own.
+  const liveNetWorth = useUnifiedNetWorth({ progressive: true });
+
+  // SPENDLY-632: the last figures this dashboard showed, drawn on a cold start
+  // until each section's live data arrives. Display only and labelled.
+  const snapshot = useDashboardSnapshot({
+    month: activeMonth,
+    summaries: liveCashFlowSummaries,
+    summariesSettled: !activeLoading && !financeError,
+    netWorth: liveNetWorth,
+    netWorthSettled: !liveNetWorth.loading && !liveNetWorth.secondaryLoading,
+  });
+  const summariesFromSnapshot =
+    activeLoading && !financeError && liveCashFlowSummaries.length === 0 && snapshot !== null;
+  const netWorthFromSnapshot = liveNetWorth.loading && snapshot !== null;
+  const snapshotSummaries = useMemo(
+    () => (snapshot ? snapshotPeriodSummaries(snapshot) : []),
+    [snapshot]
+  );
+  const cashFlowSummaries = summariesFromSnapshot ? snapshotSummaries : liveCashFlowSummaries;
+  const cashFlowChartMonths = summariesFromSnapshot ? snapshotSummaries : liveCashFlowChartMonths;
+  const netWorth = useMemo(
+    () =>
+      netWorthFromSnapshot && snapshot
+        ? { ...liveNetWorth, ...snapshotNetWorthSummary(snapshot.netWorth) }
+        : liveNetWorth,
+    [netWorthFromSnapshot, snapshot, liveNetWorth]
+  );
+  const showingSnapshot = summariesFromSnapshot || netWorthFromSnapshot;
+  // While the saved summaries stand in, the cards are not "loading".
+  const summaryLoading = activeLoading && !summariesFromSnapshot;
   // SPENDLY-513: says so when the chart's older months are stale or fell back
   // (read-model `supabase` mode only; renders nothing otherwise).
   const cashFlowFreshness = useReadModelFreshness("cashFlow", ["expenses", "incomes"], null);
@@ -153,6 +193,27 @@ export default function DashboardScreen() {
       }
     }
   }, [activeLoading, accountsLoading]);
+
+  // SPENDLY-632: cold-start timings for the before/after comparison.
+  const firstPaintMarksRef = useRef<Set<string>>(new Set());
+  const markOnce = useCallback((name: string) => {
+    if (firstPaintMarksRef.current.has(name)) return;
+    firstPaintMarksRef.current.add(name);
+    perfMark(name);
+  }, []);
+  useEffect(() => {
+    if (showingSnapshot) markOnce("dashboard_snapshot_shown");
+  }, [showingSnapshot, markOnce]);
+  useEffect(() => {
+    if (!liveNetWorth.loading) markOnce("dashboard_networth_ready");
+    if (!liveNetWorth.loading && !liveNetWorth.secondaryLoading) markOnce("dashboard_networth_complete");
+  }, [liveNetWorth.loading, liveNetWorth.secondaryLoading, markOnce]);
+  useEffect(() => {
+    if (!activeLoading) markOnce("dashboard_summaries_ready");
+  }, [activeLoading, markOnce]);
+  useEffect(() => {
+    if (!recentLoading) markOnce("dashboard_recent_ready");
+  }, [recentLoading, markOnce]);
 
   const monthlySpent = activeSummary?.totalExpenses || 0;
   const monthlyIncome = activeSummary?.totalIncome || 0;
@@ -204,10 +265,6 @@ export default function DashboardScreen() {
     return result;
   }, [cashFlowChartMonths, activeMonth]);
 
-  // SPENDLY-566: one net-worth summary for the card and the account cards.
-  // It reads providers the app already holds; no listener of its own.
-  const netWorth = useUnifiedNetWorth({ progressive: true });
-
   /** "More" cards: user order and toggles, then the cards this layout moved down. */
   const moreCardIds = useMemo<MoreCardId[]>(() => {
     const more = getMoreDashboardWidgets(
@@ -254,7 +311,7 @@ export default function DashboardScreen() {
 
   const summaryUnavailable = financeError
     ? ("error" as const)
-    : !activeLoading && !activeSummary
+    : !summaryLoading && !activeSummary
       ? ("missing" as const)
       : null;
 
@@ -272,7 +329,7 @@ export default function DashboardScreen() {
             previousIncome={previousIncome}
             cashFlow={cashFlow}
             currency={displayCurrency}
-            loading={activeLoading && monthlySpent === 0 && monthlyIncome === 0}
+            loading={summaryLoading && monthlySpent === 0 && monthlyIncome === 0}
             unavailable={summaryUnavailable}
             monthLabel={activeMonthChipLabel}
             onOpenMonthPicker={handleOpenMonthPicker}
@@ -303,7 +360,7 @@ export default function DashboardScreen() {
           <SafeToSpendWidget
             budget={monthBudget}
             currency={displayCurrency}
-            loading={activeLoading && accountsLoading && accounts.length === 0}
+            loading={summaryLoading && accountsLoading && accounts.length === 0}
           />
         );
 
@@ -355,6 +412,13 @@ export default function DashboardScreen() {
       <DashboardEntrance index={0}>
         <NetWorthWidget netWorth={netWorth} currency={displayCurrency} />
       </DashboardEntrance>
+
+      {showingSnapshot && snapshot ? (
+        // SPENDLY-632: saved figures are never presented as current.
+        <MetaLabel style={styles.snapshotNote} numberOfLines={2}>
+          {`Showing figures saved ${snapshotAgeLabel(snapshot.savedAtMs, Date.now())} · updating…`}
+        </MetaLabel>
+      ) : null}
 
       {isDuress ? (
         <View
@@ -441,7 +505,7 @@ export default function DashboardScreen() {
                 activeMonth={activeMonth}
                 monthLabel={activeMonthChipLabel}
                 onOpenMonthPicker={handleOpenMonthPicker}
-                loading={activeLoading && !activeSummary && !financeError}
+                loading={summaryLoading && !activeSummary && !financeError}
                 unavailable={summaryUnavailable}
                 monthlyBudget={settings.monthlyBudget}
                 budget={monthBudget}
@@ -504,6 +568,10 @@ const styles = StyleSheet.create({
   },
   grid: {
     marginTop: 18,
+  },
+  snapshotNote: {
+    marginTop: 10,
+    textAlign: "center",
   },
   alertBanner: {
     flexDirection: "row",

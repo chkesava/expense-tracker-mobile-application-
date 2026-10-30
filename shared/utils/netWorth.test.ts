@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { composeNetWorth, holdingsMissingQuote, type NetWorthInputs } from "@/shared/utils/netWorth";
+import { composeNetWorth, holdingsMissingQuote, netWorthLoading, type NetWorthInputs } from "@/shared/utils/netWorth";
 
 /**
  * Regression cover for the dashboard's headline number — KAN-73.
@@ -388,5 +388,39 @@ describe("holdingsMissingQuote (SPENDLY-568)", () => {
     ];
     expect(holdingsMissingQuote(holdings, quotes)).toBe(2);
     expect(holdingsMissingQuote([], quotes)).toBe(0);
+  });
+});
+
+describe("netWorthLoading (SPENDLY-632)", () => {
+  const idle = { accountsLoading: false, ledgerLoading: false, secondaryLoading: false };
+
+  it("progressive: waits on accounts only, not the ledger or valuations", () => {
+    expect(netWorthLoading({ progressive: true, ...idle, ledgerLoading: true, secondaryLoading: true })).toBe(false);
+    expect(netWorthLoading({ progressive: true, ...idle, accountsLoading: true })).toBe(true);
+  });
+
+  it("non-progressive: still waits on everything", () => {
+    expect(netWorthLoading({ progressive: false, ...idle })).toBe(false);
+    expect(netWorthLoading({ progressive: false, ...idle, ledgerLoading: true })).toBe(true);
+    expect(netWorthLoading({ progressive: false, ...idle, secondaryLoading: true })).toBe(true);
+  });
+
+  it("the totals do not depend on the ledger the progressive card no longer waits for", () => {
+    const accounts = [account("bank", SAVINGS, 12_000), account("card", CREDIT, 3_000)];
+    const withLedger = composeNetWorth(
+      inputs({
+        accounts,
+        expenses: [{ id: "e1", amount: 500 } as never],
+        incomes: [{ id: "i1", amount: 900 } as never],
+        entries: [{ id: "n1", amount: 50 } as never],
+        payments: [{ id: "p1", amount: 70 } as never],
+        transfers: [{ id: "t1", amount: 20 } as never],
+      })
+    );
+    const withoutLedger = composeNetWorth(inputs({ accounts }));
+    expect(withoutLedger.totalNetWorth).toBe(9_000);
+    expect(withLedger.totalNetWorth).toBe(withoutLedger.totalNetWorth);
+    expect(withLedger.liquidBankAssets).toBe(withoutLedger.liquidBankAssets);
+    expect(withLedger.totalLiabilities).toBe(withoutLedger.totalLiabilities);
   });
 });

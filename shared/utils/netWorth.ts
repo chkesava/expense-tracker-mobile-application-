@@ -226,3 +226,21 @@ export function composeNetWorth(inputs: NetWorthInputs): NetWorthTotals {
     totalNetWorth,
   };
 }
+
+/**
+ * SPENDLY-632: when the net-worth figures are still loading. The totals come
+ * only from the stored account balances (and the secondary sources), so in
+ * progressive mode the card waits for accounts and account types alone; the
+ * ledger listeners feed only the `liquidBalanceMayBePartial` flag, which is
+ * raised while they are incomplete. Non-progressive callers keep waiting on
+ * everything, as before.
+ */
+export function netWorthLoading(input: {
+  progressive: boolean;
+  accountsLoading: boolean;
+  ledgerLoading: boolean;
+  secondaryLoading: boolean;
+}): boolean {
+  if (input.progressive) return input.accountsLoading;
+  return input.accountsLoading || input.ledgerLoading || input.secondaryLoading;
+}
