@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { where } from "firebase/firestore";
+import { where } from "@/lib/firestore";
 
 import { useGaneshCollection } from "@/hooks/ganesh/useGaneshCollection";
 import { useGaneshSession } from "@/providers/GaneshSessionProvider";

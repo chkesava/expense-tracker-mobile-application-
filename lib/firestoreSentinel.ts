@@ -23,7 +23,7 @@ import {
   deleteField,
   increment,
   serverTimestamp,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 export const FIRESTORE_SENTINEL_KEY = "__spendlyFv";
 

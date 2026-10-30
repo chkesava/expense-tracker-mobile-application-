@@ -8,7 +8,7 @@ import {
   startAfter,
   type Firestore,
   type QueryDocumentSnapshot,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { logDirectRead } from "@/lib/firestoreReadDebug";
 import { foldLedgerSnapshot, LEDGER_PAGE_SIZE } from "@/shared/utils/ledgerSnapshot";

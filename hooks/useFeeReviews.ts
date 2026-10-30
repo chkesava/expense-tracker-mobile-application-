@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot } from "@/lib/firestore";
 
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { getFirestoreDb } from "@/lib/firebase";

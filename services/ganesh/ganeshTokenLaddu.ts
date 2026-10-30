@@ -5,7 +5,7 @@ import {
   serverTimestamp,
   type Firestore,
   type Transaction,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { newId } from "@/lib/id";
 import { omitUndefined } from "@/shared/utils/firestorePayload";

@@ -64,7 +64,7 @@ vi.mock("@/lib/id", () => ({
   newId: () => `id-${++idCounter}`,
 }));
 
-import { getDoc, getDocs, setDoc, writeBatch } from "firebase/firestore";
+import { getDoc, getDocs, setDoc, writeBatch } from "@/lib/firestore";
 
 import {
   applyReconciliationRepairs,

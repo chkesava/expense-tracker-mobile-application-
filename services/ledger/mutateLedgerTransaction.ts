@@ -21,7 +21,7 @@ import {
   serverTimestamp,
   type DocumentReference,
   type Firestore,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";

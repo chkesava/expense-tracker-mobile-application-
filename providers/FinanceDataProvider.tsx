@@ -11,7 +11,7 @@ import {
   type QueryDocumentSnapshot,
   type QuerySnapshot,
   waitForPendingWrites,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 import {
   createContext,
   useCallback,
@@ -1304,7 +1304,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         // to the same doc), so only apply the balance delta the first time —
         // otherwise a retry after a dropped connection would decrement
         // `currentOutstanding` twice for one real credit.
-        const existing = await import("firebase/firestore").then((m) => m.getDoc(ref));
+        const existing = await import("@/lib/firestore").then((m) => m.getDoc(ref));
         let balOps: MutationOp[] = [];
         if (!existing.exists()) {
           const accountInfo = (
@@ -1381,7 +1381,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     if (!u || !database || !id) return false;
     try {
       const ref = doc(database, "users", u.uid, "accountPayments", id);
-      const snap = await import("firebase/firestore").then((m) => m.getDoc(ref));
+      const snap = await import("@/lib/firestore").then((m) => m.getDoc(ref));
       let balOps: MutationOp[] = [];
       // Already voided (or never existed): reversing the balance again would
       // double-credit outstanding back for one real reversal.
@@ -1515,7 +1515,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     if (!u || !database) return;
     try {
       const ref = doc(database, "users", u.uid, "accountEntries", id);
-      const snap = await import("firebase/firestore").then(m => m.getDoc(ref));
+      const snap = await import("@/lib/firestore").then(m => m.getDoc(ref));
       const balOps = [];
       if (snap.exists()) {
         const data = snap.data();
@@ -1622,7 +1622,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     if (!u || !database) return;
     try {
       const ref = doc(database, "users", u.uid, "accountTransfers", id);
-      const snap = await import("firebase/firestore").then(m => m.getDoc(ref));
+      const snap = await import("@/lib/firestore").then(m => m.getDoc(ref));
       const balOps = [];
       if (snap.exists()) {
         const data = snap.data();

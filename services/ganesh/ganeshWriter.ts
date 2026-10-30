@@ -4,7 +4,7 @@ import type {
   SetOptions,
   UpdateData,
   WithFieldValue,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 /**
  * The slice of `WriteBatch` and `Transaction` that the Ganesh ledger helpers

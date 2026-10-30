@@ -12,7 +12,7 @@ import {
   orderBy,
   query,
   updateDoc,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 import {
   createContext,
   useCallback,

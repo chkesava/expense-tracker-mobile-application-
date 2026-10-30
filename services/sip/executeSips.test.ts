@@ -32,7 +32,7 @@ vi.mock("@/services/marketDataService", () => ({
   fetchMarketQuote: vi.fn(),
 }));
 
-import { getDoc, getDocs, writeBatch } from "firebase/firestore";
+import { getDoc, getDocs, writeBatch } from "@/lib/firestore";
 import { fetchMarketQuote } from "@/services/marketDataService";
 import { executeDueSips } from "./executeSips";
 

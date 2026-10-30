@@ -1,4 +1,4 @@
-import type { Firestore } from "firebase/firestore";
+import type { Firestore } from "@/lib/firestore";
 
 import type { connectReadModel } from "@/lib/readModelClient";
 import { timestampMillis } from "@/shared/utils/readModel/mapping";

@@ -7,7 +7,7 @@ import {
   serverTimestamp,
   writeBatch,
   type Firestore,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { newId } from "@/lib/id";
 import { commitWrite } from "@/lib/firestoreWrite";

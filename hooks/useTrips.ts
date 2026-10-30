@@ -11,7 +11,7 @@ import {
   updateDoc,
   where,
   writeBatch,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
@@ -132,7 +132,7 @@ export function useTrips(options?: { enabled?: boolean }) {
         where("tripId", "==", tripId)
       );
 
-      const { getDocs } = await import("firebase/firestore");
+      const { getDocs } = await import("@/lib/firestore");
       const expensesSnap = await getDocs(expensesQuery);
 
       // Offline this answers from cache, which may not hold every linked

@@ -6,7 +6,7 @@ import {
   deleteField,
   increment,
   serverTimestamp,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import {
   FIRESTORE_SENTINEL_KEY,

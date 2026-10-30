@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppState, Platform } from "react-native";
 import Constants from "expo-constants";
 import * as Application from "expo-application";
-import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, onSnapshot } from "@/lib/firestore";
 
 import {
   parseRelease,

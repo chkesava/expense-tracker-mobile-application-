@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc } from "@/lib/firestore";
 import { useColorScheme as useSystemColorScheme } from "react-native";
 
 import { logError } from "@/lib/errors";

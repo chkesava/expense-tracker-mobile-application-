@@ -1,4 +1,4 @@
-import { doc, getDoc, serverTimestamp, writeBatch } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, writeBatch } from "@/lib/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
 import { newId } from "@/lib/id";

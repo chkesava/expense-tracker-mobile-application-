@@ -1,4 +1,4 @@
-import { increment } from "firebase/firestore";
+import { increment } from "@/lib/firestore";
 import { addCategoryDeltas, summaryMonthOf } from "@/shared/utils/dashboardSummaryKeys";
 
 export type DashboardSummaryDelta = {
