@@ -4,7 +4,7 @@
 - **Epic branch:** `feature/SPENDLY-622-market-dashboard`, cut from `origin/main` at `ed57efe2` on 2026-10-30
 - **Worktree:** `C:\dev\worktrees\spendly-622`
 - **Plan:** [SPENDLY-622-plan.md](SPENDLY-622-plan.md)
-- **State:** 642, 643 and 644 merged into the feature branch. 645 merged into the feature branch. 646 (instrument sheet) built and tested; awaiting UI review and merge approval. All five stories are then complete; merging to `main` waits for the user.
+- **State:** 642, 643 and 644 merged into the feature branch. All five stories (642–646) are merged into the feature branch. A PR against `main` is open; the post-merge steps are in the PR description and in "After merge" below.
 
 ## Overview
 The dashboard is a Groww-style market overview inside the Expense app's Investments hub. It shows:
@@ -33,7 +33,7 @@ The data comes through a new Netlify function. The app never calls Yahoo itself.
 | 2 | NIFTY 50 gainers and losers (spark batch, coverage gate) | SPENDLY-643 | `feature/SPENDLY-643-market-movers` | Merged into feature branch |
 | 3 | Client service, hook and offline last-good snapshot | SPENDLY-644 | `feature/SPENDLY-644-market-overview-client` | Merged into feature branch |
 | 4 | Markets tab UI and its states | SPENDLY-645 | `feature/SPENDLY-645-markets-tab` | Merged into feature branch |
-| 5 | Read-only instrument sheet (tap an index or mover to see its chart) | SPENDLY-646 | `feature/SPENDLY-646-instrument-sheet` | Built, tested; awaiting UI review and merge approval |
+| 5 | Read-only instrument sheet (tap an index or mover to see its chart) | SPENDLY-646 | `feature/SPENDLY-646-instrument-sheet` | Merged into feature branch |
 
 ## Decisions
 - **2026-10-30, audit result:** Yahoo's batch quote endpoint (`v7/finance/quote`) returns 401 without a crumb, so it can't be used. Yahoo's predefined `day_gainers` screener ignores `region=IN` and returns US stocks, so it isn't a valid source for Indian movers. The plan therefore computes movers itself, over a pinned list of NIFTY 50 stocks (see plan §2).
@@ -47,3 +47,12 @@ The data comes through a new Netlify function. The app never calls Yahoo itself.
   - The dashboard is a **Markets** tab in the Investments hub.
   - The stories are created in Jira as Subtasks 642 to 646.
   - The feature ships dark: until a Netlify web deploy, the tab shows "unavailable". The user decides when to deploy.
+
+## After merge
+Merging to `main` deploys nothing.
+1. Run **Deploy Web (Netlify)**. That's the only thing that makes `/api/market-overview` exist, and native builds call the same site.
+2. Run **Release — Expense** so the Android app gets the Markets tab.
+3. There are no Firestore rules, indexes, Cloud Functions, Supabase or read-model changes, and no new environment variables.
+4. Smoke-test `/api/market-overview` and `/api/stock-history?symbol=%5ENSEI&range=1D` on the deployed site.
+5. Move SPENDLY-622 and 642–646 to Done once on `main`.
+6. Upkeep: regenerate `shared/data/nifty50.ts` after each NSE rebalance (March and September).
