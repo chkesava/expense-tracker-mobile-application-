@@ -200,6 +200,13 @@ describe("stock-history", () => {
     expect(body(res).code).toBe("MALFORMED");
   });
 
+  it("asks the provider for an index symbol without a .NS suffix (SPENDLY-642)", async () => {
+    const fetchMock = vi.fn(async () => upstream(yahooChart(75)));
+    vi.stubGlobal("fetch", fetchMock);
+    await handler(get({ symbol: "^nsei", range: "1D" }));
+    expect(calledUrl(fetchMock)).toContain("/v8/finance/chart/%5ENSEI?range=1d&interval=5m");
+  });
+
   it("rejects bad symbols and ranges without calling the provider", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

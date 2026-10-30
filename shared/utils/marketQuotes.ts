@@ -13,11 +13,14 @@ import type { CryptoQuoteDTO, MutualFundQuoteDTO, StockQuoteDTO } from "../types
 /** US tickers the legacy function left without an exchange suffix. */
 const US_TICKERS = new Set(["AAPL", "TSLA", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "QQQ", "SPY"]);
 
-/** Upper-cases and appends `.NS` to a bare Indian ticker (SILVERBEES → SILVERBEES.NS). */
+/**
+ * Upper-cases and appends `.NS` to a bare Indian ticker (SILVERBEES → SILVERBEES.NS).
+ * Index symbols (`^NSEI`, `^BSESN`) pass through: Yahoo has no `^NSEI.NS` (SPENDLY-642).
+ */
 export function normalizeStockSymbol(raw: string | null | undefined): string | null {
   const symbol = (raw ?? "").trim().toUpperCase();
   if (!symbol) return null;
-  if (symbol.includes(".") || US_TICKERS.has(symbol)) return symbol;
+  if (symbol.startsWith("^") || symbol.includes(".") || US_TICKERS.has(symbol)) return symbol;
   return `${symbol}.NS`;
 }
 
