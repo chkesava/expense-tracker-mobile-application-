@@ -32,6 +32,10 @@ const CHART_PATH = [
   "components/markets/MarketParts.tsx",
   // SPENDLY-646: read-only instrument sheet.
   "components/markets/InstrumentSheet.tsx",
+  // SPENDLY-647: stock screener universe.
+  "shared/data/nifty500.ts",
+  "shared/utils/screenerUniverse.ts",
+  "netlify/functions/screener-universe.ts",
   "netlify/functions/market-overview.ts",
 ];
 

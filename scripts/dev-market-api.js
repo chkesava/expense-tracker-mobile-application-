@@ -8,8 +8,8 @@
  *   # in another terminal (PowerShell):
  *   $env:EXPO_PUBLIC_MARKET_API_URL="http://localhost:8888"; npx expo start --web
  *
- * Serves /api/stock, /api/mutual-funds, /api/crypto, /api/stock-history and
- * /api/market-overview from netlify/functions-dist/. Public market data only:
+ * Serves /api/stock, /api/mutual-funds, /api/crypto, /api/stock-history,
+ * /api/market-overview and /api/screener-universe from netlify/functions-dist/. Public market data only:
  * no Firebase, no user data, no secrets. Never deployed.
  */
 
@@ -17,7 +17,7 @@ const http = require("http");
 const path = require("path");
 
 const PORT = Number(process.env.PORT) || 8888;
-const FUNCTIONS = ["stock", "mutual-funds", "crypto", "stock-history", "market-overview"];
+const FUNCTIONS = ["stock", "mutual-funds", "crypto", "stock-history", "market-overview", "screener-universe"];
 const dist = path.join(__dirname, "..", "netlify", "functions-dist");
 
 const handlers = {};
