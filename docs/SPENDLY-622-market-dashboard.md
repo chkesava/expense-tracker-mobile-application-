@@ -4,7 +4,7 @@
 - **Epic branch:** `feature/SPENDLY-622-market-dashboard`, cut from `origin/main` at `ed57efe2` on 2026-10-30
 - **Worktree:** `C:\dev\worktrees\spendly-622`
 - **Plan:** [SPENDLY-622-plan.md](SPENDLY-622-plan.md)
-- **State:** 642 and 643 merged into the feature branch. 644 built and tested on its branch; awaiting approval to merge.
+- **State:** 642, 643 and 644 merged into the feature branch. 645 (Markets tab UI) in progress.
 
 ## Overview
 The dashboard is a Groww-style market overview inside the Expense app's Investments hub. It shows:
@@ -31,8 +31,8 @@ The data comes through a new Netlify function. The app never calls Yahoo itself.
 |---|---|---|---|---|
 | 1 | Market-data audit and `/api/market-overview` for indices and market status | SPENDLY-642 | `feature/SPENDLY-642-market-overview-api` | Merged into feature branch |
 | 2 | NIFTY 50 gainers and losers (spark batch, coverage gate) | SPENDLY-643 | `feature/SPENDLY-643-market-movers` | Merged into feature branch |
-| 3 | Client service, hook and offline last-good snapshot | SPENDLY-644 | `feature/SPENDLY-644-market-overview-client` | Built, tested; awaiting merge approval |
-| 4 | Markets tab UI and its states | SPENDLY-645 | | Not started |
+| 3 | Client service, hook and offline last-good snapshot | SPENDLY-644 | `feature/SPENDLY-644-market-overview-client` | Merged into feature branch |
+| 4 | Markets tab UI and its states | SPENDLY-645 | `feature/SPENDLY-645-markets-tab` | In progress |
 | 5 | Read-only instrument sheet (tap an index or mover to see its chart) | SPENDLY-646 | | Not started |
 
 ## Decisions
