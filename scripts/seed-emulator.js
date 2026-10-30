@@ -318,6 +318,7 @@ function buildDemoData(today = new Date()) {
   };
 
   const financialSummaries = buildDashboardSummaries(expenses, incomes, today);
+  applyStoredBalances(accounts, expenses, incomes);
 
   return {
     userDoc,
@@ -401,6 +402,30 @@ async function seed() {
   console.log(`Seeded ${projectId} on ${process.env.FIRESTORE_EMULATOR_HOST}`);
   console.log(`  ${counts.join(', ')}`);
   console.log(`Sign in to Spendly Test as ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
+}
+
+/**
+ * SPENDLY-620: the materialized balance each account carries. In the app every
+ * create moves it through `buildAccountBalanceOps`; the seed writes rows
+ * directly, so without this every account read as unseeded and net worth
+ * counted them as zero. Bank/cash: opening + incomes − expenses. Cards: the
+ * spend is the outstanding (no payments are seeded). Every seeded row falls
+ * after `balanceAsOfDate`, so this is the same figure an in-app Rebuild gives
+ * (pinned by lib/localTestMode.test.ts).
+ */
+function applyStoredBalances(accounts, expenses, incomes) {
+  const sumFor = (rows, id) => rows.reduce((total, row) => total + (row.data.accountId === id ? row.data.amount : 0), 0);
+  const round = (n) => Math.round(n * 100) / 100;
+  for (const account of accounts) {
+    const spent = sumFor(expenses, account.id);
+    if (account.data.typeId === 'type-credit') {
+      account.data.currentOutstanding = round(spent);
+      account.data.summaryReconciliationStatus = 'healthy';
+    } else {
+      account.data.currentBalance = round(account.data.openingBalance + sumFor(incomes, account.id) - spent);
+      account.data.balanceReconciliationStatus = 'healthy';
+    }
+  }
 }
 
 /**

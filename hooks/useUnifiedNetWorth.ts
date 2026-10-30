@@ -65,8 +65,15 @@ export interface UnifiedNetWorthSummary {
    */
   liquidBalanceMayBePartial: boolean;
   /**
+   * SPENDLY-620: accounts whose stored balance is missing or awaiting
+   * reconciliation. Net-worth history skips a snapshot while it is > 0.
+   */
+  untrustedBalanceAccounts: number;
+  /** Names of those accounts (SPENDLY-620). */
+  untrustedBalanceAccountNames: string[];
+  /**
    * SPENDLY-568: holdings priced at cost because their live quote is missing.
-   * Transparency flag only; net-worth history skips a snapshot while it is > 0.
+   * Transparency flag only (SPENDLY-620: it no longer blocks a snapshot).
    */
   holdingsMissingQuote: number;
 }

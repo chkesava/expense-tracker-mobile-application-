@@ -37,8 +37,7 @@ Path: `users/{uid}/netWorthHistory/{YYYY-MM}`, with one document per month:
   - in duress mode;
   - while offline (cached data may be stale);
   - while the core or secondary net-worth sources are loading;
-  - while any holding has no live quote, because `composeNetWorth` would price it at its average buy price. This is the new `holdingsMissingQuote` count on `UnifiedNetWorthSummary`.
-  - while `liquidBalanceMayBePartial` is set (SPENDLY-413);
+  - while any account's stored balance (or card outstanding) is missing or `needs_reconciliation` (`untrustedBalanceAccounts`, SPENDLY-620);
   - when any value is non-finite or out of bounds;
 - the values stay unchanged for 2.5 s, so a late quote isn't caught mid-update.
 
@@ -49,14 +48,14 @@ The write itself:
 
 ## UI
 `components/dashboard/NetWorthTrend.tsx` sits inside the dashboard's `NetWorthHeroCard` through a new `trend` slot. The Money hub's copy of the card is unchanged and reads nothing new.
-- **Period chips:** 1M / 3M / 6M / 1Y.
+- **Period chips:** 1W / 1M / 3M / 6M / 1Y (1W added in SPENDLY-620).
 - **Change line:** "Up/Down/No change", then the signed amount in whole rupees, the percentage, and "this month" / "over 3 months" / … The words and an arrow carry the direction as well as the colour.
   - The change is measured from the last recorded day on or before the period start.
   - With shorter history it reads "since {first recorded day}" instead of claiming the full period.
 - **Line:** the recorded days are joined, with gaps left as gaps. Long series are thinned evenly to 60 points.
   - This uses the existing `SpendingCurveChart` with two new opt-in props: `tightDomain` (fit the scale to the data rather than to zero) and `dots="ends"`.
   - Its tooltip amount is now `ghostable` everywhere.
-- **Empty state:** with fewer than 3 recorded days, the card says "Trend appears after a few days of history." No line is drawn.
+- **Empty state:** with fewer than 3 recorded days, the card says "Trend appears after 3 saved days (N so far)." No line is drawn. A status line underneath says whether today's point is saved (SPENDLY-620).
 - **Load failure:** a one-line message.
 - **Ghost mode:** hides the change amount, the percentage and the tooltip. The line's shape stays, but it has no axis values.
 
@@ -85,7 +84,7 @@ The write itself:
 - `npm run typecheck:shared` and `npx tsc -p tsconfig.json --noEmit`: clean.
 - `npm run test:rules`: 28 files, 555 tests passed, including the 6 new `netWorthHistory` tests.
 - **Web, against the Firebase emulator as the demo user (Midnight Emerald):**
-  - With no history, the empty state shows. With the seeded holdings, **no snapshot was written**: test mode blocks live quotes, so the `missingQuotes` blocker held, as intended.
+  - With no history, the empty state shows. With the seeded holdings, **no snapshot was written**: test mode blocks live quotes, so the `missingQuotes` blocker held. (SPENDLY-620 removed that blocker; unquoted holdings are now recorded at cost once quotes finish loading.)
   - After removing the holdings in the emulator, today's point was written once (`2026-10/points/22`), in the exact shape the rules allow.
   - With synthetic past days seeded into the emulator only:
     - 1M showed "Up +₹9,745 (+10.8%) this month" with the line;
@@ -100,7 +99,14 @@ This adds a new collection that the client reads and writes, so per `docs/AFTER_
 
 ## Not done / known limitations
 - **No backfill.** History starts the first day a complete valuation is seen after release. A backfill would need its own dry run, variance report and approval.
-- **Users who hold stocks get snapshots only on days live quotes load.** If quotes are down, that day has no point.
+- **Holdings without a live quote are recorded at cost** once quotes finish loading (SPENDLY-620), the same value the headline shows. Before that fix they blocked the snapshot every day.
 - **Snapshots are taken only on the dashboard.** A user who never opens it records nothing; there is no scheduled job.
 - **Not every source can report a failure.** Loans, card bills, receivables, entries, payments and transfers don't expose a load error to `useUnifiedNetWorth`. If one of their listeners failed while still reporting "loaded", a snapshot could be taken from incomplete data. The other guards make this unlikely, but it isn't impossible.
 - **No Android device QA yet.**
+
+## SPENDLY-620 fix: the trend never recorded
+Two of the original blockers could stay set indefinitely, so no point was ever written:
+- **`liquidBalanceMayBePartial`** (SPENDLY-413) stays true for anyone with 300+ transactions and a bank account without `balanceAsOfDate`, because the full ledger is no longer auto-loaded (SPENDLY-409). `composeNetWorth` reads each account's stored `currentBalance` and never replays the ledger, so the flag never affected the value. It is now only the card's info note. The snapshot instead waits on `untrustedBalanceAccounts`, which the user can clear by rebuilding the balance from Accounts.
+- **Missing quotes** blocked every day while any holding's quote was unavailable. Now the recorder waits until quotes finish loading (`secondaryLoading`), then records an unquoted holding at cost, the same value the headline shows.
+
+The card shows one status line under the trend (`netWorthRecorderStatus` / `netWorthRecorderMessage`): saved, saving, the blocking reason, or a failed write. A failed write is retried after 60 s instead of being dropped for the session. A **1W** period was added. Rules and the stored shape are unchanged. Missed days are not backfilled.

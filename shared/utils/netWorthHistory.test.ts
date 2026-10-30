@@ -6,7 +6,10 @@ import {
   flattenNetWorthHistory,
   hasPointOn,
   historyStartMonth,
+  daysBefore,
   monthsBefore,
+  netWorthRecorderMessage,
+  netWorthRecorderStatus,
   netWorthSnapshotWrite,
   netWorthTrend,
   snapshotBlockers,
@@ -19,8 +22,7 @@ const ready: SnapshotReadiness = {
   isOnline: true,
   loading: false,
   secondaryLoading: false,
-  holdingsMissingQuote: 0,
-  liquidBalanceMayBePartial: false,
+  untrustedBalanceAccounts: 0,
   totalNetWorth: 100,
   totalAssets: 150,
   totalLiabilities: 50,
@@ -36,8 +38,14 @@ describe("snapshotBlockers", () => {
   it("never records from a partial valuation", () => {
     expect(snapshotBlockers({ ...ready, loading: true })).toContain("loading");
     expect(snapshotBlockers({ ...ready, secondaryLoading: true })).toContain("valuationsLoading");
-    expect(snapshotBlockers({ ...ready, holdingsMissingQuote: 2 })).toContain("missingQuotes");
-    expect(snapshotBlockers({ ...ready, liquidBalanceMayBePartial: true })).toContain("partialLedger");
+    expect(snapshotBlockers({ ...ready, untrustedBalanceAccounts: 1 })).toEqual(["untrustedBalances"]);
+  });
+
+  it("SPENDLY-620: the staged-ledger and missing-quote flags no longer block", () => {
+    // Neither is an input any more: a large ledger or an unquoted holding used
+    // to block every day's snapshot indefinitely.
+    const legacy = { ...ready, liquidBalanceMayBePartial: true, holdingsMissingQuote: 3 } as SnapshotReadiness;
+    expect(snapshotBlockers(legacy)).toEqual([]);
   });
 
   it("blocks offline, duress and impossible values", () => {
@@ -172,5 +180,58 @@ describe("downsampleSeries", () => {
     expect(thin[0]).toBe(0);
     expect(thin[thin.length - 1]).toBe(364);
     expect([...thin].sort((a, b) => a - b)).toEqual(thin);
+  });
+});
+
+describe("netWorthRecorderStatus (SPENDLY-620)", () => {
+  const base = { recordedToday: false, historyLoading: false, failed: false, blockers: [] as const };
+
+  it("is saved once today has a point, whatever else is true", () => {
+    expect(netWorthRecorderStatus({ ...base, recordedToday: true, blockers: ["offline"] })).toEqual({ state: "saved", blockers: [] });
+  });
+
+  it("waits while history or valuations are loading", () => {
+    expect(netWorthRecorderStatus({ ...base, historyLoading: true }).state).toBe("waiting");
+    expect(netWorthRecorderStatus({ ...base, blockers: ["loading", "valuationsLoading"] }).state).toBe("waiting");
+    expect(netWorthRecorderStatus(base).state).toBe("waiting");
+  });
+
+  it("reports a lasting blocker with its reason", () => {
+    const status = netWorthRecorderStatus({ ...base, blockers: ["loading", "untrustedBalances"] });
+    expect(status).toEqual({ state: "blocked", blockers: ["untrustedBalances"] });
+    expect(netWorthRecorderMessage(status)).toMatch(/needs a rebuild/);
+    expect(netWorthRecorderMessage({ ...status, accountNames: ["HDFC"] })).toBe(
+      "Today's net worth isn't saved: HDFC has no confirmed balance. Open Accounts → Edit → Rebuild."
+    );
+    expect(netWorthRecorderMessage({ ...status, accountNames: ["A", "B", "C", "D"] })).toMatch(/A, B \+2 more have/);
+    expect(netWorthRecorderMessage(netWorthRecorderStatus({ ...base, blockers: ["offline"] }))).toMatch(/offline/);
+  });
+
+  it("never reveals the duress session", () => {
+    const status = netWorthRecorderStatus({ ...base, blockers: ["duress"] });
+    expect(status).toEqual({ state: "waiting", blockers: [] });
+    expect(netWorthRecorderMessage(status)).toBe(netWorthRecorderMessage(netWorthRecorderStatus(base)));
+    // A blocker a normal session can also hit still shows.
+    expect(netWorthRecorderStatus({ ...base, blockers: ["duress", "offline"] })).toEqual({ state: "blocked", blockers: ["offline"] });
+  });
+
+  it("reports a failed write", () => {
+    expect(netWorthRecorderStatus({ ...base, failed: true }).state).toBe("failed");
+  });
+});
+
+describe("1W period (SPENDLY-620)", () => {
+  it("moves back whole days across month ends", () => {
+    expect(daysBefore("2026-10-27", 7)).toBe("2026-10-20");
+    expect(daysBefore("2026-03-03", 7)).toBe("2026-02-24");
+  });
+
+  it("measures from the last point on or before a week ago", () => {
+    const points = [pt("2026-10-15", 100), pt("2026-10-20", 110), pt("2026-10-24", 130), pt("2026-10-27", 125)];
+    const trend = netWorthTrend(points, "1W", "2026-10-27");
+    expect(trend.baseline?.date).toBe("2026-10-20");
+    expect(trend.change).toBe(15);
+    expect(trend.coversFullPeriod).toBe(true);
+    expect(trend.series.map((p) => p.date)).toEqual(["2026-10-20", "2026-10-24", "2026-10-27"]);
   });
 });

@@ -316,6 +316,46 @@ describe("liquidBalanceMayBePartial (SPENDLY-413)", () => {
   });
 });
 
+describe("untrustedBalanceAccounts (SPENDLY-620)", () => {
+  it("is 0 for seeded, healthy accounts — even with a staged ledger and no baseline", () => {
+    const result = composeNetWorth(
+      inputs({
+        accounts: [account("a", SAVINGS, 50_000), account("c", CREDIT, 2_000)],
+        expensesComplete: false,
+        incomesComplete: false,
+      })
+    );
+    expect(result.liquidBalanceMayBePartial).toBe(true);
+    expect(result.untrustedBalanceAccounts).toBe(0);
+  });
+
+  it("counts an account flagged needs_reconciliation", () => {
+    const result = composeNetWorth(
+      inputs({
+        accounts: [
+          { ...account("a", SAVINGS, 50_000), balanceReconciliationStatus: "needs_reconciliation" as const },
+          { ...account("c", CREDIT, 2_000), summaryReconciliationStatus: "needs_reconciliation" as const },
+        ],
+      })
+    );
+    expect(result.untrustedBalanceAccounts).toBe(2);
+    expect(result.untrustedBalanceAccountNames).toEqual(["a", "c"]);
+  });
+
+  it("counts a missing or non-finite stored balance", () => {
+    const result = composeNetWorth(
+      inputs({
+        accounts: [
+          { ...account("a", SAVINGS, 0), currentBalance: undefined },
+          { ...account("b", SAVINGS, 0), currentBalance: Number.NaN },
+          { ...account("c", CREDIT, 0), currentOutstanding: undefined },
+        ],
+      })
+    );
+    expect(result.untrustedBalanceAccounts).toBe(3);
+  });
+});
+
 describe("borrowings and receivables sit on opposite sides", () => {
   it("counts borrowings as a liability", () => {
     const result = composeNetWorth(inputs({ borrowingOutstanding: 30_000 }));
