@@ -1,4 +1,6 @@
-import type { MarketOverviewDTO, MarketOverviewErrorCode } from "../../shared/types/market";
+import { NIFTY50, NIFTY50_AS_OF } from "../../shared/data/nifty50";
+import type { MarketOverviewDTO, MarketOverviewErrorCode, MoverDTO, MoversDTO } from "../../shared/types/market";
+import { chunk, isSparkPayload, moversFromSpark, rankMovers, yahooSparkUrl } from "../../shared/utils/marketMovers";
 import {
   MARKET_INDICES,
   buildMarketOverview,
@@ -15,9 +17,9 @@ import { isTimeout, jsonWithHeaders, upstreamGetWithTimeout, type NetlifyEvent, 
  * GET /api/market-overview (SPENDLY-622, story SPENDLY-642).
  *
  * One payload for the Markets tab: NIFTY 50, SENSEX and NIFTY BANK from
- * Yahoo's v8 chart endpoint (fetched in parallel), and whether the market is
- * open. Movers arrive in SPENDLY-643; until then they are reported as
- * unavailable rather than left out.
+ * Yahoo's v8 chart endpoint, whether the market is open, and the top gainers
+ * and losers among NIFTY 50 stocks from Yahoo's v8 spark endpoint
+ * (SPENDLY-643). Three chart and three spark calls run in parallel.
  *
  * The endpoint takes no parameters, so every caller shares one cache entry.
  * Caching follows stock-history.ts:
@@ -28,7 +30,8 @@ import { isTimeout, jsonWithHeaders, upstreamGetWithTimeout, type NetlifyEvent, 
  * Errors are never cached as data. Market data is never written to Firestore.
  *
  * Yahoo's endpoints are unofficial. Some indices failing still returns 200
- * with the ones that worked; only all three failing is an error.
+ * with the ones that worked. Movers failing never fails the response: they
+ * are reported unavailable with a reason. Only no data at all is an error.
  */
 
 /** Two attempts at this fit inside Netlify's 10 s limit. */
@@ -43,7 +46,9 @@ const BROWSER_CACHE = "public, max-age=0, must-revalidate";
 type IndexOutcome = { ok: true; reading: IndexReading } | { ok: false; code: Exclude<MarketOverviewErrorCode, "BAD_REQUEST"> };
 
 let lastGood: { dto: MarketOverviewDTO; storedAt: number } | null = null;
-let inFlight: Promise<{ outcomes: IndexOutcome[]; upstreamMs: number }> | null = null;
+type Loaded = { outcomes: IndexOutcome[]; movers: MoversDTO; upstreamMs: number };
+
+let inFlight: Promise<Loaded> | null = null;
 
 export function __resetMarketOverviewCacheForTests(): void {
   lastGood = null;
@@ -89,11 +94,29 @@ async function fetchIndex(index: (typeof MARKET_INDICES)[number]): Promise<Index
   return reading ? { ok: true, reading } : { ok: false, code: "MALFORMED" };
 }
 
-function loadIndices(): Promise<{ outcomes: IndexOutcome[]; upstreamMs: number }> {
+/** One spark batch of at most 20 stocks; `null` when the batch failed. */
+async function fetchMoverBatch(stocks: typeof NIFTY50): Promise<MoverDTO[] | null> {
+  try {
+    const res = await upstreamGetWithTimeout(yahooSparkUrl(stocks.map((s) => s.symbol)), INDEX_TIMEOUT_MS);
+    if (!res.ok) return null;
+    const payload: unknown = await res.json();
+    return isSparkPayload(payload) ? moversFromSpark(payload, stocks) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function loadMovers(): Promise<MoversDTO> {
+  const batches = await Promise.all(chunk(NIFTY50).map(fetchMoverBatch));
+  const priced = batches.flatMap((b) => b ?? []);
+  return rankMovers(priced, NIFTY50.length, NIFTY50_AS_OF, batches.some((b) => b == null));
+}
+
+function loadAll(): Promise<Loaded> {
   if (inFlight) return inFlight;
   const started = Date.now();
-  inFlight = Promise.all(MARKET_INDICES.map(fetchIndex))
-    .then((outcomes) => ({ outcomes, upstreamMs: Date.now() - started }))
+  inFlight = Promise.all([Promise.all(MARKET_INDICES.map(fetchIndex)), loadMovers()])
+    .then(([outcomes, movers]) => ({ outcomes, movers, upstreamMs: Date.now() - started }))
     .finally(() => {
       inFlight = null;
     });
@@ -120,7 +143,10 @@ function hash(text: string): string {
 
 function etagFor(dto: MarketOverviewDTO): string {
   const prices = dto.indices.map((i) => `${i.symbol}:${i.price}:${i.asOf}`).join(",");
-  return `"${hash(`${dto.fetchedAt}|${dto.stale}|${dto.status.state}|${prices}`)}"`;
+  const movers = dto.movers.available
+    ? `${dto.movers.asOf}:${[...dto.movers.gainers, ...dto.movers.losers].map((m) => `${m.symbol}:${m.price}`).join(",")}`
+    : dto.movers.reason;
+  return `"${hash(`${dto.fetchedAt}|${dto.stale}|${dto.status.state}|${prices}|${movers}`)}"`;
 }
 
 function successResult(event: NetlifyEvent, dto: MarketOverviewDTO, cdnMaxAgeSec: number, swrSec: number): NetlifyResult {
@@ -149,6 +175,7 @@ function logOutcome(fields: {
   outcome: "hit" | "miss" | "stale" | "error";
   status: number;
   indices?: number;
+  movers?: string;
   upstreamMs?: number;
   code?: string;
 }): void {
@@ -168,13 +195,14 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
     }
   }
 
-  const { outcomes, upstreamMs } = await loadIndices();
+  const { outcomes, movers, upstreamMs } = await loadAll();
   const readings = outcomes.map((o) => (o.ok ? o.reading : null));
 
-  if (readings.some((r) => r != null)) {
-    const dto = buildMarketOverview(readings, { available: false, reason: "DISABLED" }, new Date(nowMs));
+  if (readings.some((r) => r != null) || movers.available) {
+    const dto = buildMarketOverview(readings, movers, new Date(nowMs));
     lastGood = { dto, storedAt: nowMs };
-    logOutcome({ outcome: "miss", status: 200, indices: dto.indices.length, upstreamMs });
+    const moversLog = movers.available ? `${Math.round(movers.coverage * 100)}%` : movers.reason;
+    logOutcome({ outcome: "miss", status: 200, indices: dto.indices.length, movers: moversLog, upstreamMs });
     return successResult(event, dto, overviewFreshSeconds(dto.status, nowMs), SWR_SEC);
   }
 
