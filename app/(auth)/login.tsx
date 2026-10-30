@@ -24,6 +24,8 @@ import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 import { ACTIVE_PRODUCT, activeProductRootRoute } from "@/lib/activeProduct";
 import { authPalette, usesExpenseLook } from "@/lib/authLook";
+import { useReSignInNotice } from "@/lib/nativeAuthMigration";
+import { RE_SIGN_IN_NOTICE } from "@/shared/utils/nativeAuthMigration";
 
 import { SpendlyLogo } from "@/components/auth/SpendlyLogo";
 import { AuthBackground } from "@/components/auth/AuthBackground";
@@ -45,6 +47,8 @@ export default function AuthScreen() {
   const [displayName, setDisplayName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [secureText, setSecureText] = useState(true);
+  // SPENDLY-636: one-time note after the move to the native SDK (off until SPENDLY-638).
+  const reSignIn = useReSignInNotice(Boolean(user));
 
   if (authLoading) {
     return (
@@ -136,6 +140,25 @@ export default function AuthScreen() {
               </Text>
             </View>
           </Animated.View>
+
+          {mode === "login" && reSignIn.visible ? (
+            <View
+              style={[styles.reSignInNote, { backgroundColor: p.surface, borderColor: p.surfaceBorder }]}
+              accessibilityRole="summary"
+            >
+              <Text style={[styles.reSignInTitle, { color: p.title, fontFamily: theme.fontFamily.semibold }]}>
+                {RE_SIGN_IN_NOTICE.title}
+              </Text>
+              <Text style={[styles.reSignInBody, { color: p.muted, fontFamily: theme.fontFamily.regular }]}>
+                {RE_SIGN_IN_NOTICE.body}
+              </Text>
+              <Pressable onPress={reSignIn.dismiss} accessibilityRole="button" hitSlop={8}>
+                <Text style={[styles.reSignInDismiss, { color: p.link, fontFamily: theme.fontFamily.medium }]}>
+                  Got it
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           {/* Form Surface */}
           <Animated.View 
@@ -270,6 +293,25 @@ export default function AuthScreen() {
 }
 
 const styles = StyleSheet.create({
+  reSignInNote: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    gap: 6,
+  },
+  reSignInTitle: {
+    fontSize: 15,
+  },
+  reSignInBody: {
+    fontSize: 13.5,
+    lineHeight: 19,
+  },
+  reSignInDismiss: {
+    fontSize: 14,
+    marginTop: 4,
+    alignSelf: "flex-end",
+  },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   scrollContent: {
     flexGrow: 1,

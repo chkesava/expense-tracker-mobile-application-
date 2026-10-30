@@ -4,7 +4,7 @@
  * target. Enforces the same admin "disable signups" gate as the native
  * ID-token path (see lib/googleSignupGate.ts) before reporting success.
  */
-import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { GoogleAuthProvider, signInWithPopup } from "@/lib/auth";
 
 import { getFirebaseAuth } from "@/lib/firebase";
 import { enforceGoogleSignupGate } from "@/lib/googleSignupGate";

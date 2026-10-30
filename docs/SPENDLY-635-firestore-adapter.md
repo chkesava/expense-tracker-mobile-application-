@@ -13,7 +13,7 @@ Epic: SPENDLY-633. Branch: `feature/SPENDLY-635-firestore-adapter`.
   Untouched by design: `firestore/*.rules.test.ts` and `scripts/` (web SDK
   against the emulator), and `vi.mock("firebase/firestore", …)` in tests,
   which still applies because the adapter re-exports that module.
-- **`lib/firestoreImportGuard.test.ts`**: fails on any direct
+- **`lib/firebaseImportGuard.test.ts` (Firestore + Auth)**: fails on any direct
   `firebase/firestore` import outside the allowed places (stands in for a
   lint rule; the repo has no ESLint setup).
 - **`lib/firestoreAdapterContract.test.ts`**: resolves the native SDK's real

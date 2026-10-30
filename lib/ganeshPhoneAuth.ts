@@ -5,7 +5,7 @@ import {
   PhoneAuthProvider,
   RecaptchaVerifier,
   type ApplicationVerifier,
-} from "firebase/auth";
+} from "@/lib/auth";
 
 import { env } from "@/lib/env";
 import { getFirebaseAuth } from "@/lib/firebase";

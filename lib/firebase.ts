@@ -24,7 +24,7 @@
  */
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
-import { connectAuthEmulator, type Auth } from "firebase/auth";
+import { connectAuthEmulator, type Auth } from "@/lib/auth";
 import {
   clearIndexedDbPersistence,
   connectFirestoreEmulator,
