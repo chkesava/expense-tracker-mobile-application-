@@ -4,11 +4,15 @@ import {
   StockQuoteDTO,
   MutualFundQuoteDTO,
   CryptoQuoteDTO,
+  type MarketOverviewDTO,
+  type MarketOverviewErrorCode,
+  type MarketOverviewErrorDTO,
   type StockHistoryDTO,
   type StockHistoryErrorCode,
   type StockHistoryErrorDTO,
   type StockHistoryRange,
 } from '@/shared/types/market';
+import { isMarketOverview } from '@/shared/utils/marketOverview';
 import {
   MarketQuote,
   SearchResult,
@@ -42,11 +46,11 @@ export type QuoteRequestOptions = { signal?: AbortSignal | null };
 
 export class MarketDataError extends Error {
   readonly status?: number;
-  /** Typed reason from /api/stock-history (THROTTLED, TIMEOUT, ...), when known. */
-  readonly code?: StockHistoryErrorCode;
+  /** Typed reason from /api/stock-history or /api/market-overview (THROTTLED, TIMEOUT, ...), when known. */
+  readonly code?: StockHistoryErrorCode | MarketOverviewErrorCode;
   constructor(
     message: string,
-    options?: { status?: number; code?: StockHistoryErrorCode; cause?: unknown }
+    options?: { status?: number; code?: StockHistoryErrorCode | MarketOverviewErrorCode; cause?: unknown }
   ) {
     super(message);
     this.name = "MarketDataError";
@@ -164,6 +168,57 @@ export const fetchStockHistory = async (
   if (res.status === 404) return null;
   throw new MarketDataError(
     (code && HISTORY_MESSAGES[code]) || `stock history responded with ${res.status}`,
+    { status: res.status, code }
+  );
+};
+
+/**
+ * The Markets tab payload (SPENDLY-622): indices, market status and NIFTY 50
+ * movers, from /api/market-overview and Netlify's shared cache — never from
+ * Firestore, and never straight from Yahoo.
+ *
+ * `null` only when no market API base URL is configured. Failures throw a
+ * `MarketDataError` carrying the server's typed `code`.
+ */
+export const fetchMarketOverview = async (
+  options: QuoteRequestOptions = {}
+): Promise<MarketOverviewDTO | null> => {
+  const baseUrl = getBaseUrl();
+  if (!baseUrl) return null;
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(`${baseUrl}/api/market-overview`, { signal: options.signal, timeoutMs: 12_000 });
+  } catch (error) {
+    if (isAbortError(error) && options.signal?.aborted) throw error;
+    throw new MarketDataError(
+      isAbortError(error) ? HISTORY_MESSAGES.TIMEOUT! : 'market overview request failed',
+      { code: isAbortError(error) ? 'TIMEOUT' : undefined, cause: error }
+    );
+  }
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch (error) {
+    if (res.ok) {
+      throw new MarketDataError('market overview returned a malformed response', {
+        status: res.status,
+        code: 'MALFORMED',
+        cause: error,
+      });
+    }
+  }
+  if (res.ok) {
+    if (!isMarketOverview(body)) {
+      throw new MarketDataError('market overview returned a malformed response', {
+        status: res.status,
+        code: 'MALFORMED',
+      });
+    }
+    return body;
+  }
+  const code = (body as Partial<MarketOverviewErrorDTO> | null)?.code;
+  throw new MarketDataError(
+    (code && HISTORY_MESSAGES[code as StockHistoryErrorCode]) || `market overview responded with ${res.status}`,
     { status: res.status, code }
   );
 };

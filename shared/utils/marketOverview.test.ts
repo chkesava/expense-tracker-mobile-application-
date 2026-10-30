@@ -6,10 +6,17 @@ import {
   MARKET_INDICES,
   buildMarketOverview,
   chartMeta,
+  classifyFreshness,
+  formatIstTime,
+  freshnessLabel,
   indexReadingFromMeta,
+  isMarketOverview,
   marketStateAt,
   marketStatusFromReadings,
+  overviewErrorCopy,
   overviewFreshSeconds,
+  overviewPollMs,
+  overviewStaleMs,
 } from "./marketOverview";
 
 /** SPENDLY-642: index normalisation and market status. */
@@ -185,5 +192,119 @@ describe("buildMarketOverview", () => {
     const dto = buildMarketOverview([null, null, null], DISABLED, new Date(START_MS));
     expect(dto.indices).toEqual([]);
     expect(dto.status.state).toBe("unknown");
+  });
+});
+
+// --- SPENDLY-644: client freshness ----------------------------------------
+
+/** A payload fetched at `fetchedMs` whose newest trade was `tradeMs`. */
+const overview = (fetchedMs: number, tradeMs: number, over: Partial<ReturnType<typeof buildMarketOverview>> = {}) => {
+  const dto = buildMarketOverview([reading("^NSEI", { tradeSec: Math.floor(tradeMs / 1000) })], DISABLED, new Date(fetchedMs));
+  return { ...dto, ...over };
+};
+
+describe("formatIstTime", () => {
+  it("shows only the time for today in IST", () => {
+    expect(formatIstTime(new Date(END_MS).toISOString(), END_MS + 60 * MIN)).toBe("15:30 IST");
+  });
+
+  it("adds the date for another IST day, even when UTC agrees", () => {
+    // 2026-10-30 23:50 IST is 18:20 UTC; at 2026-10-31 00:10 IST (still 30 Oct UTC) it is "yesterday" in IST.
+    const lateEvening = Date.UTC(2026, 9, 30, 18, 20);
+    expect(formatIstTime(new Date(lateEvening).toISOString(), lateEvening + 20 * MIN)).toBe("30 Oct, 23:50 IST");
+  });
+
+  it("is empty for an unparseable time", () => {
+    expect(formatIstTime("nope", END_MS)).toBe("");
+  });
+});
+
+describe("classifyFreshness", () => {
+  it("is fresh while open and recent, stale once a few minutes behind", () => {
+    const at = START_MS + 60 * MIN;
+    const dto = overview(at, at);
+    expect(classifyFreshness(dto, at + 2 * MIN)).toBe("fresh");
+    expect(classifyFreshness(dto, at + 4 * MIN)).toBe("stale");
+  });
+
+  it("keeps a closing price fresh overnight", () => {
+    const dto = overview(END_MS + 5 * MIN, END_MS + 71_000);
+    expect(classifyFreshness(dto, END_MS + 8 * 60 * MIN)).toBe("fresh");
+  });
+
+  it("is stale when the server served its last good copy", () => {
+    expect(classifyFreshness(overview(END_MS, END_MS, { stale: true }), END_MS + MIN)).toBe("stale");
+  });
+
+  it("expires after a day", () => {
+    expect(classifyFreshness(overview(END_MS, END_MS), END_MS + 25 * 60 * MIN)).toBe("expired");
+  });
+});
+
+describe("freshnessLabel", () => {
+  it("names the state and the as-of time", () => {
+    const at = START_MS + 60 * MIN;
+    expect(freshnessLabel(overview(at, at), at + MIN)).toBe("Market open · as of 10:15 IST");
+    expect(freshnessLabel(overview(END_MS + 5 * MIN, END_MS + 71_000), END_MS + 10 * MIN)).toBe("Market closed · as of 15:31 IST");
+  });
+
+  it("re-derives the state on the device: an 'open' copy reads closed after the session", () => {
+    const at = END_MS - 2 * MIN;
+    const dto = overview(at, at);
+    expect(dto.status.state).toBe("open");
+    expect(freshnessLabel(dto, END_MS + MIN)).toBe("Market closed · as of 15:28 IST");
+  });
+
+  it("says delayed, offline or out of date instead of claiming freshness", () => {
+    const at = START_MS + 60 * MIN;
+    expect(freshnessLabel(overview(at, at), at + 10 * MIN)).toBe("Delayed · showing 10:15 IST");
+    expect(freshnessLabel(overview(at, at), at + MIN, { offline: true })).toBe("Offline · showing 10:15 IST");
+    expect(freshnessLabel(overview(at, at), at + 25 * 60 * MIN)).toBe("Out of date · last seen 30 Oct, 10:15 IST");
+  });
+
+  it("never says live", () => {
+    const at = START_MS + 60 * MIN;
+    for (const later of [MIN, 10 * MIN, 25 * 60 * MIN]) {
+      expect(freshnessLabel(overview(at, at), at + later).toLowerCase()).not.toContain("live");
+    }
+  });
+
+  it("falls back to fetch time when no index traded", () => {
+    const dto = buildMarketOverview([], DISABLED, new Date(END_MS));
+    expect(freshnessLabel(dto, END_MS + MIN)).toBe("Market status unavailable · as of 15:30 IST");
+  });
+});
+
+describe("overviewPollMs and overviewStaleMs", () => {
+  it("polls every minute only while open", () => {
+    const at = START_MS + 60 * MIN;
+    expect(overviewPollMs(overview(at, at), at)).toBe(60_000);
+    expect(overviewPollMs(overview(at, at), END_MS + MIN)).toBe(false);
+    expect(overviewPollMs(undefined, at)).toBe(false);
+  });
+
+  it("uses the server's fresh lifetime as the stale time", () => {
+    const at = START_MS + 60 * MIN;
+    expect(overviewStaleMs(overview(at, at), at)).toBe(60_000);
+    expect(overviewStaleMs(overview(END_MS, END_MS + 71_000), END_MS + MIN)).toBe(900_000);
+    expect(overviewStaleMs(null, at)).toBe(0);
+  });
+});
+
+describe("overviewErrorCopy", () => {
+  it("maps codes to copy and has a generic fallback", () => {
+    expect(overviewErrorCopy("THROTTLED")).toMatch(/busy/);
+    expect(overviewErrorCopy("TIMEOUT")).toMatch(/too long/);
+    expect(overviewErrorCopy("UPSTREAM")).toMatch(/provider/);
+    expect(overviewErrorCopy(undefined)).toMatch(/Couldn't load market data/);
+  });
+});
+
+describe("isMarketOverview", () => {
+  it("accepts a built payload and rejects other shapes", () => {
+    expect(isMarketOverview(buildMarketOverview([reading("^NSEI")], DISABLED, new Date(END_MS)))).toBe(true);
+    expect(isMarketOverview({ success: true })).toBe(false);
+    expect(isMarketOverview({ ...buildMarketOverview([], DISABLED, new Date(END_MS)), schemaVersion: 2 })).toBe(false);
+    expect(isMarketOverview(null)).toBe(false);
   });
 });

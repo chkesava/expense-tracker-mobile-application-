@@ -183,3 +183,115 @@ export function buildMarketOverview(
     movers,
   };
 }
+
+// --- SPENDLY-644: client-side freshness and copy ---------------------------
+
+const IST_OFFSET_MS = 19_800_000;
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** While trading, a copy older than this is behind the market. */
+export const OVERVIEW_STALE_WHILE_OPEN_MS = 3 * 60_000;
+/** Older than this, a copy is from a previous session at best. */
+export const OVERVIEW_EXPIRED_MS = 24 * 60 * 60_000;
+/** How often the app refetches while the market trades and the screen is focused. */
+export const OVERVIEW_POLL_MS = 60_000;
+
+export type OverviewFreshness = "fresh" | "stale" | "expired";
+
+function istParts(ms: number) {
+  const d = new Date(ms + IST_OFFSET_MS);
+  return { y: d.getUTCFullYear(), m: d.getUTCMonth(), day: d.getUTCDate(), hh: d.getUTCHours(), mm: d.getUTCMinutes() };
+}
+
+/**
+ * "15:30 IST" for a time on today's IST date, "29 Oct, 15:30 IST" otherwise.
+ * Formatted by hand so it does not depend on the device's Intl data.
+ */
+export function formatIstTime(iso: string, nowMs: number): string {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return "";
+  const t = istParts(ms);
+  const n = istParts(nowMs);
+  const time = `${String(t.hh).padStart(2, "0")}:${String(t.mm).padStart(2, "0")} IST`;
+  return t.y === n.y && t.m === n.m && t.day === n.day ? time : `${t.day} ${MONTHS[t.m]}, ${time}`;
+}
+
+/**
+ * How much to trust a copy right now:
+ * - expired: fetched more than a day ago;
+ * - stale: the server said so, or the market is trading and the copy is a
+ *   few minutes old;
+ * - fresh: otherwise. A closing price stays fresh until the next session.
+ */
+export function classifyFreshness(dto: MarketOverviewDTO, nowMs: number): OverviewFreshness {
+  const fetched = Date.parse(dto.fetchedAt);
+  const age = Number.isFinite(fetched) ? nowMs - fetched : Number.POSITIVE_INFINITY;
+  if (age > OVERVIEW_EXPIRED_MS) return "expired";
+  if (dto.stale) return "stale";
+  if (marketStateAt(dto.status, nowMs) === "open" && age > OVERVIEW_STALE_WHILE_OPEN_MS) return "stale";
+  return "fresh";
+}
+
+const STATE_LABEL: Record<MarketState, string> = {
+  open: "Market open",
+  closed: "Market closed",
+  unknown: "Market status unavailable",
+};
+
+/**
+ * One line for the status strip, worked out against the device clock, e.g.
+ * "Market closed · as of 15:30 IST" or "Offline · showing 29 Oct, 15:30 IST".
+ * Never says "live": the provider may be delayed.
+ */
+export function freshnessLabel(dto: MarketOverviewDTO, nowMs: number, opts: { offline?: boolean } = {}): string {
+  const asOfIso = dto.status.lastTradeAt ?? dto.fetchedAt;
+  const at = formatIstTime(asOfIso, nowMs);
+  if (opts.offline) return at ? `Offline · showing ${at}` : "Offline";
+  const freshness = classifyFreshness(dto, nowMs);
+  const state = STATE_LABEL[marketStateAt(dto.status, nowMs)];
+  if (freshness === "expired") return at ? `Out of date · last seen ${at}` : "Out of date";
+  if (freshness === "stale") return at ? `Delayed · showing ${at}` : "Delayed";
+  return at ? `${state} · as of ${at}` : state;
+}
+
+/** Poll only while the market trades; a closed market's prices do not move. */
+export function overviewPollMs(dto: MarketOverviewDTO | null | undefined, nowMs: number): number | false {
+  return dto && marketStateAt(dto.status, nowMs) === "open" ? OVERVIEW_POLL_MS : false;
+}
+
+/** React Query `staleTime`: the server's fresh lifetime, worked out against the device clock. */
+export function overviewStaleMs(dto: MarketOverviewDTO | null | undefined, nowMs: number): number {
+  return dto ? overviewFreshSeconds(dto.status, nowMs) * 1000 : 0;
+}
+
+/** User-facing copy for a failed load, by the server's error code. */
+export function overviewErrorCopy(code: string | undefined): string {
+  switch (code) {
+    case "THROTTLED":
+      return "Market data is busy right now. Try again in a minute.";
+    case "TIMEOUT":
+      return "Market data took too long to load. Check your connection and try again.";
+    case "MALFORMED":
+    case "UPSTREAM":
+      return "The market data provider isn't responding right now. Try again later.";
+    default:
+      return "Couldn't load market data. Check your connection and try again.";
+  }
+}
+
+/** Structural check for a payload read from the network or from disk. */
+export function isMarketOverview(value: unknown): value is MarketOverviewDTO {
+  const dto = value as Partial<MarketOverviewDTO> | null;
+  return (
+    !!dto &&
+    dto.success === true &&
+    dto.schemaVersion === MARKET_OVERVIEW_SCHEMA_VERSION &&
+    typeof dto.fetchedAt === "string" &&
+    typeof dto.stale === "boolean" &&
+    Array.isArray(dto.indices) &&
+    !!dto.status &&
+    typeof dto.status === "object" &&
+    !!dto.movers &&
+    typeof dto.movers.available === "boolean"
+  );
+}
