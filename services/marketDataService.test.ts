@@ -164,6 +164,13 @@ describe("fetchStockHistory (SPENDLY-558)", () => {
     expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toBe(`${BASE}/api/stock-history?symbol=M%26M.NS&range=1W`);
   });
 
+  it("asks for an index symbol URL-encoded, without a .NS suffix (SPENDLY-646)", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(series));
+    vi.stubGlobal("fetch", fetchMock);
+    await fetchStockHistory("^NSEI", "1D");
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toBe(`${BASE}/api/stock-history?symbol=%5ENSEI&range=1D`);
+  });
+
   it("returns null when there is no data for the period", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ success: false, code: "NO_DATA", message: "x" }, 404)));
     await expect(fetchStockHistory("KPITTECH.NS", "1D")).resolves.toBeNull();

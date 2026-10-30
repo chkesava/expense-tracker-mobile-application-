@@ -105,11 +105,17 @@ export function MarketBanner({ banner, onRetry }: { banner: BannerView; onRetry:
   );
 }
 
-export function IndexCard({ item, dimmed }: { item: IndexView; dimmed: boolean }) {
+export function IndexCard({ item, dimmed, onPress }: { item: IndexView; dimmed: boolean; onPress: () => void }) {
   const { theme } = useTheme();
   const color = useDirectionColor(item.direction);
   return (
-    <View accessible accessibilityLabel={item.accessibilityLabel} style={styles.indexCell}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={item.accessibilityLabel}
+      accessibilityHint="Opens the chart"
+      style={({ pressed }) => [styles.indexCell, pressed && { opacity: 0.7 }]}
+    >
       <MarketCard dimmed={dimmed}>
         <Text style={{ color: theme.colors.mutedForeground, fontSize: theme.typography.xs, fontFamily: theme.fontFamily.semibold }}>
           {item.name}
@@ -136,19 +142,25 @@ export function IndexCard({ item, dimmed }: { item: IndexView; dimmed: boolean }
           As of {item.asOf}
         </Text>
       </MarketCard>
-    </View>
+    </Pressable>
   );
 }
 
-export function MoverRow({ item, last }: { item: MoverView; last: boolean }) {
+export function MoverRow({ item, last, onPress }: { item: MoverView; last: boolean; onPress: () => void }) {
   const { theme } = useTheme();
   const colors = usePortfolioColors();
   const color = useDirectionColor(item.direction);
   return (
-    <View
-      accessible
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
       accessibilityLabel={item.accessibilityLabel}
-      style={[styles.moverRow, !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline }]}
+      accessibilityHint="Opens the chart"
+      style={({ pressed }) => [
+        styles.moverRow,
+        !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline },
+        pressed && { opacity: 0.7 },
+      ]}
     >
       <View style={styles.moverName}>
         <Text style={{ color: theme.colors.foreground, fontSize: theme.typography.sm, fontFamily: theme.fontFamily.semibold }} numberOfLines={1}>
@@ -169,7 +181,8 @@ export function MoverRow({ item, last }: { item: MoverView; last: boolean }) {
           </Text>
         </View>
       </View>
-    </View>
+      <ChevronRight size={16} color={theme.colors.mutedForeground} />
+    </Pressable>
   );
 }
 

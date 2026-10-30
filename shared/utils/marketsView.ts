@@ -12,6 +12,7 @@
 import type { IndexQuoteDTO, MarketOverviewDTO, MarketState, MoverDTO, MoversUnavailableReason } from "../types/market";
 import { formatQuotePrice } from "./stockChartInspect";
 import { classifyFreshness, formatIstTime, freshnessLabel, marketStateAt } from "./marketOverview";
+import { normalizeHistorySymbol } from "./stockHistory";
 
 export type Direction = "up" | "down" | "flat";
 
@@ -199,4 +200,41 @@ export function marketsView(input: MarketsViewInput): MarketsView {
         }
       : { kind: "unavailable", title: "Gainers and losers unavailable", text: MOVERS_UNAVAILABLE[movers.reason] },
   };
+}
+
+// --- SPENDLY-646: read-only instrument sheet --------------------------------
+
+/** What was tapped on the Markets tab. */
+export type Instrument = { kind: "index"; item: IndexView } | { kind: "stock"; item: MoverView };
+
+/** The symbol the history endpoint should chart, or null if it cannot be charted. */
+export function instrumentChartSymbol(instrument: Instrument): string | null {
+  return normalizeHistorySymbol(instrument.item.symbol);
+}
+
+/** Index levels are points; stock prices are money. */
+export function instrumentPriceUnit(instrument: Instrument): "points" | "currency" {
+  return instrument.kind === "index" ? "points" : "currency";
+}
+
+/** Header text for the sheet: title, a subtitle line, the headline figure and its move. */
+export function instrumentHeader(instrument: Instrument): {
+  title: string;
+  subtitle: string;
+  value: string;
+  move: string;
+  direction: Direction;
+} {
+  if (instrument.kind === "index") {
+    const i = instrument.item;
+    return {
+      title: i.name,
+      subtitle: `Index · as of ${i.asOf}`,
+      value: i.value,
+      move: `${i.change} (${i.changePercent})`,
+      direction: i.direction,
+    };
+  }
+  const m = instrument.item;
+  return { title: m.name, subtitle: `${m.ticker} · NSE · NIFTY 50`, value: m.price, move: m.changePercent, direction: m.direction };
 }

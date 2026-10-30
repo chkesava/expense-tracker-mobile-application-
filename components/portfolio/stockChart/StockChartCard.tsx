@@ -51,6 +51,7 @@ import {
   seriesChange,
 } from "@/shared/utils/stockHistory";
 import { formatSignedPercent } from "@/shared/utils/investmentPresentation";
+import { formatPoints, formatSignedPoints } from "@/shared/utils/marketsView";
 import { useTheme } from "@/theme/ThemeProvider";
 
 import { StockChartPlot, type ChartKeyAction } from "./StockChartPlot";
@@ -73,18 +74,24 @@ function useDebounced<T>(value: T, delayMs: number): T {
  * views over eight ranges. Data comes from /api/stock-history through
  * `useStockHistory`, never from Firestore, and is labelled as delayed with
  * its own as-of time rather than as live.
+ *
+ * `priceUnit="points"` (SPENDLY-646) is for an index such as ^NSEI: levels
+ * are points, not money, so they show without a currency symbol and ghost
+ * mode does not mask them.
  */
-export function StockChartCard({ symbol }: { symbol: string }) {
+export type ChartPriceUnit = "currency" | "points";
+
+export function StockChartCard({ symbol, priceUnit = "currency" }: { symbol: string; priceUnit?: ChartPriceUnit }) {
   const colors = usePortfolioColors();
   const ready = useStockHistoryCacheReady();
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      {ready ? <StockChartBody symbol={symbol} /> : <SkeletonChart height={PLOT_HEIGHT} />}
+      {ready ? <StockChartBody symbol={symbol} priceUnit={priceUnit} /> : <SkeletonChart height={PLOT_HEIGHT} />}
     </View>
   );
 }
 
-function StockChartBody({ symbol }: { symbol: string }) {
+function StockChartBody({ symbol, priceUnit }: { symbol: string; priceUnit: ChartPriceUnit }) {
   const { theme } = useTheme();
   const colors = usePortfolioColors();
   const muted = theme.colors.mutedForeground;
@@ -100,7 +107,9 @@ function StockChartBody({ symbol }: { symbol: string }) {
   const query = useStockHistory(symbol, queryRange);
   const dto = query.data ?? null;
   const currency = dto?.currency ?? "INR";
-  const formatPrice = useGhostMoney(currency);
+  const formatMoney = useGhostMoney(currency);
+  const points = priceUnit === "points";
+  const formatPrice = points ? formatPoints : formatMoney;
 
   const hasData = !!dto && dto.candles.some((candle) => candle.c != null);
   const state = chartViewState({
@@ -191,7 +200,11 @@ function StockChartBody({ symbol }: { symbol: string }) {
           {change && dto ? (
             <>
               <View style={styles.readoutLine}>
-                <FinancialAmount value={change.change} currency={currency} size="md" sign="auto" tone="auto" weight="bold" />
+                {points ? (
+                  <Text style={[styles.pointsChange, { color: lineColor }]}>{formatSignedPoints(change.change)}</Text>
+                ) : (
+                  <FinancialAmount value={change.change} currency={currency} size="md" sign="auto" tone="auto" weight="bold" />
+                )}
                 <Text style={[styles.changePct, { color: lineColor }]}>
                   ({formatSignedPercent(change.changePercent, 2)})
                 </Text>
@@ -255,7 +268,7 @@ function StockChartBody({ symbol }: { symbol: string }) {
                 <ChartTooltip
                   point={point}
                   time={formatInspectedTime(point, dto.range, dto.gmtOffsetSec)}
-                  formatQuote={(value) => formatQuotePrice(value, currency, ghost)}
+                  formatQuote={(value) => (points ? formatPoints(value) : formatQuotePrice(value, currency, ghost))}
                   source={selection.source}
                   onDismiss={dismiss}
                 />
@@ -517,6 +530,11 @@ const styles = StyleSheet.create({
   },
   ohlcValue: {
     fontSize: 12,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+  },
+  pointsChange: {
+    fontSize: 16,
     fontWeight: "700",
     fontVariant: ["tabular-nums"],
   },
