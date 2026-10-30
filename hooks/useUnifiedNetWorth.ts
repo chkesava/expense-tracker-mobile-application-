@@ -15,7 +15,7 @@ import { usePortfolio } from "@/hooks/usePortfolio";
 import { useReceivables } from "@/hooks/useReceivables";
 import { useSettings } from "@/providers/SettingsProvider";
 import { todayDateKey } from "@/shared/utils/dates";
-import { composeNetWorth, holdingsMissingQuote } from "@/shared/utils/netWorth";
+import { composeNetWorth, holdingsMissingQuote, netWorthLoading } from "@/shared/utils/netWorth";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 
 export interface UnifiedNetWorthSummary {
@@ -219,9 +219,10 @@ export function useUnifiedNetWorth(
     ]
   );
 
-  const coreLoading =
-    accountsLoading ||
-    typesLoading ||
+  // SPENDLY-632: the totals read the stored account balances only, so the
+  // progressive card no longer waits on the ledger listeners (see
+  // `netWorthLoading`).
+  const ledgerLoading =
     expensesLoading ||
     incomesLoading ||
     entriesLoading ||
@@ -238,7 +239,12 @@ export function useUnifiedNetWorth(
     billsLoading ||
     epfLoading;
 
-  const loading = isProgressive ? coreLoading : coreLoading || secondaryLoading;
+  const loading = netWorthLoading({
+    progressive: isProgressive,
+    accountsLoading: accountsLoading || typesLoading,
+    ledgerLoading,
+    secondaryLoading,
+  });
 
   const missingQuotes = useMemo(() => holdingsMissingQuote(holdings, quotes), [holdings, quotes]);
 

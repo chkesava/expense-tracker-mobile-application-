@@ -28,6 +28,7 @@ import {
 import { doc, getDoc } from "firebase/firestore";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { clearDashboardSnapshot } from "@/lib/dashboardSnapshotStore";
 import NetInfo from "@react-native-community/netinfo";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 
@@ -310,6 +311,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await AsyncStorage.removeItem(ganeshSessionStorageKey(signedOutUid)).catch(
           () => undefined
         );
+        // SPENDLY-632: the last-seen dashboard figures belong to this user.
+        await clearDashboardSnapshot(signedOutUid);
       }
       await GoogleSignin.signOut().catch(() => {});
       await signOut(auth);
