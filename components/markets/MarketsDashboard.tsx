@@ -7,9 +7,10 @@ import { Skeleton, SkeletonCard } from "@/components/common/Skeleton";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useMarketOverview, useMarketOverviewCacheReady } from "@/hooks/useMarketOverview";
 import type { PortfolioSubTabId } from "@/shared/config/navigation";
-import { marketsView } from "@/shared/utils/marketsView";
+import { marketsView, type Instrument } from "@/shared/utils/marketsView";
 import { useTheme } from "@/theme/ThemeProvider";
 
+import { InstrumentSheet } from "./InstrumentSheet";
 import {
   IndexCard,
   MarketBanner,
@@ -72,6 +73,7 @@ function MarketsBody({ onOpenStocks }: { onOpenStocks: (sub: PortfolioSubTabId) 
   const overview = useMarketOverview();
   const nowMs = useNow(30_000);
   const [side, setSide] = useState<MoversSide>("gainers");
+  const [selected, setSelected] = useState<Instrument | null>(null);
   const retry = () => void overview.query.refetch();
 
   const view = marketsView({
@@ -141,7 +143,12 @@ function MarketsBody({ onOpenStocks }: { onOpenStocks: (sub: PortfolioSubTabId) 
         {view.indices.kind === "list" ? (
           <View style={styles.indexGrid}>
             {view.indices.items.map((item) => (
-              <IndexCard key={item.symbol} item={item} dimmed={view.dimmed} />
+              <IndexCard
+                key={item.symbol}
+                item={item}
+                dimmed={view.dimmed}
+                onPress={() => setSelected({ kind: "index", item })}
+              />
             ))}
           </View>
         ) : (
@@ -169,7 +176,14 @@ function MarketsBody({ onOpenStocks }: { onOpenStocks: (sub: PortfolioSubTabId) 
               onChange={setSide}
             />
             {list.length > 0 ? (
-              list.map((item, i) => <MoverRow key={item.symbol} item={item} last={i === list.length - 1} />)
+              list.map((item, i) => (
+                <MoverRow
+                  key={item.symbol}
+                  item={item}
+                  last={i === list.length - 1}
+                  onPress={() => setSelected({ kind: "stock", item })}
+                />
+              ))
             ) : (
               <Text
                 style={[
@@ -198,6 +212,8 @@ function MarketsBody({ onOpenStocks }: { onOpenStocks: (sub: PortfolioSubTabId) 
       <Text style={{ color: theme.colors.mutedForeground, fontSize: theme.typography.xs, fontFamily: theme.fontFamily.regular }}>
         Prices from Yahoo Finance and may be delayed. Index levels are in points.
       </Text>
+
+      <InstrumentSheet instrument={selected} onClose={() => setSelected(null)} />
     </View>
   );
 }

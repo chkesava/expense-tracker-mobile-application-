@@ -9,6 +9,7 @@ import {
   historyCacheKey,
   historyErrorCopy,
   historyFreshSeconds,
+  isIndianListing,
   isIndianMarketOpen,
   normalizeHistorySymbol,
   normalizeYahooChart,
@@ -69,6 +70,17 @@ describe("range mapping", () => {
     expect(historyFreshSeconds("1D", "KPITTECH.NS", evening)).toBe(1800);
     // Non-Indian listings are treated as open.
     expect(historyFreshSeconds("1D", "AAPL", saturday)).toBe(60);
+  });
+
+  it("treats the benchmark indices as NSE/BSE listings (SPENDLY-646)", () => {
+    expect(isIndianListing("^NSEI")).toBe(true);
+    expect(isIndianListing("^BSESN")).toBe(true);
+    expect(isIndianListing("^NSEBANK")).toBe(true);
+    expect(isIndianListing("^GSPC")).toBe(false);
+    expect(isIndianListing("KPITTECH.NS")).toBe(true);
+    expect(isIndianListing("AAPL")).toBe(false);
+    const saturday = Date.parse("2026-10-17T05:00:00Z");
+    expect(historyFreshSeconds("1D", "^NSEI", saturday)).toBe(1800);
   });
 
   it("knows the NSE session edges", () => {

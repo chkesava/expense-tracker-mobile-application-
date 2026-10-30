@@ -8,6 +8,9 @@ import {
   formatSignedPct,
   formatSignedPoints,
   indexView,
+  instrumentChartSymbol,
+  instrumentHeader,
+  instrumentPriceUnit,
   marketsView,
   moverView,
   type MarketsView,
@@ -193,5 +196,41 @@ describe("marketsView", () => {
       view({ data: overview(), errorMessage: "x" }),
     ];
     expect(JSON.stringify(states).toLowerCase()).not.toMatch(/\blive\b/);
+  });
+});
+
+describe("instrument sheet (SPENDLY-646)", () => {
+  const index = { kind: "index" as const, item: indexView(reading("^NSEI")!.quote, AFTER_CLOSE) };
+  const stock = { kind: "stock" as const, item: moverView(MOVERS.losers[0]) };
+
+  it("charts the index symbol as-is and the stock by its NSE symbol", () => {
+    expect(instrumentChartSymbol(index)).toBe("^NSEI");
+    expect(instrumentChartSymbol(stock)).toBe("M&M.NS");
+  });
+
+  it("charts index levels in points and stock prices in rupees", () => {
+    expect(instrumentPriceUnit(index)).toBe("points");
+    expect(instrumentPriceUnit(stock)).toBe("currency");
+  });
+
+  it("builds the header from figures the tab already has", () => {
+    expect(instrumentHeader(index)).toEqual({
+      title: "NIFTY 50",
+      subtitle: "Index · as of 15:31 IST",
+      value: "23,053.10",
+      move: "+354.30 (+1.56%)",
+      direction: "up",
+    });
+    expect(instrumentHeader(stock)).toEqual({
+      title: "Mahindra & Mahindra Ltd.",
+      subtitle: "M&M · NSE · NIFTY 50",
+      value: "₹2,840.30",
+      move: "-1.72%",
+      direction: "down",
+    });
+  });
+
+  it("refuses a symbol the history endpoint would reject", () => {
+    expect(instrumentChartSymbol({ kind: "stock", item: { ...stock.item, symbol: "../x" } })).toBeNull();
   });
 });
