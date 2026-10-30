@@ -6,7 +6,7 @@ import {
   // @ts-expect-error RN Auth exports this; web typings omit it
   getReactNativePersistence,
   type Auth,
-} from "firebase/auth";
+} from "@/lib/auth";
 
 /**
  * Native Auth must use AsyncStorage persistence or Firebase warns
