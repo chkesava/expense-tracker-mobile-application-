@@ -4,7 +4,7 @@
 - **Feature branch:** `feature/SPENDLY-623-stock-screener`, cut from `origin/main` at `9085d8da` on 2026-10-30.
 - **Worktree:** `C:\dev\worktrees\spendly-623`
 - **Plan:** [SPENDLY-623-plan.md](SPENDLY-623-plan.md)
-- **State:** 647, 648 and 649 merged into the feature branch. 650 built and tested on its branch; awaiting approval to merge.
+- **State:** 647–650 merged into the feature branch. 651 (screener UI) in progress.
 
 ## Overview
 The screener filters and sorts **NIFTY 500** stocks on fields that have a real, keyless data source:
@@ -23,8 +23,8 @@ Market cap, P/E and volume appear as **disabled** filters, each with the reason 
 | 1 | Screener universe API (NIFTY 500, spark 1-year, cache, coverage) | SPENDLY-647 | `feature/SPENDLY-647-screener-universe-api` | Merged into feature branch |
 | 2 | Filter and sort engine (availability, validation, missing values, presets) | SPENDLY-648 | `feature/SPENDLY-648-screener-engine` | Merged into feature branch |
 | 3 | Saved screens (on-device) | SPENDLY-649 | `feature/SPENDLY-649-saved-screens` | Merged into feature branch |
-| 4 | Client service, hook and snapshot | SPENDLY-650 | `feature/SPENDLY-650-screener-client` | Built, tested; awaiting merge approval |
-| 5 | Screener UI (route, filters, results, saved menu, states) | SPENDLY-651 | | Not started |
+| 4 | Client service, hook and snapshot | SPENDLY-650 | `feature/SPENDLY-650-screener-client` | Merged into feature branch |
+| 5 | Screener UI (route, filters, results, saved menu, states) | SPENDLY-651 | `feature/SPENDLY-651-screener-ui` | In progress |
 
 ## Decisions
 - **2026-10-30, audit:** market cap and P/E have no keyless source; Yahoo v7, v10 and v1 all return 401. Volume needs one call per stock. All three are unavailable in v1 and shown disabled. Price, change, 52-week figures and 1-year return come from batched spark calls (25 per refresh). Sector comes from NSE's official NIFTY 500 file.
