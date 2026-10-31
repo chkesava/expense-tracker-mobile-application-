@@ -28,7 +28,7 @@ import {
 import { doc, getDoc } from "@/lib/firestore";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { clearDashboardSnapshot } from "@/lib/dashboardSnapshotStore";
+import { purgeLegacyDashboardSnapshots } from "@/lib/legacyDashboardSnapshotPurge";
 import NetInfo from "@react-native-community/netinfo";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 
@@ -106,6 +106,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [realUser, setRealUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDuress, setIsDuress] = useState(() => privacySession.isDuress());
+
+  // SPENDLY-641: remove the retired SPENDLY-632 dashboard snapshots, once.
+  useEffect(() => {
+    void purgeLegacyDashboardSnapshots();
+  }, []);
 
   useEffect(() => {
     if (!realUser) return;
@@ -311,8 +316,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await AsyncStorage.removeItem(ganeshSessionStorageKey(signedOutUid)).catch(
           () => undefined
         );
-        // SPENDLY-632: the last-seen dashboard figures belong to this user.
-        await clearDashboardSnapshot(signedOutUid);
       }
       await GoogleSignin.signOut().catch(() => {});
       await signOut(auth);
