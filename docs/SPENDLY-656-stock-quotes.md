@@ -19,15 +19,20 @@
 | Tests | `stockQuotes.test.ts` (13), `stock-quotes.test.ts` (8), `stockQuoteCache.test.ts` (5) and 3 in `marketDataService.test.ts`. |
 
 ## How the price and change are worked out
-- The **last two daily closes** of a 5-day spark series, for stocks and indices alike.
-- **Why not Yahoo's `chartPreviousClose`:** on 30 Oct 2026 it gave Indian **indices** the close from **two sessions earlier**. NIFTY 50 would have read +1.56% instead of +0.51%, SENSEX +1.66% instead of +0.42%, and NIFTY BANK +0.77% instead of **−0.41%**. Stocks were correct.
-- **Fallback for BSE listings:** Yahoo returns only the latest point for `.BO` symbols, even over 5 days. For a **stock** with a single close, `chartPreviousClose` is used; it matched the real previous close for every stock checked. **Never for an index:** an index with one close shows its price and no change.
-- **Index levels are points:** `isIndex` tells the UI not to show a currency. `currency` is "INR" for `.NS`/`.BO` and Indian indices, otherwise null (unknown).
-- **Rounding:** derived figures are rounded to 4 decimals.
+> **Corrected after merge** (branch `feature/SPENDLY-656-quote-source-fix`). The first version used the last two closes of a 5-day series for everything. A live check then found that **Yahoo's 5-day series can miss the latest session's close**: M&M on 30 Oct was `[…, 2890, null]`. That would have priced M&M at the previous day's close (+0.70% instead of −1.72%). The rules below replace it.
+
+| | Price and time | Previous close |
+|---|---|---|
+| **Stock** | newest close of the **1-day** spark | the 1-day `chartPreviousClose` (it matched the real previous close for every stock checked, including BSE listings, where Yahoo returns a single point) |
+| **Index** (`^…`) | newest close of the **1-day** spark | **the daily close before the latest trade's session**, from a 5-day spark (`previousSessionClose`, the same rule as SPENDLY-659). **Never `chartPreviousClose`**: on 30 Oct it was two sessions old (NIFTY 50 +1.56% instead of +0.51%, NIFTY BANK +0.77% instead of −0.41%). No daily history means a price with no change. |
+
+- The extra 5-day call is made only when a batch contains an index, and only for those symbols. If that call fails, the index still shows its price with no change; it isn't marked failed.
+- Index levels are points: `isIndex` tells the UI not to show a currency. `currency` is "INR" for `.NS`/`.BO` and Indian indices, otherwise null.
+- Derived figures are rounded to 4 decimals.
 
 ## Endpoint behaviour
 - **Input:** 1–50 symbols, normalized ("tcs" → `TCS.NS`, "^nsei" → `^NSEI`), de-duplicated and sorted. Anything invalid returns 400 without calling Yahoo.
-- **Batching:** batches of 20 or fewer (so 3 calls for a full list), all run in parallel.
+- **Batching:** batches of 20 or fewer (so 3 calls for a full list), all run in parallel, plus one 5-day call per batch that contains an index.
 - **`missing`:** symbols Yahoo doesn't know. A batch where Yahoo knows **none** of the symbols comes back as a 404 "No data found", which is treated as all missing, **not** a failure.
 - **`failed`:** symbols in a batch that errored. The response is still 200 with what priced, and a 60 s CDN lifetime.
 - **Cache:**
@@ -55,3 +60,9 @@
 
 ## Found while building this (not fixed here)
 **The SPENDLY-622 Markets tab index cards use `chartPreviousClose` and would show the wrong daily change for indices.** It's on `main` but not deployed. It needs its own bug ticket, and the fix must land before the next Netlify web deploy.
+
+## Correction validation (`feature/SPENDLY-656-quote-source-fix`)
+- `stockQuotes.test.ts` and `stock-quotes.test.ts`: 25 tests passed. They cover the M&M missing-close case, indices from the daily series (never `chartPreviousClose`), BSE single points, the 5-day call only when there's an index, and an index priced without a change when its 5-day call fails.
+- **Live** (31 Oct): TCS +0.99%, **M&M −1.72%** (was stale under the old rule), INFY.BO +3.37%, NIFTY 50 +0.51%, SENSEX +0.42%, NIFTY BANK −0.41%. `NOTAREAL.NS` came back missing, in 719 ms.
+- **`npm test`: 504 files, 6,831 tests passed.** `typecheck:shared` and `tsc` both exited 0.
+

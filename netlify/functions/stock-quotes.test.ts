@@ -21,7 +21,13 @@ const get = (symbols?: string, headers: Record<string, string> = {}) => ({ httpM
 const body = (r: { body: string }) => JSON.parse(r.body);
 const symbolsOf = (url: unknown) => new URL(String(url)).searchParams.get("symbols")!.split(",");
 
-/** Prices every requested symbol except those in `unknown`: closes 100,101,102,103,104+i. */
+const rangeOf = (url: unknown) => new URL(String(url)).searchParams.get("range");
+
+/**
+ * Yahoo spark. 1-day: price 104+i with chartPreviousClose 103 (the real shape
+ * for stocks). 5-day (indices only): daily closes 100..104+i. Symbols in
+ * `unknown` are absent; a batch knowing none of them is a 404.
+ */
 function yahoo(unknown: string[] = [], failFirstBatch = false) {
   let call = 0;
   return vi.fn(async (url: unknown) => {
@@ -29,7 +35,17 @@ function yahoo(unknown: string[] = [], failFirstBatch = false) {
     if (failFirstBatch && call === 1) return upstream({}, 500);
     const syms = symbolsOf(url).filter((s) => !unknown.includes(s));
     if (syms.length === 0) return upstream({ spark: { result: null, error: { code: "Not Found", description: "No data found for spark symbols" } } }, 404);
-    return upstream(Object.fromEntries(syms.map((s, i) => [s, { symbol: s, timestamp: DAYS, close: [100, 101, 102, 103, 104 + i], chartPreviousClose: 1 }])));
+    const fiveDay = rangeOf(url) === "5d";
+    return upstream(
+      Object.fromEntries(
+        syms.map((s, i) => [
+          s,
+          fiveDay
+            ? { symbol: s, timestamp: DAYS, close: [100, 101, 102, 103, 104 + i], chartPreviousClose: 1 }
+            : { symbol: s, timestamp: [DAYS[4] + 22_000], close: [104 + i], chartPreviousClose: s.startsWith("^") ? 1 : 103 },
+        ])
+      )
+    );
   });
 }
 
@@ -52,11 +68,16 @@ describe("stock-quotes", () => {
     vi.stubGlobal("fetch", fetchMock);
     const res = await handler(get("tcs,^nsei"));
     expect(res.statusCode).toBe(200);
-    expect(String(fetchMock.mock.calls[0][0])).toContain("/v8/finance/spark?symbols=TCS.NS,%5ENSEI&range=5d&interval=1d");
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    // Prices for every symbol from the 1-day series; the 5-day series only for the index.
+    expect(urls).toContain("https://query1.finance.yahoo.com/v8/finance/spark?symbols=TCS.NS,%5ENSEI&range=1d&interval=1d");
+    expect(urls).toContain("https://query1.finance.yahoo.com/v8/finance/spark?symbols=%5ENSEI&range=5d&interval=1d");
+    expect(urls).toHaveLength(2);
     const dto = body(res);
     expect(dto).toMatchObject({ success: true, symbols: ["TCS.NS", "^NSEI"], missing: [], failed: [], stale: false, status: { state: "closed" } });
     expect(dto.quotes[0]).toMatchObject({ symbol: "TCS.NS", price: 104, previousClose: 103, change: 1, isIndex: false, currency: "INR" });
-    expect(dto.quotes[1]).toMatchObject({ symbol: "^NSEI", isIndex: true });
+    // The index ignores its (stale) chartPreviousClose and uses the previous daily close.
+    expect(dto.quotes[1]).toMatchObject({ symbol: "^NSEI", isIndex: true, previousClose: 103 });
     expect(res.headers["Netlify-Vary"]).toBe("query=symbols");
     expect(res.headers["Netlify-CDN-Cache-Control"]).toMatch(/^public, durable, s-maxage=\d+, stale-while-revalidate=60$/);
   });
@@ -67,6 +88,8 @@ describe("stock-quotes", () => {
     const fifty = Array.from({ length: 50 }, (_, i) => `S${String(i).padStart(2, "0")}`).join(",");
     const dto = body(await handler(get(fifty)));
     expect(fetchMock.mock.calls.map((c) => symbolsOf(c[0]).length)).toEqual([20, 20, 10]);
+    // No index in the list, so no 5-day calls.
+    expect(fetchMock.mock.calls.every((c) => rangeOf(c[0]) === "1d")).toBe(true);
     expect(dto.quotes).toHaveLength(50);
   });
 
@@ -124,5 +147,28 @@ describe("stock-quotes", () => {
     expect((await handler(get(Array.from({ length: 51 }, (_, i) => `S${i}`).join(",")))).statusCode).toBe(400);
     expect((await handler({ httpMethod: "POST", queryStringParameters: { symbols: "TCS" } })).statusCode).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("stock-quotes: index history failing", () => {
+  it("still prices the index (no change) when the 5-day call fails", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(Date.UTC(2026, 9, 31, 6, 0)));
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    __resetStockQuotesCacheForTests();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: unknown) =>
+        rangeOf(url) === "5d"
+          ? upstream({}, 503)
+          : upstream({ "^NSEI": { symbol: "^NSEI", timestamp: [DAYS[4]], close: [23053.1], chartPreviousClose: 22698.8 } })
+      )
+    );
+    const dto = body(await handler(get("^nsei")));
+    expect(dto.quotes[0]).toMatchObject({ symbol: "^NSEI", price: 23053.1, previousClose: null, change: null });
+    expect(dto.failed).toEqual([]);
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 });

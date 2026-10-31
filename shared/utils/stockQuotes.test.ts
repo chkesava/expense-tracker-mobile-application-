@@ -6,7 +6,8 @@ import {
   currencyFor,
   isStockQuotes,
   parseQuoteSymbols,
-  quoteFromDailySpark,
+  previousSessionClose,
+  quoteFromSpark,
   quoteRows,
   quoteSymbolsParam,
   quotesLabel,
@@ -39,43 +40,53 @@ describe("parseQuoteSymbols", () => {
   });
 });
 
-describe("quoteFromDailySpark", () => {
-  it("uses the last two closes, not chartPreviousClose (the 30 Oct index bug)", () => {
-    expect(quoteFromDailySpark(NIFTY, "^NSEI")).toEqual({
-      symbol: "^NSEI",
-      price: 23053.1,
-      previousClose: 22936.75,
-      change: 116.35,
-      changePercent: 0.5073,
+// Real 1-day spark entries from 31 Oct 2026 (the 30 Oct session).
+const TCS_1D = { symbol: "TCS.NS", timestamp: [1793354296], close: [2502.6], chartPreviousClose: 2478 };
+const MM_1D = { symbol: "M&M.NS", timestamp: [1793354297], close: [2840.3], chartPreviousClose: 2890 };
+const NIFTY_1D = { symbol: "^NSEI", timestamp: [1793354471], close: [23053.1], chartPreviousClose: 22698.8 };
+const BANK_1D = { symbol: "^NSEBANK", timestamp: [1793354471], close: [54686.95], chartPreviousClose: 54267.4 };
+
+describe("quoteFromSpark", () => {
+  it("prices a stock from the 1-day series with its chartPreviousClose", () => {
+    expect(quoteFromSpark(TCS_1D, undefined, "TCS.NS")).toEqual({
+      symbol: "TCS.NS",
+      price: 2502.6,
+      previousClose: 2478,
+      change: 24.6,
+      changePercent: 0.9927,
       currency: "INR",
-      isIndex: true,
-      asOf: new Date(1793331900 * 1000).toISOString(),
+      isIndex: false,
+      asOf: new Date(1793354296 * 1000).toISOString(),
     });
-    // NIFTY BANK fell on 30 Oct; chartPreviousClose (54267.4) would have shown a rise.
-    expect(quoteFromDailySpark(NIFTY_BANK, "^NSEBANK")).toMatchObject({ change: -222.7, changePercent: -0.4056 });
-    expect(quoteFromDailySpark(TCS, "TCS.NS")).toMatchObject({ price: 2502.6, previousClose: 2478, changePercent: 0.9927, isIndex: false, currency: "INR" });
   });
 
-  it("shows a price without a change when there is only one close and nothing to fall back on", () => {
-    expect(quoteFromDailySpark({ timestamp: [DAYS[4]], close: [100] }, "NEW.NS")).toMatchObject({ price: 100, previousClose: null, change: null, changePercent: null });
+  it("is right for M&M, whose 5-day series is missing the latest close", () => {
+    // 5-day spark had [.., 2890, null]: last-two-closes would have priced M&M at 2890.
+    expect(quoteFromSpark(MM_1D, { timestamp: DAYS, close: [2853.1, 2858.4, 2869.9, 2890, null] }, "M&M.NS")).toMatchObject({
+      price: 2840.3,
+      previousClose: 2890,
+      changePercent: -1.7197,
+    });
   });
 
-  it("falls back to the provider's previous close for a stock with one close (BSE), never for an index", () => {
-    // Real INFY.BO on 31 Oct: Yahoo returns a single 5-day point.
-    expect(quoteFromDailySpark({ timestamp: [1793354812], close: [1182], chartPreviousClose: 1143.45 }, "INFY.BO")).toMatchObject({
-      price: 1182,
+  it("gives an index its previous session close from the daily series, never chartPreviousClose", () => {
+    expect(quoteFromSpark(NIFTY_1D, NIFTY, "^NSEI")).toMatchObject({ price: 23053.1, previousClose: 22936.75, change: 116.35, changePercent: 0.5073, isIndex: true });
+    // NIFTY BANK fell on 30 Oct; the stale chartPreviousClose (54267.4) would have shown a rise.
+    expect(quoteFromSpark(BANK_1D, NIFTY_BANK, "^NSEBANK")).toMatchObject({ change: -222.7, changePercent: -0.4056 });
+    expect(quoteFromSpark(NIFTY_1D, undefined, "^NSEI")).toMatchObject({ price: 23053.1, previousClose: null, change: null });
+  });
+
+  it("works for a BSE stock with a single point", () => {
+    expect(quoteFromSpark({ timestamp: [1793354812], close: [1182], chartPreviousClose: 1143.45 }, undefined, "INFY.BO")).toMatchObject({
       previousClose: 1143.45,
-      change: 38.55,
       changePercent: 3.3714,
     });
-    expect(quoteFromDailySpark({ timestamp: [DAYS[4]], close: [23053.1], chartPreviousClose: 22698.8 }, "^NSEI")).toMatchObject({ previousClose: null, change: null });
-    expect(quoteFromDailySpark({ timestamp: [DAYS[4]], close: [100], chartPreviousClose: 0 }, "X.NS")).toMatchObject({ previousClose: null });
   });
 
-  it("skips null closes and returns null with no price", () => {
-    expect(quoteFromDailySpark({ timestamp: DAYS, close: [1, 2, 3, 4, null] }, "X.NS")).toMatchObject({ price: 4, previousClose: 3 });
-    expect(quoteFromDailySpark(undefined, "X.NS")).toBeNull();
-    expect(quoteFromDailySpark({ timestamp: [], close: [] }, "X.NS")).toBeNull();
+  it("has no change without a usable previous close, and no quote without a price", () => {
+    expect(quoteFromSpark({ timestamp: [DAYS[4]], close: [100], chartPreviousClose: 0 }, undefined, "X.NS")).toMatchObject({ price: 100, previousClose: null, change: null });
+    expect(quoteFromSpark(undefined, undefined, "X.NS")).toBeNull();
+    expect(quoteFromSpark({ timestamp: [], close: [] }, undefined, "X.NS")).toBeNull();
   });
 
   it("knows the currency of Indian listings and indices only", () => {
@@ -88,10 +99,23 @@ describe("quoteFromDailySpark", () => {
   });
 });
 
+describe("previousSessionClose", () => {
+  it("is the close before the latest trade's session", () => {
+    expect(previousSessionClose(NIFTY, 1793354471 * 1000)).toBe(22936.75);
+  });
+
+  it("is the last bar when the latest session has no bar yet, and skips a missing newest close", () => {
+    const mondayTrade = (1793331900 + 3 * 86_400 + 900) * 1000;
+    expect(previousSessionClose(NIFTY, mondayTrade)).toBe(23053.1);
+    expect(previousSessionClose({ timestamp: DAYS, close: [1, 2, 3, 22936.75, null] }, 1793354471 * 1000)).toBe(22936.75);
+    expect(previousSessionClose(undefined, 1)).toBeNull();
+  });
+});
+
 describe("buildStockQuotes", () => {
   const now = new Date(Date.UTC(2026, 9, 31, 6, 0));
   it("keeps request order and separates missing from failed", () => {
-    const tcs = quoteFromDailySpark(TCS, "TCS.NS")!;
+    const tcs = quoteFromSpark(TCS_1D, undefined, "TCS.NS")!;
     const dto = buildStockQuotes(["INFY.NS", "NOPE.NS", "TCS.NS"], new Map([["TCS.NS", tcs]]), new Set(["INFY.NS"]), now);
     expect(dto).toMatchObject({ success: true, schemaVersion: 1, stale: false, symbols: ["INFY.NS", "NOPE.NS", "TCS.NS"], missing: ["NOPE.NS"], failed: ["INFY.NS"] });
     expect(dto.quotes.map((q) => q.symbol)).toEqual(["TCS.NS"]);
@@ -107,8 +131,8 @@ describe("buildStockQuotes", () => {
 
 describe("quoteRows and quotesLabel", () => {
   const SAT = Date.UTC(2026, 9, 31, 6, 0);
-  const tcs = quoteFromDailySpark(TCS, "TCS.NS")!;
-  const nifty = quoteFromDailySpark(NIFTY, "^NSEI")!;
+  const tcs = quoteFromSpark(TCS_1D, undefined, "TCS.NS")!;
+  const nifty = quoteFromSpark(NIFTY_1D, NIFTY, "^NSEI")!;
   const live = (over: Record<string, unknown> = {}) => ({
     ...buildStockQuotes(["TCS.NS", "NOPE.NS", "INFY.NS"], new Map([["TCS.NS", tcs]]), new Set(["INFY.NS"]), new Date(SAT)),
     ...over,
