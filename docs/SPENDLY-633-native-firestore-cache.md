@@ -20,7 +20,7 @@ Found during SPENDLY-632.
 | SPENDLY-638 | Native cutover: Firestore, Auth, Storage on the native SDKs | Merged into epic (149fe311) |
 | SPENDLY-639 | Offline / outbox / freshness integrity | Merged into epic (d4b8534e) |
 | SPENDLY-640 | Measure, device QA (3 apps), staged release | Partial, merged into epic (afbac086): configs verified, release plan written; timings not taken (stopped by owner) |
-| SPENDLY-641 | Keep or retire the SPENDLY-632 dashboard snapshot | Retired; done on story branch, awaiting review |
+| SPENDLY-641 | Keep or retire the SPENDLY-632 dashboard snapshot | Retired; merged into epic (3a90b700) |
 
 ## Decisions
 - Android only; all three native apps switch together in code, Expense is released first (owner, 2026-10-30).
