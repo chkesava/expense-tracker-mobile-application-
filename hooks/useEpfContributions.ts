@@ -26,8 +26,6 @@ import {
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
-import { computeContributionDelta } from "@/shared/features/epf/utils/mutations";
-import { buildEpfSummaryOps } from "@/shared/utils/epfMutations";
 import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
@@ -258,30 +256,9 @@ export function useEpfContributions(
             );
           }
 
-          let empDelta = 0;
-          let emrDelta = 0;
-          let maxMonth = "";
-          for (const item of accepted) {
-            const oldRow = item.existing;
-            const newRow = { ...item.row, status: item.status };
-            const delta = computeContributionDelta(oldRow as any, newRow as any);
-            empDelta += delta.employeeContributionDelta || 0;
-            emrDelta += delta.employerContributionDelta || 0;
-            if (item.row.month > maxMonth) maxMonth = item.row.month;
-          }
-          if (empDelta !== 0 || emrDelta !== 0) {
-            const ops = buildEpfSummaryOps(uid, {
-              employeeContributionDelta: empDelta,
-              employerContributionDelta: emrDelta,
-              creditPeriod: maxMonth || undefined,
-            });
-            for (const op of ops) {
-              if (op.op === "set" && op.merge) {
-                batch.set(doc(db, (op.ref as any).path), op.data, { merge: true });
-              }
-            }
-          }
-
+          // SPENDLY-653: no summary delta here. `financialSummaries/epf` is
+          // written whole from the ledger by `useEpfSummarySync`; a delta taken
+          // against a lagging `byMonth` could be applied twice.
           const outcome = await commitWrite(() => batch.commit(), {
             label: "EPF contributions",
           });
@@ -454,15 +431,6 @@ export function useEpfContributions(
         if (kind === "delete") {
           const batch = writeBatch(db);
           batch.delete(ref);
-          const delta = computeContributionDelta(current as any, null);
-          if (delta.employeeContributionDelta || delta.employerContributionDelta) {
-            const ops = buildEpfSummaryOps(uid, delta);
-            for (const op of ops) {
-              if (op.op === "set" && op.merge) {
-                batch.set(doc(db, (op.ref as any).path), op.data, { merge: true });
-              }
-            }
-          }
           const outcome = await commitWrite(() => batch.commit(), {
             label: "EPF contribution",
           });

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/Button";
 import { useEpf } from "@/hooks/useEpf";
 import { useEpfCatchUp } from "@/hooks/useEpfCatchUp";
 import { useEpfInterestCatchUp } from "@/hooks/useEpfInterestCatchUp";
+import { useEpfSummarySync } from "@/hooks/useEpfSummarySync";
 import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -60,7 +61,24 @@ export function EpfDashboard() {
   });
   // Persist FY interest for every employer that has contributions, so Home
   // does not stay at ₹0 until someone opens the Balance tab (SPENDLY-71).
-  useEpfInterestCatchUp({ enabled: hasProfile });
+  const ledger = useEpfInterestCatchUp({ enabled: hasProfile });
+  // SPENDLY-653: one derivation for the overview card and the stored summary
+  // net worth reads, from the rows the catch-up already listens to.
+  const summarySources = useMemo(
+    () => ({
+      establishments,
+      contributions: ledger.contributions,
+      transfers: ledger.transfers,
+      interestEntries: ledger.interestEntries,
+      adjustments: ledger.reconciliations,
+    }),
+    [establishments, ledger.contributions, ledger.transfers, ledger.interestEntries, ledger.reconciliations]
+  );
+  const portfolio = useEpfSummarySync({
+    enabled: hasProfile,
+    ready: !establishmentsLoading && !establishmentsError && !ledger.loading && !ledger.error,
+    sources: summarySources,
+  });
   const load = combineEpfLoad([
     { loading: profileLoading, error: profileError, retry: retryProfile },
     { loading: establishmentsLoading, error: establishmentsError, retry: retryEstablishments },
@@ -143,7 +161,7 @@ export function EpfDashboard() {
       {profile ? <EpfProfileCard profile={profile} onEdit={() => setProfileModalOpen(true)} /> : null}
 
       {/* Total across every employer — the list below is its breakdown. */}
-      <EpfPortfolioCard />
+      <EpfPortfolioCard summary={portfolio} />
 
       <EpfCurrentMonthCard
         establishment={activeEstablishment}
