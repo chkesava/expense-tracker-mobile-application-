@@ -4,7 +4,7 @@
 - **Feature branch:** `feature/SPENDLY-624-watchlists`, cut from `origin/main` at `3b0a09c8` on 2026-10-31.
 - **Worktree:** `C:\dev\worktrees\spendly-624`
 - **Plan:** [SPENDLY-624-plan.md](SPENDLY-624-plan.md)
-- **State:** 654 merged into the feature branch. 655 built and tested on its branch; awaiting approval to merge.
+- **State:** 654 and 655 merged into the feature branch. 656 (batch quotes) in progress.
 
 ## Overview
 Today's single, unvalidated watchlist becomes **multiple named watchlists** with a default list:
@@ -20,8 +20,8 @@ Lists live in Firestore under strict, tested rules and sync through the offline 
 | # | Story | Jira | Branch | State |
 |---|---|---|---|---|
 | 1 | Data model and strict Firestore rules (+ emulator and contract tests) | SPENDLY-654 | `feature/SPENDLY-654-watchlist-model-rules` | Merged into feature branch |
-| 2 | Watchlist store: CRUD, reorder, default list, legacy import (via `commitMutations`) | SPENDLY-655 | `feature/SPENDLY-655-watchlist-store` | Built, tested; awaiting merge approval |
-| 3 | Batch quotes: `/api/stock-quotes` and `useWatchlistQuotes` | SPENDLY-656 | | Not started |
+| 2 | Watchlist store: CRUD, reorder, default list, legacy import (via `commitMutations`) | SPENDLY-655 | `feature/SPENDLY-655-watchlist-store` | Merged into feature branch |
+| 3 | Batch quotes: `/api/stock-quotes` and `useWatchlistQuotes` | SPENDLY-656 | `feature/SPENDLY-656-stock-quotes` | In progress |
 | 4 | Live data hook `useWatchlists` (bounded listeners) and removal of the old writers | SPENDLY-657 | | Not started |
 | 5 | Watchlist UI, plus "Add to watchlist" from the stock sheet | SPENDLY-658 | | Not started |
 
