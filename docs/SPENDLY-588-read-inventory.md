@@ -4,7 +4,7 @@
 |---|---|
 | Epic | SPENDLY-586 (Supabase-first reads); feeds the ADR `docs/SPENDLY-586-adr.md` (D5, D7) |
 | Branch | `feature/SPENDLY-588-read-inventory` |
-| State (2026-10-31) | **Tooling and the code-derived inventory are done. The lab measurements (§4) and the console baseline (§5) are pending:** they need a person to run them, and the console baseline needs the 633 release on devices for 7 days |
+| State (2026-10-31) | **Tooling, code inventory and lab run are done** (§4, `docs/SPENDLY-588-lab-2026-10-31.md`). **Pending: the production console baseline (§5)**, which needs the 633 release on devices for 7 days |
 
 ## 1. Why, and the method
 
@@ -30,7 +30,7 @@ Instead, three sources:
 
 | Column | Meaning |
 |---|---|
-| Cold reads | The first server snapshot of each listener, billed as a brand-new query: one read per document, at least 1. This is a launch **more than 30 minutes** after the last |
+| Cold reads | Each listener's first result, billed as a brand-new query: one read per document, at least 1. This is a launch **more than 30 minutes** after the last. The size is taken from the cache snapshot when the server sends nothing new: the SDK skips metadata-only snapshots, but the server still bills the re-query (a lab dry run showed the earlier server-snapshot-only rule undercounting 464 → 157) |
 | Warm reads | The same snapshot billed as changes only. This is a relaunch **within 30 minutes**, with the persistent cache (633) |
 | Update reads | Later server snapshots: the changed documents. This device's own pending-write echoes and cache-only snapshots aren't billed |
 | Gets / Get reads | `getDoc`/`getDocs` answered by the server |
@@ -83,34 +83,42 @@ These are what 600 would have to switch off to save reads at launch:
 
 **Read-model coverage of this set today:** only Wave 1 (`expenses`, `incomes`, `accounts`, `accountTypes`, `accountPayments`, `accountEntries`, `accountTransfers`, `creditCardBills`, `categories`) plus `financialGoals`. Everything else is in no wave yet (589–592). `notifyReadModelSnapshot` runs only on the 7 `FinanceDataProvider` listeners, `categories` and `creditCardBills`.
 
-## 4. Lab runs (pending; protocol)
+## 4. Lab run (2026-10-31)
 
-**Setup:**
-- Spendly Test on the Firebase emulator (`docs/LOCAL_TEST_MODE.md`): `npm run emulators:local`, then `npm run emulators:seed`.
-- Run Expo web (`npm run web`, a dev build, so the meter is on), sign in as `demo@spendly.test`.
-- Optionally repeat on a phone with a perf build (`EXPO_PUBLIC_PERF_MARKS=1`), never the real app (`docs/AGENT_WORKFLOW.md` §7).
+**How it ran:**
+- `scripts/read-inventory-lab.js` drove Spendly Test on Expo web (dev build of the 588 branch) against the Firebase emulator, with headless Chrome. No production system was touched.
+- The seed was 129 expenses, 4 incomes, 4 accounts, 3 subscriptions, 2 goals, 3 holdings and 4 budgets. The app adds 287 categories itself at first sign-in.
+- Full tables: `docs/SPENDLY-588-lab-2026-10-31.md`. To repeat it, see the header of the script.
 
-**Scenario.** In the console, run `spendlyReadInventory.reset()` before each step and `spendlyReadInventory.table()` after it:
+**Results (billed reads):**
 
-| Step | Action | Measures |
-|---|---|---|
-| A | Hard reload (cold launch) → wait for the dashboard to settle, ~10 s | launch + dashboard; the **cold reads** column is a >30 min launch |
-| B | Reload again within 1 minute | the **warm reads** column (with the IndexedDB cache) |
-| C | Journal → scroll one page → Insights → Accounts → a card → back to the dashboard | per-screen additions |
-| D | Leave the app idle for 10 minutes | steady-state update reads (should be ~0) |
-| E | Add one expense; edit it; delete it | update reads caused by own writes |
+| Step | What | Cold (> 30 min) | Warm (< 30 min) | Updates | Gets | Main contributors |
+|---|---|---:|---:|---:|---:|---|
+| A0 | First launch on an empty cache: sign in → dashboard | 465 | 448 | 0 | 5 | `categories` 287, `expenses` 129 |
+| A | Relaunch → dashboard (cache present) | **464** | **1** | 0 | 5 | `categories` 287 (62%), `expenses` 129 (28%), all others ≤ 5 each |
+| B | Reload within a minute | 464 | 1 | 0 | 5 | the same |
+| C | Money (Journal/Ledger) tab | 0 | 0 | 0 | 0 | everything comes from the launch listeners |
+| C | Analytics tab | 1 | 0 | 0 | 0 | `feeReviews` (empty) |
+| C | Investments tab | 1 | 0 | 0 | 0 | a second `investments` listener |
+| C | Vaults tab | 1 | 0 | 0 | 0 | top-level `vaults` (empty) |
+| C | Back to the dashboard, the cards view | 0 | 0 | 0 | 0 | — |
+| D | Idle 5 minutes | 0 | 0 | 0 | 0 | — |
+| E | One expense written by another device | 0 | 0 | **1** | 1 | the `expenses` listener (1); `recurringDismissals` re-checked (1 get) |
 
-**Results:** to be filled in from the runs. Paste each table under its step.
+**What this means:**
+1. **Almost every read happens at launch.** Navigating between screens and idling cost ~0. A screen migrated to Supabase saves reads only if its launch listeners can be switched off (600), and those live in shared providers (F6).
+2. **The cost of a launch depends on how long since the last one.** Within 30 minutes it is ~1 read (633's persistent cache works). After 30 minutes it is the full result of every launch listener: 464 here.
+3. **`categories` is the single biggest item** (F7). It's a near-static catalogue of 287 documents per user (production: 2,090 across 11 users, ≈ 190/user), re-read in full on every cold launch.
+4. **Realtime updates are cheap:** one changed document costs one read.
 
-| Step | Total cold | Total warm | Update | Get reads | Top 3 collections |
-|---|---:|---:|---:|---:|---|
-| A | — | — | — | — | — |
-| B | — | — | — | — | — |
-| C | — | — | — | — | — |
-| D | — | — | — | — | — |
-| E | — | — | — | — | — |
+**Production estimate per cold launch, per user** (E, using the 494 inventory):
+- `categories` ≈ 190;
+- `expenses` + `incomes`: up to 300 each (the 300 cap binds for heavy users; average ≈ 113 expenses and ≈ 4 incomes);
+- everything else ≈ 30–60.
 
-**Scaling note:** the seed has 1 user and small collections. To estimate production per-user cost, scale each row by its production document count (494 inventory, 2026-10-17: e.g. `expenses` 1,352 across 12 users, so the 300 cap binds for heavy users; `categories` 2,090 across 11 users).
+So it is **≈ 350 for an average user** (190 + 113 + 4 + ~45) **and up to ≈ 850 for a heavy one.**
+
+**Consistency check:** production's ≈ 22.7K reads/day (Oct 10–17) across 24 users is ≈ 950 per user per day, which is about three cold launches each. That is plausible, so the model explains the production volume without any other large source.
 
 ## 5. Production baseline (pending)
 
@@ -130,13 +138,19 @@ The Firebase console → Firestore → Usage, as a 7-day export:
 | F3 | `lib/ensureCategoryHierarchy.ts:310` reads the **whole** `expenses` collection, unmetered, when the category stamp is stale | A full-ledger read for heavy users, on a migration that is rare but unbounded | P2 | Now metered by this story; bounding it is a separate fix |
 | F4 | Unbounded launch listeners: `categoryBudgets`, `accountPayments`, `accountEntries`, `accountTransfers`, the borrowings/receivables group, `creditCardBills`, `calendarReminders`, `investments`, `holdings`, `investmentCashTransactions`, `netWorthHistory` (12 months) | Cost grows with history on every cold launch | P2 | Candidates for **plain Firestore bounds** (as SPENDLY-406/501 did), which cut reads without the read model |
 | F5 | Dead code: `listAccountReconciliations`, `listWhatIfScenarios`, `getWhatIfScenario` have no callers | none | P3 | Leave it; note it for cleanup |
+| F7 | **`categories` is ~62% of a cold launch in the lab** (287 docs; production ≈ 190/user). It is a near-static catalogue with a listener (`ExpenseReferenceDataProvider.tsx:265`, limit 500), re-read in full after every 30-minute gap | The largest single cold-launch cost | P2 | **A Firestore-only fix:** load once and refresh when a version stamp changes (the stamp `meta/categories` is already read at launch by `ensureCategoryHierarchy`), instead of a live listener. No read model needed |
 | F6 | `expenses`/`incomes` (newest 300) feed about 10 consumers through `FinanceDataProvider` | 600 can remove them only after **all** of them are migrated (Journal, Dashboard, Insights, forms, Runway, Calendar, recurring sync, SetupProgress) | — | Recorded as a 600 constraint |
 
-## 7. Provisional migration order (code-based; confirm with §4 and §5)
+## 7. Recommended order (from §3 and §4; confirm the volume with §5)
 
-1. **`expenses` + `incomes` window (596):** the largest bounded launch cost (up to 600 docs cold), but blocked by F6. Its savings arrive only when every consumer is migrated.
-2. **Account sub-collections + `creditCardBills` (597):** unbounded, already synced (Wave 1), with balances copied (592).
-3. **Dashboard summaries + `categoryBudgets` (599/591):** `categoryBudgets` is unbounded and unsynced.
-4. **Investments/portfolio (598, needs 590).**
+**Firestore-only first.** These are cheaper than any read-model step, keep offline and realtime, and need no ADR "go":
+1. **`categories` (F7):** a stamp-gated load instead of a listener. It saves up to ~60% of every cold launch.
+2. **Bound the unbounded launch listeners (F4):** `categoryBudgets`, the account sub-collections, and the borrowings/receivables group. Today they are small, but they grow with history.
 
-**Alternative the ADR should weigh:** F4's Firestore-only bounds could reach a similar launch saving with none of the read-model work. It is cheaper and keeps offline and realtime intact.
+**Then, only if the post-633 baseline still justifies it (ADR D7):**
+
+3. **The `expenses` + `incomes` window (596):** the largest remaining cold-launch cost (up to 600 docs), but its savings arrive only when every `FinanceDataProvider` consumer is migrated (F6, 600).
+4. **Account sub-collections + `creditCardBills` (597):** small in reads; the value is consistency rather than savings.
+5. **Dashboard summaries, budgets, investments (598/599):** a handful of reads each at launch. **The read savings don't justify their risk;** migrate them only for reasons other than reads.
+
+**For the ADR:** the lab shows the epic's read savings sit almost entirely in two launch listeners (`categories`, `expenses`/`incomes`). One of them (`categories`) can be fixed without the read model.

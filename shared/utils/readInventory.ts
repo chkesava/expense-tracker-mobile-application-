@@ -14,12 +14,16 @@
  *   changes, unless it was disconnected for more than 30 minutes, when it is
  *   billed "as if you had issued a brand-new query".
  *
- * So the first server snapshot of each listener is counted twice:
- * - `coldReads`: the full result (a launch more than 30 minutes after the last);
+ * So each listener's first result is counted twice:
+ * - `coldReads`: the full result (a launch more than 30 minutes after the
+ *   last). Its size is taken from the cache snapshot until a server snapshot
+ *   arrives, because a listener whose data hasn't changed never delivers a
+ *   server snapshot (the SDK skips metadata-only snapshots unless
+ *   `includeMetadataChanges` is set), yet the server still bills the re-query;
  * - `warmReads`: only the documents that changed against the cached view (a
- *   relaunch within 30 minutes).
- * Snapshots served from the cache, and ones that only echo this device's own
- * pending write, are never billed.
+ *   relaunch within 30 minutes): the first server snapshot's changes.
+ * After that, only server snapshots are billed, by changed documents; ones
+ * that only echo this device's own pending write are not.
  *
  * Keys never contain document ids or uids: every document segment of a path
  * becomes `*` (`users/abc/expenses` → `users/* /expenses`, without the space).
@@ -43,9 +47,9 @@ export type ReadInventoryRow = {
   attaches: number;
   /** Listeners attached right now. */
   open: number;
-  /** First server snapshot billed as a brand-new query. */
+  /** First result billed as a brand-new query (a launch after > 30 min). */
   coldReads: number;
-  /** First server snapshot billed as changes only. */
+  /** First server snapshot billed as changes only (a relaunch within 30 min). */
   warmReads: number;
   /** Server snapshots after the first: changed documents. */
   updateReads: number;
@@ -58,7 +62,7 @@ export type ReadInventoryRow = {
 
 export type ReadInventoryTotals = Omit<ReadInventoryRow, "key">;
 
-type ListenerState = { key: string; sawServer: boolean };
+type ListenerState = { key: string; sawServer: boolean; cold: number };
 
 const EMPTY_ROW: ReadInventoryTotals = {
   attaches: 0,
@@ -105,7 +109,7 @@ export function createReadInventory() {
     attach(path: string | null | undefined): number {
       const id = nextId++;
       const key = collectionKey(path);
-      listeners.set(id, { key, sawServer: false });
+      listeners.set(id, { key, sawServer: false, cold: 0 });
       const r = row(key);
       r.attaches += 1;
       r.open += 1;
@@ -136,19 +140,19 @@ export function createReadInventory() {
       const l = listeners.get(id);
       if (!l) return;
       const r = row(l.key);
+      if (!l.sawServer) {
+        // The cold re-query bills the current result, cached or not.
+        const cold = facts.kind === "query" ? Math.max(1, facts.size) : 1;
+        r.coldReads += cold - l.cold;
+        l.cold = cold;
+      }
       if (facts.fromCache) {
         r.cacheDocs += facts.size;
         return;
       }
       if (!l.sawServer) {
         l.sawServer = true;
-        if (facts.kind === "query") {
-          r.coldReads += Math.max(1, facts.size);
-          r.warmReads += facts.changes;
-        } else {
-          r.coldReads += 1;
-          r.warmReads += 1;
-        }
+        r.warmReads += facts.kind === "query" ? facts.changes : 1;
         return;
       }
       if (facts.hasPendingWrites) return;
@@ -201,7 +205,9 @@ export function createReadInventory() {
       const open = new Map<string, number>();
       for (const l of listeners.values()) {
         open.set(l.key, (open.get(l.key) ?? 0) + 1);
-        // Already served: later snapshots are updates in the new window too.
+        // Their cold read belongs to the window they attached in: from now
+        // on their server snapshots are updates.
+        l.sawServer = true;
       }
       rows.clear();
       for (const [key, n] of open) row(key).open = n;
@@ -223,7 +229,10 @@ export function formatReadInventory(rows: ReadInventoryRow[], totals: ReadInvent
     `Window: ${Math.round(sinceMs / 1000)} s`,
     "",
     header,
-    ...rows.map((r) => line(`\`${r.key}\``, r)),
+    // Listeners that are merely still open (attached in an earlier window) add nothing.
+    ...rows
+      .filter((r) => r.attaches + r.coldReads + r.warmReads + r.updateReads + r.directGets + r.cacheDocs > 0)
+      .map((r) => line(`\`${r.key}\``, r)),
     line("**Total**", totals),
   ].join("\n");
 }
