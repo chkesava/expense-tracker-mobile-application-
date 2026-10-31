@@ -320,3 +320,53 @@ describe("fetchScreenerUniverse (SPENDLY-650)", () => {
     await expect(fetchScreenerUniverse()).rejects.toMatchObject({ code: "TIMEOUT" });
   });
 });
+
+describe("fetchStockQuotes (SPENDLY-656)", () => {
+  let fetchStockQuotes: typeof import("./marketDataService").fetchStockQuotes;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    process.env.EXPO_PUBLIC_MARKET_API_URL = BASE;
+    ({ fetchStockQuotes } = await import("./marketDataService"));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.EXPO_PUBLIC_MARKET_API_URL;
+  });
+
+  const answer = {
+    success: true,
+    schemaVersion: 1,
+    provider: "yahoo",
+    fetchedAt: "2026-10-31T06:00:00.000Z",
+    stale: false,
+    status: { state: "closed", sessionStart: null, sessionEnd: null, lastTradeAt: null },
+    symbols: ["INFY.NS", "TCS.NS"],
+    quotes: [],
+    missing: [],
+    failed: [],
+  };
+
+  it("asks once for the whole set, normalized and sorted", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(answer));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchStockQuotes(["tcs", "INFY.NS", "TCS.NS"])).resolves.toEqual(answer);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toBe(`${BASE}/api/stock-quotes?symbols=INFY.NS%2CTCS.NS`);
+  });
+
+  it("does not call the network for an empty list", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchStockQuotes([])).resolves.toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("carries the server code and calls a wrong shape malformed", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ success: false, code: "UPSTREAM", message: "x" }, 502)));
+    await expect(fetchStockQuotes(["TCS"])).rejects.toMatchObject({ code: "UPSTREAM", status: 502 });
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ success: true })));
+    await expect(fetchStockQuotes(["TCS"])).rejects.toMatchObject({ code: "MALFORMED" });
+  });
+});
