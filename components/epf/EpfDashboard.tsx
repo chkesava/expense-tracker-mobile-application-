@@ -34,6 +34,7 @@ export function EpfDashboard() {
     liveEstablishments,
     archivedEstablishments,
     establishmentsLoading,
+    establishmentsFromCache,
     establishmentsError,
     retryEstablishments,
     activeEstablishment,
@@ -77,6 +78,8 @@ export function EpfDashboard() {
   const portfolio = useEpfSummarySync({
     enabled: hasProfile,
     ready: !establishmentsLoading && !establishmentsError && !ledger.loading && !ledger.error,
+    // Display may use cache; the absolute write waits for the server.
+    confirmed: !establishmentsFromCache && !ledger.fromCache,
     sources: summarySources,
   });
   const load = combineEpfLoad([

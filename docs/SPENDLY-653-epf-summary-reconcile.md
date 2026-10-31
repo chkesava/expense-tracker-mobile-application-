@@ -60,16 +60,22 @@ all use it.
   - `epfSummaryNeedsWrite` compares the stored document with that, to the
     paisa.
   - `decideEpfSummarySync` refuses to write while a source is loading or
-    failed. It also refuses to zero a non-zero stored balance when every
-    money collection is empty, mirroring the rebuild's `--override-zeros`
-    guard against an offline cold start.
+    failed (reconciliations now have their own loading flag). It also refuses
+    while any source snapshot is cache-only (`metadata.fromCache`), because an
+    offline or reconnecting device can hold an incomplete cached collection.
+    The EPF listeners use `includeMetadataChanges` (`lib/firestoreSyncState.ts`)
+    so the server's confirmation arrives. Metadata-only events flip a flag and
+    leave the lists untouched. A server-confirmed empty ledger writes zero.
+  - `pendingSummaryWrite` holds back a repeat only while our write is
+    outstanding, and releases it once the stored doc shows it. A later stale
+    write from another device is then repaired, not ignored.
 - `hooks/useEpfSummarySync.ts` is mounted by `EpfDashboard`, which already
   listens to every source through `useEpfInterestCatchUp` (now returned from
   it). It adds one document listener. It writes the **absolute** document
   with `setDoc(..., { merge: true })` only when the stored one differs.
   Retries, re-runs and second devices therefore converge instead of adding.
 - `EpfPortfolioCard` renders the live summary, not the stored document, so it
-  matches Balance immediately. It also gains a *Transferred in (net)* row, so
+  matches Balance immediately. It also gains a *Net transfers* row, so
   its rows add up to its total.
 - **Removed:** every `increment()` writer in `useEpfContributions` (save,
   delete) and `useEpfInterest` (interest recompute, reconciliation), plus
@@ -113,3 +119,12 @@ runway pick it up from the same document. No migration or backfill was run.
   - no write while loading or failed;
   - no write in sync (reload converges);
   - empty-source zeroing is refused, and a genuine drop to zero is still written.
+
+## Review follow-up (CodeRabbit, PR #247)
+
+All five comments were valid and fixed:
+- write only from server-confirmed snapshots;
+- direction-neutral "Net transfers" label;
+- reconciliations loading flag;
+- pending-write suppression released on confirmation;
+- confirmed-empty ledger writes zero.

@@ -22,6 +22,7 @@ import {
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { LISTEN_WITH_SYNC_STATE, onlyMetadataChanged } from "@/lib/firestoreSyncState";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
@@ -62,6 +63,8 @@ export function useEpfTransfers(options?: { enabled?: boolean }) {
 
   const [transfers, setTransfers] = useState<EpfTransfer[]>([]);
   const [transfersLoading, setTransfersLoading] = useState(true);
+  // SPENDLY-653: false once the server has confirmed the rows.
+  const [transfersFromCache, setTransfersFromCache] = useState(true);
   const {
     error: transfersError,
     setError: setTransfersError,
@@ -80,9 +83,15 @@ export function useEpfTransfers(options?: { enabled?: boolean }) {
     setTransfersLoading(true);
     const path = `users/${uid}/${EPF_TRANSFERS_COLLECTION}`;
 
+    let received = false;
     const unsubscribe = onSnapshot(
       collection(db, "users", uid, EPF_TRANSFERS_COLLECTION),
+      LISTEN_WITH_SYNC_STATE,
       (snapshot) => {
+        setTransfersFromCache(snapshot.metadata.fromCache);
+        const first = !received;
+        received = true;
+        if (onlyMetadataChanged(snapshot, first)) return;
         logQuerySnapshot(path, snapshot);
         setTransfers(
           snapshot.docs.map((docSnap) =>
@@ -366,6 +375,7 @@ export function useEpfTransfers(options?: { enabled?: boolean }) {
     transfers,
     byId,
     transfersLoading,
+    transfersFromCache,
     transfersError,
     retryTransfers,
 

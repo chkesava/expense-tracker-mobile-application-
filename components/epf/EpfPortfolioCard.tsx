@@ -36,9 +36,10 @@ export function EpfPortfolioCard({ summary }: { summary: EpfPortfolioSummary | n
   ];
 
   // Without these the rows did not add up to the total: a balance carried in
-  // from an employer not tracked here is part of it.
+  // from (or out to) an employer not tracked here is part of it. The sign is
+  // shown on the amount, so the label stays direction-neutral.
   if (summary.netTransfers !== 0) {
-    rows.push({ key: "transfers", label: "Transferred in (net)", value: summary.netTransfers });
+    rows.push({ key: "transfers", label: "Net transfers", value: summary.netTransfers });
   }
   if (summary.adjustments !== 0) {
     rows.push({ key: "adjustments", label: "Adjustments", value: summary.adjustments });

@@ -13,6 +13,7 @@ import {
   decideEpfSummarySync,
   epfSummaryFields,
   epfSummaryNeedsWrite,
+  pendingSummaryWrite,
   type EpfSummarySources,
 } from "@/shared/features/epf/utils/summarySync";
 import { establishmentBalanceBreakdown } from "@/shared/features/epf/utils/transfers";
@@ -165,15 +166,28 @@ describe("decideEpfSummarySync", () => {
   const input = sources([august, septemberCredited]);
 
   it("never writes while a source is still loading or failed", () => {
-    expect(decideEpfSummarySync({ ready: false, stored: null, sources: input })).toEqual({
-      write: false,
-      reason: "not-ready",
-    });
+    expect(
+      decideEpfSummarySync({ ready: false, confirmed: true, stored: null, sources: input })
+    ).toEqual({ write: false, reason: "not-ready" });
+  });
+
+  it("never writes from cache-only snapshots — a partial offline cache must not overwrite the server", () => {
+    // Non-empty but incomplete: only August cached, September not yet synced.
+    const partial = sources([august]);
+    expect(
+      decideEpfSummarySync({
+        ready: true,
+        confirmed: false,
+        stored: epfSummaryFields(input),
+        sources: partial,
+      })
+    ).toEqual({ write: false, reason: "unconfirmed" });
   });
 
   it("writes the absolute document when the stored one is stale", () => {
     const decision = decideEpfSummarySync({
       ready: true,
+      confirmed: true,
       stored: { currentBalance: 1, summaryVersion: 1 },
       sources: input,
     });
@@ -183,33 +197,58 @@ describe("decideEpfSummarySync", () => {
 
   it("does nothing once in sync — a reload or a second device converges, not accumulates", () => {
     const stored = epfSummaryFields(input);
-    expect(decideEpfSummarySync({ ready: true, stored, sources: input })).toEqual({
+    expect(decideEpfSummarySync({ ready: true, confirmed: true, stored, sources: input })).toEqual({
       write: false,
       reason: "in-sync",
     });
   });
 
-  it("refuses to zero a stored balance from empty collections (offline cold start)", () => {
+  it("writes zero for a server-confirmed empty ledger, even over a non-zero stored balance", () => {
     const empty = sources([], { transfers: [], interestEntries: [] });
-    expect(
-      decideEpfSummarySync({ ready: true, stored: { currentBalance: 50391.11 }, sources: empty })
-    ).toEqual({ write: false, reason: "empty-sources" });
-  });
-
-  it("still writes zeros for a genuinely empty profile with nothing stored", () => {
-    const empty = sources([], { transfers: [], interestEntries: [] });
-    const decision = decideEpfSummarySync({ ready: true, stored: null, sources: empty });
+    const decision = decideEpfSummarySync({
+      ready: true,
+      confirmed: true,
+      stored: { currentBalance: 50391.11, summaryVersion: EPF_SUMMARY_VERSION },
+      sources: empty,
+    });
     expect(decision.write).toBe(true);
+    if (decision.write) expect(decision.fields.currentBalance).toBe(0);
   });
 
   it("writes the drop to zero when money rows still exist but no longer bear a balance", () => {
     const reversed = sources([{ ...august, status: "reversed" }], { transfers: [], interestEntries: [] });
     const decision = decideEpfSummarySync({
       ready: true,
+      confirmed: true,
       stored: { currentBalance: 2350, summaryVersion: EPF_SUMMARY_VERSION },
       sources: reversed,
     });
     expect(decision.write).toBe(true);
     if (decision.write) expect(decision.fields.currentBalance).toBe(0);
+  });
+});
+
+describe("pendingSummaryWrite", () => {
+  const fields = epfSummaryFields(sources([august, septemberCredited]));
+
+  it("holds an outstanding write until the stored document shows it", () => {
+    expect(pendingSummaryWrite(fields, null)).toBe(fields);
+    expect(pendingSummaryWrite(fields, { currentBalance: 1 })).toBe(fields);
+  });
+
+  it("releases once confirmed, so a later stale write from another device is repaired", () => {
+    expect(pendingSummaryWrite(fields, { ...fields })).toBeNull();
+
+    // Another device then writes a stale summary; nothing is pending, so the
+    // decision to repair is not suppressed.
+    const staleFromElsewhere = { ...fields, currentBalance: 45671.11 };
+    expect(pendingSummaryWrite(null, staleFromElsewhere)).toBeNull();
+    const decision = decideEpfSummarySync({
+      ready: true,
+      confirmed: true,
+      stored: staleFromElsewhere,
+      sources: sources([august, septemberCredited]),
+    });
+    expect(decision.write).toBe(true);
   });
 });

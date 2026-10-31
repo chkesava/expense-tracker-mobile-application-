@@ -24,6 +24,8 @@ import { useEpfSummary } from "@/hooks/useDomainSummaries";
 import { epfPortfolioSummary } from "@/shared/features/epf/utils/portfolio";
 import {
   decideEpfSummarySync,
+  pendingSummaryWrite,
+  type EpfSummaryFields,
   type EpfSummarySources,
 } from "@/shared/features/epf/utils/summarySync";
 
@@ -31,13 +33,15 @@ export function useEpfSummarySync(args: {
   enabled: boolean;
   /** Every source loaded without error. Never write a summary of a partial read. */
   ready: boolean;
+  /** Every source snapshot is server-backed, not a possibly partial cache. */
+  confirmed: boolean;
   sources: EpfSummarySources;
 }) {
-  const { enabled, ready, sources } = args;
+  const { enabled, ready, confirmed, sources } = args;
   const { user } = useAuth();
   const uid = user?.uid;
   const { summary: stored, loading: storedLoading, error: storedError } = useEpfSummary();
-  const lastWritten = useRef<string | null>(null);
+  const pending = useRef<EpfSummaryFields | null>(null);
 
   const live = useMemo(
     () => (enabled && ready ? epfPortfolioSummary(sources) : null),
@@ -48,32 +52,41 @@ export function useEpfSummarySync(args: {
     const db = getFirestoreDb();
     if (!enabled || !uid || !db) return;
 
+    // Released as soon as the stored document shows it.
+    pending.current = pendingSummaryWrite(pending.current, stored);
+
     const decision = decideEpfSummarySync({
       ready: ready && !storedLoading && !storedError,
+      confirmed,
       stored,
       sources,
     });
     if (!decision.write) return;
 
     // The stored snapshot lags our own write by a round trip; don't send the
-    // same document again in the meantime.
-    const signature = JSON.stringify(decision.fields);
-    if (lastWritten.current === signature) return;
-    lastWritten.current = signature;
+    // same document again while it is outstanding.
+    if (
+      pending.current &&
+      JSON.stringify(pending.current) === JSON.stringify(decision.fields)
+    ) {
+      return;
+    }
+    const fields = decision.fields;
+    pending.current = fields;
 
     void commitWrite(
       () =>
         setDoc(
           doc(db, "users", uid, "financialSummaries", "epf"),
-          { ...decision.fields, calculatedAt: serverTimestamp() },
+          { ...fields, calculatedAt: serverTimestamp() },
           { merge: true }
         ),
       { label: "EPF summary" }
     ).catch((err) => {
-      lastWritten.current = null;
+      if (pending.current === fields) pending.current = null;
       logError("epf.summarySync", err);
     });
-  }, [enabled, uid, ready, stored, storedLoading, storedError, sources]);
+  }, [enabled, uid, ready, confirmed, stored, storedLoading, storedError, sources]);
 
   return live;
 }

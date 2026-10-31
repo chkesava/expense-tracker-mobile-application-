@@ -88,37 +88,48 @@ export function epfSummaryNeedsWrite(
 }
 
 export type EpfSummarySyncDecision =
-  | { write: false; reason: "not-ready" | "in-sync" | "empty-sources" }
+  | { write: false; reason: "not-ready" | "unconfirmed" | "in-sync" }
   | { write: true; fields: EpfSummaryFields };
 
 /**
  * Whether the client should write the summary now.
  *
- * Refuses while any source is loading or failed: a summary from a partial read
- * is a wrong number written with confidence. And, like the rebuild's
- * `--override-zeros` guard, it refuses to zero a non-zero stored balance when
- * every money source is empty. An offline cold start can deliver empty
- * collections before the real ones, and one stale snapshot must not wipe the
- * figure net worth shows.
+ * - `ready`: every source has delivered and none failed. A summary from a
+ *   partial read is a wrong number written with confidence.
+ * - `confirmed`: every source snapshot is server-backed (`fromCache: false`).
+ *   An offline or just-reconnected device can hold a non-empty but incomplete
+ *   cached collection; an absolute write from it would be queued and then
+ *   overwrite the right value on sync. Display may use cache, a write may not.
+ *
+ * Once confirmed, an empty ledger is genuinely empty and its zero is written.
  */
 export function decideEpfSummarySync(args: {
   ready: boolean;
+  confirmed: boolean;
   stored: Partial<EpfSummary> | null | undefined;
   sources: EpfSummarySources;
 }): EpfSummarySyncDecision {
   if (!args.ready) return { write: false, reason: "not-ready" };
+  if (!args.confirmed) return { write: false, reason: "unconfirmed" };
 
-  const { sources, stored } = args;
-  const noMoneySources =
-    sources.contributions.length === 0 &&
-    sources.transfers.length === 0 &&
-    sources.interestEntries.length === 0 &&
-    sources.adjustments.length === 0;
-  if (noMoneySources && (stored?.currentBalance ?? 0) !== 0) {
-    return { write: false, reason: "empty-sources" };
-  }
-
-  const fields = epfSummaryFields(sources);
-  if (!epfSummaryNeedsWrite(stored, fields)) return { write: false, reason: "in-sync" };
+  const fields = epfSummaryFields(args.sources);
+  if (!epfSummaryNeedsWrite(args.stored, fields)) return { write: false, reason: "in-sync" };
   return { write: true, fields };
+}
+
+/**
+ * Whether an outstanding write should still hold back a repeat — SPENDLY-653.
+ *
+ * The stored listener lags our own write by a round trip, so the same
+ * document must not be re-sent in between. But suppression is only for that
+ * window: once the stored document shows the pending fields, the write is
+ * confirmed and the hold is released, so a later change (another device
+ * writing a stale summary) is repaired instead of ignored for the whole mount.
+ */
+export function pendingSummaryWrite(
+  pending: EpfSummaryFields | null,
+  stored: Partial<EpfSummary> | null | undefined
+): EpfSummaryFields | null {
+  if (!pending) return null;
+  return stored && !epfSummaryNeedsWrite(stored, pending) ? null : pending;
 }

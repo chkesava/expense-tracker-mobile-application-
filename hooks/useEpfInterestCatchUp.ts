@@ -28,15 +28,20 @@ export function useEpfInterestCatchUp(args: { enabled?: boolean } = {}) {
     contributions,
     loading: contributionsLoading,
     error: contributionsError,
+    fromCache: contributionsFromCache,
   } = useEpfAllContributions({
     enabled,
   });
-  const { transfers, transfersLoading, transfersError } = useEpfTransfers({ enabled });
+  const { transfers, transfersLoading, transfersFromCache, transfersError } = useEpfTransfers({
+    enabled,
+  });
   const {
     recomputeInterest,
     interestEntries,
     reconciliations,
     interestLoading,
+    reconciliationsLoading,
+    interestFromCache,
     interestError,
   } = useEpfInterest({ enabled });
 
@@ -44,7 +49,7 @@ export function useEpfInterestCatchUp(args: { enabled?: boolean } = {}) {
 
   useEffect(() => {
     if (!enabled) return;
-    if (contributionsLoading || transfersLoading || interestLoading) return;
+    if (contributionsLoading || transfersLoading || interestLoading || reconciliationsLoading) return;
 
     const ids = [
       ...new Set([
@@ -91,6 +96,7 @@ export function useEpfInterestCatchUp(args: { enabled?: boolean } = {}) {
     reconciliations,
     interestEntries,
     interestLoading,
+    reconciliationsLoading,
     recomputeInterest,
   ]);
 
@@ -101,7 +107,9 @@ export function useEpfInterestCatchUp(args: { enabled?: boolean } = {}) {
     transfers,
     interestEntries,
     reconciliations,
-    loading: contributionsLoading || transfersLoading || interestLoading,
+    loading: contributionsLoading || transfersLoading || interestLoading || reconciliationsLoading,
     error: contributionsError ?? transfersError ?? interestError ?? null,
+    /** True while any source is still the local cache's (possibly partial) copy. */
+    fromCache: contributionsFromCache || transfersFromCache || interestFromCache,
   };
 }
