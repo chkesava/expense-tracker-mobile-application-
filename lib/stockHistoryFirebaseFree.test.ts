@@ -36,6 +36,8 @@ const CHART_PATH = [
   "shared/data/nifty500.ts",
   "shared/utils/screenerUniverse.ts",
   "netlify/functions/screener-universe.ts",
+  // SPENDLY-648: screener filter and sort engine.
+  "shared/utils/screener.ts",
   "netlify/functions/market-overview.ts",
 ];
 
