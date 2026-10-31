@@ -50,7 +50,7 @@ files; type-checking always sees the web ones.
 | 1 | Upgrade from a signed-in JS-SDK build (install over, data kept) | **Pass** — "Please sign in once more" note shown; still shown after a relaunch; after "Got it" it never returns and the old session record is removed. |
 | 2 | Sign in on the native SDK | **Pass** — dashboard loads (net worth ₹6,08,930); "Today's net worth is saved" = a native write accepted by the rules. |
 | 3 | Cold start with Firebase unreachable (emulator ports cut) | **Pass** — the full dashboard draws from the on-device cache (not the SPENDLY-632 snapshot: no "saved figures" label). |
-| 4 | Offline write → force-stop → online → applied once | Carried to SPENDLY-639 (outbox × native queue); the SPENDLY-634 spike showed it on this SDK. |
+| 4 | Offline write → force-stop → online → applied once | **Pass** in SPENDLY-639 (balance increment applied exactly once). |
 | 5 | Sign out → sign in again in the same session | **Pass** after two fixes below; cache clear logs no warning. |
 
 ### Found on device and fixed
