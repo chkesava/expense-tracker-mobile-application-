@@ -8,6 +8,7 @@ import {
   type MarketOverviewErrorCode,
   type MarketOverviewErrorDTO,
   type ScreenerUniverseDTO,
+  type StockQuotesDTO,
   type StockHistoryDTO,
   type StockHistoryErrorCode,
   type StockHistoryErrorDTO,
@@ -15,6 +16,7 @@ import {
 } from '@/shared/types/market';
 import { isMarketOverview } from '@/shared/utils/marketOverview';
 import { isScreenerUniverse } from '@/shared/utils/screenerUniverse';
+import { isStockQuotes, quoteSymbolsParam } from '@/shared/utils/stockQuotes';
 import {
   MarketQuote,
   SearchResult,
@@ -243,6 +245,21 @@ export const fetchMarketOverview = (options: QuoteRequestOptions = {}): Promise<
  */
 export const fetchScreenerUniverse = (options: QuoteRequestOptions = {}): Promise<ScreenerUniverseDTO | null> =>
   fetchCheckedJson('/api/screener-universe', 'screener universe', isScreenerUniverse, options, 20_000);
+
+/**
+ * Latest price and daily change for a set of symbols in one request
+ * (SPENDLY-656), for a watchlist. The set is normalized and sorted so the
+ * same stocks share one CDN entry. `null` when there is nothing to ask for or
+ * no market API is configured.
+ */
+export const fetchStockQuotes = (
+  symbols: readonly string[],
+  options: QuoteRequestOptions = {}
+): Promise<StockQuotesDTO | null> => {
+  const param = quoteSymbolsParam(symbols);
+  if (!param) return Promise.resolve(null);
+  return fetchCheckedJson(`/api/stock-quotes?symbols=${encodeURIComponent(param)}`, 'stock quotes', isStockQuotes, options, 12_000);
+};
 
 export const fetchMutualFundQuote = async (
   schemeCode: string,

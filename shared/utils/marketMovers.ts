@@ -40,8 +40,11 @@ export function chunk<T>(items: readonly T[], size: number = SPARK_MAX_SYMBOLS):
   return out;
 }
 
-/** `range` is "1d" for today's movers, "1y" for the screener's daily closes (SPENDLY-647). */
-export function yahooSparkUrl(symbols: readonly string[], range: "1d" | "1y" = "1d"): string {
+/**
+ * `range` is "1d" for today's movers, "1y" for the screener's daily closes
+ * (SPENDLY-647), "5d" for watchlist quotes from the last two closes (SPENDLY-656).
+ */
+export function yahooSparkUrl(symbols: readonly string[], range: "1d" | "5d" | "1y" = "1d"): string {
   const list = symbols.map((s) => encodeURIComponent(s)).join(",");
   return `https://query1.finance.yahoo.com/v8/finance/spark?symbols=${list}&range=${range}&interval=1d`;
 }
