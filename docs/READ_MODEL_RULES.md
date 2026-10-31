@@ -30,7 +30,8 @@ These rules sit beside `CLAUDE.md` (Spendly safety invariants) and `docs/AGENT_W
   - Incremental sync runs (manual, and the per-write push of SPENDLY-583) find changes by `createdAt`/`updatedAt`. A write without them reaches the read model only on the nightly full run.
   - Add a test that the writer sets both.
 - **R1.2a** Writes to synced collections must reach the **per-write push** (SPENDLY-583), so other devices see them within seconds:
-  - Writing through `commitMutations` does this automatically, as does writing a collection that has a live listener calling `notifyReadModelSnapshot` (the 10 synced collections, today).
+  - Writing through `commitMutations` does this automatically, as does writing a collection that has a live listener calling `notifyReadModelSnapshot`.
+  - **`categories` has no live listener** (SPENDLY-660): its writers call `noteCategoriesWritten` (`lib/categoryRevision.ts`), which notifies the push and bumps the revision other devices load by.
   - A new writer that does neither must call `notifyReadModelWrites(uid, paths)` after its commit, or `notifyReadModelChanged(uid)` if it can't name its documents.
   - Never send document data to the server; it reads Firestore itself.
 - **R1.3** Prefer soft deletes (`deletedAt`) for ledger rows, as today. A hard delete reaches the read model only on the nightly run, except in the always-full collections (`accounts`, `accountTypes`, `accountTransfers`, `accountEntries`).
