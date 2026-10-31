@@ -7,6 +7,7 @@ const docs = new Map<string, Record<string, unknown>>();
 const writes: Write[] = [];
 let commits = 0;
 let commitOutcome: "acked" | "queued" | "unsafe" = "acked";
+let queueDurable = false;
 
 vi.mock("firebase/firestore", () => ({
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join("/") }),
@@ -66,6 +67,7 @@ vi.mock("@/lib/firestoreWrite", () => ({
     return commitOutcome;
   },
   reportLateWriteFailure: vi.fn(),
+  isWriteQueueDurable: () => queueDurable,
 }));
 
 import {
@@ -87,6 +89,7 @@ beforeEach(() => {
   writes.length = 0;
   commits = 0;
   commitOutcome = "acked";
+  queueDurable = false;
   resetWriteOutboxForTests({
     getItem: async (key: string) => disk.get(key) ?? null,
     setItem: async (key: string, value: string) => {
@@ -212,6 +215,79 @@ describe("commitMutations", () => {
 
     expect(commits).toBe(0);
     expect(await listWriteOutbox("u1")).toEqual([]);
+  });
+});
+
+describe("journal vs a durable SDK queue (SPENDLY-639)", () => {
+  const expense = [{ op: "set" as const, ref: { path: "users/u1/expenses/e1" }, data: { amount: 12 } }];
+
+  it("does not journal when the SDK's own queue is durable (native SDK, web IndexedDB)", async () => {
+    setWriteOutboxPersistForTests(null);
+    queueDurable = true;
+    commitOutcome = "queued";
+
+    await commitMutations("u1", expense);
+
+    expect(commits).toBe(1);
+    expect(await listWriteOutbox("u1")).toEqual([]);
+  });
+
+  it("still journals when the SDK queue is memory-only", async () => {
+    setWriteOutboxPersistForTests(null);
+    queueDurable = false;
+    commitOutcome = "queued";
+
+    await commitMutations("u1", expense);
+
+    expect((await listWriteOutbox("u1")).map((entry) => entry.id)).toEqual(["outbox-1"]);
+  });
+
+  it("never holds an offline increment twice, so a restart cannot re-apply it", async () => {
+    setWriteOutboxPersistForTests(null);
+    queueDurable = true;
+    commitOutcome = "queued";
+    await commitMutations("u1", [
+      {
+        op: "update",
+        ref: { path: "users/u1/accounts/a1" },
+        data: { currentBalance: { _methodName: "increment", _operand: -250 } },
+      },
+    ]);
+    writes.length = 0;
+    commits = 0;
+
+    // Next launch: the ack is not on the server yet (native queue still flushing).
+    await replayWriteOutbox("u1");
+
+    expect(commits).toBe(0);
+  });
+
+  it("drains a write an older JS-SDK build left in the outbox, once", async () => {
+    // Journaled by the old build (memory-only queue)…
+    queueDurable = false;
+    commitOutcome = "queued";
+    await commitMutations("u1", [
+      {
+        op: "update",
+        ref: { path: "users/u1/accounts/a1" },
+        data: { currentBalance: { _methodName: "increment", _operand: -250 } },
+      },
+    ]);
+    // …whose memory-only queue died on force-stop: nothing (not even the ack)
+    // reached the server. Then the app is upgraded and relaunched.
+    docs.clear();
+    setWriteOutboxPersistForTests(null);
+    queueDurable = true;
+    commitOutcome = "acked";
+    writes.length = 0;
+    commits = 0;
+
+    await replayWriteOutbox("u1");
+    expect(commits).toBe(1);
+    expect(await listWriteOutbox("u1")).toEqual([]);
+
+    await replayWriteOutbox("u1");
+    expect(commits).toBe(1);
   });
 });
 

@@ -17,8 +17,8 @@ Found during SPENDLY-632.
 | SPENDLY-635 | Firestore platform adapter + import codemod | Merged into epic (84569ea3) |
 | SPENDLY-636 | Native auth adapter + session migration | Merged into epic (334d5bec) |
 | SPENDLY-637 | Native Storage, Functions, App Check | Merged into epic (5ac6d6d4) |
-| SPENDLY-638 | Native cutover: Firestore, Auth, Storage on the native SDKs | Done on story branch, device-verified, awaiting review |
-| SPENDLY-639 | Offline / outbox / freshness integrity | To Do |
+| SPENDLY-638 | Native cutover: Firestore, Auth, Storage on the native SDKs | Merged into epic (149fe311) |
+| SPENDLY-639 | Offline / outbox / freshness integrity | Done on story branch, device-verified, awaiting review |
 | SPENDLY-640 | Measure, device QA (3 apps), staged release | To Do |
 | SPENDLY-641 | Keep or retire the SPENDLY-632 dashboard snapshot | To Do |
 
@@ -28,7 +28,7 @@ Found during SPENDLY-632.
 - Functions has no callers; the native cutover leaves it out (SPENDLY-637).
 - Native App Check is wired but off (`NATIVE_APP_CHECK_ENABLED`); console enforcement is a separate owner decision (SPENDLY-637).
 - Auth, Storage and Functions switch to native **together with Firestore in SPENDLY-638**: they share the signed-in user, and the rules only see `request.auth` from the SDK that signed in (SPENDLY-636).
-- The `commitMutations` outbox stays as a second net; retiring it is a later, separate decision.
+- The `commitMutations` outbox no longer journals when the SDK queue is durable (web and native): a second copy risked double-applying increments. Replay still drains entries left by older JS-SDK builds (SPENDLY-639).
 - **@react-native-firebase pinned to 24.0.0** (see spike finding 1).
 - `shared/` mutation helpers import field values from `@/lib/firestore` (resolved per platform) instead of emitting descriptors (SPENDLY-635).
 - The outbox encoder (`lib/firestoreSentinel.ts`) reads native `FieldValue`s; `lib/firestore.native.ts` keeps array-transform elements for it (SPENDLY-638). Outbox × native queue replay is verified in SPENDLY-639.
