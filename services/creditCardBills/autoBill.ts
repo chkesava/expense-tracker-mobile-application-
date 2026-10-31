@@ -16,7 +16,7 @@
  * needs the server, and this path must still queue offline.
  */
 
-import { doc, increment, serverTimestamp } from "firebase/firestore";
+import { doc, increment, serverTimestamp } from "@/lib/firestore";
 
 import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";

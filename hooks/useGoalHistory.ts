@@ -10,7 +10,7 @@ import {
   where,
   type QueryConstraint,
   type QueryDocumentSnapshot,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { isLocalTestMode } from "@/lib/env";

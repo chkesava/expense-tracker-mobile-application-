@@ -8,7 +8,7 @@ import {
   type DocumentData,
   type Query,
   type QueryConstraint,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
 import { getFirestoreDb } from "@/lib/firebase";

@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, increment, limit, orderBy, query, serverTimestamp, where } from "firebase/firestore";
+import { collection, doc, getDocs, increment, limit, orderBy, query, serverTimestamp, where } from "@/lib/firestore";
 
 import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";

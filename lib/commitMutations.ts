@@ -5,6 +5,15 @@
  * `commitWrite`. A force-stop can no longer drop a write the UI already
  * called "queued". Web keeps IndexedDB and skips the journal.
  *
+ * SPENDLY-639: the journal is only written when the SDK's own write queue is
+ * not durable. Since SPENDLY-638 native builds run on the native Firestore
+ * SDK, whose queue survives a force-stop like web's IndexedDB, so they skip
+ * it too. Journaling there would hold every offline write twice — in the
+ * native queue and here — and a replay whose ack check read the server
+ * before the native queue flushed would apply an increment twice. Replay
+ * still drains entries already on the device (offline writes queued by an
+ * older JS-SDK build exist only here) and still checks the ack first.
+ *
  * Replay is idempotent: every batch also sets `users/{uid}/meta/outboxAck_{id}`
  * (the personal `meta` catch-all already allows that). Non-idempotent ops
  * (increment / arrayUnion / ledgerEvents) wait for an ack read before they
@@ -17,13 +26,14 @@ import {
   writeBatch,
   type DocumentReference,
   type Firestore,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { notifyReadModelWrites } from "@/lib/readModelPush";
 import {
   commitWrite,
+  isWriteQueueDurable,
   reportLateWriteFailure,
   type CommitWriteOptions,
   type WriteOutcome,
@@ -46,19 +56,15 @@ import type { MutationOp, MutationRef } from "@/shared/types/mutations";
 
 let persistOverride: boolean | null = null;
 
-/** Test seam. `null` restores platform detection. */
+/** Test seam. `null` restores detection from `isWriteQueueDurable()`. */
 export function setWriteOutboxPersistForTests(enabled: boolean | null): void {
   persistOverride = enabled;
 }
 
 async function outboxPersistEnabled(): Promise<boolean> {
   if (persistOverride !== null) return persistOverride;
-  try {
-    const { Platform } = await import("react-native");
-    return Platform.OS !== "web";
-  } catch {
-    return true;
-  }
+  // Journal only when the SDK would lose a queued write on a force-stop.
+  return !isWriteQueueDurable();
 }
 
 function serializeOp(op: MutationOp): SerializedMutationOp {
@@ -183,7 +189,8 @@ export async function commitMutations(
 
 export async function replayWriteOutbox(uid: string): Promise<void> {
   if (!uid.trim()) return;
-  if (!(await outboxPersistEnabled())) return;
+  // No journal check here: entries an older build left behind must still
+  // drain after the upgrade, even though this build no longer journals.
   const db = getFirestoreDb();
   if (!db) return;
 

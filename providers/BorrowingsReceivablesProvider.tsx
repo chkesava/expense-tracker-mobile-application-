@@ -25,7 +25,7 @@ import {
   serverTimestamp,
   where,
   type DocumentReference,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { logError, logWarning } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";

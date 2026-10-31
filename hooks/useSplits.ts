@@ -14,7 +14,7 @@ import {
   type Firestore,
   type QuerySnapshot,
   type WriteBatch,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
@@ -1311,7 +1311,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         `Split deleted — ${split.title}`
       );
       const deletedAt = new Date().toISOString();
-      const expenseSnaps = await Promise.all(linked.expenseIds.map(eid => import("firebase/firestore").then(m => m.getDoc(doc(db, "users", uid, "expenses", eid)))));
+      const expenseSnaps = await Promise.all(linked.expenseIds.map(eid => import("@/lib/firestore").then(m => m.getDoc(doc(db, "users", uid, "expenses", eid)))));
       
       for (let i = 0; i < linked.expenseIds.length; i++) {
         batch.update(doc(db, "users", uid, "expenses", linked.expenseIds[i]), {

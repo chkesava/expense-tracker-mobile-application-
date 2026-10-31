@@ -8,7 +8,7 @@ import {
   type DocumentData,
   type Firestore,
   type WriteBatch,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 import type { GaneshWriter } from "@/services/ganesh/ganeshWriter";
 
 import { newId } from "@/lib/id";

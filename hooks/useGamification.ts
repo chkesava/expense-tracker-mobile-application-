@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { doc, onSnapshot, setDoc } from "@/lib/firestore";
 
 import { useExpenses } from "@/hooks/useExpenses";
 import { getFirestoreDb } from "@/lib/firebase";

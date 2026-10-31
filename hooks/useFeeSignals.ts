@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot } from "@/lib/firestore";
 
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { friendlyErrorMessage, logError } from "@/lib/errors";

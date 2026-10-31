@@ -4,7 +4,7 @@ import {
   serverTimestamp,
   writeBatch,
   type Firestore,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { commitWrite } from "@/lib/firestoreWrite";
 import { omitUndefined } from "@/shared/utils/firestorePayload";

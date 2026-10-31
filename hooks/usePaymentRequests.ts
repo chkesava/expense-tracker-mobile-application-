@@ -9,7 +9,7 @@ import {
   setDoc,
   updateDoc,
   where,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 import { getRandomBytes } from "expo-crypto";
 
 import { logError } from "@/lib/errors";

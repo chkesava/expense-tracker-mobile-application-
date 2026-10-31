@@ -9,7 +9,7 @@ import {
   serverTimestamp,
   getDocs,
   writeBatch,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 import { logError, friendlyErrorMessage } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { useAuth } from "@/providers/AuthProvider";

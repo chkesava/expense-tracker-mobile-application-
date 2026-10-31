@@ -1,5 +1,5 @@
 import { useLayoutEffect } from "react";
-import type { DocumentData, QueryConstraint } from "firebase/firestore";
+import type { DocumentData, QueryConstraint } from "@/lib/firestore";
 
 import { useGaneshCollection } from "@/hooks/ganesh/useGaneshCollection";
 import type { LoadFailure } from "@/lib/firestoreErrors";

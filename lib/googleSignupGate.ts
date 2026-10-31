@@ -5,8 +5,8 @@
  * (providers/AuthProvider.tsx's loginWithGoogleIdToken) or the web
  * signInWithPopup flow (lib/googleSignIn.web.ts).
  */
-import { getAdditionalUserInfo, type UserCredential } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { getAdditionalUserInfo, type UserCredential } from "@/lib/auth";
+import { doc, getDoc } from "@/lib/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
 

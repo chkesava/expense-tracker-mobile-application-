@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { collection, getDocs, query, where, type Firestore } from "firebase/firestore";
+import { collection, getDocs, query, where, type Firestore } from "@/lib/firestore";
 
 import { logDirectRead } from "@/lib/firestoreReadDebug";
 import { resolveJournalDateScope } from "@/shared/utils/journalDateScope";

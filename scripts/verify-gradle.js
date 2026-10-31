@@ -10,6 +10,23 @@ const {
   saveReleaseState
 } = require('./common');
 
+/**
+ * Points `buildTypes { release { … } }` at `signingConfigs.release`.
+ *
+ * SPENDLY-638: the old regex started at the first `release {` in the file —
+ * the one inside `signingConfigs` — and ran on to the first
+ * `signingConfig signingConfigs.debug`, which in Expo's template is the
+ * *debug* build type. So the first build after a prebuild was debug-signed
+ * (and would not install over a release-signed app) until a second run
+ * happened to fix the release block. Match inside `buildTypes` only.
+ */
+function pointReleaseBuildTypeAtReleaseSigning(buildGradle) {
+  return buildGradle.replace(
+    /(buildTypes\s*\{[\s\S]*?\brelease\s*\{[^{}]*?)signingConfig\s+signingConfigs\.debug/,
+    '$1signingConfig signingConfigs.release'
+  );
+}
+
 function verifyGradle() {
   console.log('⚙️  [Verify 4/4] Verifying Android Gradle Configuration...');
 
@@ -49,12 +66,9 @@ function verifyGradle() {
   }
 
   // Ensure buildTypes.release has signingConfig signingConfigs.release
-  if (buildGradle.includes("signingConfig signingConfigs.debug")) {
-    // Replace only within buildTypes release block
-    buildGradle = buildGradle.replace(
-      /(release\s*\{[\s\S]*?)signingConfig\s+signingConfigs\.debug/,
-      '$1signingConfig signingConfigs.release'
-    );
+  const signedRelease = pointReleaseBuildTypeAtReleaseSigning(buildGradle);
+  if (signedRelease !== buildGradle) {
+    buildGradle = signedRelease;
     buildGradleModified = true;
   }
 
@@ -122,4 +136,4 @@ if (require.main === module) {
   verifyGradle();
 }
 
-module.exports = { verifyGradle };
+module.exports = { verifyGradle, pointReleaseBuildTypeAtReleaseSigning };

@@ -1,11 +1,15 @@
 /**
- * Firebase Auth + Firestore bootstrap for Expo.
+ * Firebase Auth + Firestore bootstrap for Expo — **web and vitest**.
  *
- * Offline strategy:
- * - Auth (native): AsyncStorage via createAuth.native.ts
+ * SPENDLY-638: Android/iOS no longer use this file. Metro resolves
+ * `firebase.native.ts`, which runs on the native SDKs with a durable
+ * on-device cache. The native branches below stay only for type-checking and
+ * tests; the history in this comment explains why native had to move.
+ *
+ * Offline strategy (JS SDK):
  * - Auth (web): browser persistence via createAuth.web.ts
  * - Firestore (web): IndexedDB persistentLocalCache (multi-tab), genuinely durable
- * - Firestore (native): requested persistent, **delivered memory** — see below
+ * - Firestore (native, before SPENDLY-638): requested persistent, **delivered memory** — see below
  *
  * The native line used to claim "SQLite persistentLocalCache (survives app
  * restart)". It does not, and SPENDLY-1 traced the consequences. The Firebase
@@ -24,7 +28,7 @@
  */
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
-import { connectAuthEmulator, type Auth } from "firebase/auth";
+import { connectAuthEmulator, type Auth } from "@/lib/auth";
 import {
   clearIndexedDbPersistence,
   connectFirestoreEmulator,
@@ -36,8 +40,8 @@ import {
   terminate,
   waitForPendingWrites,
   type Firestore,
-} from "firebase/firestore";
-import { connectStorageEmulator, getStorage, type FirebaseStorage } from "firebase/storage";
+} from "@/lib/firestore";
+import { connectStorageEmulator, getStorage, type FirebaseStorage } from "@/lib/storage";
 import { getFunctions, type Functions } from "firebase/functions";
 import { Platform } from "react-native";
 
@@ -63,13 +67,15 @@ export type FirebaseClients = {
   /** Human-readable offline cache mode for diagnostics */
   firestoreCacheMode:
     | "persistent-indexeddb"
+    /** SPENDLY-638: the native SDK's on-device cache (`firebase.native.ts`). */
+    | "persistent-native"
     /** Persistence was requested but the RN bundle downgrades it to memory. */
     | "memory-fallback-native"
     | "memory"
     | "default"
     | "uninitialized";
   /** Auth persistence mode for Phase 1 verification */
-  authPersistence: "async-storage" | "browser" | "none" | "uninitialized";
+  authPersistence: "async-storage" | "browser" | "native" | "none" | "uninitialized";
 };
 
 let app: FirebaseApp | null = null;

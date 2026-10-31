@@ -26,7 +26,7 @@ import {
   serverTimestamp,
   setDoc,
   writeBatch,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite, type WriteOutcome } from "@/lib/firestoreWrite";

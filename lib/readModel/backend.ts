@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { collection, getDocs, type Firestore } from "firebase/firestore";
+import { collection, getDocs, type Firestore } from "@/lib/firestore";
 
 import { mapDocument, SPEC_BY_COLLECTION, type ReadModelRow } from "@/shared/utils/readModel/mapping";
 import { LEDGER_PAGE_SIZE } from "@/shared/utils/ledgerSnapshot";

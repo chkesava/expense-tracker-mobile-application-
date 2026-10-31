@@ -27,7 +27,7 @@ import {
   getDoc,
   increment,
   serverTimestamp,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";

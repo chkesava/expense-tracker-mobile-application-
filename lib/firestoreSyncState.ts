@@ -13,7 +13,7 @@
  * display can use cache, an absolute write must not.
  */
 
-import type { QuerySnapshot } from "firebase/firestore";
+import type { QuerySnapshot } from "@/lib/firestore";
 
 export const LISTEN_WITH_SYNC_STATE = { includeMetadataChanges: true } as const;
 

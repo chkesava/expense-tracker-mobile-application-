@@ -1,4 +1,4 @@
-import type { Firestore } from "firebase/firestore";
+import type { Firestore } from "@/lib/firestore";
 
 import { fetchAccountTypes } from "@/services/ledger/fetchAccountTypes";
 import type { MutationOp } from "@/shared/types/mutations";
