@@ -138,13 +138,13 @@ The Firebase console → Firestore → Usage, as a 7-day export:
 | F3 | `lib/ensureCategoryHierarchy.ts:310` reads the **whole** `expenses` collection, unmetered, when the category stamp is stale | A full-ledger read for heavy users, on a migration that is rare but unbounded | P2 | Now metered by this story; bounding it is a separate fix |
 | F4 | Unbounded launch listeners: `categoryBudgets`, `accountPayments`, `accountEntries`, `accountTransfers`, the borrowings/receivables group, `creditCardBills`, `calendarReminders`, `investments`, `holdings`, `investmentCashTransactions`, `netWorthHistory` (12 months) | Cost grows with history on every cold launch | P2 | Candidates for **plain Firestore bounds** (as SPENDLY-406/501 did), which cut reads without the read model |
 | F5 | Dead code: `listAccountReconciliations`, `listWhatIfScenarios`, `getWhatIfScenario` have no callers | none | P3 | Leave it; note it for cleanup |
-| F7 | **`categories` is ~62% of a cold launch in the lab** (287 docs; production ≈ 190/user). It is a near-static catalogue with a listener (`ExpenseReferenceDataProvider.tsx:265`, limit 500), re-read in full after every 30-minute gap | The largest single cold-launch cost | P2 | **A Firestore-only fix:** load once and refresh when a version stamp changes (the stamp `meta/categories` is already read at launch by `ensureCategoryHierarchy`), instead of a live listener. No read model needed |
+| F7 | **`categories` is ~62% of a cold launch in the lab** (287 docs; production ≈ 190/user). It is a near-static catalogue with a listener (`ExpenseReferenceDataProvider.tsx:265`, limit 500), re-read in full after every 30-minute gap | The largest single cold-launch cost | P2 | **Fixed by SPENDLY-660** (PR #250, on main `8a66d9dc`, 2026-10-31): categories are loaded by a revision on `meta/categories` instead of a live listener. Lab: a cold launch went from 464 to 178 reads; another device's edits still show live. Ships with the next release |
 | F6 | `expenses`/`incomes` (newest 300) feed about 10 consumers through `FinanceDataProvider` | 600 can remove them only after **all** of them are migrated (Journal, Dashboard, Insights, forms, Runway, Calendar, recurring sync, SetupProgress) | — | Recorded as a 600 constraint |
 
 ## 7. Recommended order (from §3 and §4; confirm the volume with §5)
 
 **Firestore-only first.** These are cheaper than any read-model step, keep offline and realtime, and need no ADR "go":
-1. **`categories` (F7):** a stamp-gated load instead of a listener. It saves up to ~60% of every cold launch.
+1. **`categories` (F7): done in SPENDLY-660** (on main, not yet released). It cut 62% of a cold launch in the lab (464 → 178).
 2. **Bound the unbounded launch listeners (F4):** `categoryBudgets`, the account sub-collections, and the borrowings/receivables group. Today they are small, but they grow with history.
 
 **Then, only if the post-633 baseline still justifies it (ADR D7):**
