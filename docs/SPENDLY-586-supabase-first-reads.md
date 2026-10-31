@@ -7,8 +7,8 @@
 
 | # | Story | Branch | State |
 |---|---|---|---|
-| 0 | SPENDLY-587 ADR and go/no-go | `feature/SPENDLY-587-adr-go-no-go` | **In Progress.** ADR drafted; awaiting the spike, the parity gate (7/14 on 2026-10-31), the post-633 baseline and user sign-off |
-| 0 | SPENDLY-588 read inventory | — | To Do (can start now; method per ADR D5) |
+| 0 | SPENDLY-587 ADR and go/no-go | `feature/SPENDLY-587-adr-go-no-go` | **In Progress**, merged into the epic as `44fe02ae`. ADR drafted; awaiting the spike, the parity gate (7/14 on 2026-10-31), the post-633 baseline and user sign-off |
+| 0 | SPENDLY-588 read inventory | `feature/SPENDLY-588-read-inventory` | **In Progress.** Read meter + code inventory done (`docs/SPENDLY-588-read-inventory.md`); lab runs and post-633 console baseline pending |
 | 1 | SPENDLY-589 sync Wave 2 | — | To Do; gated on D7 |
 | 1 | SPENDLY-590 sync Wave 3 | — | To Do; gated on D7 |
 | 1 | SPENDLY-591 remaining collections (`financialGoals` already synced, 609) | — | To Do; gated on D7 + 588 |
@@ -27,3 +27,4 @@
 
 - **2026-10-31:** SPENDLY-583 is live (web deploy `41178735321`; push and claims return 401, not 404).
 - **2026-10-31:** ADR drafted. Every decision is RECOMMENDED until the user signs off on SPENDLY-587.
+- **2026-10-31:** 588 uses the lab + console method (ADR D5) instead of production telemetry. Every read is metered once, in the `@/lib/firestore` adapter, in dev and perf builds only.

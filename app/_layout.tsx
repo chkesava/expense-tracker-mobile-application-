@@ -35,6 +35,7 @@ import {
   getFirestoreReadStats,
   resetFirestoreReadDebug,
 } from "@/lib/firestoreReadDebug";
+import { isReadMeterEnabled, readInventory, readInventoryTable } from "@/lib/firestoreReadMeter";
 import { installGlobalErrorHandlers } from "@/lib/globalErrorHandler";
 import { perfMark, perfStart, perfEnd } from "@/lib/perf";
 import { bindQueryClientToNetwork } from "@/lib/queryNetworkBinding";
@@ -64,6 +65,18 @@ if (__DEV__) {
   resetFirestoreReadDebug();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (global as any).spendlyReadStats = getFirestoreReadStats;
+}
+
+// SPENDLY-588: the billed-read inventory (dev and perf builds only), for the
+// lab runs in docs/SPENDLY-588-read-inventory.md.
+if (isReadMeterEnabled()) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (global as any).spendlyReadInventory = {
+    table: () => readInventoryTable(),
+    rows: () => readInventory.rows(),
+    totals: () => readInventory.totals(),
+    reset: () => readInventory.reset(),
+  };
 }
 
 /** Longest the splash screen may block the UI before we show it regardless. */
