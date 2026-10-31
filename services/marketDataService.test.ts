@@ -269,3 +269,54 @@ describe("fetchMarketOverview (SPENDLY-644)", () => {
     await expect(fetchMarketOverview({ signal: controller.signal })).rejects.toBe(abort);
   });
 });
+
+describe("fetchScreenerUniverse (SPENDLY-650)", () => {
+  let fetchScreenerUniverse: typeof import("./marketDataService").fetchScreenerUniverse;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    process.env.EXPO_PUBLIC_MARKET_API_URL = BASE;
+    ({ fetchScreenerUniverse } = await import("./marketDataService"));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.EXPO_PUBLIC_MARKET_API_URL;
+  });
+
+  const universe = {
+    success: true,
+    schemaVersion: 1,
+    provider: "yahoo",
+    universe: "NIFTY500",
+    universeAsOf: "2026-10-30",
+    universeSize: 500,
+    priced: 499,
+    coverage: 0.998,
+    fetchedAt: "2026-10-30T10:30:00.000Z",
+    stale: false,
+    status: { state: "closed", sessionStart: null, sessionEnd: null, lastTradeAt: "2026-10-30T03:45:00.000Z" },
+    available: true,
+    rows: [],
+  };
+
+  it("reads /api/screener-universe from the market API base", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(universe));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchScreenerUniverse()).resolves.toEqual(universe);
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toBe(`${BASE}/api/screener-universe`);
+  });
+
+  it("carries the server's typed code, and calls a wrong shape malformed", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ success: false, code: "UPSTREAM", message: "x" }, 502)));
+    await expect(fetchScreenerUniverse()).rejects.toMatchObject({ name: "MarketDataError", code: "UPSTREAM", status: 502 });
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ success: true, rows: [] })));
+    await expect(fetchScreenerUniverse()).rejects.toMatchObject({ code: "MALFORMED" });
+  });
+
+  it("reports its own timeout as TIMEOUT", async () => {
+    const abort = Object.assign(new Error("aborted"), { name: "AbortError" });
+    vi.stubGlobal("fetch", vi.fn(async () => { throw abort; }));
+    await expect(fetchScreenerUniverse()).rejects.toMatchObject({ code: "TIMEOUT" });
+  });
+});

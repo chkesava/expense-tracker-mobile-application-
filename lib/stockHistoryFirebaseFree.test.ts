@@ -41,6 +41,9 @@ const CHART_PATH = [
   // SPENDLY-649: saved screens, on the device only.
   "shared/utils/savedScreens.ts",
   "lib/screenerSavedScreens.ts",
+  // SPENDLY-650: screener client.
+  "lib/screenerUniverseCache.ts",
+  "hooks/useScreenerUniverse.ts",
   "netlify/functions/market-overview.ts",
 ];
 
