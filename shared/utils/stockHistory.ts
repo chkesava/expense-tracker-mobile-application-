@@ -15,6 +15,7 @@ import type {
   StockHistoryErrorCode,
   StockHistoryRange,
 } from "../types/market";
+import { MARKET_INDICES } from "./marketOverview";
 import { normalizeStockSymbol, type YahooChartMeta } from "./marketQuotes";
 
 export const STOCK_HISTORY_SCHEMA_VERSION = 1 as const;
@@ -112,9 +113,15 @@ export function normalizeHistorySymbol(raw: string | null | undefined): string |
   return symbol && SYMBOL_PATTERN.test(symbol) ? symbol : null;
 }
 
-/** NSE/BSE listings, whose session the market-hours rule below describes. */
+const INDIAN_INDEX_SYMBOLS = new Set<string>(MARKET_INDICES.map((index) => index.symbol));
+
+/**
+ * NSE/BSE listings, whose session the market-hours rule below describes.
+ * The benchmark indices (^NSEI, ^BSESN, ^NSEBANK) trade the same session
+ * (SPENDLY-646).
+ */
 export function isIndianListing(symbol: string): boolean {
-  return symbol.endsWith(".NS") || symbol.endsWith(".BO");
+  return symbol.endsWith(".NS") || symbol.endsWith(".BO") || INDIAN_INDEX_SYMBOLS.has(symbol);
 }
 
 const IST_OFFSET_SEC = 19_800;
