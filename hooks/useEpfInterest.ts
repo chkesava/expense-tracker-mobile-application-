@@ -23,6 +23,7 @@ import {
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { LISTEN_WITH_SYNC_STATE, onlyMetadataChanged } from "@/lib/firestoreSyncState";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
@@ -66,10 +67,13 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
   const [interestEntries, setInterestEntries] = useState<EpfInterestEntry[]>([]);
   const [reconciliations, setReconciliations] = useState<EpfReconciliation[]>([]);
   const [interestLoading, setInterestLoading] = useState(true);
+  // SPENDLY-653: interestLoading clears on interest entries alone, so a
+  // consumer could see "loaded" with reconciliations still []. Track them.
+  const [reconciliationsLoading, setReconciliationsLoading] = useState(true);
+  const [interestFromCache, setInterestFromCache] = useState(true);
+  const [reconciliationsFromCache, setReconciliationsFromCache] = useState(true);
   const interestEntriesRef = useRef(interestEntries);
   interestEntriesRef.current = interestEntries;
-  const reconciliationsRef = useRef(reconciliations);
-  reconciliationsRef.current = reconciliations;
   const {
     error: interestError,
     setError: setInterestError,
@@ -83,16 +87,25 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
       setInterestEntries([]);
       setReconciliations([]);
       setInterestLoading(false);
+      setReconciliationsLoading(false);
       return;
     }
 
     setInterestLoading(true);
+    setReconciliationsLoading(true);
     const entryPath = `users/${uid}/${EPF_INTEREST_ENTRIES_COLLECTION}`;
     const reconPath = `users/${uid}/${EPF_RECONCILIATIONS_COLLECTION}`;
 
+    let entriesReceived = false;
+    let reconReceived = false;
     const unsubEntries = onSnapshot(
       collection(db, "users", uid, EPF_INTEREST_ENTRIES_COLLECTION),
+      LISTEN_WITH_SYNC_STATE,
       (snapshot) => {
+        setInterestFromCache(snapshot.metadata.fromCache);
+        const first = !entriesReceived;
+        entriesReceived = true;
+        if (onlyMetadataChanged(snapshot, first)) return;
         logQuerySnapshot(entryPath, snapshot);
         setInterestEntries(
           snapshot.docs.map((docSnap) =>
@@ -114,13 +127,19 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
 
     const unsubRecon = onSnapshot(
       collection(db, "users", uid, EPF_RECONCILIATIONS_COLLECTION),
+      LISTEN_WITH_SYNC_STATE,
       (snapshot) => {
+        setReconciliationsFromCache(snapshot.metadata.fromCache);
+        const first = !reconReceived;
+        reconReceived = true;
+        if (onlyMetadataChanged(snapshot, first)) return;
         logQuerySnapshot(reconPath, snapshot);
         setReconciliations(
           snapshot.docs.map((docSnap) =>
             normalizeReconciliation(docSnap.id, docSnap.data() as Record<string, unknown>)
           )
         );
+        setReconciliationsLoading(false);
       },
       snapshotErrorHandler(
         "snapshot.epfReconciliations",
@@ -130,6 +149,7 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
           // it, a reconciliations failure left the Balance tab on skeletons
           // forever, because nothing else ever set this false (KAN-73).
           setInterestLoading(false);
+          setReconciliationsLoading(false);
         },
         "Couldn't load your EPF reconciliations."
       )
@@ -203,22 +223,10 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
           );
         }
 
-        const oldInterest = interestEntriesRef.current
-          .filter(e => e.establishmentId === args.establishmentId)
-          .reduce((sum, e) => sum + e.interest, 0);
-        const newInterest = years.reduce((sum, y) => sum + y.interest, 0);
-        const interestDelta = newInterest - oldInterest;
-
-        if (interestDelta !== 0) {
-          const { buildEpfSummaryOps } = require("@/shared/utils/epfMutations");
-          const ops = buildEpfSummaryOps(uid, { interestDelta });
-          for (const op of ops) {
-            if (op.op === "set" && op.merge) {
-              batch.set(doc(db, (op.ref as any).path), op.data, { merge: true });
-            }
-          }
-        }
-
+        // SPENDLY-653: the stored summary is derived whole by
+        // `useEpfSummarySync`, not incremented here. This effect re-runs on
+        // every contribution change and `interestEntriesRef` lags its own
+        // write, so a delta could land twice.
         await commitWrite(() => batch.commit(), { label: "EPF interest" });
         return years.length;
       } catch (err) {
@@ -252,10 +260,7 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
           EPF_RECONCILIATIONS_COLLECTION,
           reconciliationDocId(input.establishmentId, input.date)
         );
-        const oldRow = reconciliationsRef.current.find(r => r.id === reconciliationDocId(input.establishmentId, input.date));
-        const oldAdj = oldRow?.adjustmentAmount || 0;
         const built = buildReconciliation(input);
-        const adjustmentDelta = built.adjustmentAmount - oldAdj;
 
         const batch = writeBatch(db);
         batch.set(
@@ -267,16 +272,6 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
           }),
           { merge: true }
         );
-
-        if (adjustmentDelta !== 0) {
-          const { buildEpfSummaryOps } = require("@/shared/utils/epfMutations");
-          const ops = buildEpfSummaryOps(uid, { adjustmentDelta });
-          for (const op of ops) {
-            if (op.op === "set" && op.merge) {
-              batch.set(doc(db, (op.ref as any).path), op.data, { merge: true });
-            }
-          }
-        }
 
         const outcome = await commitWrite(
           () => batch.commit(),
@@ -297,6 +292,8 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
     interestEntries,
     reconciliations,
     interestLoading,
+    reconciliationsLoading,
+    interestFromCache: interestFromCache || reconciliationsFromCache,
     interestError,
     retryInterest,
 

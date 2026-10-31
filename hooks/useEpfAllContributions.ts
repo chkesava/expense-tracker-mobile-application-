@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
+import { LISTEN_WITH_SYNC_STATE, onlyMetadataChanged } from "@/lib/firestoreSyncState";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
@@ -32,6 +33,8 @@ export function useEpfAllContributions(options?: { enabled?: boolean }) {
 
   const [contributions, setContributions] = useState<EpfContribution[]>([]);
   const [loading, setLoading] = useState(true);
+  // SPENDLY-653: false once the server has confirmed the rows.
+  const [fromCache, setFromCache] = useState(true);
   const { error, setError, retry, attempt } = useLoadFailure();
 
   useEffect(() => {
@@ -45,9 +48,15 @@ export function useEpfAllContributions(options?: { enabled?: boolean }) {
     setLoading(true);
     const path = `users/${uid}/${EPF_CONTRIBUTIONS_COLLECTION}`;
 
+    let received = false;
     const unsubscribe = onSnapshot(
       collection(db, "users", uid, EPF_CONTRIBUTIONS_COLLECTION),
+      LISTEN_WITH_SYNC_STATE,
       (snapshot) => {
+        setFromCache(snapshot.metadata.fromCache);
+        const first = !received;
+        received = true;
+        if (onlyMetadataChanged(snapshot, first)) return;
         logQuerySnapshot(path, snapshot);
         setContributions(
           sortContributionsByMonth(
@@ -75,5 +84,5 @@ export function useEpfAllContributions(options?: { enabled?: boolean }) {
     };
   }, [uid, enabled, attempt]);
 
-  return { contributions, loading, error, retry };
+  return { contributions, loading, error, retry, fromCache };
 }

@@ -3,7 +3,7 @@ import { PiggyBank } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
-import { useEpfNetWorth } from "@/hooks/useEpfNetWorth";
+import type { EpfPortfolioSummary } from "@/shared/features/epf/utils/portfolio";
 import { useTheme } from "@/theme/ThemeProvider";
 
 import { withAlpha } from "@/theme/surfaces";
@@ -17,29 +17,32 @@ import { Section } from "@/components/dashboard/primitives";
  *
  * Uses `Amount` rather than the local `money` helper the other EPF components
  * use, so ghost mode works here as it does everywhere else on a summary screen.
+ *
+ * SPENDLY-653: renders the summary derived live from the ledger (the same
+ * `epfPortfolioSummary` the Balance tab and the stored summary use), not the
+ * stored document. That document was built from `increment()` deltas, missed
+ * hand-marked credits and transfers, and showed a different total from Balance.
  */
-export function EpfPortfolioCard() {
+export function EpfPortfolioCard({ summary }: { summary: EpfPortfolioSummary | null }) {
   const { theme } = useTheme();
   const currency = useDisplayCurrency();
-  const { summary, hasProfile, loading } = useEpfNetWorth();
 
-  if (!hasProfile || loading || !summary || summary.currentBalance === 0) return null;
+  if (!summary || summary.total === 0) return null;
 
-  // SPENDLY-544: the EPF summary doc is built with Firestore `increment()`,
-  // which only writes a total once it moves, so a user with no interest or
-  // adjustments yet has no such field and the card showed "₹NaN" (and an
-  // Adjustments row, since undefined !== 0). A missing total means nothing
-  // was recorded, i.e. 0. Display only; the stored summary is unchanged.
-  const total = (value: number | undefined) => (Number.isFinite(value) ? (value as number) : 0);
-
-  const rows: { key: string; label: string; value: number; hint?: string }[] = [
-    { key: "employee", label: "Your contributions", value: total(summary.employeeContributionTotal) },
-    { key: "employer", label: "Employer's share", value: total(summary.employerContributionTotal) },
-    { key: "interest", label: "Interest", value: total(summary.interestTotal) },
+  const rows: { key: string; label: string; value: number }[] = [
+    { key: "employee", label: "Your contributions", value: summary.employeeShare },
+    { key: "employer", label: "Employer's share", value: summary.employerEpfShare },
+    { key: "interest", label: "Interest", value: summary.interest },
   ];
 
-  if (total(summary.adjustmentsTotal) !== 0) {
-    rows.push({ key: "adjustments", label: "Adjustments", value: total(summary.adjustmentsTotal) });
+  // Without these the rows did not add up to the total: a balance carried in
+  // from (or out to) an employer not tracked here is part of it. The sign is
+  // shown on the amount, so the label stays direction-neutral.
+  if (summary.netTransfers !== 0) {
+    rows.push({ key: "transfers", label: "Net transfers", value: summary.netTransfers });
+  }
+  if (summary.adjustments !== 0) {
+    rows.push({ key: "adjustments", label: "Adjustments", value: summary.adjustments });
   }
 
   return (
@@ -53,7 +56,7 @@ export function EpfPortfolioCard() {
             Total EPF
           </Text>
           <Amount
-            value={summary.currentBalance}
+            value={summary.total}
             currency={currency}
             ghostable
             style={{

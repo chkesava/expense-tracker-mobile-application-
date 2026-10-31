@@ -24,22 +24,32 @@ const CATCH_UP_DEBOUNCE_MS = 400;
 
 export function useEpfInterestCatchUp(args: { enabled?: boolean } = {}) {
   const enabled = args.enabled !== false;
-  const { contributions, loading: contributionsLoading } = useEpfAllContributions({
+  const {
+    contributions,
+    loading: contributionsLoading,
+    error: contributionsError,
+    fromCache: contributionsFromCache,
+  } = useEpfAllContributions({
     enabled,
   });
-  const { transfers, transfersLoading } = useEpfTransfers({ enabled });
+  const { transfers, transfersLoading, transfersFromCache, transfersError } = useEpfTransfers({
+    enabled,
+  });
   const {
     recomputeInterest,
     interestEntries,
     reconciliations,
     interestLoading,
+    reconciliationsLoading,
+    interestFromCache,
+    interestError,
   } = useEpfInterest({ enabled });
 
   const lastSignatures = useRef(new Map<string, string>());
 
   useEffect(() => {
     if (!enabled) return;
-    if (contributionsLoading || transfersLoading || interestLoading) return;
+    if (contributionsLoading || transfersLoading || interestLoading || reconciliationsLoading) return;
 
     const ids = [
       ...new Set([
@@ -86,6 +96,20 @@ export function useEpfInterestCatchUp(args: { enabled?: boolean } = {}) {
     reconciliations,
     interestEntries,
     interestLoading,
+    reconciliationsLoading,
     recomputeInterest,
   ]);
+
+  // SPENDLY-653: the same rows the EPF summary is derived from, so the
+  // dashboard can sync it without mounting a second set of listeners.
+  return {
+    contributions,
+    transfers,
+    interestEntries,
+    reconciliations,
+    loading: contributionsLoading || transfersLoading || interestLoading || reconciliationsLoading,
+    error: contributionsError ?? transfersError ?? interestError ?? null,
+    /** True while any source is still the local cache's (possibly partial) copy. */
+    fromCache: contributionsFromCache || transfersFromCache || interestFromCache,
+  };
 }

@@ -25,6 +25,7 @@ import {
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { LISTEN_WITH_SYNC_STATE, onlyMetadataChanged } from "@/lib/firestoreSyncState";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
@@ -91,6 +92,8 @@ export function useEpf(options?: { enabled?: boolean }) {
 
   const [establishments, setEstablishments] = useState<EpfEstablishment[]>([]);
   const [establishmentsLoading, setEstablishmentsLoading] = useState(true);
+  // SPENDLY-653: false once the server has confirmed the list.
+  const [establishmentsFromCache, setEstablishmentsFromCache] = useState(true);
   const {
     error: establishmentsError,
     setError: setEstablishmentsError,
@@ -152,9 +155,15 @@ export function useEpf(options?: { enabled?: boolean }) {
     // never silently dropped from the result.
     const q = query(collection(db, "users", uid, EPF_ESTABLISHMENTS_COLLECTION));
 
+    let received = false;
     const unsubscribe = onSnapshot(
       q,
+      LISTEN_WITH_SYNC_STATE,
       (snapshot) => {
+        setEstablishmentsFromCache(snapshot.metadata.fromCache);
+        const first = !received;
+        received = true;
+        if (onlyMetadataChanged(snapshot, first)) return;
         logQuerySnapshot(path, snapshot);
         setEstablishments(
           sortEstablishments(
@@ -542,6 +551,7 @@ export function useEpf(options?: { enabled?: boolean }) {
     liveEstablishments,
     archivedEstablishments,
     establishmentsLoading,
+    establishmentsFromCache,
     establishmentsError,
     retryEstablishments,
 
