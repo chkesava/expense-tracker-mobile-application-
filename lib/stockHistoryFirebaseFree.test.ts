@@ -38,6 +38,9 @@ const CHART_PATH = [
   "netlify/functions/screener-universe.ts",
   // SPENDLY-648: screener filter and sort engine.
   "shared/utils/screener.ts",
+  // SPENDLY-649: saved screens, on the device only.
+  "shared/utils/savedScreens.ts",
+  "lib/screenerSavedScreens.ts",
   "netlify/functions/market-overview.ts",
 ];
 
