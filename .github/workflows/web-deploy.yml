@@ -149,6 +149,7 @@ jobs:
           node --no-experimental-require-module -e "require('./netlify/functions-dist/crypto.js'); console.log('crypto loaded')"
           node --no-experimental-require-module -e "require('./netlify/functions-dist/stock-history.js'); console.log('stock-history loaded')"
           node --no-experimental-require-module -e "require('./netlify/functions-dist/market-overview.js'); console.log('market-overview loaded')"
+          node --no-experimental-require-module -e "require('./netlify/functions-dist/screener-universe.js'); console.log('screener-universe loaded')"
           node --no-experimental-require-module -e "require('./netlify/functions-dist/readmodel-claims.js'); console.log('readmodel-claims loaded')"
           node --no-experimental-require-module -e "require('./netlify/functions-dist/readmodel-push.js'); console.log('readmodel-push loaded')"
 

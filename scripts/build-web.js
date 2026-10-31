@@ -188,6 +188,8 @@ function writeRedirectsAndHeaders() {
     '/api/stock-history /.netlify/functions/stock-history 200',
     // SPENDLY-642: Markets tab overview (cached on Netlify's durable CDN).
     '/api/market-overview /.netlify/functions/market-overview 200',
+    // SPENDLY-647: stock screener universe (cached on Netlify's durable CDN).
+    '/api/screener-universe /.netlify/functions/screener-universe 200',
     '/*                 /index.html             200',
     '',
   ].join('\n');

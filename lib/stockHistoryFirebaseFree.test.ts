@@ -32,6 +32,23 @@ const CHART_PATH = [
   "components/markets/MarketParts.tsx",
   // SPENDLY-646: read-only instrument sheet.
   "components/markets/InstrumentSheet.tsx",
+  // SPENDLY-647: stock screener universe.
+  "shared/data/nifty500.ts",
+  "shared/utils/screenerUniverse.ts",
+  "netlify/functions/screener-universe.ts",
+  // SPENDLY-648: screener filter and sort engine.
+  "shared/utils/screener.ts",
+  // SPENDLY-649: saved screens, on the device only.
+  "shared/utils/savedScreens.ts",
+  "lib/screenerSavedScreens.ts",
+  // SPENDLY-650: screener client.
+  "lib/screenerUniverseCache.ts",
+  "hooks/useScreenerUniverse.ts",
+  // SPENDLY-651: screener UI.
+  "shared/utils/screenerView.ts",
+  "app/(app)/screener.tsx",
+  "components/screener/ScreenerFilterSheet.tsx",
+  "components/screener/ScreenerSheets.tsx",
   "netlify/functions/market-overview.ts",
 ];
 
@@ -51,7 +68,14 @@ describe("stock chart path is Firebase-free", () => {
 const PORTFOLIO_ACCESS = /\busePortfolio\(|PortfolioDataProvider|@\/services\/portfolio|@\/hooks\/usePortfolio["\']|addToWatchlist|MockTradeModal/;
 
 describe("Markets tab is read-only", () => {
-  it.each(["components/markets/InstrumentSheet.tsx", "components/markets/MarketsDashboard.tsx", "components/markets/MarketParts.tsx"])(
+  it.each([
+    "components/markets/InstrumentSheet.tsx",
+    "components/markets/MarketsDashboard.tsx",
+    "components/markets/MarketParts.tsx",
+    "app/(app)/screener.tsx",
+    "components/screener/ScreenerFilterSheet.tsx",
+    "components/screener/ScreenerSheets.tsx",
+  ])(
     "%s does not touch the portfolio",
     (file) => {
       const source = readFileSync(path.resolve(__dirname, "..", file), "utf8");

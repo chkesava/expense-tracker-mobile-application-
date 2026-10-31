@@ -248,3 +248,59 @@ export interface MarketOverviewErrorDTO {
   code: MarketOverviewErrorCode;
   message: string;
 }
+
+// --- SPENDLY-623: stock screener universe ---------------------------------
+
+/**
+ * One NIFTY 500 stock for the screener. Every number is computed from the
+ * provider's daily closes, or `null` when it cannot be: nothing is filled in.
+ */
+export interface ScreenerRowDTO {
+  symbol: string;
+  name: string;
+  /** NSE industry classification. */
+  sector: string;
+  nifty50: boolean;
+  currency: "INR";
+  /** Newest daily close (today's price while the market trades). */
+  price: number | null;
+  /** The daily close before `price`. */
+  previousClose: number | null;
+  change: number | null;
+  changePercent: number | null;
+  /** Highest and lowest daily close over the last 52 weeks. */
+  high52: number | null;
+  low52: number | null;
+  /** (price − high52) / high52 × 100; zero or negative. */
+  pctFromHigh52: number | null;
+  /** (price − low52) / low52 × 100; zero or positive. */
+  pctAboveLow52: number | null;
+  /** Price change over the last year, from daily closes. */
+  return1y: number | null;
+  /** Time of the newest close (ISO). */
+  asOf: string | null;
+}
+
+export type ScreenerUnavailableReason = "LOW_COVERAGE" | "UPSTREAM";
+
+interface ScreenerUniverseBase {
+  success: true;
+  schemaVersion: 1;
+  provider: "yahoo";
+  universe: "NIFTY500";
+  /** Date the pinned constituent list was last checked (YYYY-MM-DD). */
+  universeAsOf: string;
+  universeSize: number;
+  /** Stocks with a usable price. */
+  priced: number;
+  /** priced / universeSize, 0..1. */
+  coverage: number;
+  fetchedAt: string;
+  stale: boolean;
+  status: MarketStatusDTO;
+}
+
+/** `GET /api/screener-universe` success body. */
+export type ScreenerUniverseDTO =
+  | (ScreenerUniverseBase & { available: true; rows: ScreenerRowDTO[] })
+  | (ScreenerUniverseBase & { available: false; reason: ScreenerUnavailableReason; rows: [] });

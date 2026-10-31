@@ -41,6 +41,8 @@ const RESTORABLE_ROUTES = [
   "/top-categories",
   "/recurring",
   "/recurring/",
+  // SPENDLY-651: stock screener.
+  "/screener",
 ] as const;
 
 /**

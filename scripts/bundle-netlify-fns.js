@@ -34,6 +34,8 @@ const FUNCTIONS = (module.exports.FUNCTIONS = [
   "stock-history",
   // SPENDLY-642: indices and market status for the Markets tab.
   "market-overview",
+  // SPENDLY-647: NIFTY 500 rows for the stock screener.
+  "screener-universe",
   // SPENDLY-505: gives a signed-in user the role Supabase's read model needs.
   "readmodel-claims",
   // SPENDLY-583: copies a user's just-saved documents to the read model.
