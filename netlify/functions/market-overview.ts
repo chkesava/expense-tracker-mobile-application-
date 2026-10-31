@@ -4,8 +4,7 @@ import { chunk, isSparkPayload, moversFromSpark, rankMovers, yahooSparkUrl } fro
 import {
   MARKET_INDICES,
   buildMarketOverview,
-  chartMeta,
-  indexReadingFromMeta,
+  indexReadingFromChart,
   marketStateAt,
   overviewFreshSeconds,
   type IndexReading,
@@ -72,7 +71,7 @@ const STATUS: Record<MarketOverviewErrorCode, number> = {
 };
 
 export function yahooIndexUrl(symbol: string): string {
-  return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1d`;
+  return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d`;
 }
 
 async function fetchIndex(index: (typeof MARKET_INDICES)[number]): Promise<IndexOutcome> {
@@ -90,7 +89,7 @@ async function fetchIndex(index: (typeof MARKET_INDICES)[number]): Promise<Index
   } catch {
     return { ok: false, code: "MALFORMED" };
   }
-  const reading = indexReadingFromMeta(chartMeta(payload), index);
+  const reading = indexReadingFromChart(payload, index);
   return reading ? { ok: true, reading } : { ok: false, code: "MALFORMED" };
 }
 
