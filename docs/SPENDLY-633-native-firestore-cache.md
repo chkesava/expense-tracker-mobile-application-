@@ -18,8 +18,8 @@ Found during SPENDLY-632.
 | SPENDLY-636 | Native auth adapter + session migration | Merged into epic (334d5bec) |
 | SPENDLY-637 | Native Storage, Functions, App Check | Merged into epic (5ac6d6d4) |
 | SPENDLY-638 | Native cutover: Firestore, Auth, Storage on the native SDKs | Merged into epic (149fe311) |
-| SPENDLY-639 | Offline / outbox / freshness integrity | Done on story branch, device-verified, awaiting review |
-| SPENDLY-640 | Measure, device QA (3 apps), staged release | To Do |
+| SPENDLY-639 | Offline / outbox / freshness integrity | Merged into epic (d4b8534e) |
+| SPENDLY-640 | Measure, device QA (3 apps), staged release | Partial: configs verified, release plan written; timings not taken (stopped by owner) |
 | SPENDLY-641 | Keep or retire the SPENDLY-632 dashboard snapshot | To Do |
 
 ## Decisions
