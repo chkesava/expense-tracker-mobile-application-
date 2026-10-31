@@ -28,4 +28,5 @@ Saved screens stay **on the device only** (the user chose Option A on 2026-10-30
 
 ## Validation
 - `savedScreens.test.ts` and `screenerSavedScreens.test.ts`: 20 tests passed. They cover surviving an app restart, rename and delete persisting, limits, name rules, corrupt and other-version data, entry-by-entry dropping, storage failure and subscriptions.
-- Full suite and typechecks: see below.
+- Full `npm test`: **493 files, 6,682 tests passed** on the first run. `npm run typecheck:shared` and `npx tsc -p tsconfig.json --noEmit` both exited 0.
+- `test:rules` was not run, because there's no Firestore and no rules change.
