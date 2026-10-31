@@ -46,6 +46,22 @@ describe("createReadInventory", () => {
     expect(row).toMatchObject({ key: "users/*/expenses", attaches: 1, open: 1, coldReads: 302, warmReads: 2, cacheDocs: 300 });
   });
 
+  it("bills the cold re-query from the cache result when the server never re-sends unchanged data", () => {
+    const inv = createReadInventory();
+    const id = inv.attach("users/u1/accounts");
+    inv.snapshot(id, q(4, 4, true)); // cache only; no server snapshot follows
+    expect(inv.rows()[0]).toMatchObject({ coldReads: 4, warmReads: 0, cacheDocs: 4 });
+  });
+
+  it("re-sizes the cold read when the server result differs from the cache", () => {
+    const inv = createReadInventory();
+    const id = inv.attach("users/u1/expenses");
+    inv.snapshot(id, q(0, 0, true)); // empty cache (fresh install)
+    inv.snapshot(id, q(130, 130));
+    inv.snapshot(id, q(131, 1)); // later change: an update, not cold
+    expect(inv.rows()[0]).toMatchObject({ coldReads: 130, warmReads: 130, updateReads: 1 });
+  });
+
   it("bills an empty query one read when cold", () => {
     const inv = createReadInventory();
     const id = inv.attach("users/u1/receivables");
@@ -115,6 +131,16 @@ describe("createReadInventory", () => {
     expect(inv.rows()[0]).toMatchObject({ coldReads: 0, updateReads: 1 });
   });
 
+  it("reset settles cache-only listeners, so the new window gets no cold reads from them", () => {
+    const inv = createReadInventory();
+    const id = inv.attach("users/u1/accounts");
+    inv.snapshot(id, q(4, 4, true));
+    inv.reset();
+    inv.snapshot(id, q(3, 1, true));
+    inv.snapshot(id, q(3, 1));
+    expect(inv.rows()[0]).toMatchObject({ coldReads: 0, warmReads: 0, updateReads: 1, cacheDocs: 3 });
+  });
+
   it("formats a markdown table with a total line", () => {
     const inv = createReadInventory();
     inv.snapshot(inv.attach("users/u1/expenses"), q(3, 3));
@@ -123,5 +149,16 @@ describe("createReadInventory", () => {
     expect(table).toContain("| `users/*/expenses` | 1 | 1 | 3 | 3 | 0 | 0 | 0 | 0 |");
     expect(table).toContain("| **Total** | 1 | 1 | 3 | 3 | 0 | 0 | 0 | 0 |");
     expect(table).not.toContain("u1");
+  });
+
+  it("leaves out rows that are only still-open listeners from an earlier window", () => {
+    const inv = createReadInventory();
+    inv.snapshot(inv.attach("users/u1/expenses"), q(3, 3));
+    inv.reset();
+    inv.snapshot(inv.attach("users/u1/feeReviews"), q(0, 0));
+    const table = formatReadInventory(inv.rows(), inv.totals(), 1000);
+    expect(table).toContain("`users/*/feeReviews`");
+    expect(table).not.toContain("`users/*/expenses`");
+    expect(table).toContain("| **Total** | 1 | 2 | 1 | 0 | 0 | 0 | 0 | 0 |");
   });
 });
