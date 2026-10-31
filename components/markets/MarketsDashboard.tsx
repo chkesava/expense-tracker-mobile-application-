@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Bell, Eye, LineChart } from "lucide-react-native";
+import { useRouter, type Href } from "expo-router";
+import { Bell, Eye, LineChart, ListFilter } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { Skeleton, SkeletonCard } from "@/components/common/Skeleton";
@@ -70,6 +71,7 @@ export function MarketsDashboard({ onOpenStocks }: { onOpenStocks: (sub: Portfol
 
 function MarketsBody({ onOpenStocks }: { onOpenStocks: (sub: PortfolioSubTabId) => void }) {
   const { theme } = useTheme();
+  const router = useRouter();
   const overview = useMarketOverview();
   const nowMs = useNow(30_000);
   const [side, setSide] = useState<MoversSide>("gainers");
@@ -88,6 +90,13 @@ function MarketsBody({ onOpenStocks }: { onOpenStocks: (sub: PortfolioSubTabId) 
     <View style={styles.stack}>
       <SectionTitle title="Your stocks" />
       <MarketCard>
+        <ShortcutRow
+          icon={<ListFilter size={18} color={theme.colors.primary} />}
+          label="Stock screener"
+          hint="Filter NIFTY 500 by price, change and 52-week range"
+          onPress={() => router.push("/screener" as Href)}
+          last={false}
+        />
         <ShortcutRow
           icon={<Eye size={18} color={theme.colors.primary} />}
           label="Watchlist"
