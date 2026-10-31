@@ -88,9 +88,9 @@ describe("market-overview", () => {
     expect(res.statusCode).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(6);
     expect(chartCalls(fetchMock).map((c) => String(c[0]))).toEqual([
-      "https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEI?range=1d&interval=1d",
-      "https://query1.finance.yahoo.com/v8/finance/chart/%5EBSESN?range=1d&interval=1d",
-      "https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEBANK?range=1d&interval=1d",
+      "https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEI?range=5d&interval=1d",
+      "https://query1.finance.yahoo.com/v8/finance/chart/%5EBSESN?range=5d&interval=1d",
+      "https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEBANK?range=5d&interval=1d",
     ]);
     const dto = body(res);
     expect(dto).toMatchObject({
@@ -219,6 +219,8 @@ describe("market-overview", () => {
     const dto = body(await handler(get()));
 
     expect(sparkCalls(fetchMock).map((c) => sparkSymbols(c[0]).length)).toEqual([20, 20, 10]);
+    // SPENDLY-659: movers stay on the 1-day series (a 5-day one can miss the latest close).
+    for (const c of sparkCalls(fetchMock)) expect(String(c[0])).toContain("&range=1d&interval=1d");
     expect(sparkCalls(fetchMock).flatMap((c) => sparkSymbols(c[0])).sort()).toEqual(NIFTY50.map((s) => s.symbol).sort());
     const symbolsAt = (...i: number[]) => i.map((n) => NIFTY50[n].symbol);
     expect(dto.movers.gainers.map((m: { symbol: string }) => m.symbol)).toEqual(symbolsAt(49, 48, 47, 46, 45));

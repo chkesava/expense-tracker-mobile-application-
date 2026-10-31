@@ -115,6 +115,15 @@ describe("moverFromSpark", () => {
   });
 });
 
+describe("moverFromSpark previous close (SPENDLY-659)", () => {
+  it("keeps the 1-day chartPreviousClose for stocks (correct in every check)", () => {
+    // Real M&M on 30 Oct: 1-day spark close 2840.3, chartPreviousClose 2890 (the 29 Oct close).
+    const m = moverFromSpark({ timestamp: [T], close: [2840.3], chartPreviousClose: 2890 }, RELIANCE)!;
+    expect(m.previousClose).toBe(2890);
+    expect(m.changePercent).toBeCloseTo(-1.7197, 3);
+  });
+});
+
 describe("moversFromSpark", () => {
   it("keeps universe order and only priced stocks", () => {
     const stocks = [RELIANCE, { symbol: "TCS.NS", name: "TCS" }, { symbol: "INFY.NS", name: "Infosys" }];
