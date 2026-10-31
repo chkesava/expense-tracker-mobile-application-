@@ -2,15 +2,17 @@
  * Batched quotes for watchlists (SPENDLY-624, story SPENDLY-656). Pure; shared
  * by the `/api/stock-quotes` Netlify function and the app.
  *
- * Price and change come from the **last two daily closes** of a 5-day spark
- * series, for stocks and indices alike. Yahoo's `chartPreviousClose` is not
- * used: on 30 Oct 2026 it gave Indian indices the close from two sessions
- * earlier (NIFTY 50 +1.56% instead of +0.51%; NIFTY BANK even the wrong sign).
- *
- * Fallback: Yahoo returns only the latest point for BSE (`.BO`) listings even
- * over 5 days. For a **stock** with a single close, `chartPreviousClose` is
- * used — it matched the real previous close for every stock checked. Never for
- * an index: an index with one close shows its price and no change.
+ * Where each number comes from (fixed after two Yahoo traps found on
+ * 31 Oct 2026, see docs/SPENDLY-656-stock-quotes.md):
+ * - **Price and time:** the newest close of the **1-day** spark. A 5-day series
+ *   can miss the latest session's close (M&M on 30 Oct), which would price a
+ *   stock at yesterday's close.
+ * - **Previous close, stocks:** the 1-day `chartPreviousClose`. It matched the
+ *   real previous close for every stock checked.
+ * - **Previous close, indices:** never `chartPreviousClose` (on 30 Oct it was
+ *   two sessions old: NIFTY 50 read +1.56% instead of +0.51%). Instead, the
+ *   daily close before the latest trade's session, from a **5-day** spark
+ *   (SPENDLY-659's rule). No history means a price with no change.
  */
 
 import type { BatchQuoteDTO, StockQuotesDTO } from "../types/market";
@@ -63,17 +65,43 @@ function round4(value: number): number {
   return Math.round(value * 10_000) / 10_000;
 }
 
-/** One quote from a 5-day daily spark entry, or null when there is no price. */
-export function quoteFromDailySpark(entry: YahooSparkEntry | null | undefined, symbol: string): BatchQuoteDTO | null {
-  const series = dailyCloses(entry);
+const IST_MS = 19_800_000;
+const istDay = (ms: number) => Math.floor((ms + IST_MS) / 86_400_000);
+
+/**
+ * The close of the session before the one `tradeMs` belongs to, from a 5-day
+ * daily spark entry: the second-to-last bar, or the last one when the latest
+ * session has no bar yet. Missing closes are skipped.
+ */
+export function previousSessionClose(daily: YahooSparkEntry | null | undefined, tradeMs: number): number | null {
+  const bars = dailyCloses(daily);
+  if (bars.length === 0) return null;
+  const last = bars[bars.length - 1];
+  if (istDay(tradeMs) > istDay(last.t)) return last.c;
+  return bars.length >= 2 ? bars[bars.length - 2].c : null;
+}
+
+function positive(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/**
+ * One quote: price and time from the 1-day spark entry; previous close from
+ * its `chartPreviousClose` for a stock, or from the 5-day `daily` entry for an
+ * index. Null when there is no price.
+ */
+export function quoteFromSpark(
+  intraday: YahooSparkEntry | null | undefined,
+  daily: YahooSparkEntry | null | undefined,
+  symbol: string
+): BatchQuoteDTO | null {
+  const series = dailyCloses(intraday);
   if (series.length === 0) return null;
   const last = series[series.length - 1];
   const isIndex = symbol.startsWith("^");
-  let prevClose: number | null = series.length >= 2 ? series[series.length - 2].c : null;
-  if (prevClose == null && !isIndex) {
-    const provider = entry?.chartPreviousClose;
-    if (typeof provider === "number" && Number.isFinite(provider) && provider > 0) prevClose = provider;
-  }
+  const prevClose = isIndex
+    ? previousSessionClose(daily, last.t)
+    : positive(intraday?.chartPreviousClose) ?? positive(intraday?.previousClose);
   return {
     symbol,
     price: last.c,

@@ -1,7 +1,7 @@
 import type { BatchQuoteDTO, MarketOverviewErrorCode, StockQuotesDTO } from "../../shared/types/market";
-import { chunk, isSparkPayload, yahooSparkUrl } from "../../shared/utils/marketMovers";
+import { chunk, isSparkPayload, yahooSparkUrl, type YahooSparkEntry } from "../../shared/utils/marketMovers";
 import { marketStateAt, overviewFreshSeconds } from "../../shared/utils/marketOverview";
-import { buildStockQuotes, parseQuoteSymbols, quoteFromDailySpark } from "../../shared/utils/stockQuotes";
+import { buildStockQuotes, parseQuoteSymbols, quoteFromSpark } from "../../shared/utils/stockQuotes";
 
 import { jsonWithHeaders, query, upstreamGetWithTimeout, type NetlifyEvent, type NetlifyResult } from "./_market";
 
@@ -10,8 +10,10 @@ import { jsonWithHeaders, query, upstreamGetWithTimeout, type NetlifyEvent, type
  *
  * Latest price and daily change for a watchlist in one request: up to 50
  * symbols, in Yahoo spark batches of at most 20 (so 3 calls for a full list),
- * all in parallel. Change comes from the last two daily closes of a 5-day
- * series, never from `chartPreviousClose` (see shared/utils/stockQuotes.ts).
+ * all in parallel. Price comes from the 1-day series; the previous close from
+ * its `chartPreviousClose` for stocks, and from a 5-day daily series for
+ * indices (one extra call, only when a batch has an index). See
+ * shared/utils/stockQuotes.ts for why.
  *
  * - A symbol Yahoo doesn't know is reported in `missing`; a batch that failed
  *   puts its symbols in `failed`. Neither removes anything from a watchlist.
@@ -66,18 +68,31 @@ type BatchResult = { ok: true; quotes: BatchQuoteDTO[] } | { ok: false };
  * One batch. Yahoo answers a batch where it knows *none* of the symbols with
  * 404 "No data found": that is a real answer (all missing), not a failure.
  */
-async function fetchBatch(symbols: readonly string[]): Promise<BatchResult> {
+type SparkResult = { ok: true; payload: Record<string, YahooSparkEntry | undefined> } | { ok: false };
+
+async function fetchSpark(symbols: readonly string[], range: "1d" | "5d"): Promise<SparkResult> {
   try {
-    const res = await upstreamGetWithTimeout(yahooSparkUrl(symbols, "5d"), BATCH_TIMEOUT_MS);
-    if (res.status === 404) return { ok: true, quotes: [] };
+    const res = await upstreamGetWithTimeout(yahooSparkUrl(symbols, range), BATCH_TIMEOUT_MS);
+    if (res.status === 404) return { ok: true, payload: {} };
     if (!res.ok) return { ok: false };
     const payload: unknown = await res.json();
-    if (!isSparkPayload(payload)) return { ok: false };
-    const quotes = symbols.map((s) => quoteFromDailySpark(payload[s], s)).filter((q): q is BatchQuoteDTO => !!q);
-    return { ok: true, quotes };
+    return isSparkPayload(payload) ? { ok: true, payload } : { ok: false };
   } catch {
     return { ok: false };
   }
+}
+
+async function fetchBatch(symbols: readonly string[]): Promise<BatchResult> {
+  const indices = symbols.filter((s) => s.startsWith("^"));
+  const [intraday, daily] = await Promise.all([
+    fetchSpark(symbols, "1d"),
+    indices.length > 0 ? fetchSpark(indices, "5d") : Promise.resolve<SparkResult>({ ok: true, payload: {} }),
+  ]);
+  if (!intraday.ok) return { ok: false };
+  // Without the daily series an index still gets its price, just no change.
+  const dailyPayload = daily.ok ? daily.payload : {};
+  const quotes = symbols.map((s) => quoteFromSpark(intraday.payload[s], dailyPayload[s], s)).filter((q): q is BatchQuoteDTO => !!q);
+  return { ok: true, quotes };
 }
 
 function load(key: string, symbols: string[], now: Date): Promise<Loaded> {
