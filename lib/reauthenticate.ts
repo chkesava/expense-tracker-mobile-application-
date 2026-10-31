@@ -139,7 +139,7 @@ async function firebaseAdapter(): Promise<ReauthAdapter> {
   // `firebase/auth` import makes it unloadable in vitest's node environment.
   const [{ getFirebaseAuth }, authModule, { Platform }] = await Promise.all([
     import("./firebase"),
-    import("firebase/auth"),
+    import("@/lib/auth"),
     import("react-native"),
   ]);
   const {

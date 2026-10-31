@@ -21,7 +21,7 @@ import {
   serverTimestamp,
   where,
   writeBatch,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";

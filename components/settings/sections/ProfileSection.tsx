@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { router } from "expo-router";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc } from "@/lib/firestore";
 
 import { SettingsPanel } from "@/components/settings/SettingsControls";
 import { Button } from "@/components/ui/Button";

@@ -5,7 +5,7 @@ import {
   type DocumentReference,
   type DocumentSnapshot,
   type Firestore,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 import { isCreditCardAccount } from "@/shared/utils/accountKind";
 
 export type AccountInfo = {

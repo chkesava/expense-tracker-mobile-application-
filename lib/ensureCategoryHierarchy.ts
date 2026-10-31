@@ -8,7 +8,7 @@ import {
   serverTimestamp,
   type Firestore,
   type WriteBatch,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 import { logDirectRead } from "@/lib/firestoreReadDebug";
 import {
   CATEGORY_TAXONOMY,

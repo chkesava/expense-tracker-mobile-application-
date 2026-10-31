@@ -15,7 +15,7 @@ import {
   increment,
   serverTimestamp,
   writeBatch,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite } from "@/lib/firestoreWrite";

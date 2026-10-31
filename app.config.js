@@ -34,6 +34,10 @@ const SHARED_PLUGINS = [
   // listed in app.json.
   "expo-image",
   "@react-native-google-signin/google-signin",
+  // SPENDLY-638: native Firebase SDKs (durable Firestore cache, native Auth).
+  // Also listed in app.json.
+  "@react-native-firebase/app",
+  "@react-native-firebase/auth",
   [
     "expo-notifications",
     {
@@ -183,8 +187,10 @@ function buildConfig({ config }) {
  * SPENDLY-175: a local test build (EXPO_PUBLIC_FIREBASE_EMULATOR_HOST set,
  * never in CI) installs as a separate "Spendly Test" app next to the real one,
  * so its demo sign-in, caches and write outbox can never mix with the real
- * account. google-services.json has no client for the test package, and the
- * JS Firebase SDK does not need it, so the file is dropped (no push in test).
+ * account. The real google-services.json is replaced by
+ * google-services.localtest.json, which names only the `demo-spendly`
+ * emulator project and the test package (SPENDLY-634: the native Firebase SDK
+ * needs a services file at build time). No production keys, no push in test.
  * With the variable unset the config is returned untouched.
  */
 const LOCAL_TEST_SUFFIX = ".localtest";
@@ -202,6 +208,9 @@ function applyLocalTestBuild(config) {
     android: {
       ...android,
       package: `${android.package}${LOCAL_TEST_SUFFIX}`,
+      // SPENDLY-634/638: the native Firebase SDK needs a services file at
+      // build time. This one names only the `demo-spendly` emulator project.
+      googleServicesFile: "./google-services.localtest.json",
     },
     ios: ios.bundleIdentifier
       ? { ...ios, bundleIdentifier: `${ios.bundleIdentifier}${LOCAL_TEST_SUFFIX}` }

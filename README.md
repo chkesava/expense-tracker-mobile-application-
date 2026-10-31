@@ -1,410 +1,289 @@
-# Expense Tracker Mobile
+# Spendly
 
-Expo (SDK 57) + React Native app for the expense tracker. Uses Firebase Auth/Firestore and the deployed web app for market/share URLs and Expo Go Google Sign-In.
+One Expo + React Native + TypeScript codebase that ships **three apps** for Android and the web:
 
----
+| App | What it does | Android package | Web path | Routes |
+|---|---|---|---|---|
+| **Spendly** (Expense) | Personal finance: accounts, ledger/journal, budgets, credit cards, investments, EPF, goals, splits, SMS auto-add | `com.example.expensetracker` | `/expense` | `app/(app)`, `app/(auth)` |
+| **Spendly Nutrition** | Meal logging, food photo analysis, nutrition insights | `com.example.nutritiontrackera` | `/nutrition` | `app/(nutrition)` |
+| **Ganesh Seva** | Ganesh Pandal management: contributions, seva, funds, people, sponsors, assets | `com.example.ganeshseva` | `/ganesh` | `app/(ganesh)`, `app/(ganesh-auth)` |
 
-## What you need after cloning
+A landing page at the web root (`spendly-share.netlify.app/`) links to all three. Each app's name, version, package, icons and permissions live in `products/<app>.json`.
 
-Git ignores secrets and generated folders. After `git clone`, install dependencies and create local config files that are **not** in the repo.
-
-### Included in the repo (no action)
-
-| File / folder | Purpose |
-|---------------|---------|
-| `package.json` / lockfile | Dependencies |
-| `app.json` | Expo app config (package name, plugins, icons) |
-| `eas.json` | EAS Build profiles |
-| `google-services.json` | Firebase Android config (root). Prebuild copies it into `android/app/` |
-| `.env.example` | Template for local env vars |
-| `releases/.gitkeep` | Folder for built APKs (APKs themselves are ignored) |
-
-### Not in the repo — you must create / obtain
-
-| File | Required for | How to get it |
-|------|--------------|---------------|
-| **`.env`** | Running the app (Firebase + Google) | Copy from `.env.example`, then fill values from a teammate or the web project (see below) |
-| **`keystores/expense-tracker-upload-key.keystore`** | Release / signed APK only | Ask a teammate who already has the upload keystore. Do **not** invent a new keystore if you need Play Store / existing signing |
-| **`.env.release`** (optional) | Release signing passwords | Same secrets as in `.env`: `MYAPP_RELEASE_STORE_PASSWORD`, `MYAPP_RELEASE_KEY_PASSWORD` |
-| **`android/` / `ios/`** | Native runs / release | Generated locally with `npx expo prebuild` (folders are gitignored) |
-| **`node_modules/`** | Everything | `npm install` |
-
-Never commit: `.env`, `.env*.local`, `.env.release`, keystores, private keys, or release APKs.
+> **New here?** Read this file, then [`docs/AGENT_WORKFLOW.md`](docs/AGENT_WORKFLOW.md) (branching, Jira, validation and safety rules) and [`docs/READ_MODEL_RULES.md`](docs/READ_MODEL_RULES.md) before touching user data.
 
 ---
 
-## Prerequisites
+## Contents
 
-- **Node.js** 20+ (repo has been run on Node 22)
-- **npm** (comes with Node)
-- **Git**
-- For **Android emulator/device** native builds:
-  - Android Studio + Android SDK
-  - `ANDROID_HOME` (or `ANDROID_SDK_ROOT`) set
-  - A running emulator or USB-debugging device
-- For **iOS** (macOS only): Xcode
-- Optional: [Expo Go](https://expo.dev/go) on a phone for JS-only smoke tests (native Google Sign-In does **not** work in Expo Go)
-
----
-
-## Quick start (day-to-day development)
-
-### 1. Clone
-
-```bash
-git clone <YOUR_GITHUB_REPO_URL>
-cd expense-tracker-mobile-application-
-```
-
-Use the real GitHub HTTPS/SSH URL for this repository.
-
-### 2. Install dependencies
-
-```bash
-npm install
-```
-
-### 3. Create `.env`
-
-```bash
-cp .env.example .env
-```
-
-On Windows PowerShell:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Fill at least these keys in `.env` (same Firebase project as the web app):
-
-```env
-EXPO_PUBLIC_APP_URL=https://kesavaexpensetracker.netlify.app
-
-EXPO_PUBLIC_FIREBASE_API_KEY=
-EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=
-EXPO_PUBLIC_FIREBASE_PROJECT_ID=
-EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=
-EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER=
-EXPO_PUBLIC_FIREBASE_APP_ID=
-
-# Web OAuth client ID (Firebase Console → Project settings → OAuth web client)
-EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=
-```
-
-**Ways to get Firebase values**
-
-1. Ask a teammate for a filled `.env` (recommended for the shared project).
-2. Or copy from the sibling web app (if it lives next to this repo):
-
-   ```bash
-   npm run env:copy-from-web
-   # or with an explicit path:
-   npm run env:copy-from-web -- --web-dir=../expense-tracker --force
-   ```
-
-3. Or copy `VITE_FIREBASE_*` / `VITE_PUBLIC_APP_URL` from the web `.env` and map them to `EXPO_PUBLIC_*` as in `.env.example`.
-
-Release signing passwords can stay empty for local/dev:
-
-```env
-MYAPP_RELEASE_STORE_PASSWORD=
-MYAPP_RELEASE_KEY_PASSWORD=
-```
-
-### 4. Start the Expo bundler
-
-```bash
-npm start
-# same as: npx expo start
-```
-
-Then:
-
-- Press `a` for Android emulator, or scan the QR code with Expo Go.
-- Prefer a **dev client / `npm run android`** if you need native Google Sign-In (see below).
-
-Clear cache if the bundle looks stale:
-
-```bash
-npx expo start --clear
-```
-
-### 5. Native Android debug build (recommended for full features)
-
-Google Sign-In and other native modules need a custom native build, not Expo Go:
-
-```bash
-npx expo prebuild
-npm run android
-# or: npx expo run:android
-```
-
-`android/` is generated and gitignored — each developer runs prebuild locally.
+1. [Architecture](#architecture)
+2. [Repository layout](#repository-layout)
+3. [Setup](#setup)
+4. [Running the apps](#running-the-apps)
+5. [Local test mode (emulator)](#local-test-mode-emulator)
+6. [Tests and checks](#tests-and-checks)
+7. [How we work](#how-we-work)
+8. [Deploying and releasing](#deploying-and-releasing)
+9. [CI one-time setup](#ci-one-time-setup)
+10. [Troubleshooting](#troubleshooting)
+11. [Docs index](#docs-index)
 
 ---
 
-## Google Sign-In
-
-| Client | How auth works |
-|--------|----------------|
-| **Dev / release APK** | Native `@react-native-google-signin/google-signin` + `google-services.json` + SHA-1 registered in Firebase |
-
-If Google Sign-In fails with `DEVELOPER_ERROR` on Android, register your **debug** or **release** SHA-1 in Firebase:
-
-```bash
-# Debug keystore (after prebuild)
-keytool -list -v -keystore android/app/debug.keystore -alias androiddebugkey -storepass android
-
-# Release upload keystore (once you have the private keystore file)
-npm run release:sha1
-```
-
-Add that SHA-1 under Firebase → Project settings → Your Android app (`com.example.expensetracker`).
-
----
-
-## Env reference
-
-| Variable | Required | Notes |
-|----------|----------|--------|
-| `EXPO_PUBLIC_APP_URL` | Yes (share links / Expo Go Google) | Public Netlify/web origin |
-| `EXPO_PUBLIC_FIREBASE_*` | Yes | Client Firebase config |
-| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Yes (Google Sign-In) | OAuth **Web** client ID |
-| `EXPO_PUBLIC_MARKET_API_URL` | No | Override market API origin |
-| `EXPO_PUBLIC_PERF_MARKS` | No | Set `1` to log perf marks in release |
-| `MYAPP_RELEASE_STORE_PASSWORD` | Release only | Unlock upload keystore |
-| `MYAPP_RELEASE_KEY_PASSWORD` | Release only | Unlock key alias |
-
-Do **not** put server secrets (`TWELVE_DATA`, `CRON_SECRET`, service-account JSON, etc.) in mobile `.env`.
-
----
-
-## Automated releases (CI/CD)
-
-Android releases are **manual**. From GitHub: **Actions → Android Release → Run workflow**. That builds a signed APK, ships it to Firebase App Distribution, and tells installed apps that an update exists. Workflow: `.github/workflows/android-release.yml`. Merges to `main` do not start a build.
+## Architecture
 
 ```text
-Actions → Run workflow  ->  GitHub Actions  ->  signed APK
-                                                  |
-                                                  +->  GitHub Releases (android-v{name}-{code})  ->  in-app download
-                                                  +->  Firebase Storage (optional)              ->  in-app download
-                                                  +->  Firestore system_settings/latest_release ->  in-app prompt
-                                                  +->  Firebase App Distribution                ->  tester email
+            ┌──────────────────────────── Android app (native Firebase SDK, durable on-device cache)
+ Client ────┤
+            └──────────────────────────── Web app (Firebase JS SDK)
+                │            │                 │
+          writes + live   history/report     /api/* calls
+          reads           reads (opt-in)       │
+                ▼            ▼                 ▼
+        Firebase         Supabase           Netlify Functions
+        Auth + Firestore read model         market data, screener, stock history,
+        (source of       (read-only copy,   account deletion, nutrition AI,
+         truth)           synced nightly    Ganesh summary/draw, read-model push
+                          + per write)
 ```
 
-### One-time setup
+| Piece | Where | Notes |
+|---|---|---|
+| **Firebase Auth + Firestore** | project `expenseapp-27f94` | The **only** write path and the source of truth. Rules in `firestore.rules`, indexes in `firestore.indexes.json`. **Dev and prod share one project; there is no staging.** |
+| Native Firebase | `@react-native-firebase/*` 24.0.0 | Android uses the native SDK (`lib/*.native.ts`) for a durable offline cache; web uses the JS SDK (`lib/*.ts`). Metro picks the right file per platform. |
+| **Supabase read model** | `supabase-readmodel/` | Read-only copy of Firestore for history, report and filter screens. Reads go through `lib/readModel/screenReadPath.ts` behind a per-screen switch that defaults to Firestore. Current balances never come from here. See [`docs/READ_MODEL_RULES.md`](docs/READ_MODEL_RULES.md) and [`docs/READMODEL_RUNBOOK.md`](docs/READMODEL_RUNBOOK.md). |
+| Supabase storage | `supabase/` | File buckets (`spendly-files`, `ganesh-files`) behind edge functions. |
+| **Netlify** | `netlify/functions/`, `netlify.toml` | Hosts the web apps and the `/api/*` functions. Native builds call the same site. |
+| Cloud Functions | `functions/` | Ganesh Seva festival summary maintenance only. |
 
-**1. Repository secrets** (Settings → Secrets and variables → Actions → Secrets)
+### Rules that keep money correct
+
+- Financial correctness beats convenience. Never invent balances, transactions or schemas.
+- Don't recompute authoritative totals in UI components, and don't add a parallel ledger.
+- Writes go to Firestore only and stamp `createdAt` / `updatedAt`.
+- No bulk data fixes or migrations without a dry run, a variance report and explicit approval. Remember: the Firebase project is production.
+- User-facing errors and logging go through `lib/errors.ts`.
+
+---
+
+## Repository layout
+
+| Path | What's there |
+|---|---|
+| `app/` | Expo Router screens, grouped per app (see the table at the top) |
+| `components/` | UI. Shared wrappers live in `components/ui` and `components/common`; reuse them instead of adding new UI systems |
+| `hooks/`, `providers/` | React hooks and context providers |
+| `lib/` | Platform adapters (Firebase, auth, storage), errors, read model, utilities |
+| `shared/` | Pure, tested domain logic: finance calculations, mutations, features (EPF, goals…) |
+| `services/` | Data services that talk to Firestore and the network |
+| `theme/`, `constants/`, `assets/` | Design tokens, palettes, branding and artwork |
+| `products/` | Per-app config (name, version, package, icons, web base path) |
+| `modules/`, `plugins/`, `patches/` | Local native modules, Expo config plugins, `patch-package` patches |
+| `firestore/` | Firestore rules tests |
+| `netlify/functions/` | Serverless API endpoints (with tests) |
+| `supabase-readmodel/` | Read-model migrations, sync, drills and reports |
+| `scripts/` | Build, release, emulator and verification scripts |
+| `docs/` | Design docs, story docs (`SPENDLY-<n>-*.md`), runbooks and audits |
+| `design/` | Design references (`design/references/DESIGN.md` is the Expense design guide) |
+
+`android/` and `ios/` are generated by `npx expo prebuild`. Don't hand-edit them: prebuild overwrites them.
+
+---
+
+## Setup
+
+### Prerequisites
+
+- **Node.js 22** (the version CI uses) and npm
+- Git
+- For Android: Android Studio, the Android SDK with `ANDROID_HOME` set, **JDK 21**, and an emulator or a phone with USB debugging
+- Firebase CLI (`npm i -g firebase-tools`) for the emulator and rules tests
+- iOS is configured but not shipped; it needs macOS and Xcode
+
+### Install
+
+```bash
+git clone https://github.com/chkesava/expense-tracker-mobile-application-.git
+cd expense-tracker-mobile-application-
+npm ci          # also applies patches/ via patch-package
+```
+
+### Environment file
+
+Copy `.env.example` to `.env` and ask a teammate for the values (or run `npm run env:copy-from-web` to map them from the legacy web project).
+
+| Variable | Used for |
+|---|---|
+| `EXPO_PUBLIC_FIREBASE_API_KEY`, `_AUTH_DOMAIN`, `_PROJECT_ID`, `_STORAGE_BUCKET`, `_MESSAGING_SENDER`, `_APP_ID` | Firebase (web SDK) |
+| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Google sign-in (OAuth **web** client ID) |
+| `EXPO_PUBLIC_APP_URL`, `EXPO_PUBLIC_SHARE_URL` | Netlify site for `/api/*` calls and share links |
+| `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase file storage |
+| `EXPO_PUBLIC_READMODEL_SUPABASE_URL`, `EXPO_PUBLIC_READMODEL_SUPABASE_PUBLISHABLE_KEY` | Supabase read model |
+| `MYAPP_RELEASE_STORE_PASSWORD`, `MYAPP_RELEASE_KEY_PASSWORD` | Local signed release builds only |
+
+`EXPO_PUBLIC_*` values are embedded in every build, so they are not secrets; security comes from Firestore rules and Supabase RLS. **Never commit** `.env`, `.env.release`, keystores, service-account JSON or APKs.
+
+---
+
+## Running the apps
+
+### Pick an app
+
+`EXPO_PUBLIC_PRODUCT` selects which app you build:
+
+| Value | Result |
+|---|---|
+| `expense`, `nutrition`, `ganesh` | Only that app's routes, name, icons and package |
+| *(unset)* | Legacy combined build with all three apps' routes |
+
+```bash
+# bash
+EXPO_PUBLIC_PRODUCT=ganesh npx expo start --web
+```
+```powershell
+# PowerShell
+$env:EXPO_PUBLIC_PRODUCT = "ganesh"; npx expo start --web
+```
+
+### Web (fastest loop)
+
+```bash
+npm run web                 # Expo dev server, opens in the browser
+```
+
+### Android
+
+Expo Go **does not work**: the app uses native modules (native Firebase, Google sign-in). Use a development build:
+
+```bash
+npx expo prebuild           # generates android/ (wipes local edits there)
+npm run android             # build, install and start the dev client
+```
+
+> Prebuild regenerates `android/` and drops release-signing edits in `build.gradle` / `gradle.properties`. If you build signed releases locally, back those up first.
+
+Running a dev build against your `.env` talks to **production** Firebase. For UI testing with fake data, use local test mode instead.
+
+---
+
+## Local test mode (emulator)
+
+**Spendly Test** is a separate Android app (`com.example.expensetracker.localtest`) that installs next to the real one and talks only to the Firebase Local Emulator Suite, with seeded demo data. Use it for all on-device QA.
+
+```bash
+npm run emulators:local     # keep running; data persists in .emulator-data/
+npm run emulators:seed      # once, or any time to reset the demo account
+npm run android:test-build  # ~8 min → dist/Spendly-Test.apk
+npm run android:install     # install + AOT compile
+npm run device:reverse      # after every USB reconnect
+```
+
+Sign in with `demo@spendly.test` / `spendly-demo`. Google sign-in, push and Netlify/Supabase/market calls are unavailable in the test app. Full guide: [`docs/LOCAL_TEST_MODE.md`](docs/LOCAL_TEST_MODE.md).
+
+---
+
+## Tests and checks
+
+| Command | What it checks |
+|---|---|
+| `npx vitest run <path>` | One test file or folder (run this first) |
+| `npm test` | Full Vitest suite |
+| `npm run typecheck` | TypeScript for the app |
+| `npm run typecheck:shared` | TypeScript for `shared/` |
+| `npm run test:rules` | Firestore rules against the emulator |
+| `npm run perf:verify` | Performance budgets |
+
+**PR Checks** runs on every pull request, including the Firestore rules tests. It must pass before merging. The rules tests run again before every web deploy, rules deploy and release.
+
+---
+
+## How we work
+
+The full rules are in [`docs/AGENT_WORKFLOW.md`](docs/AGENT_WORKFLOW.md), which both developers and AI agents follow (`CLAUDE.md` and `AGENTS.md` point to it). In short:
+
+- Work is tracked in Jira (`SPENDLY-<n>`). Branches go `main` → epic branch (`feature/SPENDLY-<epic>-<slug>`) → one branch per story (`feature/SPENDLY-<story>-<slug>`).
+- Each story gets a doc at `docs/SPENDLY-<story>-<slug>.md` and focused tests.
+- Ask before merging a story into its epic branch. The epic reaches `main` through a PR once all its stories are in.
+- A ticket moves to **Done** only when its changes reach `main`.
+- **Ganesh Seva UI** work follows the design rules in `CLAUDE.md` and [`docs/GANESH_SEVA_UI_REDESIGN.md`](docs/GANESH_SEVA_UI_REDESIGN.md). Never change shared UI in a way that affects Expense or Nutrition.
+- Read the Expo SDK 57 docs before writing Expo code: https://docs.expo.dev/versions/v57.0.0/
+
+---
+
+## Deploying and releasing
+
+**Merging to `main` deploys nothing.** Every deploy is a manual GitHub Actions workflow. After a merge, check the story doc and [`docs/AFTER_MERGE_CHECKLIST.md`](docs/AFTER_MERGE_CHECKLIST.md) for what it needs.
+
+| Workflow | When to run it | What it does |
+|---|---|---|
+| **Release — Expense / Nutrition / Ganesh** | App code changed | Builds a signed APK for that app, publishes a GitHub Release, writes the update record so installed apps prompt users, and sends it to Firebase App Distribution. Inputs: `version` (empty = auto patch bump from `products/<app>.json`), `notes`, `mandatory`. |
+| **Deploy Web (Netlify)** | Web app or `netlify/functions/` changed | Runs the rules gate, builds all web apps and functions, and deploys to Netlify. New `/api/*` endpoints only exist after this. |
+| **Deploy Firestore rules** | `firestore.rules` / `firestore.indexes.json` changed | Manual run deploys. The nightly scheduled run never deploys: it fails if live rules/indexes differ from the repo, and runs a production access probe. |
+| Read-model schema | Runs on read-model changes | Tests the migrations on a throwaway Postgres (tables, RLS, grants). It does **not** touch production. Apply new migrations to the read-model project yourself, as described in [`docs/READMODEL_RUNBOOK.md`](docs/READMODEL_RUNBOOK.md). |
+| Read-model sync / sync health | Scheduled | Nightly Firestore → Supabase sync and its health check. |
+| Android Release | Don't use | Legacy combined-app build, kept for reference. |
+
+**Order matters** when rules change. If new rules *tighten* writes, release the apps first and deploy rules after, so old builds aren't denied. If new rules *allow* a new write, deploy rules first. Native-module changes (new native dependency or config plugin) need a full release; release Expense first and check it on a device before Nutrition and Ganesh.
+
+### How users get updates
+
+The release writes `system_settings/latest_release` in Firestore. The app compares its own `versionCode` (`hooks/useAppUpdate.ts`), shows `components/UpdateAvailableSheet.tsx`, downloads the APK from the GitHub Release and opens Android's install sheet. Mandatory updates can't be dismissed. Settings → App version has a manual check.
+
+---
+
+## CI one-time setup
+
+Repository secrets (Settings → Secrets and variables → Actions):
 
 | Secret | Value |
-|--------|-------|
-| `ANDROID_KEYSTORE_BASE64` | Base64 of `keystores/expense-tracker-upload-key.keystore` |
-| `ANDROID_KEYSTORE_PASSWORD` | Keystore password |
-| `ANDROID_KEY_PASSWORD` | Key alias password |
-| `FIREBASE_SERVICE_ACCOUNT` | Service account JSON (see below) |
-| `MOBILE_ENV_FILE` | *(optional)* Full contents of your local `.env` |
-| `EXPO_PUBLIC_APP_URL` | Same as local `.env` |
-| `EXPO_PUBLIC_FIREBASE_API_KEY` | Same as local `.env` |
-| `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN` | Same as local `.env` |
-| `EXPO_PUBLIC_FIREBASE_PROJECT_ID` | Same as local `.env` |
-| `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` | Same as local `.env` |
-| `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER` | Same as local `.env` |
-| `EXPO_PUBLIC_FIREBASE_APP_ID` | Same as local `.env` |
-| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Google OAuth **Web** client ID |
-| `GEMINI_API_KEY` (Netlify site env only) | Nutrition AI proxy (SPENDLY-24). Never `EXPO_PUBLIC_`. |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | Base64 of the upload keystore |
+| `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_PASSWORD` | Keystore and key passwords |
+| `FIREBASE_SERVICE_ACCOUNT` | CI service-account JSON (least privilege, never Owner) |
+| `MOBILE_ENV_FILE` *(or the individual `EXPO_PUBLIC_*` secrets)* | Contents of a production `.env` |
+| `EXPO_PUBLIC_SUPABASE_*`, `EXPO_PUBLIC_READMODEL_SUPABASE_PUBLISHABLE_KEY` | Supabase keys for release builds |
 
-Use either **`MOBILE_ENV_FILE`** or the individual `EXPO_PUBLIC_*` secrets (both work). If you use individual secrets, also add `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` so Google Sign-In works in release builds. Nutrition AI uses the Netlify `nutrition-ai` function and `GEMINI_API_KEY` on that site — not a client env var.
+The CI service account needs only: Firebase App Distribution Admin, Cloud Datastore User, Firebase Rules Admin, and Datastore Index Admin (for index deploys). Netlify-only secrets such as `GEMINI_API_KEY` (nutrition AI) live in the Netlify site env and are never `EXPO_PUBLIC_`.
 
-Generate the keystore secret on Windows:
+Encode the keystore on Windows:
 
 ```powershell
 [Convert]::ToBase64String([IO.File]::ReadAllBytes("keystores\expense-tracker-upload-key.keystore")) | Set-Clipboard
 ```
 
-**2. Repository variables** (same page → Variables tab)
-
-| Variable | Value |
-|----------|-------|
-| `FIREBASE_ANDROID_APP_ID` | `1:246872619658:android:4ecd4bcc317d14bb4c8b73` |
-| `VERSION_CODE_OFFSET` | `27` |
-
-`versionCode` is computed as `VERSION_CODE_OFFSET + github.run_number`, so it always increases without CI committing version bumps back to `main`.
-
-**3. Firebase service account**
-
-Google Cloud Console → IAM & Admin → Service Accounts → create one for CI, then grant **only**:
-
-- `Firebase App Distribution Admin` (upload builds)
-- `Cloud Datastore User` (write the release doc)
-- `Firebase Rules Admin` *(Deploy Firestore rules Action)* — compile (`:test`) and upload `firestore.rules`
-- `Service Usage Viewer` *(optional)* — `firebase deploy` probes this; the rules workflow seeds the CLI cache instead
-- `Storage Admin` *(optional)* — only if you later enable Firebase Storage
-
-Create a JSON key and paste the whole file into `FIREBASE_SERVICE_ACCOUNT`. Do not reuse an Owner-level key.
-
-**4. Firebase App Distribution**
-
-Enable it in the Firebase Console and create a tester group named `testers`. Each user accepts an email invite once and installs the Firebase App Tester app.
-
-### What is and is not secret
-
-Your `EXPO_PUBLIC_FIREBASE_*` values, the Google web client ID, and `google-services.json` are **not** secrets — they are already committed and are embedded in every APK. Firebase security comes from Firestore rules plus the package name and SHA-1 restrictions. Only the keystore, its passwords, and the service account are genuinely sensitive.
-
-The workflow deliberately never triggers on `pull_request`: fork PRs would otherwise gain access to the signing keystore.
-
-### Triggering a release
-
-Actions tab → **Android Release** → **Run workflow**, with optional inputs:
-- `version` — version name, e.g. `1.2.0` (defaults to auto-bumped patch from `app.json`)
-- `notes` — release notes shown to testers and in the update prompt (defaults to the latest commit subject)
-- `mandatory` — set `true` to make the in-app prompt non-dismissible
-
-### How users get the update
-
-`scripts/publish-release-metadata.js` attaches the APK to a public GitHub Release and writes `system_settings/latest_release` in Firestore. Firebase Storage is tried as well; a missing bucket no longer fails the job.
-
-```json
-{
-  "versionName": "1.2.0",
-  "versionCode": 42,
-  "downloadUrl": "https://github.com/chkesava/expense-tracker-mobile-application-/releases/download/android-v1.2.0-42/Spendly-1.2.0-42.apk",
-  "storagePath": "",
-  "testerUrl": "https://appdistribution.firebase.dev/i/...",
-  "notes": "Fixed ledger totals",
-  "mandatory": false
-}
-```
-
-The app compares that `versionCode` against its own (`hooks/useAppUpdate.ts`) and shows `components/UpdateAvailableSheet.tsx`. Tapping **Update** downloads the APK and opens the system Install sheet. Optional updates can be dismissed once per version; mandatory ones cannot. Settings → App version also offers a manual "Check for updates".
-
-You can test the publisher without writing to Firestore:
-
-```bash
-node scripts/publish-release-metadata.js --apk-path=releases/app-release.apk --dry-run
-```
-
-### Cost and quota notes
-
-An Android build takes roughly 15-25 minutes. On GitHub Free, a private repo gets 2000 Actions minutes/month (about 80-130 builds). APK artifacts are kept for 7 days to protect the 500 MB storage quota.
-
----
-
-## Release / signed APK (manual, local)
-
-Only needed if you build a signed APK locally instead of via CI.
-
-### Extra files (share privately, never commit)
-
-1. Place the upload keystore at:
-
-   ```text
-   keystores/expense-tracker-upload-key.keystore
-   ```
-
-2. Put passwords in `.env` and/or `.env.release`:
-
-   ```env
-   MYAPP_RELEASE_STORE_PASSWORD=...
-   MYAPP_RELEASE_KEY_PASSWORD=...
-   ```
-
-   Default key alias: `expense-tracker-upload`.
-
-3. Ensure Android SDK + JDK are available (`ANDROID_HOME`).
-
-### Build
-
-```bash
-npm run release:verify   # SDK, keystore, google-services, gradle wiring
-npm run release          # prepare + build pipeline
-```
-
-Or step by step:
-
-```bash
-npm run release:prepare
-npm run release:build
-npm run release:report
-```
-
-Signed APKs land under `releases/` (APK files are gitignored; share via Drive/email if needed).
-
-### EAS cloud build (alternative)
-
-```bash
-npm install -g eas-cli
-eas login
-eas build --platform android --profile preview
-```
-
-See `eas.json` for `development` / `preview` / `production` profiles.
-
----
-
-## Useful scripts
-
-| Command | What it does |
-|---------|----------------|
-| `npm start` | Expo dev server |
-| `npm run android` | Native Android run |
-| `npm run ios` | Native iOS run (macOS) |
-| `npm run web` | Expo web |
-| `npm test` | Vitest |
-| `npm run typecheck` | TypeScript check |
-| `npm run env:copy-from-web` | Map web `VITE_*` → mobile `.env` |
-| `npm run release` | Full local release pipeline |
-| `npm run release:sha1` | Print release keystore SHA-1 |
-| `npm run release:publish` | Publish release metadata to Firestore (used by CI) |
-
-More day-to-day tips: `docs/react_native_handbook.md`.
+Release workflows never run on `pull_request`, so fork PRs can't reach the signing key. Local signed builds (`npm run release:verify`, `npm run release`) need the keystore in `keystores/`. Ask a teammate for it, and never generate a new one, because the existing signature must match.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Fix |
-|---------|-----|
-| Firebase “not configured” / auth fails | Ensure `.env` exists and all `EXPO_PUBLIC_FIREBASE_*` values are set; restart Metro (`npx expo start --clear`) |
-| `RNGoogleSignin could not be found` | You are in Expo Go — use `npm run android` / a dev build |
-| Google `DEVELOPER_ERROR` | Register the app’s SHA-1 in Firebase; confirm package `com.example.expensetracker` |
-| Missing `google-services.json` after prebuild | Keep root `google-services.json`; re-run `npx expo prebuild` |
-| Release verify fails on keystore | Obtain `keystores/expense-tracker-upload-key.keystore` + passwords from a teammate |
-| Stale JS after env change | Restart Expo with `--clear` (env is inlined at bundler start) |
-| CI fails at "Restore .env" or "Restore signing keystore" | The matching repository secret is missing or empty |
-| CI build succeeds but testers get nothing | Enable Firebase App Distribution and create the `testers` group |
-| Update prompt never appears | Confirm `system_settings/latest_release` exists, you are signed in, and Firestore rules for `system_settings` are deployed |
-| Check for updates says no release information | Deploy `firestore.rules` (signed-in read on `system_settings`) and confirm CI published the release doc |
-| Workflow red after testers already got the APK | Older releases required Firebase Storage. Current CI hosts the APK on GitHub Releases and still writes Firestore — re-run Android Release after merging that fix |
-| In-app download fails / opens the tester webpage | Confirm `latest_release.downloadUrl` is a GitHub `releases/download/...apk` link, not the App Distribution webpage |
-| Update install fails with a signature error | The APK was signed with a different keystore — CI must use the same upload keystore |
+| Problem | Fix |
+|---|---|
+| `RNGoogleSignin` / `RNFBAppModule` not found | You're in Expo Go. Use `npm run android` (dev build) |
+| Firebase "not configured" | Check every `EXPO_PUBLIC_FIREBASE_*` in `.env`, then `npx expo start --clear` |
+| Stale bundle or odd Metro errors | `npx expo start --clear` |
+| `npm ci` fails with EPERM / EBUSY on Windows | A running Expo/Metro process is locking `node_modules`. Stop it and rerun |
+| Google sign-in fails on a new machine or keystore | Add its SHA-1 (`npm run release:sha1`, or `cd android && ./gradlew signingReport`) to the Firebase Android app |
+| A market/screener tab says "unavailable" | The Netlify functions aren't deployed yet. Run **Deploy Web (Netlify)** |
+| Release signing lost after prebuild | Restore your backed-up `android/app/build.gradle` and `gradle.properties` |
 
 ---
 
-## Project layout (high level)
+## Docs index
 
-```text
-app/                 Expo Router screens
-components/          UI
-hooks/               Data / Firebase hooks
-lib/                 Firebase, env, auth helpers
-providers/           App providers
-assets/              Branding / icons
-scripts/             Release + env helpers
-.github/workflows/   CI: build, distribute, announce releases
-docs/                Migration / auth / perf notes
-google-services.json Firebase Android config
-.env.example         Env template (committed)
-.env                 Local secrets (gitignored)
-```
+| Topic | Doc |
+|---|---|
+| Team/agent workflow | [`docs/AGENT_WORKFLOW.md`](docs/AGENT_WORKFLOW.md) |
+| After-merge steps | [`docs/AFTER_MERGE_CHECKLIST.md`](docs/AFTER_MERGE_CHECKLIST.md) |
+| Firestore rules deploy | [`docs/FIREBASE_RULES_DEPLOY.md`](docs/FIREBASE_RULES_DEPLOY.md) |
+| Read model rules / runbook | [`docs/READ_MODEL_RULES.md`](docs/READ_MODEL_RULES.md), [`docs/READMODEL_RUNBOOK.md`](docs/READMODEL_RUNBOOK.md) |
+| Local test mode | [`docs/LOCAL_TEST_MODE.md`](docs/LOCAL_TEST_MODE.md) |
+| Three-app split | [`docs/MULTI_APP_SEPARATION_ANALYSIS.md`](docs/MULTI_APP_SEPARATION_ANALYSIS.md) |
+| Native Firestore cache | [`docs/SPENDLY-633-native-firestore-cache.md`](docs/SPENDLY-633-native-firestore-cache.md) |
+| Ganesh Seva UI | [`docs/GANESH_SEVA_UI_REDESIGN.md`](docs/GANESH_SEVA_UI_REDESIGN.md) |
+| Expense design guide | [`design/references/DESIGN.md`](design/references/DESIGN.md) |
+| A specific feature | `docs/SPENDLY-<ticket>-*.md` or `docs/KAN-<ticket>-*.md` |
 
 ---
 
-## Security checklist for teammates
-
-- [ ] Clone the repo
-- [ ] `npm install`
-- [ ] Create `.env` from `.env.example` (get values from the team — do not invent a second Firebase project unless intentional)
-- [ ] Run `npm start` or `npm run android`
-- [ ] For release builds only: obtain the **same** upload keystore + passwords offline
-- [ ] Never commit `.env`, `.env.release`, `*.keystore`, or `releases/*.apk`
+License: see [`LICENSE`](LICENSE).

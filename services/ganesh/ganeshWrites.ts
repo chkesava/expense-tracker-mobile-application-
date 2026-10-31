@@ -19,7 +19,7 @@ import {
   type DocumentData,
   type Transaction,
   type WriteBatch,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { DEFAULT_GANESH_CATEGORIES } from "@/shared/data/ganeshCategories";
 import { purposeForCategoryName } from "@/shared/utils/ganeshMoneyPurpose";

@@ -1,4 +1,4 @@
-import { collection, getDocs, limit, query, where, type Firestore } from "firebase/firestore";
+import { collection, getDocs, limit, query, where, type Firestore } from "@/lib/firestore";
 
 import type { GaneshSponsorship } from "@/shared/types/ganesh";
 import { festivalCol } from "@/shared/utils/ganeshPaths";

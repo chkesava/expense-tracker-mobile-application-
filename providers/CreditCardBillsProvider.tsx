@@ -10,7 +10,7 @@ import {
   setDoc,
   runTransaction,
   updateDoc,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 import {
   createContext,
   useCallback,

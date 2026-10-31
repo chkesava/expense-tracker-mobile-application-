@@ -1,4 +1,4 @@
-import type { User } from "firebase/auth";
+import type { User } from "@/lib/auth";
 
 import { duressUid } from "@/shared/utils/duress";
 

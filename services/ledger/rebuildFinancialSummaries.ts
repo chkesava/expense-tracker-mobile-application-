@@ -1,4 +1,4 @@
-import { collection, deleteField, doc, getDoc, getDocs, query, where, writeBatch, serverTimestamp } from "firebase/firestore";
+import { collection, deleteField, doc, getDoc, getDocs, query, where, writeBatch, serverTimestamp } from "@/lib/firestore";
 import { getFirestoreDb } from "@/lib/firebase";
 import type { Account, Expense, Income, AccountPayment, AccountEntry, AccountTransfer } from "@/shared/types/expense";
 import type { Borrowing, BorrowingRepayment } from "@/shared/types/borrowing";

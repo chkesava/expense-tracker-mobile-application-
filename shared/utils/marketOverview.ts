@@ -75,22 +75,66 @@ export function chartMeta(payload: unknown): YahooIndexMeta | null {
   return meta && typeof meta === "object" ? (meta as YahooIndexMeta) : null;
 }
 
+const IST_MS = 19_800_000;
+const istDay = (ms: number) => Math.floor((ms + IST_MS) / 86_400_000);
+
 /**
- * One index from its chart meta. `null` when the provider gave no usable
- * price, previous close or trade time: the index is then hidden, because a
- * change computed against a guessed baseline would be invented.
+ * The previous session's close from a `range=5d&interval=1d` chart payload
+ * (SPENDLY-659): the daily close before the latest trade's session. Normally
+ * that is the second-to-last bar; if the provider hasn't added a bar for the
+ * latest trade's session yet, it is the last bar. `null` without that history.
+ *
+ * Yahoo's `chartPreviousClose` is deliberately not used for indices: on
+ * 30 Oct 2026 it held the close from two sessions earlier (NIFTY 50 read
+ * +1.56% instead of +0.51%; NIFTY BANK even the wrong sign).
+ */
+export function dailyPreviousClose(payload: unknown, tradeSec: number | null): number | null {
+  const result = (payload as { chart?: { result?: unknown } } | null)?.chart?.result;
+  const r = Array.isArray(result) ? (result[0] as { timestamp?: unknown; indicators?: { quote?: { close?: unknown }[] } }) : null;
+  const times = Array.isArray(r?.timestamp) ? (r?.timestamp as unknown[]) : [];
+  const closes = Array.isArray(r?.indicators?.quote?.[0]?.close) ? (r?.indicators?.quote?.[0]?.close as unknown[]) : [];
+  const bars: { t: number; c: number }[] = [];
+  for (let i = 0; i < Math.min(times.length, closes.length); i += 1) {
+    const t = finite(times[i]);
+    const c = finite(closes[i]);
+    if (t != null && c != null && c > 0) bars.push({ t: t * 1000, c: Math.round(c * 100) / 100 });
+  }
+  bars.sort((a, b) => a.t - b.t);
+  if (bars.length === 0) return null;
+  const last = bars[bars.length - 1];
+  if (tradeSec != null && istDay(tradeSec * 1000) > istDay(last.t)) return last.c;
+  return bars.length >= 2 ? bars[bars.length - 2].c : null;
+}
+
+/**
+ * One index from a 5-day daily chart payload: price, day range, session and
+ * trade time from `meta`, the previous close from the daily bars.
+ */
+export function indexReadingFromChart(
+  payload: unknown,
+  index: { symbol: MarketIndexSymbol; name: string }
+): IndexReading | null {
+  const meta = chartMeta(payload);
+  return indexReadingFromMeta(meta, index, dailyPreviousClose(payload, finite(meta?.regularMarketTime)));
+}
+
+/**
+ * One index from its chart meta and its previous session close. `null` when
+ * there is no usable price, previous close or trade time: the index is then
+ * hidden, because a change computed against a guessed baseline would be
+ * invented.
  */
 export function indexReadingFromMeta(
   meta: YahooIndexMeta | null | undefined,
-  index: { symbol: MarketIndexSymbol; name: string }
+  index: { symbol: MarketIndexSymbol; name: string },
+  previousClose: number | null
 ): IndexReading | null {
   if (!meta) return null;
   const price = finite(meta.regularMarketPrice);
-  const previousClose = finite(meta.chartPreviousClose) ?? finite(meta.previousClose);
   const tradeSec = finite(meta.regularMarketTime);
   if (price == null || previousClose == null || previousClose <= 0 || tradeSec == null) return null;
 
-  const change = price - previousClose;
+  const change = Math.round((price - previousClose) * 10_000) / 10_000;
   const start = finite(meta.currentTradingPeriod?.regular?.start);
   const end = finite(meta.currentTradingPeriod?.regular?.end);
   const hasSession = start != null && end != null && end > start;
@@ -104,7 +148,7 @@ export function indexReadingFromMeta(
       price,
       previousClose,
       change,
-      changePercent: (change / previousClose) * 100,
+      changePercent: Math.round((change / previousClose) * 100 * 10_000) / 10_000,
       dayHigh: finite(meta.regularMarketDayHigh),
       dayLow: finite(meta.regularMarketDayLow),
       asOf: new Date(lastTradeMs).toISOString(),

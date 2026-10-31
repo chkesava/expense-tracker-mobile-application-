@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { MarketOverviewDTO, MoverDTO } from "../types/market";
 import { SESSION_END_SEC, SESSION_START_SEC, indexChart } from "./marketOverview.fixtures";
-import { MARKET_INDICES, buildMarketOverview, chartMeta, indexReadingFromMeta } from "./marketOverview";
+import { MARKET_INDICES, buildMarketOverview, indexReadingFromChart } from "./marketOverview";
 import {
   formatPoints,
   formatSignedPct,
@@ -24,7 +24,7 @@ const END_MS = SESSION_END_SEC * 1000;
 const AFTER_CLOSE = END_MS + 10 * MIN;
 
 const reading = (symbol: string, tradeSec = SESSION_END_SEC + 71) =>
-  indexReadingFromMeta(chartMeta(indexChart(symbol, { tradeSec })), MARKET_INDICES.find((i) => i.symbol === symbol)!);
+  indexReadingFromChart(indexChart(symbol, { tradeSec }), MARKET_INDICES.find((i) => i.symbol === symbol)!);
 
 const mover = (symbol: string, name: string, price: number, prev: number): MoverDTO => ({
   symbol,
@@ -83,14 +83,14 @@ describe("indexView", () => {
     expect(v).toMatchObject({
       name: "NIFTY 50",
       value: "23,053.10",
-      change: "+354.30",
-      changePercent: "+1.56%",
+      change: "+116.35",
+      changePercent: "+0.51%",
       direction: "up",
       dayRange: "22,905.10 – 23,118.10",
       asOf: "15:31 IST",
     });
     expect(v.value).not.toContain("₹");
-    expect(v.accessibilityLabel).toBe("NIFTY 50 23,053.10, up 354.30 points, 1.56 percent, as of 15:31 IST");
+    expect(v.accessibilityLabel).toBe("NIFTY 50 23,053.10, up 116.35 points, 0.51 percent, as of 15:31 IST");
   });
 
   it("leaves out a missing day range", () => {
@@ -218,7 +218,7 @@ describe("instrument sheet (SPENDLY-646)", () => {
       title: "NIFTY 50",
       subtitle: "Index · as of 15:31 IST",
       value: "23,053.10",
-      move: "+354.30 (+1.56%)",
+      move: "+116.35 (+0.51%)",
       direction: "up",
     });
     expect(instrumentHeader(stock)).toEqual({

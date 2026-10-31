@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot } from "@/lib/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
 import { LISTEN_WITH_SYNC_STATE, onlyMetadataChanged } from "@/lib/firestoreSyncState";

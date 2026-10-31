@@ -9,6 +9,8 @@ import {
   classifyFreshness,
   formatIstTime,
   freshnessLabel,
+  dailyPreviousClose,
+  indexReadingFromChart,
   indexReadingFromMeta,
   isMarketOverview,
   marketStateAt,
@@ -29,7 +31,7 @@ const DISABLED = { available: false, reason: "DISABLED" } as const;
 
 const reading = (symbol: string, opts: IndexChartOptions = {}) => {
   const index = MARKET_INDICES.find((i) => i.symbol === symbol)!;
-  return indexReadingFromMeta(chartMeta(indexChart(symbol, opts)), index);
+  return indexReadingFromChart(indexChart(symbol, opts), index);
 };
 
 const status = (over: Partial<MarketStatusDTO> = {}): MarketStatusDTO => ({
@@ -40,7 +42,7 @@ const status = (over: Partial<MarketStatusDTO> = {}): MarketStatusDTO => ({
   ...over,
 });
 
-describe("indexReadingFromMeta", () => {
+describe("indexReadingFromChart (SPENDLY-659: previous close from daily bars)", () => {
   it("normalises real ^NSEI chart meta, using our display name", () => {
     const r = reading("^NSEI")!;
     expect(r.quote).toEqual({
@@ -48,9 +50,9 @@ describe("indexReadingFromMeta", () => {
       name: "NIFTY 50",
       currency: "INR",
       price: 23053.1,
-      previousClose: 22698.8,
-      change: expect.closeTo(354.3, 6),
-      changePercent: expect.closeTo(1.5609, 3),
+      previousClose: 22936.75,
+      change: 116.35,
+      changePercent: 0.5073,
       dayHigh: 23118.1,
       dayLow: 22905.1,
       asOf: new Date((SESSION_END_SEC + 71) * 1000).toISOString(),
@@ -63,16 +65,37 @@ describe("indexReadingFromMeta", () => {
     expect(reading("^BSESN")!.quote.name).toBe("SENSEX");
   });
 
-  it("falls back to previousClose when chartPreviousClose is missing", () => {
-    const r = reading("^NSEI", { meta: { chartPreviousClose: undefined, previousClose: 23000 } })!;
-    expect(r.quote.previousClose).toBe(23000);
+  it("ignores Yahoo's stale chartPreviousClose: the 30 Oct numbers are right for every index", () => {
+    expect(reading("^NSEI")!.quote).toMatchObject({ previousClose: 22936.75, change: 116.35, changePercent: 0.5073 });
+    expect(reading("^BSESN")!.quote).toMatchObject({ previousClose: 74151.04, change: 308.49, changePercent: 0.416 });
+    // NIFTY BANK fell; the stale field (54267.4) would have shown a rise.
+    expect(reading("^NSEBANK")!.quote).toMatchObject({ previousClose: 54909.65, change: -222.7, changePercent: -0.4056 });
+  });
+
+  it("hides an index with no daily history rather than guessing (never chartPreviousClose)", () => {
+    expect(reading("^NSEI", { daily: null })).toBeNull();
+    expect(reading("^NSEI", { daily: [23053.1] })).toBeNull();
+  });
+
+  it("uses the last bar when the latest trade is from a session the series doesn't have yet", () => {
+    // Trade on Mon 2 Nov (09:30 IST); the daily series still ends on Fri 30 Oct.
+    const mondayTrade = 1793331900 + 3 * 86_400 + 900;
+    expect(dailyPreviousClose(indexChart("^NSEI", { tradeSec: mondayTrade }), mondayTrade)).toBe(23053.1);
+    expect(dailyPreviousClose(indexChart("^NSEI"), 1793354471)).toBe(22936.75);
+  });
+
+  it("still finds the right previous close when the latest daily close is missing (the M&M gap)", () => {
+    // 30 Oct trade, but the 30 Oct daily close is null: the previous session is 29 Oct.
+    expect(dailyPreviousClose(indexChart("^NSEI", { daily: [22753.2, 22749.75, 22698.85, 22936.75, null] }), 1793354471)).toBe(22936.75);
+  });
+
+  it("skips missing daily closes", () => {
+    expect(dailyPreviousClose(indexChart("^NSEI", { daily: [22000, 22936.75, null, 23053.1] }), 1793354471)).toBe(22936.75);
   });
 
   it.each([
     ["no price", { regularMarketPrice: undefined }],
     ["NaN price", { regularMarketPrice: Number.NaN }],
-    ["no previous close", { chartPreviousClose: undefined }],
-    ["zero previous close", { chartPreviousClose: 0 }],
     ["no trade time", { regularMarketTime: undefined }],
   ])("hides the index rather than inventing a value: %s", (_label, meta) => {
     expect(reading("^NSEI", { meta })).toBeNull();
@@ -94,7 +117,8 @@ describe("indexReadingFromMeta", () => {
   it("rejects payloads without a chart result", () => {
     expect(chartMeta({ chart: { result: null, error: { code: "Not Found" } } })).toBeNull();
     expect(chartMeta(null)).toBeNull();
-    expect(indexReadingFromMeta(null, NIFTY)).toBeNull();
+    expect(indexReadingFromMeta(null, NIFTY, 100)).toBeNull();
+    expect(indexReadingFromChart(null, NIFTY)).toBeNull();
   });
 });
 

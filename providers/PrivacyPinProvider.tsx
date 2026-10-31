@@ -24,7 +24,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { deleteField, doc, setDoc } from "firebase/firestore";
+import { deleteField, doc, setDoc } from "@/lib/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
 import { logError } from "@/lib/errors";

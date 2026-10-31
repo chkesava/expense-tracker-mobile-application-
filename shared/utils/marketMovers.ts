@@ -61,6 +61,12 @@ export function isSparkPayload(payload: unknown): payload is YahooSparkPayload {
 /**
  * One stock from its spark entry, or `null`. The price is the newest non-null
  * close, its time the matching timestamp, and the baseline `chartPreviousClose`.
+ *
+ * SPENDLY-659: for **stocks** the 1-day `chartPreviousClose` matched the real
+ * previous close in every check; it was only stale for **indices** (fixed in
+ * marketOverview.ts). A 5-day series is not used here on purpose: it can miss
+ * the latest session's close (M&M on 30 Oct), which would price a stock at
+ * yesterday's close.
  */
 export function moverFromSpark(entry: YahooSparkEntry | null | undefined, stock: Nifty50Constituent): MoverDTO | null {
   if (!entry) return null;

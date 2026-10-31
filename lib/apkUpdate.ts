@@ -4,7 +4,7 @@
  */
 
 import { File, Directory, Paths } from "expo-file-system";
-import { getDownloadURL, ref } from "firebase/storage";
+import { getDownloadURL, ref } from "@/lib/storage";
 import { AppState, Linking, Platform } from "react-native";
 
 import ApkInstaller from "@/lib/apkInstaller";

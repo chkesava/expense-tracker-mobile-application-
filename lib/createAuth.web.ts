@@ -1,4 +1,4 @@
-import { getAuth, type Auth } from "firebase/auth";
+import { getAuth, type Auth } from "@/lib/auth";
 import type { FirebaseApp } from "firebase/app";
 
 /** Web Auth uses browser persistence by default. */

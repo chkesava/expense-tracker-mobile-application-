@@ -38,7 +38,11 @@ These rules sit beside `CLAUDE.md` (Spendly safety invariants) and `docs/AGENT_W
 
 ## 2. New collections and fields
 
-**Synced today (Wave 1):** `expenses`, `incomes`, `ledgerEvents`, `accounts`, `accountTypes`, `accountTransfers`, `accountEntries`, `accountPayments`, `creditCardBills`, `categories`. Everything else is **not** in the read model. Waves 2 and 3 (514–518) were closed as won't-do under the no-Blaze decision.
+**Synced today (12 collections):**
+- Wave 1: `expenses`, `incomes`, `ledgerEvents`, `accounts`, `accountTypes`, `accountTransfers`, `accountEntries`, `accountPayments`, `creditCardBills`, `categories`.
+- Save Goals (SPENDLY-609): `financialGoals`, `goalEvents`.
+
+Everything else is **not** in the read model. Waves 2 and 3 (514–518) were closed as won't-do under the no-Blaze decision.
 
 - **R2.1** A new collection is **not** synced unless the story says so. If it must be, all of these go in the same story:
   - a migration in `supabase-readmodel/supabase/migrations/`, with the contract columns (`uid`, `doc_id`, `doc`, `source_path`, `source_update_time`, `source_deleted`, `deleted_at`, `schema_version`, `mapping_status`, `synced_at`), a primary key `(uid, doc_id)`, `(uid, …)` indexes, RLS on, an owner-only SELECT policy, and `grant select … to authenticated`;

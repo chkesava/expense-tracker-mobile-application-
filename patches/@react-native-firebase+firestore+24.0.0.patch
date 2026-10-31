@@ -1,0 +1,13 @@
+diff --git a/node_modules/@react-native-firebase/firestore/android/src/main/java/io/invertase/firebase/firestore/UniversalFirebaseFirestoreModule.java b/node_modules/@react-native-firebase/firestore/android/src/main/java/io/invertase/firebase/firestore/UniversalFirebaseFirestoreModule.java
+--- a/node_modules/@react-native-firebase/firestore/android/src/main/java/io/invertase/firebase/firestore/UniversalFirebaseFirestoreModule.java
++++ b/node_modules/@react-native-firebase/firestore/android/src/main/java/io/invertase/firebase/firestore/UniversalFirebaseFirestoreModule.java
+@@ -169,6 +169,9 @@ public class UniversalFirebaseFirestoreModule extends UniversalFirebaseModule {
+       instanceCache.get(firestoreKey).clear();
+       instanceCache.remove(firestoreKey);
+     }
++    // Spendly (SPENDLY-638): the instance created after terminate() must be
++    // able to use the emulator again; otherwise useEmulator() is a no-op for it.
++    emulatorConfigs.remove(firestoreKey);
+ 
+     return firebaseFirestore.terminate();
+   }

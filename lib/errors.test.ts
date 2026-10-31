@@ -35,6 +35,19 @@ describe("errorCode", () => {
     expect(errorCode(null)).toBeUndefined();
     expect(errorCode({ code: 42 })).toBeUndefined();
   });
+
+  it("reads the native SDK's prefixed Firestore codes as the bare code (SPENDLY-638)", () => {
+    expect(errorCode(firebaseError("firestore/permission-denied"))).toBe("permission-denied");
+    expect(errorCode(firebaseError("firestore/unavailable"))).toBe("unavailable");
+    // Auth and Storage codes are prefixed on both SDKs and stay as they are.
+    expect(errorCode(firebaseError("storage/object-not-found"))).toBe("storage/object-not-found");
+  });
+
+  it("classifies a native permission error like the JS SDK one", () => {
+    expect(classifyError(firebaseError("firestore/permission-denied"))).toBe(
+      classifyError(firebaseError("permission-denied"))
+    );
+  });
 });
 
 describe("classifyError", () => {

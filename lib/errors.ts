@@ -26,11 +26,19 @@ export type ErrorKind =
 
 type CodedError = { code?: unknown; message?: unknown; name?: unknown };
 
-/** Reads a Firebase/Firestore-style `code` off an unknown thrown value. */
+/**
+ * Reads a Firebase/Firestore-style `code` off an unknown thrown value.
+ *
+ * SPENDLY-638: the native Firestore SDK prefixes its codes
+ * (`firestore/permission-denied`); the JS SDK does not. Both read as the bare
+ * code so every caller keeps matching one vocabulary. Auth (`auth/…`) and
+ * Storage (`storage/…`) codes are already prefixed the same on both SDKs.
+ */
 export function errorCode(error: unknown): string | undefined {
   if (!error || typeof error !== "object") return undefined;
   const code = (error as CodedError).code;
-  return typeof code === "string" ? code : undefined;
+  if (typeof code !== "string") return undefined;
+  return code.startsWith("firestore/") ? code.slice("firestore/".length) : code;
 }
 
 function rawMessage(error: unknown): string {

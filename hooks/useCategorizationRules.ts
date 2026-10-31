@@ -4,7 +4,7 @@ import {
   deleteDoc,
   doc,
   serverTimestamp,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";

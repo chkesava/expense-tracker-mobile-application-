@@ -1,4 +1,4 @@
-import type { Firestore } from "firebase/firestore";
+import type { Firestore } from "@/lib/firestore";
 
 import { logWarning } from "@/lib/errors";
 import { connectReadModel, type ReadModelUser } from "@/lib/readModelClient";

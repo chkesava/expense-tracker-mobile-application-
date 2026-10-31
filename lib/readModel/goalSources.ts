@@ -11,7 +11,7 @@ import {
   type QueryConstraint,
   type QueryDocumentSnapshot,
   type QuerySnapshot,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { logDirectRead } from "@/lib/firestoreReadDebug";
 import type { GoalEvent } from "@/shared/types/goal";

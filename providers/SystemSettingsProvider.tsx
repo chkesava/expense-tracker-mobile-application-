@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot } from "@/lib/firestore";
 
 import { logWarning } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";

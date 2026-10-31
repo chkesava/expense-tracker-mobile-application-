@@ -60,7 +60,7 @@ vi.mock("@/lib/id", () => ({
   newId: () => "generated-id",
 }));
 
-import { writeBatch } from "firebase/firestore";
+import { writeBatch } from "@/lib/firestore";
 
 import { executeMockBuy, executeMockSell } from "./investmentCash";
 

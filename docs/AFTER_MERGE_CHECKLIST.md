@@ -191,9 +191,12 @@ rules, if native users are still on the old write path.
 
 Web tokens need a reCAPTCHA Enterprise site key in
 `EXPO_PUBLIC_FIREBASE_APPCHECK_RECAPTCHA_KEY` (Netlify env + local `.env`).
-Android Play Integrity is **not** in this JS-SDK app — do **not** turn on
-Enforce in Firebase console → App Check until native clients send tokens, or
-Android users get `app-check-token` failures.
+Android: since SPENDLY-638 native builds run on `@react-native-firebase`,
+and Play Integrity is wired in `lib/appCheck.ts` but **off**
+(`NATIVE_APP_CHECK_ENABLED = false`, SPENDLY-637). Turning it on needs Play
+Integrity set up for each app in the Firebase console; do **not** turn on
+Enforce until native clients send tokens, or Android users get
+`app-check-token` failures.
 
 ---
 

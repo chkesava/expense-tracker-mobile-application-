@@ -52,6 +52,8 @@
       "expo-secure-store",
       "expo-local-authentication",
       "@react-native-google-signin/google-signin",
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
       [
         "expo-notifications",
         {

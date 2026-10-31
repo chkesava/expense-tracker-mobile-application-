@@ -1,4 +1,4 @@
-import { collection, doc } from "firebase/firestore";
+import { collection, doc } from "@/lib/firestore";
 
 import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";

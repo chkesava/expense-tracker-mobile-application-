@@ -9,7 +9,7 @@ import {
   onSnapshot,
   where,
   type DocumentData,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 import {
   createContext,
   useCallback,

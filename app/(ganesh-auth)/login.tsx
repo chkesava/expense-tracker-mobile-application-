@@ -13,7 +13,7 @@ import { Redirect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInUp } from "react-native-reanimated";
 import { Lock, Mail, Smartphone, User } from "lucide-react-native";
-import { RecaptchaVerifier } from "firebase/auth";
+import { RecaptchaVerifier } from "@/lib/auth";
 
 import { SocialLoginButton } from "@/components/auth/SocialLoginButton";
 import { FestivalAuthHero } from "@/components/ganesh/chrome/FestivalStackHero";

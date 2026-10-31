@@ -1,4 +1,4 @@
-import { doc, type Firestore, type WriteBatch } from "firebase/firestore";
+import { doc, type Firestore, type WriteBatch } from "@/lib/firestore";
 
 import type { MutationOp } from "@/shared/types/mutations";
 

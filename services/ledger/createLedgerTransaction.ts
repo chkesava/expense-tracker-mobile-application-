@@ -7,7 +7,7 @@ import {
  * Used by ExpenseForm and statement import — one write shape, one collection path.
  */
 
-import { collection, doc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, serverTimestamp } from "@/lib/firestore";
 
 import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";

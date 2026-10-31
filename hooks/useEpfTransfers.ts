@@ -18,7 +18,7 @@ import {
   runTransaction,
   serverTimestamp,
   writeBatch,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";

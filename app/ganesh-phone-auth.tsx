@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Platform, Text, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import { PhoneAuthProvider, RecaptchaVerifier } from "firebase/auth";
+import { PhoneAuthProvider, RecaptchaVerifier } from "@/lib/auth";
 
 import { getFirebaseAuth } from "@/lib/firebase";
 import { useTheme } from "@/theme/ThemeProvider";

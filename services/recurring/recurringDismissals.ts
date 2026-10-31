@@ -13,7 +13,7 @@ export async function loadRemoteDismissedMerchants(
   if (!uid.trim() || uid.endsWith("_duress")) return [];
   try {
     const { getFirestoreDb } = await import("@/lib/firebase");
-    const { collection, getDocs } = await import("firebase/firestore");
+    const { collection, getDocs } = await import("@/lib/firestore");
     const db = getFirestoreDb();
     if (!db) return [];
     const snap = await getDocs(
@@ -35,7 +35,7 @@ export async function persistRemoteDismissal(
   if (!merchantKey) return;
   try {
     const { getFirestoreDb } = await import("@/lib/firebase");
-    const { doc, serverTimestamp, setDoc } = await import("firebase/firestore");
+    const { doc, serverTimestamp, setDoc } = await import("@/lib/firestore");
     const db = getFirestoreDb();
     if (!db) return;
     await setDoc(doc(db, "users", uid, "recurringDismissals", merchantKey), {

@@ -6,7 +6,7 @@ import {
   deleteField,
   increment,
   serverTimestamp,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import {
   FIRESTORE_SENTINEL_KEY,
@@ -14,6 +14,7 @@ import {
   encodeFirestoreData,
   encodedDataIsNonIdempotent,
 } from "./firestoreSentinel";
+import { NATIVE_ARRAY_ELEMENTS_KEY } from "./firestoreNativeKeys";
 
 /**
  * Sentinels as the app actually receives them (SPENDLY-94).
@@ -183,6 +184,67 @@ describe("firestoreSentinel", () => {
         paymentIds: { [FIRESTORE_SENTINEL_KEY]: "arrayUnion", values: ["pay-1"] },
         removed: { [FIRESTORE_SENTINEL_KEY]: "arrayRemove", values: ["pay-0"] },
       });
+    });
+  });
+
+  describe("native SDK FieldValues (SPENDLY-638)", () => {
+    /** Mirrors @react-native-firebase/firestore's FieldValue: own `_type` / `_elements`. */
+    class NativeFieldValue {
+      _type: string;
+      _elements: unknown;
+      constructor(type: string, elements?: unknown) {
+        this._type = type;
+        this._elements = elements;
+      }
+    }
+    /** What `lib/firestore.native.ts` returns for array transforms. */
+    const nativeArray = (type: "array_union" | "array_remove", plain: unknown[]) => {
+      // The real SDK pre-serialises elements for the bridge (unreadable here).
+      const fv = new NativeFieldValue(type, [[17, "opaque"]]);
+      Object.defineProperty(fv, NATIVE_ARRAY_ELEMENTS_KEY, { value: plain, enumerable: false });
+      return fv;
+    };
+
+    it("encodes serverTimestamp, delete and increment", () => {
+      expect(encodeFirestoreData(new NativeFieldValue("timestamp"))).toEqual({
+        [FIRESTORE_SENTINEL_KEY]: "serverTimestamp",
+      });
+      expect(encodeFirestoreData(new NativeFieldValue("delete"))).toEqual({
+        [FIRESTORE_SENTINEL_KEY]: "deleteField",
+      });
+      expect(encodeFirestoreData(new NativeFieldValue("increment", -250))).toEqual({
+        [FIRESTORE_SENTINEL_KEY]: "increment",
+        n: -250,
+      });
+    });
+
+    it("encodes array transforms from the kept plain elements, not the bridge form", () => {
+      expect(encodeFirestoreData(nativeArray("array_union", ["pay-1", "pay-2"]))).toEqual({
+        [FIRESTORE_SENTINEL_KEY]: "arrayUnion",
+        values: ["pay-1", "pay-2"],
+      });
+      expect(encodeFirestoreData(nativeArray("array_remove", ["pay-1"]))).toEqual({
+        [FIRESTORE_SENTINEL_KEY]: "arrayRemove",
+        values: ["pay-1"],
+      });
+    });
+
+    it("refuses an array transform whose plain elements were not kept", () => {
+      expect(() => encodeFirestoreData(new NativeFieldValue("array_union", [[17, "opaque"]]))).toThrow(
+        /arrayUnion/
+      );
+    });
+
+    it("marks native increments and array transforms as non-idempotent for replay", () => {
+      const data = encodeFirestoreData({
+        balance: new NativeFieldValue("increment", 10),
+        tags: nativeArray("array_union", ["a"]),
+      });
+      expect(encodedDataIsNonIdempotent(data)).toBe(true);
+    });
+
+    it("leaves a plain object that merely has a _type field alone", () => {
+      expect(encodeFirestoreData({ _type: "expense", amount: 5 })).toEqual({ _type: "expense", amount: 5 });
     });
   });
 

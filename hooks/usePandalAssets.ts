@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { documentId, where } from "firebase/firestore";
+import { documentId, where } from "@/lib/firestore";
 
 import { useGaneshCollection } from "@/hooks/ganesh/useGaneshCollection";
 import { useSharedOrLocalCollection } from "@/hooks/ganesh/useSharedOrLocalCollection";

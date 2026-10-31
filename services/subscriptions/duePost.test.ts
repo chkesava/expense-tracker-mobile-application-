@@ -63,7 +63,7 @@ vi.mock("@/lib/commitMutations", () => ({
   },
 }));
 
-import { increment } from "firebase/firestore";
+import { increment } from "@/lib/firestore";
 import { postDueSubscriptionCharge } from "./duePost";
 import type { DuePostAction } from "@/shared/utils/subscriptionProcessor";
 

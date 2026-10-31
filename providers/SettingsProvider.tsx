@@ -13,7 +13,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc } from "@/lib/firestore";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite } from "@/lib/firestoreWrite";

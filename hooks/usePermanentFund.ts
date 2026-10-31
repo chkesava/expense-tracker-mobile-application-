@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState } from "react";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot } from "@/lib/firestore";
 
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
 import { getFirestoreDb } from "@/lib/firebase";

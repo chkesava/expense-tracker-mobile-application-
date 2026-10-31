@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { User } from "firebase/auth";
+import type { User } from "@/lib/auth";
 import {
   authErrorMessage,
   createDuressUser,

@@ -257,7 +257,7 @@ describe("duplicate submission", () => {
     // The duplicate check is a read, and a read can fail with no signal. It
     // must degrade to "write it" rather than losing the volunteer's entry --
     // a duplicate is recoverable, a silently dropped offering is not.
-    const { getDoc } = await import("firebase/firestore");
+    const { getDoc } = await import("@/lib/firestore");
     const real = vi.mocked(getDoc).getMockImplementation()!;
     vi.mocked(getDoc).mockImplementation(async (ref: any) => {
       if (ref.path.startsWith(ENTRIES)) throw new Error("client is offline");

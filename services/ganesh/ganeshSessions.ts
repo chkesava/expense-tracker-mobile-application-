@@ -9,7 +9,7 @@ import {
   where,
   writeBatch,
   type Firestore,
-} from "firebase/firestore";
+} from "@/lib/firestore";
 
 import { commitWrite } from "@/lib/firestoreWrite";
 import { newId } from "@/lib/id";

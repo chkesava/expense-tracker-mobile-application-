@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot } from "@/lib/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";

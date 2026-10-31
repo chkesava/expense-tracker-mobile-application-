@@ -1,6 +1,6 @@
 /** User-scoped merchant corrections (SPENDLY-191). */
 
-import { collection, doc, getDocs } from "firebase/firestore";
+import { collection, doc, getDocs } from "@/lib/firestore";
 
 import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";

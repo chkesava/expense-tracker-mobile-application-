@@ -11,7 +11,7 @@ import type { MutationOp } from "@/shared/types/mutations";
  * `writeBatch` + `commitWrite`, not `runTransaction`: this must queue offline.
  */
 
-import { doc, serverTimestamp } from "firebase/firestore";
+import { doc, serverTimestamp } from "@/lib/firestore";
 
 import { commitMutations } from "@/lib/commitMutations";
 import { getFirestoreDb } from "@/lib/firebase";

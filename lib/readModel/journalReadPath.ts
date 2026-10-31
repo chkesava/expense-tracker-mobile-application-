@@ -1,4 +1,4 @@
-import type { Firestore, QueryDocumentSnapshot } from "firebase/firestore";
+import type { Firestore, QueryDocumentSnapshot } from "@/lib/firestore";
 
 import { logWarning } from "@/lib/errors";
 import type { connectReadModel } from "@/lib/readModelClient";

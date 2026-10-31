@@ -52,7 +52,7 @@ vi.mock("@/lib/id", () => ({
   newId: () => `id-${++idCounter}`,
 }));
 
-import { runTransaction, writeBatch } from "firebase/firestore";
+import { runTransaction, writeBatch } from "@/lib/firestore";
 
 import { addAssetPurchase } from "./ganeshWrites";
 

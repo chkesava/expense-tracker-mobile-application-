@@ -1,4 +1,4 @@
-import { doc, serverTimestamp, setDoc, type Firestore } from "firebase/firestore";
+import { doc, serverTimestamp, setDoc, type Firestore } from "@/lib/firestore";
 
 import { omitUndefined } from "@/shared/utils/firestorePayload";
 

@@ -1,4 +1,4 @@
-import { doc, getDoc, type Firestore } from "firebase/firestore";
+import { doc, getDoc, type Firestore } from "@/lib/firestore";
 
 import { festivalDoc } from "@/shared/utils/ganeshPaths";
 
