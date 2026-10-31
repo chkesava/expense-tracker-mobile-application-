@@ -223,12 +223,22 @@ export function formatIstTime(iso: string, nowMs: number): string {
  *   few minutes old;
  * - fresh: otherwise. A closing price stays fresh until the next session.
  */
-export function classifyFreshness(dto: MarketOverviewDTO, nowMs: number): OverviewFreshness {
+/**
+ * Anything with a fetch time, a server stale flag and a market status: the
+ * market overview, and the screener universe (SPENDLY-650).
+ */
+export type FreshnessSource = Pick<MarketOverviewDTO, "fetchedAt" | "stale" | "status">;
+
+export function classifyFreshness(
+  dto: FreshnessSource,
+  nowMs: number,
+  staleWhileOpenMs: number = OVERVIEW_STALE_WHILE_OPEN_MS
+): OverviewFreshness {
   const fetched = Date.parse(dto.fetchedAt);
   const age = Number.isFinite(fetched) ? nowMs - fetched : Number.POSITIVE_INFINITY;
   if (age > OVERVIEW_EXPIRED_MS) return "expired";
   if (dto.stale) return "stale";
-  if (marketStateAt(dto.status, nowMs) === "open" && age > OVERVIEW_STALE_WHILE_OPEN_MS) return "stale";
+  if (marketStateAt(dto.status, nowMs) === "open" && age > staleWhileOpenMs) return "stale";
   return "fresh";
 }
 
@@ -243,11 +253,15 @@ const STATE_LABEL: Record<MarketState, string> = {
  * "Market closed · as of 15:30 IST" or "Offline · showing 29 Oct, 15:30 IST".
  * Never says "live": the provider may be delayed.
  */
-export function freshnessLabel(dto: MarketOverviewDTO, nowMs: number, opts: { offline?: boolean } = {}): string {
+export function freshnessLabel(
+  dto: FreshnessSource,
+  nowMs: number,
+  opts: { offline?: boolean; staleWhileOpenMs?: number } = {}
+): string {
   const asOfIso = dto.status.lastTradeAt ?? dto.fetchedAt;
   const at = formatIstTime(asOfIso, nowMs);
   if (opts.offline) return at ? `Offline · showing ${at}` : "Offline";
-  const freshness = classifyFreshness(dto, nowMs);
+  const freshness = classifyFreshness(dto, nowMs, opts.staleWhileOpenMs);
   const state = STATE_LABEL[marketStateAt(dto.status, nowMs)];
   if (freshness === "expired") return at ? `Out of date · last seen ${at}` : "Out of date";
   if (freshness === "stale") return at ? `Delayed · showing ${at}` : "Delayed";

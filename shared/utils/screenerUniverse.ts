@@ -16,7 +16,7 @@
 import type { Nifty500Constituent } from "../data/nifty500";
 import type { MarketStatusDTO, ScreenerRowDTO, ScreenerUniverseDTO } from "../types/market";
 import type { YahooSparkEntry } from "./marketMovers";
-import { marketStateAt } from "./marketOverview";
+import { classifyFreshness, formatIstTime, marketStateAt, type OverviewFreshness } from "./marketOverview";
 
 export const SCREENER_SCHEMA_VERSION = 1 as const;
 /** Below this share of the universe priced, screening would mislead. */
@@ -168,4 +168,74 @@ export function buildScreenerUniverse(
     return { ...base, available: false, reason: opts.anyBatchFailed ? "UPSTREAM" : "LOW_COVERAGE", rows: [] };
   }
   return { ...base, available: true, rows: [...rows] };
+}
+
+// --- SPENDLY-650: client-side helpers -------------------------------------
+
+/** While trading, a copy older than this is behind (the server refreshes every 5 min). */
+export const SCREENER_STALE_WHILE_OPEN_MS = 10 * 60_000;
+/** How often the app refetches while the market trades and the screener is open. */
+export const SCREENER_POLL_MS = 5 * 60_000;
+
+/** Structural check for a universe read from the network or from disk. */
+export function isScreenerUniverse(value: unknown): value is ScreenerUniverseDTO {
+  const dto = value as Partial<ScreenerUniverseDTO> | null;
+  return (
+    !!dto &&
+    dto.success === true &&
+    dto.schemaVersion === SCREENER_SCHEMA_VERSION &&
+    dto.universe === "NIFTY500" &&
+    typeof dto.fetchedAt === "string" &&
+    typeof dto.stale === "boolean" &&
+    typeof dto.available === "boolean" &&
+    typeof dto.universeSize === "number" &&
+    typeof dto.priced === "number" &&
+    Array.isArray(dto.rows) &&
+    !!dto.status &&
+    typeof dto.status === "object"
+  );
+}
+
+export function screenerFreshness(dto: ScreenerUniverseDTO, nowMs: number): OverviewFreshness {
+  return classifyFreshness(dto, nowMs, SCREENER_STALE_WHILE_OPEN_MS);
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "30 Oct": the IST trading date of a daily bar. */
+export function istDayLabel(iso: string | null): string {
+  if (!iso) return "";
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return "";
+  const d = new Date(ms + IST_OFFSET_MS);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+}
+
+/**
+ * One line for the screener header. A daily bar is stamped with the session's
+ * open (09:15 IST), so its time says nothing about when the price was taken:
+ * a closed market shows the closing date, a trading one the fetch time.
+ * Never says "live".
+ */
+export function screenerFreshnessLabel(dto: ScreenerUniverseDTO, nowMs: number, opts: { offline?: boolean } = {}): string {
+  const fetchedAt = formatIstTime(dto.fetchedAt, nowMs);
+  const day = istDayLabel(dto.status.lastTradeAt);
+  if (opts.offline) return `Offline · showing prices from ${fetchedAt || day}`;
+  const freshness = screenerFreshness(dto, nowMs);
+  if (freshness === "expired") return day ? `Out of date · closing prices of ${day}` : "Out of date";
+  if (freshness === "stale") return `Delayed · prices from ${fetchedAt}`;
+  const state = marketStateAt(dto.status, nowMs);
+  if (state === "open") return `Market open · prices as of ${fetchedAt}`;
+  if (state === "closed") return day ? `Market closed · closing prices of ${day}` : "Market closed";
+  return "Market status unavailable";
+}
+
+/** Poll only while the market trades; closing prices do not move. */
+export function screenerPollMs(dto: ScreenerUniverseDTO | null | undefined, nowMs: number): number | false {
+  return dto && marketStateAt(dto.status, nowMs) === "open" ? SCREENER_POLL_MS : false;
+}
+
+/** React Query `staleTime`: the server's fresh lifetime, against the device clock. */
+export function screenerStaleMs(dto: ScreenerUniverseDTO | null | undefined, nowMs: number): number {
+  return dto ? screenerFreshSeconds(dto.status, nowMs) * 1000 : 0;
 }

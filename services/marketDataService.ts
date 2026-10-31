@@ -7,12 +7,14 @@ import {
   type MarketOverviewDTO,
   type MarketOverviewErrorCode,
   type MarketOverviewErrorDTO,
+  type ScreenerUniverseDTO,
   type StockHistoryDTO,
   type StockHistoryErrorCode,
   type StockHistoryErrorDTO,
   type StockHistoryRange,
 } from '@/shared/types/market';
 import { isMarketOverview } from '@/shared/utils/marketOverview';
+import { isScreenerUniverse } from '@/shared/utils/screenerUniverse';
 import {
   MarketQuote,
   SearchResult,
@@ -173,25 +175,28 @@ export const fetchStockHistory = async (
 };
 
 /**
- * The Markets tab payload (SPENDLY-622): indices, market status and NIFTY 50
- * movers, from /api/market-overview and Netlify's shared cache — never from
- * Firestore, and never straight from Yahoo.
- *
+ * GET a market endpoint that answers with a typed body (SPENDLY-622/623).
  * `null` only when no market API base URL is configured. Failures throw a
- * `MarketDataError` carrying the server's typed `code`.
+ * `MarketDataError` carrying the server's typed `code`; our own timeout is
+ * TIMEOUT, a caller's cancellation passes through, and a success body that
+ * fails `isValid` is MALFORMED.
  */
-export const fetchMarketOverview = async (
-  options: QuoteRequestOptions = {}
-): Promise<MarketOverviewDTO | null> => {
+async function fetchCheckedJson<T>(
+  path: string,
+  scope: string,
+  isValid: (body: unknown) => body is T,
+  options: QuoteRequestOptions,
+  timeoutMs: number
+): Promise<T | null> {
   const baseUrl = getBaseUrl();
   if (!baseUrl) return null;
   let res: Response;
   try {
-    res = await fetchWithTimeout(`${baseUrl}/api/market-overview`, { signal: options.signal, timeoutMs: 12_000 });
+    res = await fetchWithTimeout(`${baseUrl}${path}`, { signal: options.signal, timeoutMs });
   } catch (error) {
     if (isAbortError(error) && options.signal?.aborted) throw error;
     throw new MarketDataError(
-      isAbortError(error) ? HISTORY_MESSAGES.TIMEOUT! : 'market overview request failed',
+      isAbortError(error) ? HISTORY_MESSAGES.TIMEOUT! : `${scope} request failed`,
       { code: isAbortError(error) ? 'TIMEOUT' : undefined, cause: error }
     );
   }
@@ -200,7 +205,7 @@ export const fetchMarketOverview = async (
     body = await res.json();
   } catch (error) {
     if (res.ok) {
-      throw new MarketDataError('market overview returned a malformed response', {
+      throw new MarketDataError(`${scope} returned a malformed response`, {
         status: res.status,
         code: 'MALFORMED',
         cause: error,
@@ -208,8 +213,8 @@ export const fetchMarketOverview = async (
     }
   }
   if (res.ok) {
-    if (!isMarketOverview(body)) {
-      throw new MarketDataError('market overview returned a malformed response', {
+    if (!isValid(body)) {
+      throw new MarketDataError(`${scope} returned a malformed response`, {
         status: res.status,
         code: 'MALFORMED',
       });
@@ -218,10 +223,26 @@ export const fetchMarketOverview = async (
   }
   const code = (body as Partial<MarketOverviewErrorDTO> | null)?.code;
   throw new MarketDataError(
-    (code && HISTORY_MESSAGES[code as StockHistoryErrorCode]) || `market overview responded with ${res.status}`,
+    (code && HISTORY_MESSAGES[code as StockHistoryErrorCode]) || `${scope} responded with ${res.status}`,
     { status: res.status, code }
   );
-};
+}
+
+/**
+ * The Markets tab payload (SPENDLY-622): indices, market status and NIFTY 50
+ * movers, from /api/market-overview and Netlify's shared cache — never from
+ * Firestore, and never straight from Yahoo.
+ */
+export const fetchMarketOverview = (options: QuoteRequestOptions = {}): Promise<MarketOverviewDTO | null> =>
+  fetchCheckedJson('/api/market-overview', 'market overview', isMarketOverview, options, 12_000);
+
+/**
+ * The stock screener's NIFTY 500 rows (SPENDLY-650), from
+ * /api/screener-universe. The app filters and sorts this one payload, so
+ * screening never sends one request per stock.
+ */
+export const fetchScreenerUniverse = (options: QuoteRequestOptions = {}): Promise<ScreenerUniverseDTO | null> =>
+  fetchCheckedJson('/api/screener-universe', 'screener universe', isScreenerUniverse, options, 20_000);
 
 export const fetchMutualFundQuote = async (
   schemeCode: string,

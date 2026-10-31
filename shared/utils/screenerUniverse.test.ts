@@ -5,7 +5,13 @@ import { NIFTY50 } from "../data/nifty50";
 import type { YahooSparkEntry } from "./marketMovers";
 import {
   MIN_SCREENER_COVERAGE,
+  SCREENER_POLL_MS,
   buildScreenerUniverse,
+  isScreenerUniverse,
+  istDayLabel,
+  screenerFreshnessLabel,
+  screenerPollMs,
+  screenerStaleMs,
   dailyCloses,
   screenerFreshSeconds,
   screenerRowFromSpark,
@@ -185,7 +191,6 @@ describe("buildScreenerUniverse", () => {
   });
 });
 
-void MIN;
 
 describe("52-week window edge", () => {
   it("leaves out closes older than 365 days from the 52-week range", () => {
@@ -202,5 +207,57 @@ describe("rounding", () => {
     expect(row.change).toBe(-2.5);
     expect(row.changePercent).toBe(-0.2142);
     expect(row.price).toBe(1164.9);
+  });
+});
+
+// --- SPENDLY-650: client helpers --------------------------------------------
+
+describe("client helpers", () => {
+  const rowAt = (asOfMs: number) => ({ ...screenerRowFromSpark(undefined, STOCK), price: 10, asOf: new Date(asOfMs).toISOString() });
+  const universe = (fetchedMs: number, extra: Record<string, unknown> = {}) => ({
+    ...buildScreenerUniverse(Array.from({ length: 10 }, () => rowAt(TODAY_BAR_MS)), {
+      universeAsOf: NIFTY500_AS_OF,
+      universeSize: 10,
+      anyBatchFailed: false,
+      now: new Date(fetchedMs),
+    }),
+    ...extra,
+  }) as ReturnType<typeof buildScreenerUniverse>;
+  const DURING = Date.UTC(2026, 9, 30, 6, 0); // 11:30 IST
+
+  it("recognises a universe payload and rejects other shapes", () => {
+    expect(isScreenerUniverse(universe(AFTER_CLOSE))).toBe(true);
+    expect(isScreenerUniverse({ ...universe(AFTER_CLOSE), schemaVersion: 2 })).toBe(false);
+    expect(isScreenerUniverse({ success: true, rows: [] })).toBe(false);
+    expect(isScreenerUniverse(null)).toBe(false);
+  });
+
+  it("labels a daily bar by its closing date, not the 09:15 bar time", () => {
+    expect(istDayLabel(new Date(TODAY_BAR_MS).toISOString())).toBe("30 Oct");
+    expect(istDayLabel(null)).toBe("");
+    expect(screenerFreshnessLabel(universe(AFTER_CLOSE), AFTER_CLOSE + MIN)).toBe("Market closed · closing prices of 30 Oct");
+  });
+
+  it("shows the fetch time while trading, and delayed once 10 minutes behind", () => {
+    expect(screenerFreshnessLabel(universe(DURING), DURING + 2 * MIN)).toBe("Market open · prices as of 11:30 IST");
+    expect(screenerFreshnessLabel(universe(DURING), DURING + 11 * MIN)).toBe("Delayed · prices from 11:30 IST");
+  });
+
+  it("says offline, stale and out of date honestly, and never live", () => {
+    expect(screenerFreshnessLabel(universe(AFTER_CLOSE), AFTER_CLOSE + MIN, { offline: true })).toBe("Offline · showing prices from 16:00 IST");
+    expect(screenerFreshnessLabel(universe(AFTER_CLOSE, { stale: true }), AFTER_CLOSE + MIN)).toBe("Delayed · prices from 16:00 IST");
+    expect(screenerFreshnessLabel(universe(AFTER_CLOSE), AFTER_CLOSE + 25 * 60 * MIN)).toBe("Out of date · closing prices of 30 Oct");
+    for (const later of [MIN, 11 * MIN, 25 * 60 * MIN]) {
+      expect(screenerFreshnessLabel(universe(DURING), DURING + later).toLowerCase()).not.toContain("live");
+    }
+  });
+
+  it("polls every 5 minutes only while open, with the server's lifetime as stale time", () => {
+    expect(screenerPollMs(universe(DURING), DURING)).toBe(SCREENER_POLL_MS);
+    expect(screenerPollMs(universe(AFTER_CLOSE), AFTER_CLOSE)).toBe(false);
+    expect(screenerPollMs(undefined, DURING)).toBe(false);
+    expect(screenerStaleMs(universe(DURING), DURING)).toBe(300_000);
+    expect(screenerStaleMs(universe(AFTER_CLOSE), AFTER_CLOSE)).toBe(21_600_000);
+    expect(screenerStaleMs(null, DURING)).toBe(0);
   });
 });
