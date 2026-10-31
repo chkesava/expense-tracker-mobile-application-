@@ -295,6 +295,12 @@ function AppShellInner() {
               }}
             />
             <Stack.Screen
+              name="screener"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
               name="budgets/index"
               options={{
                 animation: "slide_from_right",
