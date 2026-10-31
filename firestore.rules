@@ -858,9 +858,13 @@ service cloud.firestore {
       // SPENDLY-624: investment watchlists. A list is just a name; its items
       // are keyed by the normalized Yahoo symbol, so a list can never hold the
       // same symbol twice. A watchlist is not a holding: there are no money,
-      // quantity or account fields. `createdAt` is the server time on create
-      // and pinned afterwards; `updatedAt` is the server time on every write.
-      // The default list (id 'default') can be renamed but not deleted.
+      // quantity or account fields. `createdAt` is the server time on create;
+      // afterwards it is either kept or re-stamped with the server time (so an
+      // idempotent "create if missing" from two devices, or an offline replay,
+      // is not denied) - a client can never choose it. `updatedAt` is the
+      // server time on every write. The default list (id 'default') can be
+      // renamed but not deleted. `importedLegacyAt` marks the one-time copy of
+      // the old flat watchlist; once present it stays (kept or re-stamped).
       // Field lists and bounds mirror shared/utils/watchlists.ts
       // (watchlists.rules.contract.test.ts). Not synced to the read model.
       function watchlistWellFormed(listId) {
@@ -897,9 +901,12 @@ service cloud.firestore {
           && request.resource.data.createdAt == request.time;
         allow update: if isOwner(uid)
           && watchlistWellFormed(listId)
-          && request.resource.data.createdAt == resource.data.createdAt
+          && (request.resource.data.createdAt == resource.data.createdAt
+              || request.resource.data.createdAt == request.time)
           && (!resource.data.keys().hasAny(['importedLegacyAt'])
-              || request.resource.data.importedLegacyAt == resource.data.importedLegacyAt);
+              || (request.resource.data.keys().hasAny(['importedLegacyAt'])
+                  && (request.resource.data.importedLegacyAt == resource.data.importedLegacyAt
+                      || request.resource.data.importedLegacyAt == request.time)));
         allow delete: if isOwner(uid) && listId != 'default';
 
         match /items/{itemId} {
@@ -911,7 +918,8 @@ service cloud.firestore {
             && existsAfter(/databases/$(database)/documents/users/$(uid)/watchlists/$(listId));
           allow update: if isOwner(uid)
             && watchlistItemWellFormed(itemId)
-            && request.resource.data.createdAt == resource.data.createdAt;
+            && (request.resource.data.createdAt == resource.data.createdAt
+                || request.resource.data.createdAt == request.time);
         }
       }
       match /calendarReminders/{id} {

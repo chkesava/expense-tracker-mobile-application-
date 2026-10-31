@@ -28,12 +28,12 @@
 | Who | owner (and duress twin) only | owner (and duress twin) only |
 | Fields (`hasOnly`) | `name`, `isDefault`, `createdAt`, `updatedAt`, `importedLegacyAt` (optional) | `symbol`, `yahooSymbol`, `name`, `exchange`, `instrumentType`, `order`, `createdAt`, `updatedAt` (all required) |
 | Checks | id `^[A-Za-z0-9_-]{1,40}$`; name 1–40; `isDefault == (listId == 'default')` | **`itemId == yahooSymbol`** and `^[A-Z0-9^][A-Z0-9.&_^-]{0,24}$`; symbol ≤ 25; name 1–120; `exchange` and `instrumentType` enums; `order` within ±1e12 |
-| Times | `createdAt == request.time` on create, **pinned** on update; `updatedAt == request.time` always | same |
-| Extra | `importedLegacyAt` can be set once, then never changed. **The default list can't be deleted.** | Create needs the list to exist after the write (`existsAfter`), so a list and its items can be made in one batch |
+| Times | `createdAt == request.time` on create; on update it is **kept or re-stamped with the server time**, never client-chosen (amended in SPENDLY-655); `updatedAt == request.time` always | same |
+| Extra | `importedLegacyAt`, once present, can't be dropped or back-dated (kept or re-stamped; amended in SPENDLY-655). **The default list can't be deleted.** | Create needs the list to exist after the write (`existsAfter`), so a list and its items can be made in one batch |
 
 - **No money, quantity or account fields** are allowed, and a test proves it.
 - Item ids **are** the symbol, so a list can't hold a symbol twice.
-- `createdAt` is a **server timestamp** pinned by the rules, rather than the client-side `createdAtMs` used by `merchantOverrides`. It can't be faked, and it follows READ_MODEL_RULES R1.2.
+- `createdAt` is a **server timestamp** the client can never choose, rather than the client-side `createdAtMs` used by `merchantOverrides`. It follows READ_MODEL_RULES R1.2. SPENDLY-655 relaxed "pinned" to "kept or re-stamped with the server time", so idempotent create-if-missing writes from two devices, or an offline replay, aren't denied.
 - **Not synced to the read model** (R2.1).
 - **Account deletion** already removes every subcollection (`listCollections` + `recursiveDelete`), which covers the watchlists (R5.1).
 - **Legacy `users/{uid}/watchlist`:** still in the catch-all and writable by the owner, so older APKs keep working (tested).
