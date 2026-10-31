@@ -3,6 +3,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  increment,
   setDoc,
   writeBatch,
   serverTimestamp,
@@ -10,6 +11,8 @@ import {
   type WriteBatch,
 } from "@/lib/firestore";
 import { logDirectRead } from "@/lib/firestoreReadDebug";
+import { notifyReadModelChanged } from "@/lib/readModelPush";
+import { CATEGORIES_REVISION_FIELD } from "@/shared/utils/categoryRevision";
 import {
   CATEGORY_TAXONOMY,
   V1_PARENT_MAP,
@@ -130,6 +133,12 @@ async function ensureCategoryHierarchyOnce(
   await stampVersion(db, uid);
 }
 
+/**
+ * Every path that writes categories ends here, after its batches committed.
+ * SPENDLY-660: the same write bumps the categories revision, so devices
+ * loading categories by revision reload them; the read-model push gets a
+ * changed-only sync (the batches can touch hundreds of documents).
+ */
 async function stampVersion(db: Firestore, uid: string) {
   await setDoc(
     doc(db, "users", uid, "meta", "categories"),
@@ -137,9 +146,12 @@ async function stampVersion(db: Firestore, uid: string) {
       [HIERARCHY_FLAG]: CATEGORY_HIERARCHY_VERSION,
       [TAXONOMY_FINGERPRINT_FLAG]: taxonomyFingerprint(),
       migratedAt: serverTimestamp(),
+      [CATEGORIES_REVISION_FIELD]: increment(1),
+      categoriesRevisedAt: serverTimestamp(),
     },
     { merge: true }
   );
+  notifyReadModelChanged(uid);
 }
 
 function createBatchWriter(db: Firestore) {
