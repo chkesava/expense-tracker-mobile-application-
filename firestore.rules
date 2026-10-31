@@ -36,7 +36,7 @@ service cloud.firestore {
     //   holdings, incomes, investments, meta, portfolioOrders,
     //   portfolioSettings, portfolioSnapshots, portfolioTransactions,
     //   receivableRepayments, receivables, calendarReminders, goalFundingPlans, runwayOverrides, runwaySettings, spaces,
-    //   stats, subscriptions, recurringDismissals, trips, watchlist,
+    //   stats, subscriptions, recurringDismissals, trips, watchlist, watchlists,
     //   whatIfScenarios,
     //   merchantOverrides, netWorthHistory
     //
@@ -853,6 +853,66 @@ service cloud.firestore {
       match /runwaySettings/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && runwaySettingsWellFormed(id);
+      }
+
+      // SPENDLY-624: investment watchlists. A list is just a name; its items
+      // are keyed by the normalized Yahoo symbol, so a list can never hold the
+      // same symbol twice. A watchlist is not a holding: there are no money,
+      // quantity or account fields. `createdAt` is the server time on create
+      // and pinned afterwards; `updatedAt` is the server time on every write.
+      // The default list (id 'default') can be renamed but not deleted.
+      // Field lists and bounds mirror shared/utils/watchlists.ts
+      // (watchlists.rules.contract.test.ts). Not synced to the read model.
+      function watchlistWellFormed(listId) {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['name', 'isDefault', 'createdAt', 'updatedAt', 'importedLegacyAt'])
+          && d.keys().hasAll(['name', 'isDefault', 'createdAt', 'updatedAt'])
+          && listId.matches('^[A-Za-z0-9_-]{1,40}$')
+          && d.name is string && d.name.size() > 0 && d.name.size() <= 40
+          && d.isDefault == (listId == 'default')
+          && d.createdAt is timestamp
+          && d.updatedAt == request.time
+          && (!d.keys().hasAny(['importedLegacyAt']) || d.importedLegacyAt is timestamp);
+      }
+
+      function watchlistItemWellFormed(itemId) {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['symbol', 'yahooSymbol', 'name', 'exchange', 'instrumentType', 'order', 'createdAt', 'updatedAt'])
+          && d.keys().hasAll(['symbol', 'yahooSymbol', 'name', 'exchange', 'instrumentType', 'order', 'createdAt', 'updatedAt'])
+          && itemId.matches('^[A-Z0-9^][A-Z0-9.&_^-]{0,24}$')
+          && d.yahooSymbol == itemId
+          && d.symbol is string && d.symbol.size() > 0 && d.symbol.size() <= 25
+          && d.name is string && d.name.size() > 0 && d.name.size() <= 120
+          && d.exchange in ['NSE', 'BSE', 'US']
+          && d.instrumentType in ['stock', 'etf', 'mutual_fund', 'gold', 'crypto']
+          && d.order is number && d.order > -1000000000000 && d.order < 1000000000000
+          && d.createdAt is timestamp
+          && d.updatedAt == request.time;
+      }
+
+      match /watchlists/{listId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && watchlistWellFormed(listId)
+          && request.resource.data.createdAt == request.time;
+        allow update: if isOwner(uid)
+          && watchlistWellFormed(listId)
+          && request.resource.data.createdAt == resource.data.createdAt
+          && (!resource.data.keys().hasAny(['importedLegacyAt'])
+              || request.resource.data.importedLegacyAt == resource.data.importedLegacyAt);
+        allow delete: if isOwner(uid) && listId != 'default';
+
+        match /items/{itemId} {
+          allow read, delete: if isOwner(uid);
+          // The list must exist once the write lands (it may be created in the same batch).
+          allow create: if isOwner(uid)
+            && watchlistItemWellFormed(itemId)
+            && request.resource.data.createdAt == request.time
+            && existsAfter(/databases/$(database)/documents/users/$(uid)/watchlists/$(listId));
+          allow update: if isOwner(uid)
+            && watchlistItemWellFormed(itemId)
+            && request.resource.data.createdAt == resource.data.createdAt;
+        }
       }
       match /calendarReminders/{id} {
         allow read, delete: if isOwner(uid);
