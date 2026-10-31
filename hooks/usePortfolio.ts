@@ -56,7 +56,6 @@ import type {
   PortfolioSnapshot,
   PortfolioTransaction,
   PriceAlert,
-  WatchlistItem,
 } from "@/shared/features/portfolio/types";
 
 type CreateHoldingInput = Omit<Holding, "id" | "createdAt" | "updatedAt">;
@@ -95,7 +94,6 @@ function usePortfolioState(options?: {
 
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [transactions, setTransactions] = useState<PortfolioTransaction[]>([]);
-  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [orders, setOrders] = useState<PortfolioOrder[]>([]);
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
   const [snapshots, setSnapshots] = useState<PortfolioSnapshot[]>([]);
@@ -107,7 +105,6 @@ function usePortfolioState(options?: {
     if (!uid || !db) {
       setHoldings([]);
       setTransactions([]);
-      setWatchlist([]);
       setOrders([]);
       setAlerts([]);
       setSnapshots([]);
@@ -174,9 +171,6 @@ function usePortfolioState(options?: {
                 .map((item) => ({ id: item.id, ...item.data() } as PortfolioTransaction))
                 .sort((a, b) => b.date.localeCompare(a.date))
             );
-          }),
-          onSnapshot(query(collection(db, "users", uid, "watchlist")), (snapshot) => {
-            setWatchlist(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as WatchlistItem)));
           }),
           onSnapshot(query(collection(db, "users", uid, "portfolioOrders")), (snapshot) => {
             setOrders(
@@ -415,39 +409,6 @@ function usePortfolioState(options?: {
     }
   }, [cashEntries, db, holdings, user, today]);
 
-  const addToWatchlist = useCallback(async (item: Omit<WatchlistItem, "id" | "createdAt">) => {
-    if (!user || !db) return false;
-    if (watchlist.some((current) => current.yahooSymbol === item.yahooSymbol)) {
-      toast.info("Already in watchlist");
-      return false;
-    }
-    try {
-      await addDoc(collection(db, "users", user.uid, "watchlist"), {
-        ...item,
-        createdAt: serverTimestamp(),
-      });
-      toast.success("Added to watchlist");
-      return true;
-    } catch (error) {
-      logError("portfolio.addWatchlist", error);
-      toast.error("Failed to add to watchlist");
-      return false;
-    }
-  }, [db, user, watchlist]);
-
-  const removeFromWatchlist = useCallback(async (id: string) => {
-    if (!user || !db) return false;
-    try {
-      await deleteDoc(doc(db, "users", user.uid, "watchlist", id));
-      toast.success("Removed from watchlist");
-      return true;
-    } catch (error) {
-      logError("portfolio.removeWatchlistItem", error);
-      toast.error("Failed to remove from watchlist");
-      return false;
-    }
-  }, [db, user, today]);
-
   const addAlert = useCallback(async (alert: CreateAlertInput) => {
     if (!user || !db) return false;
     try {
@@ -574,7 +535,6 @@ function usePortfolioState(options?: {
   return {
     holdings,
     transactions,
-    watchlist,
     orders,
     alerts,
     snapshots,
@@ -591,8 +551,6 @@ function usePortfolioState(options?: {
     deleteHolding,
     findHoldingPurchase,
     overwriteHoldings,
-    addToWatchlist,
-    removeFromWatchlist,
     addAlert,
     toggleAlert,
     deleteAlert,

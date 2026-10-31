@@ -265,4 +265,28 @@ export function isValidWatchlistId(id: string): boolean {
   return WATCHLIST_ID_PATTERN.test(id);
 }
 
+/**
+ * Which list to show (SPENDLY-657): the one asked for while it still exists,
+ * else the default list, else the first. With no lists yet it is the default
+ * id, so the default list's items show as soon as it is created.
+ */
+export function pickOpenWatchlistId(lists: readonly Pick<Watchlist, "id" | "isDefault">[], requested: string | null | undefined): string {
+  if (requested && lists.some((l) => l.id === requested)) return requested;
+  return (lists.find((l) => l.isDefault) ?? lists[0])?.id ?? DEFAULT_WATCHLIST_ID;
+}
+
+/**
+ * Whether to run the first-time setup (default list + legacy copy). Only on a
+ * server-confirmed snapshot: a cache snapshot can be missing lists, and
+ * creating the default from one could re-copy the legacy list over later
+ * edits. At most once per session (`tried`); a failure is retried by Retry.
+ */
+export function shouldInitializeWatchlists(state: {
+  fromCache: boolean;
+  lists: readonly Pick<Watchlist, "isDefault">[];
+  tried: boolean;
+}): boolean {
+  return !state.fromCache && !state.tried && !state.lists.some((l) => l.isDefault);
+}
+
 export { DEFAULT_WATCHLIST_ID };

@@ -6,22 +6,33 @@ import { Amount } from "@/components/common/Amount";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { watchlistSchema } from "@/shared/features/portfolio/schemas";
-import type { MarketQuote, WatchlistItem } from "@/shared/features/portfolio/types";
+import { useWatchlistQuotes } from "@/hooks/useWatchlistQuotes";
+import { useWatchlists } from "@/hooks/useWatchlists";
+import { toast } from "@/lib/toast";
+import { displaySymbol } from "@/shared/utils/watchlists";
 import { formatSignedPercent } from "@/shared/utils/investmentPresentation";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 
 export interface WatchlistTabProps {
-  watchlist: WatchlistItem[];
-  quotes: Map<string, MarketQuote>;
   currency: string;
-  onAdd: (item: Omit<WatchlistItem, "id" | "createdAt">) => Promise<boolean>;
-  onRemove: (id: string) => Promise<boolean>;
 }
 
-export function WatchlistTab({ watchlist, quotes, currency, onAdd, onRemove }: WatchlistTabProps) {
+/**
+ * The open watchlist (SPENDLY-657 moved it onto `users/{uid}/watchlists`; the
+ * full redesign is SPENDLY-658). Mounted only while the Watchlist tab shows,
+ * so its listeners and quote polling stop when the user leaves it.
+ */
+export function WatchlistTab({ currency }: WatchlistTabProps) {
+  const lists = useWatchlists();
+  const symbols = useMemo(() => lists.entries.map((e) => e.yahooSymbol), [lists.entries]);
+  const { rows } = useWatchlistQuotes(symbols);
+  const quoteBySymbol = useMemo(() => new Map(rows.map((r) => [r.symbol, r.quote])), [rows]);
+  const watchlist = useMemo(
+    () => lists.entries.map((e) => ({ id: e.yahooSymbol, yahooSymbol: e.yahooSymbol, symbol: displaySymbol(e.yahooSymbol), name: e.name })),
+    [lists.entries]
+  );
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const [search, setSearch] = useState("");
@@ -37,24 +48,26 @@ export function WatchlistTab({ watchlist, quotes, currency, onAdd, onRemove }: W
   }, [search, watchlist]);
 
   const add = async () => {
-    const normalizedSymbol = symbol.trim().toUpperCase();
-    const parsed = watchlistSchema.safeParse({
-      symbol: normalizedSymbol,
-      yahooSymbol: normalizedSymbol.endsWith(".NS") || normalizedSymbol.endsWith(".BO") ? normalizedSymbol : `${normalizedSymbol}.NS`,
-      name: name.trim() || normalizedSymbol,
-      exchange: "NSE",
-      instrumentType: "stock",
-    });
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? "Invalid watchlist item");
+    const result = await lists.add({ symbol, name });
+    if (!result.ok) {
+      setError(result.message);
       return;
     }
-    if (await onAdd(parsed.data)) {
-      setSymbol("");
-      setName("");
-      setError(null);
-      setShowForm(false);
+    if ("status" in result && result.status === "exists") {
+      toast.info("Already in watchlist");
+      return;
     }
+    toast.success("Added to watchlist");
+    setSymbol("");
+    setName("");
+    setError(null);
+    setShowForm(false);
+  };
+
+  const remove = async (yahooSymbol: string) => {
+    const result = await lists.remove(yahooSymbol);
+    if (result.ok) toast.success("Removed from watchlist");
+    else toast.error(result.message);
   };
 
   return (
@@ -78,7 +91,16 @@ export function WatchlistTab({ watchlist, quotes, currency, onAdd, onRemove }: W
         </View>
       ) : null}
 
-      {watchlist.length === 0 ? (
+      {lists.error || lists.setupError ? (
+        <Card>
+          <View style={styles.emptyContainer}>
+            <Text style={[styles.emptySubtitle, { color: theme.colors.mutedForeground }]}>{lists.error?.message ?? lists.setupError}</Text>
+            <Button size="sm" onPress={lists.retry}>Retry</Button>
+          </View>
+        </Card>
+      ) : null}
+
+      {lists.loading && watchlist.length === 0 ? null : watchlist.length === 0 ? (
         <Card>
           <View style={styles.emptyContainer}>
             <Eye size={40} color={theme.colors.mutedForeground} />
@@ -90,9 +112,9 @@ export function WatchlistTab({ watchlist, quotes, currency, onAdd, onRemove }: W
         <>
           <Input value={search} onChangeText={setSearch} placeholder="Search watchlist..." />
           {filtered.map((item) => {
-            const quote = quotes.get(item.yahooSymbol);
-            const price = quote?.currentPrice ?? 0;
-            const changePercent = quote?.dayChangePercent ?? 0;
+            const quote = quoteBySymbol.get(item.yahooSymbol);
+            const price = quote?.price ?? 0;
+            const changePercent = quote?.changePercent ?? 0;
             return (
               <View key={item.id} style={[styles.item, { borderColor: theme.colors.border, backgroundColor: surfaces.tile }]}>
                 <View style={{ flex: 1 }}>
@@ -100,9 +122,9 @@ export function WatchlistTab({ watchlist, quotes, currency, onAdd, onRemove }: W
                   <Text style={{ color: theme.colors.mutedForeground, fontSize: 11 }} numberOfLines={1}>{item.name}</Text>
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
-                  {price > 0 ? <><Amount value={price} currency={currency} ghostable style={{ color: theme.colors.foreground, fontSize: 14, fontWeight: "800" }} /><Text style={{ color: changePercent > 0 ? theme.colors.success : changePercent < 0 ? theme.colors.destructive : theme.colors.mutedForeground, fontSize: 11, fontWeight: "700" }}>{formatSignedPercent(changePercent, 2)}</Text></> : <Text style={{ color: theme.colors.mutedForeground, fontSize: 11 }}>No quote</Text>}
+                  {price > 0 ? <><Amount value={price} currency={quote?.currency ?? currency} ghostable style={{ color: theme.colors.foreground, fontSize: 14, fontWeight: "800" }} /><Text style={{ color: changePercent > 0 ? theme.colors.success : changePercent < 0 ? theme.colors.destructive : theme.colors.mutedForeground, fontSize: 11, fontWeight: "700" }}>{formatSignedPercent(changePercent, 2)}</Text></> : <Text style={{ color: theme.colors.mutedForeground, fontSize: 11 }}>No quote</Text>}
                 </View>
-                <Pressable onPress={() => { haptic.selection().catch(() => undefined); void onRemove(item.id); }} style={styles.removeButton} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Remove ${item.symbol} from watchlist`}><Trash2 size={15} color={theme.colors.destructive} /></Pressable>
+                <Pressable onPress={() => { haptic.selection().catch(() => undefined); void remove(item.yahooSymbol); }} style={styles.removeButton} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Remove ${item.symbol} from watchlist`}><Trash2 size={15} color={theme.colors.destructive} /></Pressable>
               </View>
             );
           })}
