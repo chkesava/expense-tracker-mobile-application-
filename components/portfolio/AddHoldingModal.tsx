@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, Text, Modal, ScrollView, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { View, StyleSheet, Text, Modal, ScrollView, KeyboardAvoidingView, Platform, TouchableWithoutFeedback } from 'react-native';
+import { dismissKeyboardOnNative, keyboardDismissDisabled } from '@/lib/keyboardDismiss';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
@@ -234,7 +235,7 @@ export function AddHoldingModal({
         style={[styles.modalOverlay, { backgroundColor: theme.colors.scrim }, scopeVars]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <TouchableWithoutFeedback onPress={dismissKeyboardOnNative} disabled={keyboardDismissDisabled} accessible={false}>
           <View style={[styles.modalContent, cardBg]}>
             <View style={styles.header}>
               <Text style={[styles.title, textStyle]}>Add Holding</Text>
