@@ -21,6 +21,7 @@ A landing page at the web root (`spendly-share.netlify.app/`) links to all three
 3. [Setup](#setup)
 4. [Running the apps](#running-the-apps)
 5. [Local test mode (emulator)](#local-test-mode-emulator)
+   - [Review on web against the emulator](#review-on-web-against-the-emulator)
 6. [Tests and checks](#tests-and-checks)
 7. [How we work](#how-we-work)
 8. [Deploying and releasing](#deploying-and-releasing)
@@ -180,6 +181,43 @@ npm run device:reverse      # after every USB reconnect
 
 Sign in with `demo@spendly.test` / `spendly-demo`. Google sign-in, push and Netlify/Supabase/market calls are unavailable in the test app. Full guide: [`docs/LOCAL_TEST_MODE.md`](docs/LOCAL_TEST_MODE.md).
 
+### Review on web against the emulator
+
+This is the quickest way to try a branch end to end (screens, Firestore writes, rules, market data) **without touching production**. The web app talks to the local emulator, and the market functions run locally. Use it for every UI review of a feature that reads or writes user data.
+
+**1. Create a gitignored `.env.local`** in the checkout you're testing:
+
+```bash
+# Local review on Expo web. Test mode: Firebase emulator only.
+EXPO_PUBLIC_FIREBASE_EMULATOR_HOST=127.0.0.1
+# Market functions from scripts/dev-market-api.js
+EXPO_PUBLIC_MARKET_API_URL=http://127.0.0.1:8888
+```
+
+Use `127.0.0.1` in **both** lines. In test mode, `lib/networkGuard.ts` only allows calls to the emulator's own host, so `http://localhost:8888` would be blocked.
+
+**2. Start these, each in its own terminal, and keep them running:**
+
+| # | Command | What it is | Port |
+|---|---|---|---|
+| 1 | `npm run emulators:local` | Firebase emulator (Auth, Firestore, Storage) with **this checkout's** `firestore.rules`; project `demo-spendly` | 8080, 9099, 9199 |
+| 2 | `npm run emulators:seed` (once, after 1 is up) | Demo user `demo@spendly.test` / `spendly-demo` with accounts, expenses, holdings and goals; safe to rerun (it rebuilds only the demo user) | – |
+| 3 | `npm run build:netlify-fns` then `node scripts/dev-market-api.js` | Market functions (`/api/stock-quotes`, `/api/market-overview`, `/api/screener-universe`, `/api/stock-history`, …) with public Yahoo/NSE data. No Firebase, no secrets | 8888 |
+| 4 | `npx expo start --web --port 8082 --clear` | Expo web for the review | 8082 |
+
+Open **http://localhost:8082** and sign in as the demo user. The header shows "Test data, local emulator".
+
+**3. Rules notes:**
+- Rules are read when the emulator starts. After changing `firestore.rules`, restart terminal 1.
+- The emulator UI isn't started; inspect data through the app, or use the REST API with `Authorization: Bearer owner`, which bypasses rules (emulator only).
+
+**Gotchas:**
+- **Don't set `CI=1`** for the Expo terminal. CI mode turns off file watching, so your edits are never served and you keep testing old code.
+- **Git worktrees** (`git worktree add …` with `node_modules` linked to the main checkout) share Metro's cache with other checkouts. Always start Expo with `--clear`, or you may get the "Welcome to Expo / touch app/index.tsx" page or another checkout's code.
+- Port 8081 is Expo's default and may already be taken by another checkout's dev server; 8082 keeps them apart.
+- `npm run test:rules` starts its own emulator on 8080, so stop terminal 1 first. Alternatively, with terminal 1 running, run `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npx vitest run --config vitest.rules.config.ts`. The rules tests use their own project ids, so the demo data isn't touched.
+- Stop everything with Ctrl+C in each terminal. The emulator saves its data to `.emulator-data/` on a clean exit (that folder is gitignored).
+
 ---
 
 ## Tests and checks
@@ -262,6 +300,9 @@ Release workflows never run on `pull_request`, so fork PRs can't reach the signi
 | `RNGoogleSignin` / `RNFBAppModule` not found | You're in Expo Go. Use `npm run android` (dev build) |
 | Firebase "not configured" | Check every `EXPO_PUBLIC_FIREBASE_*` in `.env`, then `npx expo start --clear` |
 | Stale bundle or odd Metro errors | `npx expo start --clear` |
+| Web shows "Welcome to Expo" instead of the app | Metro cache from another checkout (common in worktrees). Restart with `npx expo start --web --clear` |
+| Code edits don't show up on Expo web | Expo was started with `CI=1` (no file watching). Restart without it |
+| Market data "blocked" or unavailable in local test mode | Use `EXPO_PUBLIC_MARKET_API_URL=http://127.0.0.1:8888` (same host as the emulator) and run `node scripts/dev-market-api.js` |
 | `npm ci` fails with EPERM / EBUSY on Windows | A running Expo/Metro process is locking `node_modules`. Stop it and rerun |
 | Google sign-in fails on a new machine or keystore | Add its SHA-1 (`npm run release:sha1`, or `cd android && ./gradlew signingReport`) to the Firebase Android app |
 | A market/screener tab says "unavailable" | The Netlify functions aren't deployed yet. Run **Deploy Web (Netlify)** |
