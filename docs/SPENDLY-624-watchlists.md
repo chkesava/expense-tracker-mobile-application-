@@ -4,7 +4,7 @@
 - **Feature branch:** `feature/SPENDLY-624-watchlists`, cut from `origin/main` at `3b0a09c8` on 2026-10-31.
 - **Worktree:** `C:\dev\worktrees\spendly-624`
 - **Plan:** [SPENDLY-624-plan.md](SPENDLY-624-plan.md)
-- **State:** 654, 655 and 656 (plus its quote-source correction) merged into the feature branch, and `main` (with SPENDLY-659) merged in. 657 (useWatchlists hook) in progress.
+- **State:** 654, 655 and 656 (plus its quote-source correction) merged into the feature branch, and `main` (with SPENDLY-659) merged in. 657 (useWatchlists hook) built on its story branch, awaiting approval to merge.
 
 ## Overview
 Today's single, unvalidated watchlist becomes **multiple named watchlists** with a default list:
@@ -22,7 +22,7 @@ Lists live in Firestore under strict, tested rules and sync through the offline 
 | 1 | Data model and strict Firestore rules (+ emulator and contract tests) | SPENDLY-654 | `feature/SPENDLY-654-watchlist-model-rules` | Merged into feature branch |
 | 2 | Watchlist store: CRUD, reorder, default list, legacy import (via `commitMutations`) | SPENDLY-655 | `feature/SPENDLY-655-watchlist-store` | Merged into feature branch |
 | 3 | Batch quotes: `/api/stock-quotes` and `useWatchlistQuotes` | SPENDLY-656 | `feature/SPENDLY-656-stock-quotes` | Merged into feature branch |
-| 4 | Live data hook `useWatchlists` (bounded listeners) and removal of the old writers | SPENDLY-657 | `feature/SPENDLY-657-use-watchlists` | In progress |
+| 4 | Live data hook `useWatchlists` (bounded listeners) and removal of the old writers | SPENDLY-657 | `feature/SPENDLY-657-use-watchlists` | Built, awaiting merge approval |
 | 5 | Watchlist UI, plus "Add to watchlist" from the stock sheet | SPENDLY-658 | | Not started |
 
 ## Decisions
@@ -37,4 +37,7 @@ Lists live in Firestore under strict, tested rules and sync through the offline 
   - **Reordering uses up/down buttons.**
   - The stories are created in Jira as subtasks 654 to 658.
 - **2026-10-31, SPENDLY-655 rules amendment:** `createdAt` (and `importedLegacyAt`) may be kept **or re-stamped with the server time** on update, never client-chosen. This stops a repeated "create if missing" (two devices, or an offline replay) from being denied.
-- **2026-10-31, SPENDLY-656:** quotes use the **last two daily closes** (5-day spark), not Yahoo's `chartPreviousClose`, which gave Indian indices a close from two sessions back on 30 Oct. A stock with a single close (BSE) falls back to `chartPreviousClose`; an index never does. **The SPENDLY-622 Markets index cards have this bug on `main` (not deployed); it needs a bug ticket and a fix before the next web deploy.**
+- **2026-10-31, SPENDLY-656 (corrected):** price comes from the **1-day** spark. A stock's previous close is its 1-day `chartPreviousClose`. An index's previous close is the daily close before the latest trade's session (5-day spark), never `chartPreviousClose`, which was two sessions stale on 30 Oct. A 5-day series for stocks was rejected because it was missing M&M's latest close. The same index bug on `main` was fixed by **SPENDLY-659** (PR #249, merged).
+- **2026-10-31, SPENDLY-657:**
+  - First-time setup (default list + legacy copy) runs **only on a server-confirmed snapshot** without a default list, once per session. A cached snapshot could be missing the default list and would overwrite later edits.
+  - `WatchlistTab` keeps its look but now reads the new lists and the batched quotes. The old `usePortfolio` listener and writers are removed. The redesign stays in 658.

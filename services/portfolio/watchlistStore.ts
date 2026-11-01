@@ -13,7 +13,7 @@
  *   cash, portfolio transactions, accounts or the ledger.
  */
 
-import { collection, doc, getDocs, serverTimestamp } from "firebase/firestore";
+import { collection, doc, getDocs, serverTimestamp } from "@/lib/firestore";
 
 import { commitMutations } from "@/lib/commitMutations";
 import type { WriteOutcome } from "@/lib/firestoreWrite";

@@ -12,8 +12,10 @@ import {
   exchangeFor,
   isValidWatchlistId,
   normalizeWatchSymbol,
+  pickOpenWatchlistId,
   planLegacyCopy,
   planMove,
+  shouldInitializeWatchlists,
   sortEntries,
   sortWatchlists,
   watchlistDoc,
@@ -214,5 +216,53 @@ describe("planLegacyCopy", () => {
     const plan = planLegacyCopy(legacy);
     expect(plan.items).toHaveLength(WATCHLIST_LIMITS.items);
     expect(plan.skipped).toBe(3);
+  });
+});
+
+describe("open list and first-time setup (SPENDLY-657)", () => {
+  const lists = [
+    { id: DEFAULT_WATCHLIST_ID, isDefault: true },
+    { id: "wl_a", isDefault: false },
+  ];
+
+  it("opens the requested list while it exists, else the default, else the first", () => {
+    expect(pickOpenWatchlistId(lists, "wl_a")).toBe("wl_a");
+    // The requested list was deleted (here or on another device).
+    expect(pickOpenWatchlistId(lists, "wl_gone")).toBe(DEFAULT_WATCHLIST_ID);
+    expect(pickOpenWatchlistId(lists, null)).toBe(DEFAULT_WATCHLIST_ID);
+    expect(pickOpenWatchlistId([{ id: "wl_b", isDefault: false }], undefined)).toBe("wl_b");
+  });
+
+  it("opens the default id before any list exists, so a first add lands there", () => {
+    expect(pickOpenWatchlistId([], "wl_a")).toBe(DEFAULT_WATCHLIST_ID);
+  });
+
+  it("sets up only from server data with no default list, once", () => {
+    expect(shouldInitializeWatchlists({ fromCache: false, lists: [], tried: false })).toBe(true);
+    expect(shouldInitializeWatchlists({ fromCache: false, lists: [{ isDefault: false }], tried: false })).toBe(true);
+  });
+
+  it("never sets up from the cache, a second time, or when the default list exists", () => {
+    // A cache snapshot can be missing the default list; setup would overwrite it.
+    expect(shouldInitializeWatchlists({ fromCache: true, lists: [], tried: false })).toBe(false);
+    expect(shouldInitializeWatchlists({ fromCache: false, lists: [], tried: true })).toBe(false);
+    expect(shouldInitializeWatchlists({ fromCache: false, lists: [{ isDefault: true }], tried: false })).toBe(false);
+  });
+});
+
+describe("the old single watchlist is retired from the portfolio hook (SPENDLY-657)", () => {
+  const code = async (path: string) => {
+    const { readFileSync } = await import("node:fs");
+    return readFileSync(path, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  };
+
+  it("usePortfolio no longer listens to or writes the legacy watchlist", async () => {
+    expect((await code("hooks/usePortfolio.ts")).toLowerCase()).not.toContain("watchlist");
+  });
+
+  it("useWatchlists writes only through the store and never touches holdings or money", async () => {
+    const source = await code("hooks/useWatchlists.ts");
+    for (const word of ["setDoc", "addDoc", "deleteDoc", "updateDoc", "writeBatch", "commitMutations"]) expect(source).not.toContain(word);
+    for (const word of ["holdings", "portfolioTransactions", "investmentCash", "accounts", "expenses", "ledger"]) expect(source).not.toContain(word);
   });
 });
