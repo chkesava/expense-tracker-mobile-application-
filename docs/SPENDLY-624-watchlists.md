@@ -4,7 +4,7 @@
 - **Feature branch:** `feature/SPENDLY-624-watchlists`, cut from `origin/main` at `3b0a09c8` on 2026-10-31.
 - **Worktree:** `C:\dev\worktrees\spendly-624`
 - **Plan:** [SPENDLY-624-plan.md](SPENDLY-624-plan.md)
-- **State:** 654, 655 and 656 (plus its quote-source correction) merged into the feature branch, and `main` (with SPENDLY-659) merged in. 657 (useWatchlists hook) merged into the feature branch. 658 (UI) built, awaiting the user's review on Expo web.
+- **State:** all five stories (654-658) merged into the feature branch, plus the SPENDLY-661 web form fix (cherry-picked into 658). `main` merged in. PR to `main` opened 2026-11-01 at the user's request.
 
 ## Overview
 Today's single, unvalidated watchlist becomes **multiple named watchlists** with a default list:
@@ -23,7 +23,7 @@ Lists live in Firestore under strict, tested rules and sync through the offline 
 | 2 | Watchlist store: CRUD, reorder, default list, legacy import (via `commitMutations`) | SPENDLY-655 | `feature/SPENDLY-655-watchlist-store` | Merged into feature branch |
 | 3 | Batch quotes: `/api/stock-quotes` and `useWatchlistQuotes` | SPENDLY-656 | `feature/SPENDLY-656-stock-quotes` | Merged into feature branch |
 | 4 | Live data hook `useWatchlists` (bounded listeners) and removal of the old writers | SPENDLY-657 | `feature/SPENDLY-657-use-watchlists` | Merged into feature branch |
-| 5 | Watchlist UI, plus "Add to watchlist" from the stock sheet | SPENDLY-658 | `feature/SPENDLY-658-watchlist-ui` | Built, awaiting user review on Expo web |
+| 5 | Watchlist UI, plus "Add to watchlist" from the stock sheet | SPENDLY-658 | `feature/SPENDLY-658-watchlist-ui` | Merged into feature branch (user reviewed on Expo web) |
 
 ## Decisions
 - **2026-10-31, audit:**
@@ -41,3 +41,4 @@ Lists live in Firestore under strict, tested rules and sync through the offline 
 - **2026-10-31, SPENDLY-657:**
   - First-time setup (default list + legacy copy) runs **only on a server-confirmed snapshot** without a default list, once per session. A cached snapshot could be missing the default list and would overwrite later edits.
   - `WatchlistTab` keeps its look but now reads the new lists and the batched quotes. The old `usePortfolio` listener and writers are removed. The redesign stays in 658.
+- **2026-11-01, SPENDLY-661 (Bug):** on web, the Add Holding and Buy/Sell form fields lost focus on click: a `Keyboard.dismiss` wrapper blurred the focused input. This was found during the 658 review and is on `main` too. The fix, `lib/keyboardDismiss.ts` (native-only), was cherry-picked into 658 as `aa8795b5`, so it reaches `main` with this epic. Its own branch `fix/SPENDLY-661-web-form-input-blur` is not needed after that.
