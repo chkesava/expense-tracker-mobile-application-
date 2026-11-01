@@ -9,6 +9,7 @@ type Op = { op: string; ref: FakeRef; data?: Record<string, unknown> };
 
 const commits: Array<{ uid: string; ops: Op[]; label?: string }> = [];
 let stored: Record<string, Array<{ id: string; data: Record<string, unknown> }>> = {};
+let readFromCache = false;
 
 vi.mock("firebase/firestore", () => ({
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join("/") }),
@@ -16,6 +17,7 @@ vi.mock("firebase/firestore", () => ({
   serverTimestamp: () => ({ __serverTimestamp: true }),
   getDocs: vi.fn(async (ref: FakeRef) => ({
     docs: (stored[ref.path] ?? []).map((d) => ({ id: d.id, data: () => d.data })),
+    metadata: { fromCache: readFromCache },
   })),
 }));
 
@@ -49,6 +51,7 @@ const entry = (yahooSymbol: string, order: number): WatchlistEntry => ({
 beforeEach(() => {
   commits.length = 0;
   stored = {};
+  readFromCache = false;
   db = { __db: true };
 });
 
@@ -217,5 +220,54 @@ describe("watchlists are not holdings", () => {
     for (const word of ["holdings", "portfolioTransactions", "investmentCash", "accountEntries", "accounts", "expenses", "incomes", "ledger", "quantity", "averagePrice"]) {
       expect(code).not.toContain(word);
     }
+  });
+});
+
+describe("stock sheet helpers (SPENDLY-658)", () => {
+  const listDoc = (name: string, isDefault: boolean) => ({ name, isDefault, createdAt: { toMillis: () => 1 }, updatedAt: { toMillis: () => 1 } });
+
+  it("offers the existing lists, default first, without writing", async () => {
+    stored["users/u1/watchlists"] = [
+      { id: "wl_b", data: listDoc("Banks", false) },
+      { id: "default", data: listDoc("My watchlist", true) },
+    ];
+    const r = await store.prepareWatchlistChoices(UID);
+    expect(r.ok && r.lists.map((l) => l.id)).toEqual(["default", "wl_b"]);
+    expect(commits).toHaveLength(0);
+  });
+
+  it("sets up the default list (with the old watchlist) when the server has none", async () => {
+    stored["users/u1/watchlist"] = [{ id: "x", data: { yahooSymbol: "TCS.NS", name: "TCS" } }];
+    const r = await store.prepareWatchlistChoices(UID);
+    expect(r.ok && r.lists.map((l) => [l.id, l.isDefault])).toEqual([["default", true]]);
+    expect(commits).toHaveLength(1);
+    expect(commits[0].label).toBe("watchlist setup");
+    expect(commits[0].ops.map((o) => o.ref.path)).toEqual(["users/u1/watchlists/default", "users/u1/watchlists/default/items/TCS.NS"]);
+  });
+
+  it("never sets up from a cache read: the default list may just not have synced", async () => {
+    readFromCache = true;
+    const r = await store.prepareWatchlistChoices(UID);
+    expect(r).toEqual({ ok: false, message: expect.stringContaining("Connect to the internet") });
+    expect(commits).toHaveLength(0);
+  });
+
+  it("adds to a list that isn't open, after reading its items", async () => {
+    stored["users/u1/watchlists/wl_b/items"] = [
+      { id: "HDFCBANK.NS", data: { yahooSymbol: "HDFCBANK.NS", name: "HDFC Bank", order: 1024, exchange: "NSE", instrumentType: "stock" } },
+    ];
+    const r = await store.addToWatchlistById(UID, "wl_b", { symbol: "icicibank", name: "ICICI Bank" });
+    expect(r).toMatchObject({ ok: true, status: "added", id: "ICICIBANK.NS" });
+    expect(commits[0].ops[0].ref.path).toBe("users/u1/watchlists/wl_b/items/ICICIBANK.NS");
+    // Appended after the existing item.
+    expect(commits[0].ops[0].data).toMatchObject({ order: 2048 });
+  });
+
+  it("reports a stock already in that list without writing", async () => {
+    stored["users/u1/watchlists/wl_b/items"] = [
+      { id: "TCS.NS", data: { yahooSymbol: "TCS.NS", name: "TCS", order: 1024, exchange: "NSE", instrumentType: "stock" } },
+    ];
+    expect(await store.addToWatchlistById(UID, "wl_b", { symbol: "TCS" })).toEqual({ ok: true, status: "exists", id: "TCS.NS" });
+    expect(commits).toHaveLength(0);
   });
 });

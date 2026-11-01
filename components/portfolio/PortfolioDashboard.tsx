@@ -300,7 +300,7 @@ function PortfolioDashboardInner({
 
   const otherTab =
     subTab === "watchlist" ? (
-      <WatchlistTab currency={displayCurrency} />
+      <WatchlistTab />
     ) : subTab === "orders" ? (
       <OrdersTab
         orders={orders}

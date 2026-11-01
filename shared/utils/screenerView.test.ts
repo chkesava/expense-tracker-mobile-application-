@@ -14,6 +14,7 @@ import {
   screenerView,
   type ScreenerView,
 } from "./screenerView";
+import { instrumentHeader } from "./marketsView";
 
 /** SPENDLY-651: what the screener screen shows in each state. */
 
@@ -97,6 +98,8 @@ describe("screenerRowView", () => {
       kind: "stock",
       item: { symbol: "TRENT.NS", ticker: "TRENT", price: "₹3,017.30", changePercent: "+5.44%", direction: "up" },
     });
+    // The sheet no longer calls every screener stock "NIFTY 50" (SPENDLY-658).
+    expect(instrumentHeader(screenerRowInstrument(ROWS[1])).subtitle).toBe(`TRENT · NSE · ${ROWS[1].sector}`);
   });
 });
 
