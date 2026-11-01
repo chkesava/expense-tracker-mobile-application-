@@ -32,7 +32,11 @@ import {
   normalizeWatchSymbol,
   planLegacyCopy,
   planMove,
+  sortEntries,
+  sortWatchlists,
   watchlistDoc,
+  watchlistEntryFromDoc,
+  watchlistFromDoc,
   watchlistItemDoc,
   type LegacyWatchlistItem,
 } from "@/shared/utils/watchlists";
@@ -202,4 +206,41 @@ export async function moveWatchlistItem(
     { label: "watchlist reorder" }
   );
   return { ok: true, outcome, moved: true };
+}
+
+/**
+ * The lists to offer in "Add to watchlist" from a stock sheet (SPENDLY-658),
+ * read once (no listener). If the user has never opened Watchlist, this runs
+ * the first-time setup so the old watchlist is still copied in, but only on a
+ * server read: from the cache a missing default list may just be unsynced.
+ */
+export async function prepareWatchlistChoices(uid: string): Promise<StoreResult<{ lists: Watchlist[] }>> {
+  const snapshot = await getDocs(collection(requireDb(), "users", uid, LISTS));
+  const lists = sortWatchlists(snapshot.docs.map((d) => watchlistFromDoc(d.id, d.data())).filter((l): l is Watchlist => !!l));
+  if (lists.some((l) => l.isDefault)) return { ok: true, outcome: "acked", lists };
+  if (snapshot.metadata?.fromCache !== false) {
+    return { ok: false, message: "Connect to the internet once to set up your watchlist, then try again." };
+  }
+  const setup = await initializeWatchlists(uid, await readLegacyWatchlist(uid));
+  if (!setup.ok) return setup;
+  const created: Watchlist = {
+    id: DEFAULT_WATCHLIST_ID,
+    name: DEFAULT_WATCHLIST_NAME,
+    isDefault: true,
+    createdAtMs: null,
+    updatedAtMs: null,
+    importedLegacyAtMs: null,
+  };
+  return { ok: true, outcome: setup.outcome, lists: [created, ...lists] };
+}
+
+/** Adds a stock to a list that isn't open on screen: reads its items once, then `addToWatchlist`. */
+export async function addToWatchlistById(
+  uid: string,
+  listId: string,
+  input: AddInput
+): ReturnType<typeof addToWatchlist> {
+  const snapshot = await getDocs(collection(requireDb(), "users", uid, LISTS, listId, ITEMS));
+  const entries = sortEntries(snapshot.docs.map((d) => watchlistEntryFromDoc(d.id, d.data())).filter((e): e is WatchlistEntry => !!e));
+  return addToWatchlist(uid, listId, input, entries);
 }

@@ -2,6 +2,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronLeft } from "lucide-react-native";
 
+import { AddToWatchlistButton } from "@/components/markets/AddToWatchlistButton";
 import { usePortfolioColors } from "@/components/portfolio/portfolioColors";
 import { StockChartCard } from "@/components/portfolio/stockChart/StockChartCard";
 import { haptic } from "@/lib/haptics";
@@ -18,10 +19,20 @@ import { useTheme } from "@/theme/ThemeProvider";
  * (SPENDLY-622, story SPENDLY-646): the figures the tab already has, plus the
  * price history chart.
  *
- * No buy or sell, no watchlist write and no Firestore: the chart reads
- * /api/stock-history only. "Add to watchlist" waits for SPENDLY-624.
+ * No buy or sell and no holdings: the chart reads /api/stock-history only.
+ * A stock can be added to a watchlist (SPENDLY-658), through the watchlist
+ * store; `showAddToWatchlist={false}` hides that where it makes no sense
+ * (opened from a watchlist row).
  */
-export function InstrumentSheet({ instrument, onClose }: { instrument: Instrument | null; onClose: () => void }) {
+export function InstrumentSheet({
+  instrument,
+  onClose,
+  showAddToWatchlist = true,
+}: {
+  instrument: Instrument | null;
+  onClose: () => void;
+  showAddToWatchlist?: boolean;
+}) {
   const { theme } = useTheme();
   const colors = usePortfolioColors();
   const insets = useSafeAreaInsets();
@@ -82,6 +93,11 @@ export function InstrumentSheet({ instrument, onClose }: { instrument: Instrumen
                   Day {dayRange}
                 </Text>
               ) : null}
+              {showAddToWatchlist && instrument?.kind === "stock" ? (
+                <View style={styles.action}>
+                  <AddToWatchlistButton symbol={instrument.item.symbol} name={instrument.item.name} />
+                </View>
+              ) : null}
             </View>
 
             {chartSymbol && instrument ? (
@@ -91,7 +107,7 @@ export function InstrumentSheet({ instrument, onClose }: { instrument: Instrumen
             <Text style={{ color: theme.colors.mutedForeground, fontSize: theme.typography.xs, fontFamily: theme.fontFamily.regular }}>
               {instrument?.kind === "index"
                 ? "Index levels are in points. Prices from Yahoo Finance and may be delayed."
-                : "Prices from Yahoo Finance and may be delayed. Read only: this doesn't change your portfolio."}
+                : "Prices from Yahoo Finance and may be delayed. This doesn't change your portfolio."}
             </Text>
           </ScrollView>
         ) : null}
@@ -108,5 +124,6 @@ const styles = StyleSheet.create({
   bodyContent: { paddingHorizontal: 16, paddingTop: 8, gap: 16 },
   identity: { gap: 4 },
   quoteRow: { flexDirection: "row", alignItems: "baseline", flexWrap: "wrap", gap: 8 },
+  action: { flexDirection: "row", marginTop: 8 },
   value: { fontSize: 28, fontVariant: ["tabular-nums"] },
 });

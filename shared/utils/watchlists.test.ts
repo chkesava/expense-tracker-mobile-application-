@@ -265,4 +265,18 @@ describe("the old single watchlist is retired from the portfolio hook (SPENDLY-6
     for (const word of ["setDoc", "addDoc", "deleteDoc", "updateDoc", "writeBatch", "commitMutations"]) expect(source).not.toContain(word);
     for (const word of ["holdings", "portfolioTransactions", "investmentCash", "accounts", "expenses", "ledger"]) expect(source).not.toContain(word);
   });
+
+  it("the watchlist UI (SPENDLY-658) writes only through the hook or the store and never touches holdings or money", async () => {
+    for (const file of ["components/portfolio/WatchlistTab.tsx", "components/markets/AddToWatchlistButton.tsx", "shared/utils/watchlistView.ts"]) {
+      const source = await code(file);
+      for (const word of ["setDoc", "addDoc", "deleteDoc", "updateDoc", "writeBatch", "commitMutations", "firebase/firestore", "@/lib/firestore"]) {
+        expect(source, `${file}: ${word}`).not.toContain(word);
+      }
+      // User-facing text may say "your holdings are not affected"; the code itself may not touch them.
+      const withoutText = source.replace(/"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g, '""');
+      for (const word of ["holdings", "portfolioTransactions", "investmentCash", "accounts", "expenses", "ledger", "usePortfolio("]) {
+        expect(withoutText, `${file}: ${word}`).not.toContain(word);
+      }
+    }
+  });
 });
