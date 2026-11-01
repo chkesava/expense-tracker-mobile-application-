@@ -20,7 +20,7 @@ app saves to Firestore ──► Firestore commits ──► app: "these documen
 | Piece | File | What it does |
 |---|---|---|
 | Rules shared by app and server | `shared/utils/readModel/pushRefs.ts` | What can be pushed: only the 10 synced collections, only under `users/{signed-in uid}`, never duress, sane doc ids, at most 50 per request. Requests carry refs, never data |
-| Server rules | `netlify/functions/_readmodelPushCore.ts` | Token verified (revocation checked) → duress refused → erased account refused → rate limit → read each document from Firestore → map with the sync's own mapper → upsert, or tombstone if gone. `{mode:"user"}` runs a changed-only sync of that one user instead |
+| Server rules | `netlify/functions/_readmodelPushCore.ts` | Token verified (no revocation check since SPENDLY-662) → duress refused → erased account refused → rate limit → read each document from Firestore → map with the sync's own mapper → upsert, or tombstone if gone. `{mode:"user"}` runs a changed-only sync of that one user instead |
 | Server wiring | `netlify/functions/readmodel-push.ts` | Firebase Admin and Supabase service role; `livePushPorts` is also used by the recovery drill |
 | App pusher | `lib/readModelPush.ts` | Collects refs and de-duplicates them. Waits 2 s so a burst of saves is one request, **waits for Firestore to commit** (offline, it simply waits), then posts. Never in Spendly Test or duress; drops refs for a user who signed out; failures are logged once and never shown |
 | Hook 1 | `lib/commitMutations.ts` | Names every path it wrote: expenses, incomes, audit events, accounts, transfers, entries, payments, bill payments, due-posts, including documents outside the loaded window |

@@ -1,7 +1,7 @@
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 
-import { bearerToken, claimsWithReadModelRole } from "../../shared/utils/readModelIdentity";
+import { authErrorCode, bearerToken, claimsWithReadModelRole } from "../../shared/utils/readModelIdentity";
 import { isDuressUid } from "../../shared/utils/duress";
 
 /**
@@ -68,7 +68,9 @@ export async function handleReadModelClaims(event: NetlifyEvent, ports: ClaimsPo
   let uid: string;
   try {
     ({ uid } = await ports.verifyIdToken(token));
-  } catch {
+  } catch (error) {
+    // SPENDLY-662: the reason only (never the token), to diagnose rejections.
+    console.warn(`[CLAIMS] rejected: token ${authErrorCode(error)}`);
     return json(401, { error: "Your session has expired. Sign in again." });
   }
   // Firebase never issues a duress uid; refuse one rather than trust it.

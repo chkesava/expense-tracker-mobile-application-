@@ -50,6 +50,17 @@ export function claimsWithReadModelRole(
 }
 
 /** `Bearer <token>` → token, or "" for anything else. */
+/**
+ * SPENDLY-662: the Firebase Admin error code of a failed token check
+ * (`auth/id-token-expired`, `auth/insufficient-permission`, …), never the
+ * token or its message, so a rejection can be diagnosed from the logs.
+ */
+export function authErrorCode(error: unknown): string {
+  const e = error as { code?: unknown; errorInfo?: { code?: unknown } } | null;
+  const code = e?.errorInfo?.code ?? e?.code;
+  return typeof code === "string" && /^[a-z0-9/_-]{1,64}$/i.test(code) ? code : "unknown";
+}
+
 export function bearerToken(authorization: string | null | undefined): string {
   const match = /^Bearer\s+(\S+)\s*$/i.exec(authorization ?? "");
   return match ? match[1] : "";

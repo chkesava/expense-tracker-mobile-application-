@@ -1,5 +1,5 @@
 import { isDuressUid } from "../../shared/utils/duress";
-import { bearerToken } from "../../shared/utils/readModelIdentity";
+import { authErrorCode, bearerToken } from "../../shared/utils/readModelIdentity";
 import { mapDocumentWithReason, SPEC_BY_COLLECTION, type ReadModelRow, type SourceDoc } from "../../shared/utils/readModel/mapping";
 import { parsePushRequest, type PushRef } from "../../shared/utils/readModel/pushRefs";
 
@@ -8,7 +8,11 @@ import { parsePushRequest, type PushRef } from "../../shared/utils/readModel/pus
  * seconds, so other devices see them before the nightly sync.
  *
  * Firestore stays the only source and the server the only Supabase writer:
- * - the uid comes only from the verified token (revocation checked);
+ * - the uid comes only from the verified token. Revocation isn't checked
+ *   (SPENDLY-662): a push only copies the caller's own Firestore documents,
+ *   read here, so a revoked session can't write anything of its own, and the
+ *   check needed an Auth permission the site's service account lacked, which
+ *   silently rejected every push;
  * - the client sends document refs, never data; each document is read from
  *   Firestore here (1 read each) and mapped exactly as the sync maps it;
  * - the upsert is version-guarded by Firestore's `updateTime`, so a late or
@@ -71,15 +75,30 @@ export async function handleReadModelPush(event: PushEvent, ports: PushPorts): P
   if (event.httpMethod !== "POST") return json(405, { error: "Method not allowed." });
   if (!ports.enabled()) return json(202, { skipped: "disabled" });
 
+  const stats = empty();
+  const finish = async (result: PushResult) => {
+    // Best effort, but never silent again (SPENDLY-662).
+    await ports.record(stats).catch((error) =>
+      ports.log?.(`[PUSH] record failed: ${error instanceof Error ? error.message : String(error)}`)
+    );
+    return result;
+  };
+  // SPENDLY-662: every rejection is counted and logged with its reason only.
+  const reject = (reason: string, result: PushResult) => {
+    stats.rejected += 1;
+    ports.log?.(`[PUSH] rejected: ${reason}`);
+    return finish(result);
+  };
+
   const token = bearerToken(header(event, "authorization"));
-  if (!token) return json(401, { error: "Sign in first." });
+  if (!token) return reject("no-token", json(401, { error: "Sign in first." }));
   let uid: string;
   try {
     ({ uid } = await ports.verifyIdToken(token));
-  } catch {
-    return json(401, { error: "Your session has expired. Sign in again." });
+  } catch (error) {
+    return reject(`token ${authErrorCode(error)}`, json(401, { error: "Your session has expired. Sign in again." }));
   }
-  if (!uid || isDuressUid(uid)) return json(403, { error: "Not allowed." });
+  if (!uid || isDuressUid(uid)) return reject("not-allowed", json(403, { error: "Not allowed." }));
 
   let body: unknown;
   try {
@@ -88,23 +107,11 @@ export async function handleReadModelPush(event: PushEvent, ports: PushPorts): P
     body = null;
   }
   const request = parsePushRequest(body);
-  const stats = empty();
-  const finish = async (result: PushResult) => {
-    await ports.record(stats).catch(() => undefined);
-    return result;
-  };
-  if (!request.ok) {
-    stats.rejected += 1;
-    return finish(json(400, { error: request.error }));
-  }
-  if (await ports.isPurged(uid)) {
-    stats.rejected += 1;
-    return finish(json(403, { error: "Not allowed." }));
-  }
+  if (!request.ok) return reject("bad-request", json(400, { error: request.error }));
+  if (await ports.isPurged(uid)) return reject("purged", json(403, { error: "Not allowed." }));
   const cost = request.mode === "user" ? USER_SYNC_COST : request.refs.length;
   if (!(await ports.allow(uid, cost))) {
-    stats.rejected += 1;
-    return finish(json(429, { error: "Too many updates. They'll be copied tonight." }));
+    return reject("rate-limited", json(429, { error: "Too many updates. They'll be copied tonight." }));
   }
 
   if (request.mode === "user") {
