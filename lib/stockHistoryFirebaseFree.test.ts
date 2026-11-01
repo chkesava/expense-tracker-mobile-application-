@@ -49,6 +49,11 @@ const CHART_PATH = [
   "app/(app)/screener.tsx",
   "components/screener/ScreenerFilterSheet.tsx",
   "components/screener/ScreenerSheets.tsx",
+  // SPENDLY-656: batched watchlist quotes.
+  "shared/utils/stockQuotes.ts",
+  "netlify/functions/stock-quotes.ts",
+  "lib/stockQuoteCache.ts",
+  "hooks/useWatchlistQuotes.ts",
   "netlify/functions/market-overview.ts",
 ];
 

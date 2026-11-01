@@ -16,7 +16,7 @@
 import type { Nifty500Constituent } from "../data/nifty500";
 import type { MarketStatusDTO, ScreenerRowDTO, ScreenerUniverseDTO } from "../types/market";
 import type { YahooSparkEntry } from "./marketMovers";
-import { classifyFreshness, formatIstTime, marketStateAt, type OverviewFreshness } from "./marketOverview";
+import { classifyFreshness, formatIstTime, marketStateAt, type FreshnessSource, type OverviewFreshness } from "./marketOverview";
 
 export const SCREENER_SCHEMA_VERSION = 1 as const;
 /** Below this share of the universe priced, screening would mislead. */
@@ -113,7 +113,7 @@ export function screenerRowFromSpark(
  * newest close as the last trade, `marketStateAt` reads "open" only when a
  * close has printed in today's session, so weekends and holidays read closed.
  */
-export function screenerStatus(rows: readonly ScreenerRowDTO[], nowMs: number): MarketStatusDTO {
+export function screenerStatus(rows: readonly Pick<ScreenerRowDTO, "asOf">[], nowMs: number): MarketStatusDTO {
   const ist = new Date(nowMs + IST_OFFSET_MS);
   const midnightUtc = Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate()) - IST_OFFSET_MS;
   const start = midnightUtc + (9 * 60 + 15) * 60_000;
@@ -218,10 +218,23 @@ export function istDayLabel(iso: string | null): string {
  * Never says "live".
  */
 export function screenerFreshnessLabel(dto: ScreenerUniverseDTO, nowMs: number, opts: { offline?: boolean } = {}): string {
+  return dailyCloseLabel(dto, nowMs, { offline: opts.offline, staleWhileOpenMs: SCREENER_STALE_WHILE_OPEN_MS });
+}
+
+/**
+ * The same wording for anything priced from daily bars (the screener, and the
+ * watchlist batch quotes of SPENDLY-656): a closed market shows the closing
+ * date, a trading one the fetch time. Never says "live".
+ */
+export function dailyCloseLabel(
+  dto: FreshnessSource,
+  nowMs: number,
+  opts: { offline?: boolean; staleWhileOpenMs: number }
+): string {
   const fetchedAt = formatIstTime(dto.fetchedAt, nowMs);
   const day = istDayLabel(dto.status.lastTradeAt);
   if (opts.offline) return `Offline · showing prices from ${fetchedAt || day}`;
-  const freshness = screenerFreshness(dto, nowMs);
+  const freshness = classifyFreshness(dto, nowMs, opts.staleWhileOpenMs);
   if (freshness === "expired") return day ? `Out of date · closing prices of ${day}` : "Out of date";
   if (freshness === "stale") return `Delayed · prices from ${fetchedAt}`;
   const state = marketStateAt(dto.status, nowMs);
