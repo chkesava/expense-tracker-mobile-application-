@@ -32,8 +32,21 @@ cssInterop(UIIcon as React.ComponentType<any>, {
 });
 
 const inputStyle = tva({
-  base: 'h-9 w-full flex-row items-center rounded-md border border-border  dark:bg-input/30 bg-transparent shadow-xs transition-[color,box-shadow] overflow-hidden data-[focus=true]:outline-none data-[focus=true]:border-ring dark:data-[focus=true]:border-ring data-[focus=true]:web:ring-[3px] data-[focus=true]:web:ring-ring/50 data-[invalid=true]:border-destructive/40 dark:data-[invalid=true]:border-destructive/40 data-[invalid=true]:web:ring-destructive/20 dark:data-[invalid=true]:web:ring-destructive/40 data-[disabled=true]:pointer-events-none data-[disabled=true]:cursor-not-allowed data-[disabled=true]:opacity-50 px-3 gap-2',
+  base: 'h-9 w-full flex-row items-center rounded-md border border-border bg-transparent shadow-xs transition-[color,box-shadow] overflow-hidden data-[focus=true]:outline-none data-[focus=true]:border-ring data-[focus=true]:web:ring-[3px] data-[focus=true]:web:ring-ring/50 data-[invalid=true]:border-destructive/40 data-[invalid=true]:web:ring-destructive/20 data-[disabled=true]:pointer-events-none data-[disabled=true]:cursor-not-allowed data-[disabled=true]:opacity-50 px-3 gap-2',
+  variants: {
+    // SPENDLY-677: where the dark styles come from; see the button's scheme.
+    scheme: {
+      device:
+        'dark:bg-input/30 dark:data-[focus=true]:border-ring dark:data-[invalid=true]:border-destructive/40 dark:data-[invalid=true]:web:ring-destructive/40',
+      light: '',
+      dark: 'bg-input/30 data-[invalid=true]:web:ring-destructive/40',
+    },
+  },
+  defaultVariants: {
+    scheme: 'device',
+  },
 });
+export { inputStyle };
 
 const inputIconStyle = tva({
   base: 'justify-center items-center text-muted-foreground fill-none h-4 w-4',
@@ -50,12 +63,12 @@ const inputFieldStyle = tva({
 type IInputProps = React.ComponentProps<typeof UIInput> &
   VariantProps<typeof inputStyle> & { className?: string };
 const Input = React.forwardRef<React.ComponentRef<typeof UIInput>, IInputProps>(
-  function Input({ className, ...props }, ref) {
+  function Input({ className, scheme = 'device', ...props }, ref) {
     return (
       <UIInput
         ref={ref}
         {...props}
-        className={inputStyle({ class: className })}
+        className={inputStyle({ scheme, class: className })}
         context={{}}
       />
     );

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { contrastRatio, hexToRgb } from "@/components/ui/glassTokens";
+import { spendingSliceColor } from "@/components/spending/palette";
 import {
   ACCENT_COLOR_NAMES,
   EXPENSE_DARK_PALETTE_NAMES,
@@ -16,6 +17,7 @@ import {
   resolveThemePreference,
   createTheme,
   expensePaletteColors,
+  gluestackSchemeFor,
   isExpensePaletteName,
   isThemeName,
   midnightSlateColors,
@@ -195,6 +197,51 @@ describe("light Expense palettes (SPENDLY-677)", () => {
       expect(chart.categorical).not.toContain(c.success);
       expect(chart.categorical).not.toContain(c.destructive);
       expect(new Set(chart.categorical).size).toBe(chart.categorical.length);
+    });
+  });
+});
+
+describe("Gluestack dark styles follow the palette (SPENDLY-677)", () => {
+  it("pins the scheme for Expense palettes and leaves every other theme on the device", () => {
+    for (const name of EXPENSE_DARK_PALETTE_NAMES) expect(gluestackSchemeFor(name)).toBe("dark");
+    for (const name of EXPENSE_LIGHT_PALETTE_NAMES) expect(gluestackSchemeFor(name)).toBe("light");
+    expect(gluestackSchemeFor("light")).toBe("device");
+    expect(gluestackSchemeFor("dark")).toBe("device");
+  });
+});
+
+describe("category ramps (SPENDLY-677)", () => {
+  it("keeps the shared slice ramp, unchanged, for every theme without its own", () => {
+    for (const name of [...EXPENSE_DARK_PALETTE_NAMES, "light", "dark"] as const) {
+      const theme = createTheme(name, "indigo");
+      expect(theme.chart.slices).toBeUndefined();
+      expect(theme.chart.bars).toBeUndefined();
+      const ramp = [0, 1, 2, 3, 4, 5].map((i) => spendingSliceColor(i, `c${i}`, theme));
+      expect(ramp).toEqual([theme.colors.primary, "#EC4899", "#8B5CF6", "#F59E0B", "#0EA5E9", theme.colors.primary]);
+      expect(spendingSliceColor(0, "Others", theme)).toBe(theme.colors.info);
+    }
+  });
+
+  describe.each(EXPENSE_LIGHT_PALETTE_NAMES)("%s", (name) => {
+    const theme = createTheme(name, "indigo");
+    const { slices = [], bars = [] } = theme.chart;
+    const money = [theme.colors.success, theme.colors.destructive];
+
+    it("brings five distinct slice colours and six bar colours led by ink", () => {
+      expect(slices).toHaveLength(5);
+      expect(new Set(slices).size).toBe(5);
+      expect(bars).toHaveLength(6);
+      expect(new Set(bars).size).toBe(6);
+      expect(bars[0]).toBe(theme.colors.foreground);
+      expect(spendingSliceColor(1, "Food", theme)).toBe(slices[1]);
+      expect(spendingSliceColor(0, "Others", theme)).toBe(theme.colors.info);
+    });
+
+    it("keeps every stop visible on the card (3:1) and clear of the money colours", () => {
+      for (const hex of [...slices, ...bars]) {
+        expect(ratio(hex, theme.colors.card)).toBeGreaterThanOrEqual(3);
+        expect(money).not.toContain(hex);
+      }
     });
   });
 });

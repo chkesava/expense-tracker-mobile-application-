@@ -155,6 +155,14 @@ export type ChartTokens = {
   categorical: string[];
   positive: string;
   negative: string;
+  /**
+   * SPENDLY-677: per-palette ramps for the spending slices
+   * (`spendingSliceColor`) and category bars (`categoryRamp`). Only the light
+   * Expense palettes set them; every other theme keeps the shared ramps
+   * those helpers build from its primary.
+   */
+  slices?: string[];
+  bars?: string[];
 };
 
 /** MD3-flavored type scale — additive to the legacy `typography` numeric scale. */
@@ -796,6 +804,20 @@ export function resolveExpensePalette(value: unknown): ExpensePaletteName {
   return isExpensePaletteName(value) ? value : EXPENSE_THEME_NAME;
 }
 
+/**
+ * SPENDLY-677: which scheme the vendored Gluestack button and input apply
+ * their `dark:` styles for. NativeWind resolves `dark:` from the device
+ * (tailwind `darkMode: 'media'`), so a light Expense palette on a dark phone
+ * would get the dark styles. Expense palettes pin the scheme to the palette;
+ * every other theme keeps following the device as before.
+ */
+export type GluestackScheme = "device" | "light" | "dark";
+
+export function gluestackSchemeFor(name: ThemeName): GluestackScheme {
+  if (!isExpensePaletteName(name)) return "device";
+  return themeUsesDarkPalette(name) ? "dark" : "light";
+}
+
 /** Presets that ship their own accent; the accent picker does not apply. */
 export function themeOwnsAccent(name: ThemeName): boolean {
   return isExpensePaletteName(name);
@@ -1054,6 +1076,19 @@ export function isAccentColorName(value: unknown): value is AccentColorName {
  */
 const EXPENSE_LIGHT_CHART_FILL = ["#0E7490", "#7C3AED", "#C2410C", "#DB2777", "#2563EB", "#A16207", "#475569"];
 
+/**
+ * Category ramps for the light palettes, led by each palette's own hues. No
+ * money green or red; every stop holds 3:1 on the palette's card.
+ */
+const EXPENSE_LIGHT_CATEGORY_RAMPS: Partial<Record<ExpensePaletteName, string[]>> = {
+  "expense-rose": ["#DB2777", "#6D0D3F", "#9333EA", "#D97706", "#0E7490", "#64748B"],
+  "expense-violet": ["#7C3AED", "#5B21B6", "#DB2777", "#0E7490", "#D97706", "#64748B"],
+  "expense-ocean": ["#2563EB", "#0B1F3B", "#0891B2", "#7C3AED", "#D97706", "#DB2777"],
+  "expense-sunset": ["#EA580C", "#0E7490", "#7C3AED", "#BE185D", "#A16207", "#475569"],
+  "expense-lavender": ["#5B4BFF", "#0891B2", "#9333EA", "#DB2777", "#D97706", "#475569"],
+  "expense-sage": ["#57707A", "#8E6F8A", "#A16207", "#0E7490", "#7B5E57", "#191D23"],
+};
+
 function expensePaletteChart(name: ExpensePaletteName): ChartTokens {
   const c = EXPENSE_PALETTE_COLORS[name];
   if (themeUsesDarkPalette(name)) {
@@ -1065,10 +1100,14 @@ function expensePaletteChart(name: ExpensePaletteName): ChartTokens {
   }
   const swatch = EXPENSE_PALETTE_SWATCHES[name];
   const own = [c.accent, swatch[0]];
+  const ramp = EXPENSE_LIGHT_CATEGORY_RAMPS[name] ?? [];
   return {
     categorical: [...new Set([...own, ...EXPENSE_LIGHT_CHART_FILL])].slice(0, 7),
     positive: c.success,
     negative: c.destructive,
+    slices: ramp.slice(0, 5),
+    // Bars lead with ink, like the shared ramp.
+    bars: [c.foreground, ...ramp.filter((hex) => hex !== c.foreground)].slice(0, 6),
   };
 }
 

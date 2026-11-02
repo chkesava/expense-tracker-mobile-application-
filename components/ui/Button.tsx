@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/button/index"; // Import the gluestack implementation
 import { haptic as hapticFeedback } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
+import { gluestackSchemeFor } from "@/theme/tokens";
 import { contrastRatio, hexToRgb } from "./glassTokens";
 
 export type ButtonVariant =
@@ -42,7 +43,7 @@ export function Button({
   style,
   ...props
 }: ButtonProps) {
-  const { theme } = useTheme();
+  const { theme, themeName } = useTheme();
   const isDisabled = disabled || loading;
 
   const handlePress = (e: any) => {
@@ -105,6 +106,7 @@ export function Button({
   return (
     <GluestackButton
       variant={mappedVariant}
+      scheme={gluestackSchemeFor(themeName)}
       size={mappedSize}
       isDisabled={isDisabled}
       onPress={handlePress}

@@ -99,7 +99,10 @@ type Colors = ReturnType<typeof useTheme>["theme"]["colors"];
  * The two leading stops follow the theme (ink, then the user's accent); the
  * tail is a fixed data-viz ramp.
  */
-export function categoryRamp(colors: Colors): string[] {
+export function categoryRamp(theme: { colors: Colors; chart: { bars?: string[] } }): string[] {
+  // SPENDLY-677: the light Expense palettes bring their own ramp.
+  if (theme.chart.bars?.length) return theme.chart.bars;
+  const colors = theme.colors;
   return [colors.foreground, colors.primary, "#EC4899", "#F59E0B", "#0EA5E9", "#14B8A6"];
 }
 

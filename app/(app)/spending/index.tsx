@@ -200,7 +200,7 @@ function OverviewTab({
     id: c.category,
     label: c.category,
     value: c.amount,
-    color: spendingSliceColor(i, c.category, theme.colors),
+    color: spendingSliceColor(i, c.category, theme),
   }));
 
   const openSlice = (index: number) => {
@@ -279,7 +279,7 @@ function CategoriesTab({
           amount={c.amount}
           percentage={c.percentage}
           percentageOf="total spending"
-          color={spendingSliceColor(i, c.category, theme.colors, "")}
+          color={spendingSliceColor(i, c.category, theme, "")}
           currency={currency}
           divider={i < categories.length - 1}
           onPress={() => router.push(categoryDetailHref(c.category, month) as Href)}
@@ -307,7 +307,7 @@ function TransactionsTab({
       topCategoryShares(current?.categoryTotals, Number.MAX_SAFE_INTEGER).categories.map((c, i) => ({
         value: c.category,
         label: c.category,
-        color: spendingSliceColor(i, c.category, theme.colors, ""),
+        color: spendingSliceColor(i, c.category, theme, ""),
       })),
     [current, theme.colors]
   );

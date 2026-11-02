@@ -222,7 +222,7 @@ function OverviewTab({
             label: c.category,
             amount: c.amount,
             percentage: c.percentage,
-            color: spendingSliceColor(i, c.category, theme.colors),
+            color: spendingSliceColor(i, c.category, theme),
           }))}
           currency={currency}
           formatMoney={money}
@@ -412,7 +412,7 @@ function CategoriesTab({
             accessibilityRole="button"
             accessibilityLabel={`${m.category}: ${Math.round(m.amount)} this month. ${change}. Open category`}
           >
-            <CategoryIcon category={m.category} color={spendingSliceColor(i, m.category, theme.colors, "")} size={40} />
+            <CategoryIcon category={m.category} color={spendingSliceColor(i, m.category, theme, "")} size={40} />
             <View style={styles.moveBody}>
               <Text style={[styles.moveName, { color: theme.colors.foreground, fontFamily: theme.fontFamily.medium }]} numberOfLines={1}>
                 {m.category}

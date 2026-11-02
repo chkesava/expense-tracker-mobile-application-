@@ -88,7 +88,7 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
       id: c.category,
       label: c.category,
       value: c.amount,
-      color: spendingSliceColor(i, c.category, theme.colors),
+      color: spendingSliceColor(i, c.category, theme),
     }));
   }, [categories, theme.colors.primary, theme.colors.info]);
 

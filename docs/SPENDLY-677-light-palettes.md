@@ -22,6 +22,13 @@ Decision (owner, 2026-11-02): these are true light palettes. SPENDLY-604's "alwa
 - `NetWorthGlassCard` period chip and `AppBarBrand` logo icon are theme-aware.
 - `MagicChatModal`, `ReceiptScannerModal` and `ExportDataModal`: labels and icons on primary buttons and chips use `primaryForeground` instead of white. This also fixes white-on-light-grey on the dark palettes, whose primary is the light text colour.
 - Picker (`components/settings/ExpensePalettePicker.tsx`): Dark and Light groups. Light tiles show a miniature card preview: background, card, accent dot, surface chip and action pill.
+- **Dark styles follow the palette, not the phone.**
+  - NativeWind resolves `dark:` classes from the device (`darkMode: 'media'`), so a light palette on a dark-mode phone used to get the faded destructive button and dark input and outline fills. The reverse also happened: dark palettes on light-mode phones.
+  - The vendored `components/ui/button` and `components/ui/input` now take a `scheme` variant (`device` | `light` | `dark`, default `device`). Their `dark:` classes moved into it unchanged for `device`, and unprefixed for `dark`.
+  - The Spendly `Button` and `Input` wrappers pass `gluestackSchemeFor(themeName)`: the palette's own scheme for Expense palettes, `device` for everything else. Ganesh Seva, Nutrition and the dev sandbox are unchanged.
+- **Category colours per palette.**
+  - `ChartTokens` gains optional `slices` and `bars` ramps. Only the light palettes set them, led by each palette's own hues; every stop is held to 3:1 on the card and kept off the money green/red.
+  - `spendingSliceColor` (the donut and spending drill-downs) and `categoryRamp` (top-categories bars) now take the theme and use those ramps when present. Every other theme gets exactly the shared ramp it had before.
 
 Left as they are, on purpose:
 - The bottom-nav capsule (charcoal smoke glass in every theme, checked by `lib/navContrast.test.ts` over all themes).
@@ -36,11 +43,12 @@ Left as they are, on purpose:
 - the accent at 3:1 as a mark;
 - reference colours kept on their tokens;
 - chart series free of money colours;
-- `createTheme` ignoring the accent picker.
+- `createTheme` ignoring the accent picker;
+- `gluestackSchemeFor` for every palette and theme;
+- the slice and bar ramps: distinct, 3:1 on the card, no money colours, and the shared ramp unchanged for themes without their own.
 
-`lib/navContrast.test.ts` already loops over every theme.
+`lib/navContrast.test.ts` already loops over every theme. The `scheme` class output was checked against `tailwind-variants`: `device` gives the original string exactly.
 
 ## Not done / risks
-- NativeWind `dark:` classes in `components/ui/button` and `components/ui/input` follow the **device** scheme (`darkMode: 'media'`), not the palette. On a dark-mode device with a light palette, the destructive button renders at 60% and the outline/input fills pick up their `dark:` tints. This was already true for the dark palettes on light devices.
-- `components/spending/palette.ts` and `categoryRamp` still use their fixed data-viz tails after the theme's primary. They read on light, but they don't use `theme.chart`.
+- **Dark palettes on light-mode phones now always get the `dark:` button and input styles:** the destructive button at 60%, and the outline fill and border tints. Dark-mode phones already saw these.
 - Device QA (Android status and navigation bar on a light palette) is pending.
