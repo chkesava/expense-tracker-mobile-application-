@@ -28,6 +28,20 @@
 | **Per-write push (SPENDLY-583)** | **Broken: 0 pushes recorded since it went live (10-31)** | 6 health runs show "—", against ~113 Firestore writes a day. The function is configured (it answers 401, not 202 "disabled"), so the app's requests either never arrive or are rejected at the token check, which isn't counted. See story **P0** |
 | Firestore reads | **21K / 24 h** (user screenshot, Oct 31–Nov 1) | The **~4K spike at ~6 AM IST is the nightly full sync** (4,106 reads). The other spikes are app launches and Firebase console browsing (the console counts its own reads) |
 
+### 0.1 Revisit: main since the plan (2026-11-02)
+
+`main` is now at `51c68dd7`, and the epic branch is behind it. **The first step of 587 is `git merge main`** into the epic branch, with the tests re-run.
+
+| On main | Effect on the epic | Tickets updated |
+|---|---|---|
+| **SPENDLY-624 watchlists** (`56983574`) | New collections `watchlists` and the **nested** `watchlists/{listId}/items/{itemId}` (writes already go through `commitMutations`). It is the first nested path, so the mapping, sync reader, push refs, RPC key, purge and RLS need parent-id support | 591, 669, 598, 671 |
+| **SPENDLY-668 lend already deducted** (`334719b2`) | `receivables.sourceMode` (`account` \| `already_deducted`); `sourceAccountId` is now nullable; no backfill (missing means `account`). The typed columns must be nullable, and parity mustn't expect an account leg | 589, 598, 671 |
+| **SPENDLY-675 card outstanding vs statement** (`d5ca8496`) | The card cycle numbers (`useCreditCardLiveUsage`) are **derived in TypeScript** from expenses, incomes, entries and transfers, while the stored `currentOutstanding` stays the displayed total. The bill allocation pass (a compare-and-set transaction) re-runs when **another device creates a bill**, so realtime must deliver bill inserts | 597, 671 |
+| **SPENDLY-677 light palettes** (`51c68dd7`) | `theme`, `themeMode`, `accentColor` and `expensePalette` are on `users/{uid}`, written by `ThemeProvider` with a direct `setDoc`. In `supabase` mode they must load from the on-device copy before the first paint (no palette flash) | 591, 671, 674 |
+| **SPENDLY-660 categories by revision** (`8a66d9dc`) | The revision mechanism stays as the `firestore`-mode path; `noteCategoriesWritten` also feeds the outbox | 671, 674 |
+| **SPENDLY-662 push fix** (`9603d2b3`) | P0 is done; server writers can rely on the push | — |
+| SPENDLY-659 (index previous close), README docs | No effect | — |
+
 ---
 
 ## 1. Target architecture
