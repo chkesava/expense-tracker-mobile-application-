@@ -416,3 +416,71 @@ describe("SPENDLY-160 — lending and borrowing stay symmetric in net worth", ()
     expect(receivableOutstanding).toBe(borrowingOutstanding);
   });
 });
+
+describe("SPENDLY-668 — a lend already deducted elsewhere", () => {
+  beforeEach(() => {
+    resetMemoryLedgerIds();
+  });
+
+  const balanceOf = (ledger: ReturnType<typeof createMemoryLedger>, account: Account) =>
+    computeBankBalance(
+      account,
+      ledger.listExpenses(),
+      ledger.listIncomes(),
+      [],
+      [],
+      [],
+      [],
+      [],
+      ledger.listReceivables(),
+      ledger.listReceivableRepayments()
+    );
+
+  it("records the receivable without debiting any account or adding an expense", () => {
+    const ledger = createMemoryLedger("user-1");
+    const account = ledger.addAccount(bank);
+
+    ledger.addReceivable({
+      personType: "FRIEND",
+      personName: "Rahul",
+      originalAmount: 20000,
+      lentDate: "2026-01-10",
+      sourceMode: "already_deducted",
+      sourceAccountId: null,
+      status: "ACTIVE",
+    });
+
+    expect(balanceOf(ledger, account)).toBe(50000);
+    expect(ledger.listExpenses()).toHaveLength(0);
+    expect(
+      summarizeReceivables(ledger.listReceivables(), ledger.listReceivableRepayments(), "2026-01-31")
+        .totalOutstanding
+    ).toBe(20000);
+  });
+
+  it("takes repayments into an account without needing a source account", () => {
+    const ledger = createMemoryLedger("user-1");
+    const account = ledger.addAccount(bank);
+    const receivable = ledger.addReceivable({
+      personType: "FRIEND",
+      personName: "Rahul",
+      originalAmount: 20000,
+      lentDate: "2026-01-10",
+      sourceMode: "already_deducted",
+      sourceAccountId: null,
+      status: "ACTIVE",
+    });
+
+    const paid = ledger.addReceivableRepayment({
+      receivableId: receivable.id!,
+      amount: 5000,
+      receivedAccountId: account.id!,
+      date: "2026-02-10",
+    });
+    expect(paid.ok).toBe(true);
+    expect(ledger.listReceivables()[0].outstandingAmount).toBe(15000);
+    expect(ledger.listReceivables()[0].status).toBe("PARTIALLY_SETTLED");
+    // Only the repayment moves money; the lend itself never did.
+    expect(balanceOf(ledger, account)).toBe(55000);
+  });
+});
