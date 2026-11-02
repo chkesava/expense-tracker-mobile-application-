@@ -1,6 +1,6 @@
 # SPENDLY-586 — Supabase-first reads and dual writes: implementation plan (v2)
 
-**v2, 2026-11-01.** It replaces the v1 plan of 2026-10-31.
+**v2, 2026-11-01; approved by the user 2026-11-02.** It replaces the v1 plan of 2026-10-31. Jira keys: P0 = **SPENDLY-662 (Done)**, N1–N6 = **SPENDLY-669 to 674**.
 
 **The user's decisions (2026-11-01):**
 
@@ -76,13 +76,13 @@ READ (every screen)
 
 ## 2. Stories
 
-Keys are existing Jira keys where they exist, and **N1–N6 for new stories**, created once the user approves this plan. Each story lists what it changes and its exit gate.
+Keys are existing Jira keys; the new stories N1–N6 are SPENDLY-669 to 674 (created 2026-11-02). Each story lists what it changes and its exit gate.
 
 ### Phase 0 — fix, decide, measure
 
 | Key | Story | Changes | Exit |
 |---|---|---|---|
-| **P0 (new, bug)** | **The per-write push copies nothing** | **Confirmed 2026-11-01:**<br>• Netlify logs show the app's requests arrive (~17 calls Oct 31–Nov 1, 150–660 ms each, no errors logged).<br>• `push_daily` has **no rows ever**.<br>• Expenses changed in the last 48 h reached Supabase **8–15 h** later, so only the nightly sync copied them.<br>Every Supabase-side failure throws and would be logged, so the requests stop at the **token check**: `verifyIdToken(token, true)` fails and returns 401, which is neither logged nor counted. **Most likely, `FIREBASE_SERVICE_ACCOUNT` on the `spendly-share` site is for a different Firebase project than `expenseapp-27f94`.**<br>**Fix:** log the rejection reason (the error code only), count rejections in `push_daily`, check the `rpc` errors in `record`, and correct the Netlify env. Needs one web deploy | Health shows pushes > 0 per day; a save on device A appears in Supabase within 10 s |
+| **P0 = SPENDLY-662 (Done 2026-11-01)** | **The per-write push copies nothing** | **Confirmed 2026-11-01:**<br>• Netlify logs show the app's requests arrive (~17 calls Oct 31–Nov 1, 150–660 ms each, no errors logged).<br>• `push_daily` has **no rows ever**.<br>• Expenses changed in the last 48 h reached Supabase **8–15 h** later, so only the nightly sync copied them.<br>Every Supabase-side failure throws and would be logged, so the requests stop at the **token check**: `verifyIdToken(token, true)` fails and returns 401, which is neither logged nor counted. **Most likely, `FIREBASE_SERVICE_ACCOUNT` on the `spendly-share` site is for a different Firebase project than `expenseapp-27f94`.**<br>**Fix:** log the rejection reason (the error code only), count rejections in `push_daily`, check the `rpc` errors in `record`, and correct the Netlify env. Needs one web deploy | Health shows pushes > 0 per day; a save on device A appears in Supabase within 10 s |
 | **587** | **ADR v2 + rule changes + spike** | Rewrite `docs/SPENDLY-586-adr.md` for the user's v2 decisions. Change READ_MODEL_RULES R1.1 (client writes via `rm_client_apply` only) and the read-model paragraph of `CLAUDE.md` (**the user approves the wording**). Spike, on local Docker Supabase: (a) the `rm_client_apply` RPC and (b) a Realtime Broadcast ping, both under Firebase-issued tokens, including the duress and expired-token cases | The user signs off; the spike passes |
 | **588** | **Read inventory: production baseline** | Add the post-660 and post-633 7-day console reads to the report | Baseline recorded |
 
@@ -99,10 +99,10 @@ Keys are existing Jira keys where they exist, and **N1–N6 for new stories**, c
 
 | Key | Story | Changes | Exit |
 |---|---|---|---|
-| **N1** | **`rm_client_apply` RPC** | A migration: the function (an allowlist, an owner check, the version guard: `client_written_at` vs `source_update_time`, tombstones), `revoke … from public, anon`, `grant execute … to authenticated`. New columns `written_by` (`client`/`server`) and `client_written_at`. `assert_security.sql` and `rls_behaviour.sql` cover cross-user writes, duress, expired tokens and non-allowlisted tables. Drills re-run | The SQL suite and drills are green; perf p95 is under 100 ms per batch of 50 |
-| **N2** | **The on-device Supabase outbox** | `commitMutations` hands the written paths to the outbox. The outbox reads each document from the Firestore cache, maps it with the shared mapper, persists the entry (SQLite, with N5), and sends batches to `rm_client_apply` with backoff. Each entry is idempotent on `(table, doc_id, client_written_at)`. Nothing is sent in duress or local-test mode; in Spendly Test the loopback is used. The SPENDLY-583 push stays for server writers and as a fallback | Airplane-mode, kill-app and Supabase-down tests: every write lands once, in order. Unit tests for the mapper path and the retry |
-| **N3** | **Route every direct writer** | Inventory the writers outside `commitMutations` (bills, borrowings/receivables, EPF, investment cash, splits, categories via 660's `noteCategoriesWritten`…). Move each into `commitMutations` or the outbox hook. A guard test fails for an unrouted writer of a synced collection | Guard green; the outbox count matches Firestore writes in the lab |
-| **N4** | **The sync becomes the safety net, not the copier** | The nightly run becomes changed-only (`updatedAt`) plus parity repair (Firestore wins), with a weekly full run. Health reports the divergence count (client rows the repair had to rewrite) and the outbox backlog | Nightly Firestore reads drop from ~4.1K to well under 1K; the divergence count is reported |
+| **N1 (SPENDLY-669)** | **`rm_client_apply` RPC** | A migration: the function (an allowlist, an owner check, the version guard: `client_written_at` vs `source_update_time`, tombstones), `revoke … from public, anon`, `grant execute … to authenticated`. New columns `written_by` (`client`/`server`) and `client_written_at`. `assert_security.sql` and `rls_behaviour.sql` cover cross-user writes, duress, expired tokens and non-allowlisted tables. Drills re-run | The SQL suite and drills are green; perf p95 is under 100 ms per batch of 50 |
+| **N2 (SPENDLY-670)** | **The on-device Supabase outbox** | `commitMutations` hands the written paths to the outbox. The outbox reads each document from the Firestore cache, maps it with the shared mapper, persists the entry (SQLite, with N5), and sends batches to `rm_client_apply` with backoff. Each entry is idempotent on `(table, doc_id, client_written_at)`. Nothing is sent in duress or local-test mode; in Spendly Test the loopback is used. The SPENDLY-583 push stays for server writers and as a fallback | Airplane-mode, kill-app and Supabase-down tests: every write lands once, in order. Unit tests for the mapper path and the retry |
+| **N3 (SPENDLY-671)** | **Route every direct writer** | Inventory the writers outside `commitMutations` (bills, borrowings/receivables, EPF, investment cash, splits, categories via 660's `noteCategoriesWritten`…). Move each into `commitMutations` or the outbox hook. A guard test fails for an unrouted writer of a synced collection | Guard green; the outbox count matches Firestore writes in the lab |
+| **N4 (SPENDLY-672)** | **The sync becomes the safety net, not the copier** | The nightly run becomes changed-only (`updatedAt`) plus parity repair (Firestore wins), with a weekly full run. Health reports the divergence count (client rows the repair had to rewrite) and the outbox backlog | Nightly Firestore reads drop from ~4.1K to well under 1K; the divergence count is reported |
 
 ### Phase 3 — read foundations
 
@@ -110,7 +110,7 @@ Keys are existing Jira keys where they exist, and **N1–N6 for new stories**, c
 |---|---|---|
 | **593** | **Realtime** | Broadcast ping on a private `user:<uid>` topic (`realtime.messages` RLS via `readmodel_auth.uid()`). The ping carries `{table, doc_id, synced_at}` only. The client refetches. One channel per user; `setAuth` on token refresh; a fallback to polling `max(synced_at)` |
 | **594** | **The on-device Supabase copy (SQLite)** | `expo-sqlite` (a native module, so a new build). Hydrated on sign-in, kept fresh by realtime and refetch since the last `synced_at`. This device's outbox is overlaid. Cleared on sign-out and account deletion; never in duress; size cap. Web: IndexedDB through the same interface |
-| **N5** | **The read store and provider switch** | One read-store API over the SQLite copy (`query`, `subscribe`). Each provider (`FinanceDataProvider`, `ExpenseReferenceDataProvider`, `CreditCardBillsProvider`, `BorrowingsReceivablesProvider`, the investments/EPF hooks…) reads the store when `readModel.<collection>` is `supabase`, and keeps its Firestore listener only in `firestore`/`shadow` mode. Shadow compares the two |
+| **N5 (SPENDLY-673)** | **The read store and provider switch** | One read-store API over the SQLite copy (`query`, `subscribe`). Each provider (`FinanceDataProvider`, `ExpenseReferenceDataProvider`, `CreditCardBillsProvider`, `BorrowingsReceivablesProvider`, the investments/EPF hooks…) reads the store when `readModel.<collection>` is `supabase`, and keeps its Firestore listener only in `firestore`/`shadow` mode. Shadow compares the two |
 | **595** | **The Supabase plan** | Pro ($25/month) before the first money screen flips. Daily backups verified by a restore drill. Pause and limit alerting |
 
 ### Phase 4 — collections and screens flip (each: shadow, then 7 days / 14 for money, then the user approves)
@@ -121,7 +121,7 @@ Keys are existing Jira keys where they exist, and **N1–N6 for new stories**, c
 | **597** | Accounts, balances, cards, bills | 14 days, balances to the paisa |
 | **598** | Investments, EPF, FD, loans, subscriptions | 14 days |
 | **599** | Dashboard tiles, net worth, budgets, safe-to-spend, goals | 14 days on every tile |
-| **N6** | Reference data: categories, spaces, rules, reminders, settings documents | 7 days |
+| **N6 (SPENDLY-674)** | Reference data: categories, spaces, rules, reminders, settings documents | 7 days |
 
 ### Phase 5 — savings and readiness
 
