@@ -84,6 +84,23 @@ describe("buildCardReconcileReport (SPENDLY-675)", () => {
     expect(r.credits[0]).toMatchObject({ appliedTo: "2026-11-01", datedIn: "open cycle" });
   });
 
+  it("shows the allocation the in-app pass owes a stale bill (the real Roar shape)", () => {
+    // Cashback dated inside the window settles part of the statement; the
+    // stored bill still says ₹0 paid until the bill pass writes it.
+    const r = buildCardReconcileReport({
+      ...base,
+      account: card(268.71),
+      expenses: spend,
+      payments: [{ ...payment("cb", 236.29, "2026-10-08"), sourceType: "cashback" } as AccountPayment],
+    });
+    expect(r.statements[0]).toMatchObject({ ledgerPaid: 236.29, ledgerRemaining: 268.71, storedPaid: 0, storedRemaining: 505 });
+    expect(r.rebuildVariances).toEqual([]);
+    expect(r.pendingAllocations).toEqual([
+      expect.objectContaining({ billId: "bill-oct", amountPaid: 236.29, paymentIds: ["cb"] }),
+    ]);
+    expect(r.bills[0]).toMatchObject({ id: "bill-oct", claimed: true });
+  });
+
   it("renders without the uid and marks unapplied credits", () => {
     const r = buildCardReconcileReport({
       ...base,

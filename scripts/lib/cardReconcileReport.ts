@@ -19,8 +19,14 @@ import { computeOutstandingCredit } from "../../shared/utils/accountBalance";
 import {
   buildCreditCardLedger,
   cardMovementLedgerRows,
+  collectCreditBillAllocationPatches,
+  collectCreditBillDuplicateResolutions,
+  type CreditBillAllocationPatch,
+  type CreditBillDuplicateResolution,
+  type DuplicateCreditCardBillSlice,
   type LedgerBillSlice,
 } from "../../shared/utils/creditCardLedger";
+import { AUTO_CREDIT_CARD_BILL_NOTE } from "../../shared/utils/autoCreditCardBills";
 import { isActiveLedgerRow } from "../../shared/utils/ledgerRow";
 import { roundMoney } from "../../shared/utils/money";
 import { planCardRebuild } from "../../shared/utils/reconciliation";
@@ -76,6 +82,22 @@ export type CardReconcileReport = {
   credits: CreditRowFinding[];
   /** Active credits no statement absorbed: the usual cause of the gap. */
   unappliedCreditRows: CreditRowFinding[];
+  /** Every stored bill for the card, including ones no statement claimed. */
+  bills: Array<{
+    id: string;
+    statementDate: string;
+    statementAmount: number;
+    amountPaid: number;
+    remainingAmount: number | null;
+    status: string;
+    auto: boolean;
+    note: string;
+    paymentIds: string[];
+    claimed: boolean;
+  }>;
+  /** What the in-app bill pass would write, given complete data. */
+  pendingAllocations: CreditBillAllocationPatch[];
+  pendingDuplicateResolutions: CreditBillDuplicateResolution[];
 };
 
 const sum = (values: number[]) => roundMoney(values.reduce((a, b) => a + b, 0));
@@ -149,6 +171,36 @@ export function buildCardReconcileReport(input: CardReconcileInput): CardReconci
     .map((c) => ({ ...c, datedIn: windowOf(c.date), appliedTo: appliedBy.get(c.id) ?? null }))
     .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
 
+  const claimedIds = new Set(ledger.statements.map((s) => s.billId).filter(Boolean));
+  const bills = input.bills
+    .map((b) => ({
+      id: b.id,
+      statementDate: b.statementDate,
+      statementAmount: b.statementAmount,
+      amountPaid: b.amountPaid ?? 0,
+      remainingAmount: b.remainingAmount ?? null,
+      status: String(b.status),
+      auto: b.note === AUTO_CREDIT_CARD_BILL_NOTE,
+      note: String(b.note ?? ""),
+      paymentIds: (b.paymentIds ?? []).filter(Boolean),
+      claimed: claimedIds.has(b.id),
+    }))
+    .sort((a, b) => b.statementDate.localeCompare(a.statementDate) || a.id.localeCompare(b.id));
+  // Same inputs as the CreditCardBillsProvider pass (no movements: real
+  // payment ids only), so this is exactly what that pass would write.
+  const pendingAllocations = collectCreditBillAllocationPatches({
+    accounts: [account],
+    isCreditAccount: () => true,
+    expenses: input.expenses,
+    payments: input.payments,
+    bills: input.bills,
+    today,
+  });
+  const pendingDuplicateResolutions = collectCreditBillDuplicateResolutions(
+    input.bills as unknown as DuplicateCreditCardBillSlice[],
+    today
+  );
+
   const owedPerStatements = roundMoney(res.statementDue + res.unbilledSpend + res.cancelledSpend);
   return {
     stored,
@@ -164,6 +216,9 @@ export function buildCardReconcileReport(input: CardReconcileInput): CardReconci
     statements,
     credits,
     unappliedCreditRows: credits.filter((c) => !c.voided && c.appliedTo === null),
+    bills,
+    pendingAllocations,
+    pendingDuplicateResolutions,
   };
 }
 
@@ -214,5 +269,29 @@ export function renderCardReconcileReport(name: string, accountId: string, r: Ca
       sum(r.unappliedCreditRows.map((c) => c.amount))
     )}. Part of these can still have reduced open-cycle spend; the ledger's set-aside figure is ${money(r.ledger.unappliedCredit)}.`
   );
+  out();
+  out("## Stored bills for this card (all, including unclaimed duplicates)");
+  out();
+  out("| Id | Close | Amount | Stored paid | Stored remaining | Status | Auto | Note | Payment ids | Claimed by a statement |");
+  out("|---|---|---|---|---|---|---|---|---|---|");
+  for (const b of r.bills) {
+    const note = b.note.replace(/\|/g, "/").slice(0, 40);
+    out(
+      `| ${b.id} | ${b.statementDate} | ${money(b.statementAmount)} | ${money(b.amountPaid)} | ${money(b.remainingAmount)} | ${b.status} | ${b.auto ? "yes" : "no"} | ${note} | ${b.paymentIds.join(", ") || "—"} | ${b.claimed ? "yes" : "**no**"} |`
+    );
+  }
+  out();
+  out("## What the in-app bill pass would write now");
+  out();
+  if (!r.pendingAllocations.length && !r.pendingDuplicateResolutions.length) {
+    out("Nothing: stored bills already match the ledger.");
+  }
+  for (const a of r.pendingAllocations) {
+    out(`- Allocation: bill ${a.billId} → amountPaid ${money(a.amountPaid)}, paymentIds [${a.paymentIds.join(", ")}]`);
+  }
+  for (const d of r.pendingDuplicateResolutions) {
+    const patch = d.canonicalPatch ? ` (amountPaid ${money(d.canonicalPatch.amountPaid)}, ${d.canonicalPatch.status})` : "";
+    out(`- Duplicate merge: keep ${d.canonicalId}${patch}, cancel [${d.cancelIds.join(", ")}]`);
+  }
   return lines.join("\n") + "\n";
 }
