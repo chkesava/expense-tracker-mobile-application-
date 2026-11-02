@@ -73,6 +73,10 @@ import {
   type ReceivableSummary,
 } from "@/shared/utils/receivableMath";
 import { monthFromDateKey, todayDateKey } from "@/shared/utils/dates";
+import {
+  lockLendSource,
+  normalizeLendSource,
+} from "@/shared/utils/receivableSource";
 
 /**
  * SPENDLY-496: a ledger row the provider's state does not hold yet (a fresh
@@ -912,8 +916,9 @@ export function BorrowingsReceivablesProvider({
       }
       try {
         const ref = doc(collection(db, "users", uid, "receivables"));
+        // SPENDLY-668: an "already deducted" lend never carries an account.
         const data = {
-          ...input,
+          ...normalizeLendSource(input),
           userId: uid,
           personId: input.personId ?? null,
           dueDate: input.dueDate ?? null,
@@ -966,8 +971,10 @@ export function BorrowingsReceivablesProvider({
       const existing = receivables.find((r) => r.id === id);
 
       try {
+        // SPENDLY-668: the source mode is fixed at creation, so an edit can't
+        // make an "already deducted" lend start debiting an account.
         const payload: Record<string, unknown> = {
-          ...updates,
+          ...(existing ? lockLendSource(existing, updates) : updates),
           updatedAt: serverTimestamp(),
         };
         if ("spaceId" in updates) {

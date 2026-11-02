@@ -454,6 +454,21 @@ describe("personal tree", () => {
     );
   });
 
+  // SPENDLY-668: a lend already deducted elsewhere has no source account.
+  it("owner writes an already-deducted receivable with no source account", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      addDoc(collection(db, "users", OWNER, "receivables"), {
+        originalAmount: 5000,
+        outstandingAmount: 5000,
+        totalReceived: 0,
+        lentDate: "2026-09-17",
+        sourceMode: "already_deducted",
+        sourceAccountId: null,
+      })
+    );
+  });
+
   it("owner writes a receivable carrying interest", async () => {
     const db = env.authenticatedContext(OWNER).firestore();
     await assertSucceeds(

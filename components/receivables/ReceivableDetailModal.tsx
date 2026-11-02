@@ -35,6 +35,7 @@ import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { withAlpha } from "@/theme/surfaces";
 import { DateField } from "@/components/common/DateField";
+import { isAlreadyDeducted } from "@/shared/utils/receivableSource";
 
 export interface ReceivableDetailModalProps {
   visible: boolean;
@@ -385,6 +386,10 @@ export function ReceivableDetailModal({
               Paid from{" "}
               {accountNameById.get(receivable.sourceAccountId) ?? "an account"}
               {hasRepayments ? " (locked)" : ""}
+            </Text>
+          ) : isAlreadyDeducted(receivable) ? (
+            <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
+              Already deducted elsewhere (no account balance change)
             </Text>
           ) : null}
           {receivable.spaceId ? (

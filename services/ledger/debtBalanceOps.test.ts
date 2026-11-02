@@ -78,4 +78,30 @@ describe("debtLedgerBalanceOps (SPENDLY-496)", () => {
       ], TODAY)
     ).toEqual([]);
   });
+
+  // SPENDLY-668: "None — already deducted" lends never touch a balance.
+  it("never moves a balance for an already-deducted lend: create, edit, retry or delete", async () => {
+    const lend = (originalAmount: number) =>
+      ({
+        kind: "receivable",
+        row: {
+          id: "r",
+          originalAmount,
+          lentDate: "2026-10-10",
+          sourceMode: "already_deducted",
+          sourceAccountId: null,
+        } as Receivable,
+      }) as const;
+    expect(await debtLedgerBalanceOps(db, "u1", [], [lend(50)], TODAY)).toEqual([]);
+    expect(await debtLedgerBalanceOps(db, "u1", [lend(50)], [lend(80)], TODAY)).toEqual([]);
+    expect(await debtLedgerBalanceOps(db, "u1", [lend(80)], [lend(80)], TODAY)).toEqual([]);
+    expect(await debtLedgerBalanceOps(db, "u1", [lend(80)], [], TODAY)).toEqual([]);
+  });
+
+  it("still debits an account-backed lend exactly once", async () => {
+    const ops = await debtLedgerBalanceOps(db, "u1", [], [
+      { kind: "receivable", row: { id: "r", originalAmount: 50, lentDate: "2026-10-10", sourceMode: "account", sourceAccountId: "bank-2" } as Receivable },
+    ], TODAY);
+    expect(accountIncrement(ops, "bank-2")).toBe(-50);
+  });
 });

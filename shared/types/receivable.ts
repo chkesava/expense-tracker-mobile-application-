@@ -62,6 +62,13 @@ export const RECEIVABLE_STATUS_LABELS: Record<ReceivableStatus, string> = {
   CANCELLED: "Cancelled",
 };
 
+/**
+ * Where lent money came from (SPENDLY-668). `"account"` debits
+ * `sourceAccountId` once; `"already_deducted"` means the outflow is already
+ * recorded elsewhere in Spendly, so the lend moves no account balance.
+ */
+export type ReceivableSourceMode = "account" | "already_deducted";
+
 export interface Receivable {
   id?: string;
   userId: string;
@@ -75,8 +82,17 @@ export interface Receivable {
   lentDate: string;
   /** YYYY-MM-DD */
   dueDate?: string | null;
-  /** Account the money was paid from. */
-  sourceAccountId: string;
+  /**
+   * Account the money was paid from. Null only when `sourceMode` is
+   * `"already_deducted"` (SPENDLY-668); the ledger then moves no balance.
+   */
+  sourceAccountId?: string | null;
+  /**
+   * How the lent money left the user's balances (SPENDLY-668). Missing on
+   * records made before it, which always had an account, so absent reads as
+   * `"account"`. Nothing was backfilled.
+   */
+  sourceMode?: ReceivableSourceMode;
   purpose?: string;
   note?: string;
   /** Optional Spending Space this lend belongs to. */
