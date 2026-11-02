@@ -31,6 +31,7 @@ import type {
   EpfContributionStatus,
 } from "@/shared/features/epf/types";
 import { roundMoney } from "@/shared/utils/money";
+import { withoutUndefined } from "@/shared/utils/objects";
 
 /**
  * Legal transitions.
@@ -176,6 +177,19 @@ export function buildContributionEvent(
     actor: meta.actor,
     reason: meta.reason,
   };
+}
+
+/**
+ * `buildContributionEvent` shaped for a Firestore write: absent `amount` and
+ * `reason` are dropped rather than sent as `undefined`, which both SDKs reject
+ * (`ignoreUndefinedProperties` is off). The client hooks wrap the builder in
+ * `withoutUndefined` themselves; epf-cron did not, and every generation event
+ * (no `reason`) failed the 2026-10-03 run with HTTP 500.
+ */
+export function contributionEventDoc(
+  ...args: Parameters<typeof buildContributionEvent>
+): Omit<EpfContributionEvent, "id" | "at"> {
+  return withoutUndefined(buildContributionEvent(...args));
 }
 
 /** Whether a row's credited amount is the user's word or the app's projection. */

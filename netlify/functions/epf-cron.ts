@@ -30,7 +30,8 @@ import {
 } from "../../shared/features/epf/utils/cronOutcome";
 import { chunk } from "../../shared/utils/chunk";
 import { isDuressUid } from "../../shared/utils/duress";
-import { buildContributionEvent } from "../../shared/features/epf/utils/lifecycle";
+import { contributionEventDoc } from "../../shared/features/epf/utils/lifecycle";
+import { withoutUndefined } from "../../shared/utils/objects";
 import { epfCurrentMonth } from "../../shared/features/epf/utils/epfClock";
 import { planScheduledContributions } from "../../shared/features/epf/utils/schedule";
 import {
@@ -386,48 +387,53 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       for (const group of chunk(releases, EPF_CRON_RELEASE_CHUNK_SIZE)) {
         const releaseBatch = db.batch();
         const applied: typeof group = [];
-        for (const item of group) {
-          const contributionId = contributionDocId(
-            establishment.id,
-            item.row.month,
-          );
-          const lastUpdateTime = updateTimes.get(contributionId);
-          if (!lastUpdateTime) {
-            // The row this release targets did not come from the read above, so
-            // there is no safe precondition to write under. Leave it.
-            skipped += 1;
-            continue;
-          }
-          releaseBatch.update(
-            db.doc(
-              `users/${uid}/${EPF_CONTRIBUTIONS_COLLECTION}/${contributionId}`,
-            ),
-            {
-              ...item.fields,
-              status: "expected",
-              statusUpdatedAt: new Date(),
-              updatedAt: new Date(),
-            },
-            // `update`, not `set`: it also fails if the row was deleted, which
-            // is correct — there is nothing left to release.
-            { lastUpdateTime },
-          );
-          releaseBatch.create(
-            db
-              .collection(`users/${uid}/${EPF_CONTRIBUTION_EVENTS_COLLECTION}`)
-              .doc(),
-            {
-              ...buildContributionEvent(item.row, item.row.status, "expected", {
-                actor: "system",
-                reason: item.reason,
-              }),
-              at: new Date(),
-            },
-          );
-          applied.push(item);
-        }
-        if (applied.length === 0) continue;
         try {
+          // Built inside the try: `update`/`create` validate synchronously, and a
+          // throw out here escaped to the handler's 500 and abandoned every later
+          // establishment on the page (the 2026-10-03 run).
+          for (const item of group) {
+            const contributionId = contributionDocId(
+              establishment.id,
+              item.row.month,
+            );
+            const lastUpdateTime = updateTimes.get(contributionId);
+            if (!lastUpdateTime) {
+              // The row this release targets did not come from the read above, so
+              // there is no safe precondition to write under. Leave it.
+              skipped += 1;
+              continue;
+            }
+            releaseBatch.update(
+              db.doc(
+                `users/${uid}/${EPF_CONTRIBUTIONS_COLLECTION}/${contributionId}`,
+              ),
+              withoutUndefined({
+                ...item.fields,
+                status: "expected",
+                statusUpdatedAt: new Date(),
+                updatedAt: new Date(),
+              }),
+              // `update`, not `set`: it also fails if the row was deleted, which
+              // is correct — there is nothing left to release.
+              { lastUpdateTime },
+            );
+            releaseBatch.create(
+              db
+                .collection(
+                  `users/${uid}/${EPF_CONTRIBUTION_EVENTS_COLLECTION}`,
+                )
+                .doc(),
+              {
+                ...contributionEventDoc(item.row, item.row.status, "expected", {
+                  actor: "system",
+                  reason: item.reason,
+                }),
+                at: new Date(),
+              },
+            );
+            applied.push(item);
+          }
+          if (applied.length === 0) continue;
           await releaseBatch.commit();
           released += applied.length;
           // Mirror onto the in-memory copies so `planScheduledContributions`
@@ -438,8 +444,8 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
           recordFailure("lifecycle-release", {
             uid,
             establishmentId: establishment.id,
-            month: applied[0]?.row.month ?? null,
-            rows: applied.length,
+            month: group[0]?.row.month ?? null,
+            rows: applied.length || group.length,
             error,
           });
         }
@@ -457,45 +463,54 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       if (planned.length === 0) continue;
 
       for (const group of chunk(planned, EPF_CRON_MONTHS_PER_BATCH)) {
-        const batch = db.batch();
-        for (const row of group) {
-          const contributionId = contributionDocId(establishment.id, row.month);
-          const ref = db.doc(
-            `users/${uid}/${EPF_CONTRIBUTIONS_COLLECTION}/${contributionId}`,
-          );
-          const { persisted, ...payload } = row;
-
-          // KAN-72: generation is a money-moving event, so it is audited like
-          // every other one. `from: "none"` — the row did not exist before.
-          batch.create(
-            db
-              .collection(`users/${uid}/${EPF_CONTRIBUTION_EVENTS_COLLECTION}`)
-              .doc(),
-            {
-              ...buildContributionEvent(
-                {
-                  id: contributionId,
-                  establishmentId: establishment.id,
-                  month: row.month,
-                },
-                "none",
-                row.status,
-                { actor: "system", amount: row.epfCredit },
-              ),
-              at: new Date(),
-            },
-          );
-          // `create` rather than `set`: if the row appeared since the read — a
-          // concurrent client catch-up, say — this throws instead of clobbering
-          // whatever the user has there.
-          batch.create(ref, {
-            ...payload,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          });
-        }
-
         try {
+          // Built inside the try for the same reason as the release pass.
+          const batch = db.batch();
+          for (const row of group) {
+            const contributionId = contributionDocId(
+              establishment.id,
+              row.month,
+            );
+            const ref = db.doc(
+              `users/${uid}/${EPF_CONTRIBUTIONS_COLLECTION}/${contributionId}`,
+            );
+            const { persisted, ...payload } = row;
+
+            // KAN-72: generation is a money-moving event, so it is audited like
+            // every other one. `from: "none"` — the row did not exist before.
+            batch.create(
+              db
+                .collection(
+                  `users/${uid}/${EPF_CONTRIBUTION_EVENTS_COLLECTION}`,
+                )
+                .doc(),
+              {
+                ...contributionEventDoc(
+                  {
+                    id: contributionId,
+                    establishmentId: establishment.id,
+                    month: row.month,
+                  },
+                  "none",
+                  row.status,
+                  { actor: "system", amount: row.epfCredit },
+                ),
+                at: new Date(),
+              },
+            );
+            // `create` rather than `set`: if the row appeared since the read — a
+            // concurrent client catch-up, say — this throws instead of clobbering
+            // whatever the user has there.
+            batch.create(
+              ref,
+              withoutUndefined({
+                ...payload,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+              }),
+            );
+          }
+
           await batch.commit();
           written += group.length;
         } catch (error) {

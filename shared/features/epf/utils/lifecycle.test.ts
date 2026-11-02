@@ -11,6 +11,7 @@ import {
   applyMissed,
   applyReversed,
   buildContributionEvent,
+  contributionEventDoc,
   canRecordCredit,
   canTransition,
   isReconciled,
@@ -391,5 +392,26 @@ describe("draft escape route — SPENDLY-1", () => {
     const message = transitionRejectionMessage("draft", "credited");
     expect(message).toContain("Backfill");
     expect(message).not.toContain("Cannot move");
+  });
+});
+
+describe("contributionEventDoc", () => {
+  // The 2026-10-03 epf-cron run 500'd on `reason: undefined`: the Admin SDK
+  // rejects undefined values and the cron wrote the raw builder output.
+  it("drops absent amount and reason so Firestore accepts the write", () => {
+    const generated = contributionEventDoc(contribution(), "none", "expected", {
+      actor: "system",
+      amount: 4750,
+    });
+    expect("reason" in generated).toBe(false);
+    expect(generated.amount).toBe(4750);
+
+    const released = contributionEventDoc(contribution(), "credited", "expected", {
+      actor: "system",
+      reason: "auto-credit withdrawn (SPENDLY-72)",
+    });
+    expect("amount" in released).toBe(false);
+    expect(released.reason).toBe("auto-credit withdrawn (SPENDLY-72)");
+    expect(Object.values(released)).not.toContain(undefined);
   });
 });
