@@ -12,10 +12,10 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 
 /**
- * SPENDLY-604: the Expense app is always dark, so there is no theme mode or
- * accent to pick here. SPENDLY-618: the user picks one of the dark Expense
- * palettes instead, stored as `expensePalette`; the saved theme fields are
- * left as they are, since Ganesh Seva and Nutrition still read them.
+ * SPENDLY-604: there is no theme mode or accent to pick here. SPENDLY-618:
+ * the user picks an Expense palette instead, stored as `expensePalette`; the
+ * saved theme fields are left as they are, since Ganesh Seva and Nutrition
+ * still read them. SPENDLY-677 adds six light palettes beside the dark ones.
  */
 export function AppearanceSection() {
   const { theme } = useTheme();
@@ -40,7 +40,7 @@ export function AppearanceSection() {
             fontFamily: theme.fontFamily.regular,
           }}
         >
-          Every palette is dark. Green and red always mean money in and money out.
+          Green and red always mean money in and money out, in every palette.
         </Text>
       </SettingsPanel>
 

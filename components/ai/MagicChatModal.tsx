@@ -384,8 +384,8 @@ export function MagicChatModal({
               disabled={!parsed || !parsed.amount}
               style={{ flex: 1 }}
             >
-              <Check size={18} color="#FFFFFF" />
-              <Text style={{ marginLeft: 8, fontWeight: "800", color: "#FFFFFF" }}>
+              <Check size={18} color={theme.colors.primaryForeground} />
+              <Text style={{ marginLeft: 8, fontWeight: "800", color: theme.colors.primaryForeground }}>
                 Auto-Fill Form
               </Text>
             </Button>

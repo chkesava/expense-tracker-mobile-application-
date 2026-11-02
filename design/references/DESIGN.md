@@ -48,6 +48,23 @@ Users pick the Expense palette in Settings → Appearance. Slate (above) is the 
 
 Plum and Cocoa's third colour is too light for secondary text, so their raised surface is a darker derived shade (`#373340`, `#483430`). Money and status colours are identical in every palette. Always style through tokens, never palette hex values.
 
+### Light palettes (SPENDLY-677)
+
+Six light palettes sit beside the dark ones. They map onto the same tokens through `expenseLightPaletteColors`, and picking one switches the Expense shell to light (status bar, glass and surfaces follow `themeUsesDarkPalette`). The bottom-nav capsule stays charcoal in every palette.
+
+| Palette | Reference (primary · accent · secondary · surface · background) | Action button |
+|---|---|---|
+| Rose Elegance | `#6D0D3F` `#EC4899` `#F9A8D4` `#FCE7F3` `#FFF9FB` | burgundy, white label |
+| Royal Violet | `#5B21B6` `#8B5CF6` `#C7B3FF` `#EDE9FE` `#FAF9FF` | deep violet, white label |
+| Ocean Blue | `#0B1F3B` `#2563EB` `#60A5FA` `#DBEAFE` `#F0F7FF` | blue, white label; navy ink |
+| Sunset Orange | `#1F1D2B` `#FF7A00` `#FFA94D` `#FFE4C7` `#FFF8EF` | orange, charcoal label |
+| Lavender Glass | `#0D0B2D` `#5B4BFF` `#A78BFA` `#E6E0FF` `#F7F8FF` | indigo, white label |
+| Midnight Sage | `#191D23` `#57707A` `#7B919C` `#989DAA` `#C5BAC4` `#DEDCDC` | charcoal, light label |
+
+- Cards are white, except Sage, whose cards are a lifted `#F4F3F3`. Sage's `#989DAA` and `#C5BAC4` become the line and edge colours, and `#57707A` is darkened to `#45585F` for muted text.
+- `accent` is the raw brand highlight, for dots, rings and chart series. Accent-coloured text uses `tint`, a darkened accent that reads at AA.
+- Light money and status colours are shared by all six: positive `#15803D`, negative `#C81E1E`, warning `#B45309`, info `#1D4ED8`.
+
 ### Light-mode compatibility
 
 If the current screen is using the established light dashboard, do not replace it unexpectedly. Derive equivalent tokens from the existing theme. Use near-white surfaces, dark text, subtle borders, and restrained accent tints. Theme colors must come from central tokens—not hardcoded per-screen values.

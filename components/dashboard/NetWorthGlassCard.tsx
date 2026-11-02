@@ -164,7 +164,10 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
               accessibilityLabel={`Trend period, ${PERIOD_LABELS[period]}. Change`}
               style={({ pressed }) => [
                 styles.periodChip,
-                { backgroundColor: withAlpha("#000000", 0.22), borderColor: withAlpha(theme.colors.foreground, 0.12) },
+                {
+                  backgroundColor: surfaces.isDark ? withAlpha("#000000", 0.22) : withAlpha(theme.colors.foreground, 0.06),
+                  borderColor: withAlpha(theme.colors.foreground, 0.12),
+                },
                 pressed && styles.pressed,
               ]}
             >

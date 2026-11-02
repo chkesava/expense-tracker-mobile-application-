@@ -1,7 +1,8 @@
 /**
  * Design tokens. `light` and `dark` serve Ganesh Seva and Nutrition; the four
- * `midnight-*` themes are the Expense palettes (SPENDLY-618). The other
- * presets were removed in SPENDLY-619; a stored value naming one is ignored.
+ * dark `midnight-*` themes and the six light `expense-*` themes are the
+ * Expense palettes (SPENDLY-618, SPENDLY-677). The other presets were removed
+ * in SPENDLY-619; a stored value naming one is ignored.
  */
 
 export type ThemeName =
@@ -10,7 +11,13 @@ export type ThemeName =
   | "midnight-emerald"
   | "midnight-forest"
   | "midnight-plum"
-  | "midnight-cocoa";
+  | "midnight-cocoa"
+  | "expense-rose"
+  | "expense-violet"
+  | "expense-ocean"
+  | "expense-sunset"
+  | "expense-lavender"
+  | "expense-sage";
 
 export const THEME_NAMES: ThemeName[] = [
   "light",
@@ -19,6 +26,12 @@ export const THEME_NAMES: ThemeName[] = [
   "midnight-forest",
   "midnight-plum",
   "midnight-cocoa",
+  "expense-rose",
+  "expense-violet",
+  "expense-ocean",
+  "expense-sunset",
+  "expense-lavender",
+  "expense-sage",
 ];
 
 const DARK_APPEARANCE: ReadonlySet<ThemeName> = new Set([
@@ -58,6 +71,13 @@ export type ColorTokens = {
   tint: string;
   tabIconDefault: string;
   tabIconSelected: string;
+  /**
+   * SPENDLY-677: the brand highlight, kept apart from `primary` (the main
+   * action). For decoration and non-text marks (rings, dots, chart series);
+   * text in the accent colour uses `tint`, which always reads at AA.
+   */
+  accent: string;
+  accentForeground: string;
   /** MD3 container roles */
   primaryContainer: string;
   onPrimaryContainer: string;
@@ -307,6 +327,8 @@ export const lightColors: ColorTokens = {
   tint: "#4F46FF",
   tabIconDefault: "#9CA3AF",
   tabIconSelected: "#4F46FF",
+  accent: "#4F46FF",
+  accentForeground: "#F8FAFC",
   primaryContainer: "#E4E1FF",
   onPrimaryContainer: "#150066",
   secondaryContainer: "#E7EAF3",
@@ -342,6 +364,8 @@ export const darkColors: ColorTokens = {
   tint: "#6B63FF",
   tabIconDefault: "#6B7280",
   tabIconSelected: "#6B63FF",
+  accent: "#6B63FF",
+  accentForeground: "#080A14",
   primaryContainer: "#2C2470",
   onPrimaryContainer: "#E4E1FF",
   secondaryContainer: "#1F2436",
@@ -394,6 +418,8 @@ export const midnightSlateColors: ColorTokens = {
   tint: "#CCD0CF",
   tabIconDefault: "#9BA8AB",
   tabIconSelected: "#CCD0CF",
+  accent: "#CCD0CF",
+  accentForeground: "#06141B",
   primaryContainer: "#253745",
   onPrimaryContainer: "#CCD0CF",
   secondaryContainer: "#1A2B38",
@@ -453,6 +479,8 @@ export function expensePaletteColors(p: ExpensePaletteSpec): ColorTokens {
     tint: p.text,
     tabIconDefault: p.mutedText,
     tabIconSelected: p.text,
+    accent: p.text,
+    accentForeground: p.background,
     primaryContainer: p.edge,
     onPrimaryContainer: p.text,
     secondaryContainer: p.step,
@@ -504,20 +532,228 @@ export const midnightCocoaColors = expensePaletteColors({
 });
 
 /**
- * SPENDLY-604: the Expense app is always dark. Every screen under the Expense
- * shell renders in the user's Expense palette (SPENDLY-618), Midnight Slate by
- * default, whatever theme they saved; Ganesh Seva and Nutrition still follow
- * the saved theme.
+ * SPENDLY-677: the six light Expense palettes. Each comes from a five- or
+ * six-colour reference (primary, accent, secondary, surface, background) plus
+ * the steps a full token set needs. theme/expensePalettes.test.ts holds every
+ * text pair to WCAG AA.
+ *
+ *   background · card (white, or a lifted tone) · container (secondary,
+ *   muted, surfaceVariant, primaryContainer) · step (secondaryContainer) ·
+ *   edge (border, outlineVariant) · line (outline only) · text · muted text
+ *   action + actionText: the main button (primary / primaryForeground)
+ *   accent: the raw brand highlight, for non-text marks
+ *   accentText: the accent darkened to read as text (tint, active tab)
+ *   brand: the reference's deep primary, as text on the primary container
+ *
+ * Money and status colours are one shared light set, so gains, losses and
+ * warnings mean the same thing in every light palette.
+ */
+export type ExpenseLightPaletteSpec = {
+  background: string;
+  card: string;
+  container: string;
+  step: string;
+  edge: string;
+  line: string;
+  text: string;
+  mutedText: string;
+  action: string;
+  actionText: string;
+  accent: string;
+  accentText: string;
+  brand: string;
+};
+
+export const EXPENSE_LIGHT_STATUS = {
+  success: "#15803D",
+  destructive: "#C81E1E",
+  warning: "#B45309",
+  info: "#1D4ED8",
+} as const;
+
+export function expenseLightPaletteColors(p: ExpenseLightPaletteSpec): ColorTokens {
+  return {
+    background: p.background,
+    foreground: p.text,
+    card: p.card,
+    cardForeground: p.text,
+    primary: p.action,
+    primaryForeground: p.actionText,
+    secondary: p.container,
+    secondaryForeground: p.text,
+    muted: p.container,
+    mutedForeground: p.mutedText,
+    destructive: EXPENSE_LIGHT_STATUS.destructive,
+    destructiveForeground: "#FFFFFF",
+    success: EXPENSE_LIGHT_STATUS.success,
+    successForeground: "#FFFFFF",
+    warning: EXPENSE_LIGHT_STATUS.warning,
+    warningForeground: "#FFFFFF",
+    border: p.edge,
+    tint: p.accentText,
+    tabIconDefault: p.mutedText,
+    tabIconSelected: p.accentText,
+    accent: p.accent,
+    accentForeground: p.actionText,
+    primaryContainer: p.container,
+    onPrimaryContainer: p.brand,
+    secondaryContainer: p.step,
+    onSecondaryContainer: p.text,
+    surfaceVariant: p.container,
+    onSurfaceVariant: p.mutedText,
+    outline: p.line,
+    outlineVariant: p.edge,
+    scrim: "rgba(15, 15, 25, 0.45)",
+    info: EXPENSE_LIGHT_STATUS.info,
+    infoForeground: "#FFFFFF",
+  };
+}
+
+/** Rose Elegance: #6D0D3F #EC4899 #F9A8D4 #FCE7F3 #FFF9FB. Burgundy actions, pink highlights. */
+export const roseEleganceColors = expenseLightPaletteColors({
+  background: "#FFF9FB",
+  card: "#FFFFFF",
+  container: "#FCE7F3",
+  step: "#FDF1F7",
+  edge: "#F6CFE2",
+  line: "#F9A8D4",
+  text: "#2A0717",
+  mutedText: "#7A4560",
+  action: "#6D0D3F",
+  actionText: "#FFFFFF",
+  accent: "#EC4899",
+  accentText: "#BE185D",
+  brand: "#6D0D3F",
+});
+
+/** Royal Violet: #5B21B6 #8B5CF6 #C7B3FF #EDE9FE #FAF9FF. Deep violet actions, purple highlights. */
+export const royalVioletColors = expenseLightPaletteColors({
+  background: "#FAF9FF",
+  card: "#FFFFFF",
+  container: "#EDE9FE",
+  step: "#F4F1FE",
+  edge: "#DDD3FD",
+  line: "#C7B3FF",
+  text: "#1E1035",
+  mutedText: "#5E5674",
+  action: "#5B21B6",
+  actionText: "#FFFFFF",
+  accent: "#8B5CF6",
+  accentText: "#6D28D9",
+  brand: "#5B21B6",
+});
+
+/** Ocean Blue: #0B1F3B #2563EB #60A5FA #DBEAFE #F0F7FF. Navy ink, blue actions. */
+export const oceanBlueColors = expenseLightPaletteColors({
+  background: "#F0F7FF",
+  card: "#FFFFFF",
+  container: "#DBEAFE",
+  step: "#E8F1FE",
+  edge: "#C6DCFB",
+  line: "#60A5FA",
+  text: "#0B1F3B",
+  mutedText: "#4A5D77",
+  action: "#2563EB",
+  actionText: "#FFFFFF",
+  accent: "#2563EB",
+  accentText: "#1D4ED8",
+  brand: "#0B1F3B",
+});
+
+/** Sunset Orange: #1F1D2B #FF7A00 #FFA94D #FFE4C7 #FFF8EF. Charcoal ink, orange actions with charcoal labels. */
+export const sunsetOrangeColors = expenseLightPaletteColors({
+  background: "#FFF8EF",
+  card: "#FFFFFF",
+  container: "#FFE4C7",
+  step: "#FFF0DF",
+  edge: "#FFD6AD",
+  line: "#FFA94D",
+  text: "#1F1D2B",
+  mutedText: "#675F6E",
+  action: "#FF7A00",
+  actionText: "#1F1D2B",
+  accent: "#FF7A00",
+  accentText: "#B84A00",
+  brand: "#1F1D2B",
+});
+
+/** Lavender Glass: #0D0B2D #5B4BFF #A78BFA #E6E0FF #F7F8FF. Midnight ink, electric indigo actions. */
+export const lavenderGlassColors = expenseLightPaletteColors({
+  background: "#F7F8FF",
+  card: "#FFFFFF",
+  container: "#E6E0FF",
+  step: "#EFEBFF",
+  edge: "#D9D0FF",
+  line: "#A78BFA",
+  text: "#0D0B2D",
+  mutedText: "#57557A",
+  action: "#5B4BFF",
+  actionText: "#FFFFFF",
+  accent: "#5B4BFF",
+  accentText: "#4A3AE8",
+  brand: "#0D0B2D",
+});
+
+/**
+ * Midnight Sage: #191D23 #57707A #7B919C #989DAA #C5BAC4 #DEDCDC. #989DAA is
+ * too dark for a card, so cards are a lifted #F4F3F3 and #989DAA / #C5BAC4
+ * become the line and edge; #57707A is darkened to #45585F for muted text.
+ */
+export const midnightSageColors = expenseLightPaletteColors({
+  background: "#DEDCDC",
+  card: "#F4F3F3",
+  container: "#E7E2E6",
+  step: "#EAE8E8",
+  edge: "#C5BAC4",
+  line: "#989DAA",
+  text: "#191D23",
+  mutedText: "#45585F",
+  action: "#191D23",
+  actionText: "#F4F3F3",
+  accent: "#57707A",
+  accentText: "#45585F",
+  brand: "#191D23",
+});
+
+/**
+ * SPENDLY-604: every screen under the Expense shell renders in the user's
+ * Expense palette (SPENDLY-618), Midnight Slate by default, whatever theme
+ * they saved; Ganesh Seva and Nutrition still follow the saved theme. The
+ * shell is dark unless the user picks a light palette (SPENDLY-677).
  */
 export const EXPENSE_THEME_NAME: ExpensePaletteName = "midnight-emerald";
 
-export type ExpensePaletteName = "midnight-emerald" | "midnight-forest" | "midnight-plum" | "midnight-cocoa";
+export type ExpensePaletteName =
+  | "midnight-emerald"
+  | "midnight-forest"
+  | "midnight-plum"
+  | "midnight-cocoa"
+  | "expense-rose"
+  | "expense-violet"
+  | "expense-ocean"
+  | "expense-sunset"
+  | "expense-lavender"
+  | "expense-sage";
 
-export const EXPENSE_PALETTE_NAMES: ExpensePaletteName[] = [
+export const EXPENSE_DARK_PALETTE_NAMES: ExpensePaletteName[] = [
   "midnight-emerald",
   "midnight-forest",
   "midnight-plum",
   "midnight-cocoa",
+];
+
+export const EXPENSE_LIGHT_PALETTE_NAMES: ExpensePaletteName[] = [
+  "expense-rose",
+  "expense-violet",
+  "expense-ocean",
+  "expense-sunset",
+  "expense-lavender",
+  "expense-sage",
+];
+
+export const EXPENSE_PALETTE_NAMES: ExpensePaletteName[] = [
+  ...EXPENSE_DARK_PALETTE_NAMES,
+  ...EXPENSE_LIGHT_PALETTE_NAMES,
 ];
 
 export const EXPENSE_PALETTE_COLORS: Record<ExpensePaletteName, ColorTokens> = {
@@ -525,14 +761,30 @@ export const EXPENSE_PALETTE_COLORS: Record<ExpensePaletteName, ColorTokens> = {
   "midnight-forest": midnightForestColors,
   "midnight-plum": midnightPlumColors,
   "midnight-cocoa": midnightCocoaColors,
+  "expense-rose": roseEleganceColors,
+  "expense-violet": royalVioletColors,
+  "expense-ocean": oceanBlueColors,
+  "expense-sunset": sunsetOrangeColors,
+  "expense-lavender": lavenderGlassColors,
+  "expense-sage": midnightSageColors,
 };
 
-/** The six source colours of each palette, darkest first, for the picker swatches. */
+/**
+ * The source colours of each palette, for the picker. Dark palettes list six,
+ * darkest first. Light palettes follow the reference order: primary, accent,
+ * secondary, surface, (Sage's muted,) background.
+ */
 export const EXPENSE_PALETTE_SWATCHES: Record<ExpensePaletteName, readonly string[]> = {
   "midnight-emerald": ["#06141B", "#11212D", "#253745", "#4A5C6A", "#9BA8AB", "#CCD0CF"],
   "midnight-forest": ["#051F20", "#0B2B26", "#163832", "#235347", "#8EB69B", "#DAF1DE"],
   "midnight-plum": ["#17151C", "#292531", "#45404F", "#716879", "#AAA2B3", "#E2DDE7"],
   "midnight-cocoa": ["#211B1A", "#382A28", "#60433D", "#916B60", "#C1A094", "#E8D8CE"],
+  "expense-rose": ["#6D0D3F", "#EC4899", "#F9A8D4", "#FCE7F3", "#FFF9FB"],
+  "expense-violet": ["#5B21B6", "#8B5CF6", "#C7B3FF", "#EDE9FE", "#FAF9FF"],
+  "expense-ocean": ["#0B1F3B", "#2563EB", "#60A5FA", "#DBEAFE", "#F0F7FF"],
+  "expense-sunset": ["#1F1D2B", "#FF7A00", "#FFA94D", "#FFE4C7", "#FFF8EF"],
+  "expense-lavender": ["#0D0B2D", "#5B4BFF", "#A78BFA", "#E6E0FF", "#F7F8FF"],
+  "expense-sage": ["#191D23", "#57707A", "#7B919C", "#989DAA", "#C5BAC4", "#DEDCDC"],
 };
 
 export function isExpensePaletteName(value: unknown): value is ExpensePaletteName {
@@ -793,6 +1045,33 @@ export function isAccentColorName(value: unknown): value is AccentColorName {
   );
 }
 
+/**
+ * Category series carry no money meaning, so they leave out the green and
+ * red reserved for gains and losses (SPENDLY-617). Light palettes lead with
+ * their own accent and deep primary, then fill with hues that read on a
+ * light card (SPENDLY-677). The pale reference secondaries are left out:
+ * they vanish on white.
+ */
+const EXPENSE_LIGHT_CHART_FILL = ["#0E7490", "#7C3AED", "#C2410C", "#DB2777", "#2563EB", "#A16207", "#475569"];
+
+function expensePaletteChart(name: ExpensePaletteName): ChartTokens {
+  const c = EXPENSE_PALETTE_COLORS[name];
+  if (themeUsesDarkPalette(name)) {
+    return {
+      categorical: ["#78B8FF", "#F5C451", "#B794F6", "#4FD1C5", "#F28CC0", c.foreground, "#FF9F6B"],
+      positive: "#35E889",
+      negative: "#FF7777",
+    };
+  }
+  const swatch = EXPENSE_PALETTE_SWATCHES[name];
+  const own = [c.accent, swatch[0]];
+  return {
+    categorical: [...new Set([...own, ...EXPENSE_LIGHT_CHART_FILL])].slice(0, 7),
+    positive: c.success,
+    negative: c.destructive,
+  };
+}
+
 export function createTheme(
   name: ThemeName,
   accentColor: AccentColorName = "indigo"
@@ -813,21 +1092,7 @@ export function createTheme(
       fontFamily,
       elevation,
       iconSize,
-      chart: {
-        // Category series carry no money meaning, so they leave out the
-        // green and red reserved for gains and losses (SPENDLY-617).
-        categorical: [
-          "#78B8FF",
-          "#F5C451",
-          "#B794F6",
-          "#4FD1C5",
-          "#F28CC0",
-          "#CCD0CF",
-          "#FF9F6B",
-        ].map((hex) => (hex === "#CCD0CF" ? EXPENSE_PALETTE_COLORS[name as ExpensePaletteName].foreground : hex)),
-        positive: "#35E889",
-        negative: "#FF7777",
-      },
+      chart: expensePaletteChart(name as ExpensePaletteName),
       type,
     };
   }
@@ -835,6 +1100,8 @@ export function createTheme(
   const colors: ColorTokens = {
     ...baseColors,
     ...accentOverrides,
+    accent: accentOverrides.tint,
+    accentForeground: accentOverrides.primaryForeground,
   };
 
   const chartColors: ChartTokens = {
@@ -876,4 +1143,10 @@ export const THEME_LABELS: Record<ThemeName, string> = {
   "midnight-forest": "Midnight Forest",
   "midnight-plum": "Midnight Plum",
   "midnight-cocoa": "Midnight Cocoa",
+  "expense-rose": "Rose Elegance",
+  "expense-violet": "Royal Violet",
+  "expense-ocean": "Ocean Blue",
+  "expense-sunset": "Sunset Orange",
+  "expense-lavender": "Lavender Glass",
+  "expense-sage": "Midnight Sage",
 };

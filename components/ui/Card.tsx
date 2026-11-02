@@ -20,6 +20,7 @@ import { EmptyState, type EmptyActionConfig } from "@/components/common/EmptySta
 import { type EmptyIllustrationType } from "@/components/common/EmptyStateIllustration";
 import { Skeleton } from "@/components/common/Skeleton";
 import { useTheme } from "@/theme/ThemeProvider";
+import { withAlpha } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
 import { haptic } from "@/lib/haptics";
 import { cardContentPadding, type CardDensity } from "./cardDensity";
@@ -160,7 +161,7 @@ export function Card({
   let backgroundColor: string = isTonal
     ? theme.colors.surfaceVariant
     : isGlass 
-      ? "rgba(255,255,255,0.05)" // Fake blur for now
+      ? isDark ? "rgba(255,255,255,0.05)" : withAlpha(theme.colors.card, 0.7) // Fake blur for now
       : theme.colors.card;
 
   if (isDark && resolvedElevationLevel >= 2 && !isTonal && !isGlass) {
@@ -169,7 +170,7 @@ export function Card({
 
   const borderColor = isOutlined
     ? theme.colors.outlineVariant ?? theme.colors.border
-    : isGlass ? "rgba(255,255,255,0.1)" : "transparent";
+    : isGlass ? (isDark ? "rgba(255,255,255,0.1)" : theme.colors.border) : "transparent";
   const borderWidth = isOutlined || isGlass ? 1 : 0;
 
   // Header
