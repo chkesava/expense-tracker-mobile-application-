@@ -67,7 +67,8 @@ import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useBorrowings } from "@/hooks/useBorrowings";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
-import { useCreditCardLiveUsage } from "@/hooks/useCreditCardLiveUsage";
+import { useCreditCardLedger, useCreditCardLiveUsage } from "@/hooks/useCreditCardLiveUsage";
+import { creditCardBillView } from "@/shared/utils/creditCardBillView";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useReceivables } from "@/hooks/useReceivables";
@@ -367,17 +368,36 @@ export default function AccountDetailScreen() {
 
 
 
-  const openStatementBill = useMemo(() => {
-    if (!account || !isCreditCard) return null;
-    return (
-      bills
-        .filter(
-          (b) =>
-            b.accountId === account.id && OPEN_BILL_STATUSES.includes(b.status)
-        )
-        .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0] || null
-    );
-  }, [account, isCreditCard, bills]);
+  // SPENDLY-675: this card's bills as the ledger settles them — the same
+  // allocation behind Total outstanding — so the statement card and cycle
+  // history can't show a stale stored "₹0 paid" until the bill pass runs.
+  const { ledger: cardLedger } = useCreditCardLedger(isCreditCard ? account : undefined);
+  const cardBills = useMemo(() => {
+    if (!account || !isCreditCard) return [];
+    return bills
+      .filter((bill) => bill.accountId === account.id)
+      .map((bill) => {
+        const view = creditCardBillView(bill, cardLedger, payments, today);
+        return {
+          bill: {
+            ...bill,
+            amountPaid: view.amountPaid,
+            remainingAmount: view.remainingAmount,
+            status: view.status,
+          },
+          cashbackApplied: view.cashbackApplied,
+        };
+      });
+  }, [account, isCreditCard, bills, cardLedger, payments, today]);
+
+  const openStatementBill = useMemo(
+    () =>
+      cardBills
+        .map(({ bill }) => bill)
+        .filter((bill) => OPEN_BILL_STATUSES.includes(bill.status))
+        .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0] || null,
+    [cardBills]
+  );
 
   const { activities: allActivities, loadedFrom } = useAccountActivities(id);
 
@@ -1072,11 +1092,10 @@ export default function AccountDetailScreen() {
 
   const pastCycleItems = useMemo(() => {
     if (!account || !isCreditCard) return [];
-    return bills
-      .filter((b) => b.accountId === account.id)
-      .sort((a, b) => b.statementDate.localeCompare(a.statementDate))
+    return [...cardBills]
+      .sort((a, b) => b.bill.statementDate.localeCompare(a.bill.statementDate))
       .slice(0, 6)
-      .map((bill) => {
+      .map(({ bill, cashbackApplied }) => {
         const startStr = bill.billingPeriodStart ? toLocalDateKey(parseLocalDate(bill.billingPeriodStart)) : "";
         const endStr = toLocalDateKey(parseLocalDate(bill.statementDate));
         let mappedStatus: "unpaid" | "partiallyPaid" | "paid" | "cancelled" = "unpaid";
@@ -1094,12 +1113,12 @@ export default function AccountDetailScreen() {
           remainingAmount: bill.remainingAmount,
           paymentDate: bill.paymentDate,
           status: mappedStatus,
-          cashbackApplied: 0,
+          cashbackApplied,
           overdue: bill.status === "OVERDUE" && bill.remainingAmount > 0,
           billId: bill.id,
         };
       });
-  }, [account, isCreditCard, bills, settings.dateFormat]);
+  }, [account, isCreditCard, cardBills, settings.dateFormat]);
 
   // SPENDLY-513: in read-model `supabase` mode, linked purchases older than
   // the loaded window are added so their notes show; otherwise `expenses`.

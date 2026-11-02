@@ -15,6 +15,8 @@ import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useExpenses } from "@/hooks/useExpenses";
+import { useCreditCardLedger } from "@/hooks/useCreditCardLiveUsage";
+import { creditCardBillView } from "@/shared/utils/creditCardBillView";
 import { shareCreditCardCycleExport } from "@/services/creditCardBills/creditCardStatementExportShare";
 import { appDialog } from "@/lib/appDialog";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
@@ -24,7 +26,6 @@ import { useSettings } from "@/providers/SettingsProvider";
 import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { formatCardLabel } from "@/services/creditCardBills/billNotificationCopy";
 import { isCashbackPayment, type AccountPayment } from "@/shared/types/expense";
-import { roundMoney } from "@/shared/utils/money";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
@@ -68,29 +69,18 @@ export default function CreditCardBillDetailScreen() {
   );
 
   /**
-   * How much of this statement's settlement was cashback. A bill cleared by a
-   * provider credit is not a bill the user paid, and "Amount paid" on its own
-   * would say it was.
+   * SPENDLY-675: paid / remaining / status as the ledger allocates them — the
+   * same figures behind the card's Total outstanding — not the stored fields,
+   * which lag until the bill pass runs. `cashbackApplied` is how much of the
+   * settlement was cashback: a bill cleared by a provider credit is not a bill
+   * the user paid, and "Amount paid" on its own would say it was.
    */
-  const cashbackApplied = useMemo(() => {
-    if (!bill) return 0;
-    const linked = new Set((bill.paymentIds || []).filter(Boolean));
-    if (linked.size === 0) return 0;
-    return roundMoney(
-      Math.min(
-        bill.amountPaid || 0,
-        payments
-          .filter(
-            (payment) =>
-              linked.has(payment.id) &&
-              isCashbackPayment(payment) &&
-              !payment.voidedAt
-          )
-          .reduce((sum, payment) => sum + payment.amount, 0)
-      )
-    );
-  }, [bill, payments]);
-
+  const { ledger, today } = useCreditCardLedger(account);
+  const view = useMemo(
+    () => (bill ? creditCardBillView(bill, ledger, payments, today) : null),
+    [bill, ledger, payments, today]
+  );
+  const cashbackApplied = view?.cashbackApplied ?? 0;
   /**
    * Bill payments recorded against this statement that can still be
    * corrected (SPENDLY-385). Cashback is a provider credit with its own flow,
@@ -268,19 +258,19 @@ export default function CreditCardBillDetailScreen() {
               <Row label="Card" value={account?.name || bill.accountId} />
               <Row
                 label="Status"
-                value={bill.status.replaceAll("_", " ")}
+                value={(view?.status ?? bill.status).replaceAll("_", " ")}
                 valueColor={theme.colors.primary}
               />
               <AmountRow label="Statement" value={bill.statementAmount} />
               <AmountRow label="Minimum due" value={bill.minimumDueAmount} />
               <AmountRow
                 label={cashbackApplied > 0 ? "Amount settled" : "Amount paid"}
-                value={bill.amountPaid}
+                value={view?.amountPaid ?? bill.amountPaid}
               />
               {cashbackApplied > 0 ? (
                 <AmountRow label="of which cashback" value={cashbackApplied} />
               ) : null}
-              <AmountRow label="Remaining" value={bill.remainingAmount} />
+              <AmountRow label="Remaining" value={view?.remainingAmount ?? bill.remainingAmount} />
               <Row label="Statement date" value={formatDisplayDate(bill.statementDate, settings.dateFormat)} />
               {bill.billingPeriodStart && bill.billingPeriodEnd ? (
                 <Row
@@ -364,7 +354,7 @@ export default function CreditCardBillDetailScreen() {
             {exporting ? "Exporting…" : "Export statement CSV"}
           </Button>
 
-          {bill.status !== "PAID" && bill.status !== "CANCELLED" ? (
+          {(view?.status ?? bill.status) !== "PAID" && bill.status !== "CANCELLED" ? (
             <View style={{ gap: 10 }}>
               <Button size="lg" onPress={() => setPayOpen(true)}>
                 Pay Bill
@@ -439,7 +429,7 @@ export default function CreditCardBillDetailScreen() {
             defaultCreditCardId={bill.accountId}
             accounts={accounts}
             accountTypes={accountTypes}
-            defaultAmount={bill.remainingAmount}
+            defaultAmount={view?.remainingAmount ?? bill.remainingAmount}
             applyToBillId={bill.id}
           />
           <MarkBillPaidModal
