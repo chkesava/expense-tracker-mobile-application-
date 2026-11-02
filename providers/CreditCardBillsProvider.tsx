@@ -195,6 +195,8 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   const reconcileTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoGenerateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoGenerateInFlight = useRef(false);
+  // SPENDLY-675: bill ids the pass last ran against. null until it first runs.
+  const passSeenBillIds = useRef<Set<string> | null>(null);
   const autoGenerateToastShown = useRef(false);
   const lastAutoBillFingerprintRef = useRef("");
   const didInitialAutoGenerate = useRef(false);
@@ -479,6 +481,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     if (!db) return;
     if (autoGenerateInFlight.current) return;
     autoGenerateInFlight.current = true;
+    passSeenBillIds.current = new Set(bills.map((bill) => bill.id));
     try {
       const typeNameById = new Map(
         accountTypes.map((type) => [type.id, type.name])
@@ -818,6 +821,19 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     expensesComplete,
     scheduleAutoGenerate,
   ]);
+
+  // SPENDLY-675: a bill that appears after the pass ran (one created by
+  // another device or the legacy cron, or by this pass itself) kept its
+  // creation-time amountPaid until the next app focus, so the statement
+  // contradicted the card's Total outstanding. Re-run once when a new bill id
+  // shows up. Bounded: each run records the ids it saw, the fingerprint skips
+  // a no-op run, and the allocation write is compare-and-set (SPENDLY-497),
+  // so a second device racing it skips rather than overwrites.
+  useEffect(() => {
+    const seen = passSeenBillIds.current;
+    if (!seen) return;
+    if (bills.some((bill) => !seen.has(bill.id))) scheduleAutoGenerate();
+  }, [bills, scheduleAutoGenerate]);
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
