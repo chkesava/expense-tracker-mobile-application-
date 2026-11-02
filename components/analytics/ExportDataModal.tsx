@@ -311,7 +311,7 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
                           <Text
                             style={{
                               color: isSelected
-                                ? "#FFFFFF"
+                                ? theme.colors.primaryForeground
                                 : theme.colors.foreground,
                               fontWeight: isSelected ? "700" : "500",
                               fontSize: 13,
@@ -408,8 +408,8 @@ export function ExportDataModal({ visible, onClose }: ExportDataModalProps) {
                 disabled={isExporting || !ledgerComplete}
                 style={{ marginTop: 8 }}
               >
-                <Download size={18} color="#FFFFFF" />
-                <Text style={{ marginLeft: 8, fontWeight: "800", color: "#FFFFFF" }}>
+                <Download size={18} color={theme.colors.primaryForeground} />
+                <Text style={{ marginLeft: 8, fontWeight: "800", color: theme.colors.primaryForeground }}>
                   {isExporting
                     ? "Generating..."
                     : ledgerComplete

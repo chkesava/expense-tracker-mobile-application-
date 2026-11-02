@@ -212,7 +212,7 @@ function OverviewTab({
             label: sub.label,
             amount: sub.amount,
             percentage: sub.percentage,
-            color: spendingSliceColor(i, sub.label, theme.colors, ""),
+            color: spendingSliceColor(i, sub.label, theme, ""),
           }))}
           currency={currency}
           formatMoney={money}
@@ -258,7 +258,7 @@ function TransactionsTab({
   const options = detail.subcategories.map((sub, i) => ({
     value: sub.key,
     label: sub.label,
-    color: spendingSliceColor(i, sub.label, theme.colors, ""),
+    color: spendingSliceColor(i, sub.label, theme, ""),
   }));
   const validInitial = initialSub && options.some((o) => o.value === initialSub) ? initialSub : null;
   return (

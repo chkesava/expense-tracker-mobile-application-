@@ -308,7 +308,7 @@ function TransactionsTab({
     : categorySpendSummary(totals, category).subcategories.map((sub, i) => ({
         value: sub.key,
         label: sub.label,
-        color: spendingSliceColor(i, sub.label, theme.colors, ""),
+        color: spendingSliceColor(i, sub.label, theme, ""),
       }));
   return (
     <SpendingTransactionList
@@ -354,7 +354,7 @@ function SubcategoriesTab({
             label: sub.label,
             amount: sub.amount,
             percentage: sub.percentage,
-            color: spendingSliceColor(i, sub.label, theme.colors, ""),
+            color: spendingSliceColor(i, sub.label, theme, ""),
           }))}
           currency={currency}
           formatMoney={money}

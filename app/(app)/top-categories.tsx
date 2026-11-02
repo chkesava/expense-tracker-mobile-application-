@@ -160,7 +160,7 @@ export default function TopCategoriesScreen() {
         <>
           <SurfaceCard title="Ranked by amount" meta="Share of total spending">
             {ranked.map((c, i) => {
-              const color = spendingSliceColor(i, c.category, theme.colors, "");
+              const color = spendingSliceColor(i, c.category, theme, "");
               return (
                 <Pressable
                   key={c.category}

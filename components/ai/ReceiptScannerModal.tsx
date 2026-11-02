@@ -221,7 +221,7 @@ Thank you for visiting!`;
                       { backgroundColor: theme.colors.primary },
                     ]}
                   >
-                    <Camera size={22} color="#FFFFFF" />
+                    <Camera size={22} color={theme.colors.primaryForeground} />
                   </View>
                   <Text style={[styles.actionCardTitle, { color: theme.colors.foreground }]}>
                     Take Photo
@@ -380,8 +380,8 @@ Thank you for visiting!`;
           {extracted && (
             <View style={[styles.footer, { borderTopColor: theme.colors.border }]}>
               <Button onPress={handleApply} style={{ flex: 1 }}>
-                <Check size={18} color="#FFFFFF" />
-                <Text style={{ marginLeft: 8, fontWeight: "800", color: "#FFFFFF" }}>
+                <Check size={18} color={theme.colors.primaryForeground} />
+                <Text style={{ marginLeft: 8, fontWeight: "800", color: theme.colors.primaryForeground }}>
                   Fill Transaction Form
                 </Text>
               </Button>
