@@ -58,7 +58,8 @@ export function buildClientEntry(input: {
   at: string;
 }): ClientWriteEntry | null {
   const spec = SPEC_BY_COLLECTION.get(input.collection);
-  if (!spec) return null;
+  // The users/{uid} copy is server-push only (SPENDLY-591): never via rm_client_apply.
+  if (!spec || spec.root) return null;
   const base = { key: `${spec.table}/${input.docId}`, table: spec.table, uid: input.uid, docId: input.docId, at: input.at, attempts: 0 };
   if (!input.doc) return base;
   // The mapper needs an update time; the RPC sets source_update_time from

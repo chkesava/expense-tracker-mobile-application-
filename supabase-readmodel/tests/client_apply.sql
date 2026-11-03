@@ -302,6 +302,17 @@ begin
 end
 $$;
 
+-- ─── 7a. The users/{uid} copy is server-only (SPENDLY-591) ─────────────────
+do $$
+begin
+  if ca_test.refused('user_settings', jsonb_build_array(jsonb_build_object(
+       'uid', 'user-a', 'doc_id', 'settings', 'doc', '{}'::jsonb, 'source_path', 'users/user-a/x',
+       'schema_version', 1, 'mapping_status', 'mapped', 'client_written_at', now()))) is distinct from '42501' then
+    raise exception 'a client write to user_settings was not refused';
+  end if;
+end
+$$;
+
 -- ─── 7b. A nested row (SPENDLY-591): doc_id "{listId}/{itemId}" ─────────────
 do $$
 declare

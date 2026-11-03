@@ -172,6 +172,11 @@ async function readSource(db: Firestore): Promise<Map<string, Map<string, Source
   for (const userRef of await db.collection("users").listDocuments()) {
     const byCollection = new Map<string, SourceDoc[]>();
     for (const spec of READ_MODEL_TABLES) {
+      if (spec.root) {
+        const snap = await userRef.get();
+        byCollection.set(spec.collection, snap.exists ? [{ id: spec.root.docId, data: snap.data() ?? {}, updateTime: snap.updateTime!.toMillis() }] : []);
+        continue;
+      }
       if (spec.parent) {
         // SPENDLY-591: nested rows are keyed "{parentId}/{id}".
         const docs: SourceDoc[] = [];

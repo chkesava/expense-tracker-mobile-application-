@@ -25,6 +25,7 @@ export function firestoreCounter(db: Firestore): VerifySource {
       return (await db.collection("users").listDocuments()).map((ref) => ref.id);
     },
     async count(uid, collection) {
+      if (SPEC_BY_COLLECTION.get(collection)?.root) return (await db.collection("users").doc(uid).get()).exists ? 1 : 0;
       const parent = SPEC_BY_COLLECTION.get(collection)?.parent;
       if (parent) {
         // SPENDLY-591: a nested collection counts across every parent, missing ones included.

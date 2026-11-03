@@ -16,6 +16,7 @@ import { useColorScheme as useSystemColorScheme } from "react-native";
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite } from "@/lib/firestoreWrite";
+import { noteDirectWrites } from "@/lib/readModelWriteHooks";
 import { useAuth } from "@/providers/AuthProvider";
 import { useUserDoc } from "@/providers/UserDocProvider";
 import { memoryStorage, setSharedStorage } from "@/shared/storage/memoryStorage";
@@ -249,6 +250,7 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
             () => setDoc(doc(db, "users", user.uid), fields, { merge: true }),
             { label: "theme" }
           );
+          noteDirectWrites(user.uid, [`users/${user.uid}`]);
         } catch (err) {
           logError("themeProvider.persistThemeFields", err);
         }

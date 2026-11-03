@@ -6,6 +6,7 @@
 | Branch | `feature/SPENDLY-591-sync-remaining` |
 | Part A migration | `supabase-readmodel/supabase/migrations/20261102000000_readmodel_remaining.sql` |
 | Part B migration | `supabase-readmodel/supabase/migrations/20261102010000_readmodel_watchlist_items.sql` |
+| Part C migration | `supabase-readmodel/supabase/migrations/20261102020000_readmodel_user_settings.sql` |
 
 591 comes in three parts on one branch:
 - **A:** the flat collections (this section);
@@ -101,4 +102,74 @@ Already covered:
   - `purge` (a nested row goes with its owner: 106 rows);
   - 52 policies;
   - 51 tables.
+
+## Part C — the `users/{uid}` settings document
+
+The table `user_settings` holds one row per user, under `doc_id` `settings`, with `source_path` `users/{uid}`.
+
+**An allowlist (`RootSpec.docKeys` in `mapping.ts`).** Only these fields are copied, into the typed columns and `doc` alike:
+- currency, timezone, language, date/number format, first day of week;
+- theme, theme mode, expense palette, accent colour, navigation style;
+- default category/view, compact list, haptics, investments toggle;
+- monthly budget (plus the legacy `monthly_budget`), export year;
+- dashboard widgets/order, onboarding, card-bill reminders, calendar notifications.
+
+**Never copied:**
+- **PIN and lock:** `privacyPin`, `fakePin` (the duress PIN), `lockPastMonths`, `lockOnInactivity`, `inactivityTimeout`, `lockOnAppSwitch`, `ghostMode`;
+- **Authorisation:** `role`;
+- **Identity:** `username`, `avatar`, `email`, `displayName`, `photoURL`, `phone`, `upiId`.
+
+Because it is an allowlist, any new field stays out until someone adds it.
+
+**Legacy nested `settings` map:** flattened first, with top-level fields winning, as `mergeSettingsFromDoc` does. Its preferences come along; its PINs don't.
+
+**Typed columns:** currency, timezone, language, theme, theme mode, expense palette, accent colour, navigation style, default view, monthly budget (money), investments toggle, compact list.
+
+**Server-only:**
+- The sync and the per-write push write it.
+- It is on `readmodel_sync_table_ok` but **not** `readmodel_client_table_ok`, so `rm_client_apply` refuses it; `assert_security` and `client_apply` both check this.
+- The client outbox never queues it.
+
+**What learned the root document:**
+- **The mapper:** `firestorePathOf` maps it to `users/{uid}`; `rootDocData` applies the flatten and the allowlist.
+- **Push refs:** `users/{uid}` becomes `{ collection: "userSettings", docId: "settings" }`. A 4-part `users/{uid}/userSettings/...` path is refused, because the key is a label, not a sub-collection.
+- **The reader:** one read per user per pass. Incremental passes compare Firestore's update time, because the document has no reliable `updatedAt`.
+- **Verify:** counts 1 or 0.
+- **The drill:** reads it.
+
+**Writers:**
+- `providers/SettingsProvider.tsx` and `theme/ThemeProvider.tsx` now call `noteDirectWrites(uid, ["users/{uid}"])`. The push is configured only in the Expense app (`FinanceDataProvider`), so it's a no-op in Ganesh and Nutrition.
+- A new guard test requires a hook in every writer of `users/{uid}`. The exceptions write only uncopied fields, each with its reason:
+  - PIN clears (`PrivacyPinProvider`);
+  - username/avatar (`SetupWizardModal`);
+  - profile identity (`ProfileSection`);
+  - the bulk category migration (`ensureCategoryHierarchy`, which already asks for a user sync).
+
+**Tests:**
+- the mapper: every secret, PIN, role and identity value is absent from the row and `doc`; the legacy map is flattened; the budget string is coerced;
+- push refs: root ref, duress refused, a 4-part path refused, a wrong doc id refused;
+- outbox: root is never queued;
+- guard: `users/{uid}` writers;
+- the SQL tests:
+  - 53 policies, 52 tables, purge 108;
+  - `user_settings` on the sync allowlist only;
+  - a client write to it is refused (42501).
+
+## Coverage: screens to synced collections
+
+Every screen-read collection from the 588 inventory is now synced, except:
+- what the ticket rules out: Nutrition, Ganesh, duress, `meta/*`, shared `splits`/`vaults`/`paymentRequests`, and the security settings fields;
+- `financialSummaries`, which is 592;
+- audit trails no screen reads from the read model: `decisionEvents`, `holdingAdjustments`, `portfolioReconciliationAudits`.
+
+## Results (whole story)
+
+- `npm test`: 525 files, 7,415 tests; `tsc` and `typecheck:shared` pass. The changed scripts and functions typecheck on their own (scripts are outside `tsconfig.json`).
+- **Read-model schema CI:** part A (run 41675273587) and part B (run 41677393456) both succeeded; part C is running. Docker Desktop was off, so the SQL suite ran in CI, not locally.
+
+## Production (needs the user's approval)
+
+1. **Three additive migrations:** `20261102000000`, `20261102010000`, `20261102020000`. Production dry run, then approval, then apply.
+2. **Backfill:** the first nightly full run after the epic reaches main. `mode=full`, `dry_run=true` first, for the report and the read budget (these collections aren't in the 503 baseline). Then approval (R7.2).
+3. **14 clean parity days.**
 

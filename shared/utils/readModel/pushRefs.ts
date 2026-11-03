@@ -42,6 +42,7 @@ export function isPushableDocId(docId: unknown): docId is string {
 export function isPushableRefDocId(collection: string, docId: unknown): docId is string {
   const spec = SPEC_BY_COLLECTION.get(collection);
   if (!spec) return false;
+  if (spec.root) return docId === spec.root.docId;
   if (!spec.parent) return isPushableDocId(docId);
   if (typeof docId !== "string") return false;
   const parts = docId.split("/");
@@ -58,7 +59,12 @@ export function pushRefFromPath(path: string, uid: string): PushRef | null {
   if (parts[0] !== "users" || parts[1] !== uid) return null;
   let collection: string;
   let docId: string;
-  if (parts.length === 4) {
+  if (parts.length === 2) {
+    // The users/{uid} document itself (SPENDLY-591 part C).
+    const root = READ_MODEL_TABLES.find((t) => t.root);
+    if (!root?.root) return null;
+    [collection, docId] = [root.collection, root.root.docId];
+  } else if (parts.length === 4) {
     [collection, docId] = [parts[2], parts[3]];
   } else if (parts.length === 6) {
     [collection, docId] = [`${parts[2]}/${parts[4]}`, `${parts[3]}/${parts[5]}`];
@@ -66,6 +72,8 @@ export function pushRefFromPath(path: string, uid: string): PushRef | null {
     return null;
   }
   if (!PUSHABLE_COLLECTIONS.has(collection) || !isPushableRefDocId(collection, docId)) return null;
+  // A root spec's key is a label, never a sub-collection name.
+  if (parts.length !== 2 && SPEC_BY_COLLECTION.get(collection)?.root) return null;
   return { collection, docId };
 }
 

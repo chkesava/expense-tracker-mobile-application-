@@ -47,6 +47,18 @@ export function firestoreReader(db: Firestore): SourcePort {
       return (await db.collection("users").listDocuments()).map((ref) => ref.id);
     },
     async readPage(uid, collection, request) {
+      const root = SPEC_BY_COLLECTION.get(collection)?.root;
+      if (root) {
+        // The users/{uid} document: one read, one page. It has no reliable
+        // updatedAt, so an incremental pass compares Firestore's update time.
+        if (request.after !== undefined) return { docs: [], reads: 0 };
+        const snap = await db.collection("users").doc(uid).get();
+        const fresh = request.kind === "all" || (snap.updateTime?.toMillis() ?? 0) > request.sinceMs;
+        return {
+          docs: snap.exists && fresh ? [{ id: root.docId, data: snap.data() ?? {}, updateTime: snap.updateTime }] : [],
+          reads: 1,
+        };
+      }
       const parent = SPEC_BY_COLLECTION.get(collection)?.parent;
       if (parent) {
         const parents = db.collection("users").doc(uid).collection(parent.collection);

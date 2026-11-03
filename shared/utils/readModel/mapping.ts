@@ -28,7 +28,22 @@ export type FieldSpec = { column: string; source: string; type: FieldType };
  * (Firestore ids never contain "/"), and the parent id gets its own column.
  */
 export type ParentSpec = { collection: string; child: string; column: string };
-export type TableSpec = { table: string; collection: string; fields: FieldSpec[]; derivedMonth?: boolean; parent?: ParentSpec };
+/**
+ * `root` (SPENDLY-591): the `users/{uid}` document itself, one row per user
+ * under a fixed doc_id. Only `docKeys` are copied (into the typed columns and
+ * `doc` alike): an allowlist, so a new field (a PIN, a lock flag, identity)
+ * stays out until someone adds it on purpose. `flattenNested` overlays a legacy
+ * nested map first, top-level fields winning, as the app's own merge does.
+ */
+export type RootSpec = { docId: string; docKeys: readonly string[]; flattenNested?: string };
+export type TableSpec = {
+  table: string;
+  collection: string;
+  fields: FieldSpec[];
+  derivedMonth?: boolean;
+  parent?: ParentSpec;
+  root?: RootSpec;
+};
 
 const f = (column: string, source: string, type: FieldType): FieldSpec => ({ column, source, type });
 
@@ -736,6 +751,40 @@ export const READ_MODEL_TABLES: TableSpec[] = [
       f("updated_at", "updatedAt", "timestamp"),
     ],
   },
+  // SPENDLY-591 part C (migration 20261102020000): the users/{uid} settings
+  // document. Server push only (never rm_client_apply). NOT copied: the PIN and
+  // lock fields (privacyPin, fakePin, lockPastMonths, lockOnInactivity,
+  // inactivityTimeout, lockOnAppSwitch, ghostMode), `role`, and identity data
+  // (username, avatar, email, displayName, photoURL, phone, upiId).
+  {
+    table: "user_settings",
+    collection: "userSettings",
+    root: {
+      docId: "settings",
+      flattenNested: "settings",
+      docKeys: [
+        "currency", "timezone", "language", "dateFormat", "numberFormat", "firstDayOfWeek",
+        "theme", "themeMode", "expensePalette", "accentColor", "navigationStyle",
+        "defaultCategory", "defaultView", "compactListMode", "hapticFeedback", "enableInvestments",
+        "monthlyBudget", "monthly_budget", "exportYear",
+        "dashboardWidgets", "dashboardOrder", "onboarding", "creditCardBillReminders", "calendarNotifications",
+      ],
+    },
+    fields: [
+      f("currency", "currency", "text"),
+      f("timezone", "timezone", "text"),
+      f("language", "language", "text"),
+      f("theme", "theme", "text"),
+      f("theme_mode", "themeMode", "text"),
+      f("expense_palette", "expensePalette", "text"),
+      f("accent_color", "accentColor", "text"),
+      f("navigation_style", "navigationStyle", "text"),
+      f("default_view", "defaultView", "text"),
+      f("monthly_budget", "monthlyBudget", "money"),
+      f("enable_investments", "enableInvestments", "boolean"),
+      f("compact_list_mode", "compactListMode", "boolean"),
+    ],
+  },
   // SPENDLY-591 part B (migration 20261102010000): the first nested collection.
   {
     table: "watchlist_items",
@@ -764,8 +813,9 @@ export function parentIdOf(spec: TableSpec, docId: string): string | null {
   return parts.length === 2 && parts[0] && parts[1] ? parts[0] : null;
 }
 
-/** A row's Firestore path: `users/{uid}/{collection}/{docId}`, or the nested form. */
+/** A row's Firestore path: `users/{uid}/{collection}/{docId}`, the nested form, or `users/{uid}` (root). */
 export function firestorePathOf(spec: TableSpec, uid: string, docId: string): string {
+  if (spec.root) return `users/${uid}`;
   if (!spec.parent) return `users/${uid}/${spec.collection}/${docId}`;
   const [parentId, id] = docId.split("/");
   return `users/${uid}/${spec.parent.collection}/${parentId}/${spec.parent.child}/${id}`;
@@ -882,7 +932,19 @@ export function mapDocument(spec: TableSpec, uid: string, source: SourceDoc): Re
 }
 
 /** As mapDocument, plus why a row is unmapped (the failing field; never its value). */
-export function mapDocumentWithReason(spec: TableSpec, uid: string, source: SourceDoc): { row: ReadModelRow; reason?: string } {
+/** A root document's copyable fields: the legacy nested map overlaid, then the allowlist. */
+export function rootDocData(root: RootSpec, data: Record<string, unknown>): Record<string, unknown> {
+  const nested = root.flattenNested ? data[root.flattenNested] : undefined;
+  const merged =
+    nested && typeof nested === "object" && !Array.isArray(nested) ? { ...(nested as Record<string, unknown>), ...data } : data;
+  const out: Record<string, unknown> = {};
+  for (const key of root.docKeys) if (merged[key] !== undefined) out[key] = merged[key];
+  return out;
+}
+
+export function mapDocumentWithReason(spec: TableSpec, uid: string, input: SourceDoc): { row: ReadModelRow; reason?: string } {
+  // A root document keeps only its allowlisted fields, everywhere (R2, SPENDLY-591).
+  const source: SourceDoc = spec.root ? { ...input, id: spec.root.docId, data: rootDocData(spec.root, input.data) } : input;
   const base: ReadModelRow = {
     uid,
     doc_id: source.id,

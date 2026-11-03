@@ -171,6 +171,35 @@ describe("read-model mapping (SPENDLY-506)", () => {
     expect(month.doc).toMatchObject({ points: { "01": { netWorth: 100 } } });
   });
 
+  it("SPENDLY-591: the users/{uid} copy keeps only allowlisted settings; PIN, lock, role and identity never leave Firestore", () => {
+    const settings = SPEC_BY_COLLECTION.get("userSettings")!;
+    const row = mapDocument(settings, "u1", {
+      id: "u1",
+      updateTime: UPDATE_TIME,
+      data: {
+        currency: "INR", theme: "slate", themeMode: "dark", expensePalette: "forest", monthlyBudget: "45000",
+        enableInvestments: true, dashboardOrder: ["a", "b"],
+        // Never copied:
+        privacyPin: "1234", fakePin: "9999", lockPastMonths: true, lockOnInactivity: true, inactivityTimeout: 5,
+        lockOnAppSwitch: true, ghostMode: true, role: "SUPER_ADMIN", username: "kesava", email: "x@y.z",
+        displayName: "K", photoURL: "https://p", phone: "+91", avatar: "a1", upiId: "k@upi",
+        // The legacy nested map: its settings come along (top level wins), its PINs don't.
+        settings: { language: "te", currency: "USD", privacyPin: "1111", fakePin: "2222" },
+      },
+    });
+    expect(row).toMatchObject({
+      doc_id: "settings", source_path: "users/u1", currency: "INR", language: "te", theme: "slate", theme_mode: "dark",
+      expense_palette: "forest", monthly_budget: 45000, enable_investments: true, mapping_status: "mapped",
+    });
+    const copied = JSON.stringify(row);
+    for (const secret of ["1234", "9999", "1111", "2222", "SUPER_ADMIN", "kesava", "x@y.z", "https://p", "+91", "k@upi"]) {
+      expect(copied).not.toContain(secret);
+    }
+    expect(Object.keys(row.doc as object).sort()).toEqual(
+      ["currency", "dashboardOrder", "enableInvestments", "expensePalette", "language", "monthlyBudget", "theme", "themeMode"]
+    );
+  });
+
   it("SPENDLY-591: a nested watchlist item keys on '{listId}/{itemId}', with its list id and real path", () => {
     const items = SPEC_BY_COLLECTION.get("watchlists/items")!;
     const row = mapDocument(items, "u1", {
