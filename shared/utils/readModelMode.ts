@@ -53,3 +53,12 @@ export function effectiveReadModelMode(c: ReadModelConditions): ReadModelMode {
   if (c.duress || !c.online || !c.available || c.fellBack) return "firestore";
   return c.configured;
 }
+
+/**
+ * SPENDLY-670: whether the app also writes its saves to the read model
+ * (`system_settings/global.readModel.clientWrites`). Off unless exactly true,
+ * so the setting doubles as the kill switch.
+ */
+export function clientWritesEnabled(readModelSetting: unknown): boolean {
+  return !!readModelSetting && typeof readModelSetting === "object" && (readModelSetting as Record<string, unknown>).clientWrites === true;
+}

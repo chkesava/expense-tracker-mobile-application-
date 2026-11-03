@@ -31,6 +31,7 @@ import {
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { notifyReadModelWrites } from "@/lib/readModelPush";
+import { notifyClientWrites } from "@/lib/readModelClientWrites";
 import {
   commitWrite,
   isWriteQueueDurable,
@@ -180,6 +181,8 @@ export async function commitMutations(
     // SPENDLY-583: copy the synced documents to the read model once Firestore
     // has them (the pusher waits for the commit; fire-and-forget).
     notifyReadModelWrites(uid, serialized.map((op) => op.path));
+    // SPENDLY-670: and write them to the read model from this device too.
+    notifyClientWrites(uid, serialized.map((op) => op.path));
     return outcome;
   } catch (error) {
     if (persist) await removeWriteOutbox(entry.id);

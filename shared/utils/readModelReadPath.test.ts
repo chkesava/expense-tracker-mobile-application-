@@ -112,3 +112,13 @@ describe("Phase 3 screens (SPENDLY-513)", () => {
       .toEqual({ state: "fallback", label: "History copy unavailable — showing live data" });
   });
 });
+
+describe("clientWritesEnabled (SPENDLY-670)", () => {
+  it("is on only when readModel.clientWrites is exactly true", async () => {
+    const { clientWritesEnabled } = await import("./readModelMode");
+    expect(clientWritesEnabled({ clientWrites: true })).toBe(true);
+    for (const v of [undefined, null, {}, { clientWrites: "true" }, { clientWrites: 1 }, { clientWrites: false }, "x"]) {
+      expect(clientWritesEnabled(v)).toBe(false);
+    }
+  });
+});

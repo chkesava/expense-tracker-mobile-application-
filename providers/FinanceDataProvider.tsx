@@ -10,6 +10,7 @@ import {
   where,
   type QueryDocumentSnapshot,
   type QuerySnapshot,
+  getDocFromCache,
   waitForPendingWrites,
 } from "@/lib/firestore";
 import {
@@ -93,6 +94,9 @@ import {
   logQuerySnapshot,
 } from "@/lib/firestoreReadDebug";
 import { configureReadModelPush, notifyReadModelSnapshot } from "@/lib/readModelPush";
+import { connectReadModel } from "@/lib/readModelClient";
+import { CLIENT_OUTBOX_STORAGE_PREFIX, configureClientWrites } from "@/lib/readModelClientWrites";
+import { clientWritesEnabled } from "@/shared/utils/readModelMode";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import { perfEvent } from "@/lib/perf";
@@ -308,6 +312,74 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       log: (event, detail) => logWarning(event, detail),
     });
   }, []);
+  // SPENDLY-670: the app's own writes into the read model (plan v2): each
+  // synced document commitMutations writes goes to rm_client_apply from an
+  // on-device queue. Off unless system_settings/global.readModel.clientWrites
+  // is true; never in duress or signed out; a no-op loopback in Spendly Test.
+  const clientWritesRef = useRef<ReturnType<typeof configureClientWrites> | null>(null);
+  useEffect(() => {
+    const storage = async () => (await import("@react-native-async-storage/async-storage")).default;
+    clientWritesRef.current = configureClientWrites({
+      getUser: () => userRef.current,
+      canSend: () => {
+        const rm = readModelRef.current;
+        return (
+          clientWritesEnabled(rm.setting) &&
+          (isReadModelEnvConfigured() || rm.localTestMode) &&
+          !rm.duress &&
+          !!userRef.current
+        );
+      },
+      readCached: async (path) => {
+        const database = getFirestoreDb();
+        if (!database) return undefined;
+        try {
+          const snap = await getDocFromCache(doc(database, path));
+          if (!snap.exists()) return null;
+          return { id: snap.id, data: (snap.data({ serverTimestamps: "estimate" }) ?? {}) as Record<string, unknown> };
+        } catch {
+          return undefined; // not in the cache: the server push copies it
+        }
+      },
+      apply: async (u, batch) => {
+        if (readModelRef.current.localTestMode) return { error: null }; // loopback
+        const { client } = await connectReadModel(u);
+        if (!client) return { error: { message: "read model not connected" } };
+        const { error } = await client.rpc("rm_client_apply", {
+          p_table: batch.table,
+          p_rows: batch.rows,
+          p_deletes: batch.deletes,
+        });
+        return { error };
+      },
+      load: async (id) => {
+        const raw = await (await storage()).getItem(CLIENT_OUTBOX_STORAGE_PREFIX + id);
+        return raw ? JSON.parse(raw) : null;
+      },
+      save: async (id, queue) => {
+        await (await storage()).setItem(CLIENT_OUTBOX_STORAGE_PREFIX + id, JSON.stringify(queue));
+      },
+      remove: async (id) => {
+        await (await storage()).removeItem(CLIENT_OUTBOX_STORAGE_PREFIX + id);
+      },
+      now: () => Date.now(),
+      log: (event, detail) => logWarning(event, detail),
+    });
+  }, []);
+  // Resume a saved queue on sign-in; on sign-out the previous user's queue
+  // leaves the device. Back online: send at once.
+  const clientWritesUidRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const box = clientWritesRef.current;
+    const previous = clientWritesUidRef.current;
+    clientWritesUidRef.current = uid;
+    if (!box) return;
+    if (previous && previous !== uid) void box.forget(previous);
+    if (uid && !isDuress) void box.resume(uid);
+  }, [uid, isDuress]);
+  useEffect(() => {
+    if (isOnline) clientWritesRef.current?.kick();
+  }, [isOnline]);
   /** SPENDLY-512: where read-model history paging resumes (Firestore keeps its own cursor). */
   const supabaseExpenseCursorRef = useRef<SupabaseCursor>(null);
   const supabaseIncomeCursorRef = useRef<SupabaseCursor>(null);
