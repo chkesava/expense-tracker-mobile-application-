@@ -15,6 +15,10 @@ begin
     'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
     'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
+    'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
+    'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
+    'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists',
     'sync_runs', 'sync_status', 'sync_checkpoints', 'sync_failures'
   ]) as t
   where not exists (select 1 from pg_tables where schemaname = 'public' and tablename = t);
@@ -59,7 +63,11 @@ begin
     'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
     'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
-    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history', 'sync_status',
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
+    'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
+    'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
+    'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'sync_status',
           'v_active_expenses', 'v_active_incomes', 'v_cash_flow_by_month'
         )
       ))
@@ -105,8 +113,8 @@ begin
     raise exception 'unexpected policies: %', bad;
   end if;
   select count(*) into n from pg_policies where schemaname = 'public';
-  if n <> 32 then  -- 10 Wave 1 + sync_status + SPENDLY-609 goals (2) + SPENDLY-589 Wave 2 (5) + SPENDLY-590 Wave 3 (14)
-    raise exception 'expected 32 owner-read policies, found %', n;
+  if n <> 51 then  -- 10 Wave 1 + sync_status + SPENDLY-609 goals (2) + SPENDLY-589 Wave 2 (5) + SPENDLY-590 Wave 3 (14) + SPENDLY-591 (19)
+    raise exception 'expected 51 owner-read policies, found %', n;
   end if;
   if exists (
     select 1 from pg_policies
@@ -157,7 +165,11 @@ begin
     'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
     'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
-    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history'
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
+    'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
+    'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
+    'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists'
   ]) as t
   where (
     select count(*) from information_schema.columns c
@@ -227,7 +239,11 @@ begin
     'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
     'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
-    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history'
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
+    'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
+    'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
+    'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists'
   ]) as t
   where (
     select count(*) from information_schema.columns c

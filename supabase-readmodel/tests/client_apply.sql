@@ -287,7 +287,11 @@ begin
     'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
     'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
-    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history'
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
+    'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
+    'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
+    'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists'
   ] loop
     res := public.rm_client_apply(t, jsonb_build_array(jsonb_build_object(
       'uid', 'user-a', 'doc_id', 'all-' || t, 'doc', '{}'::jsonb,

@@ -3,15 +3,19 @@ import { describe, expect, it } from "vitest";
 import { MAX_PUSH_REFS, parsePushRequest, PUSHABLE_COLLECTIONS, pushRefFromPath } from "./pushRefs";
 
 describe("push refs (SPENDLY-583)", () => {
-  it("pushable collections are exactly the synced ones (Wave 1 + SPENDLY-609 goals + Waves 2 and 3)", () => {
+  it("pushable collections are exactly the synced ones (Wave 1 + SPENDLY-609 goals + Waves 2 and 3 + SPENDLY-591)", () => {
     expect([...PUSHABLE_COLLECTIONS].sort()).toEqual([
       "accountEntries", "accountPayments", "accountTransfers", "accountTypes", "accounts",
-      "borrowingRepayments", "borrowings", "categories", "creditCardBills",
+      "borrowingRepayments", "borrowings", "calendarReminders", "categories",
+      "categorizationRules", "categoryBudgets", "creditCardBills", "decisions",
       "epfContributionEvents", "epfContributions", "epfEstablishments", "epfInterestEntries",
       "epfProfile", "epfReconciliations", "epfTransferEvents", "epfTransfers", "epfWageHistory",
-      "expenses", "financialGoals", "goalEvents", "holdings", "incomes",
-      "investmentCashTransactions", "investments", "ledgerEvents", "portfolioSettings",
-      "portfolioTransactions", "receivableRepayments", "receivables", "subscriptions",
+      "expenses", "feeReviews", "feeSignalDismissals", "financialGoals", "goalEvents",
+      "goalFundingPlans", "holdings", "incomes", "investmentCashTransactions", "investments",
+      "ledgerEvents", "merchantOverrides", "netWorthHistory", "portfolioSettings",
+      "portfolioTransactions", "receivableRepayments", "receivables", "recurringDismissals",
+      "runwayOverrides", "runwaySettings", "sipPlans", "sipTransactions", "spaces",
+      "subscriptions", "trips", "virtualPositions", "watchlists", "whatIfScenarios",
     ]);
     // The name lock is not data and is never pushed.
     expect(pushRefFromPath("users/u1/goalNames/n_car", "u1")).toBeNull();
@@ -23,7 +27,7 @@ describe("push refs (SPENDLY-583)", () => {
     expect(pushRefFromPath("users/u2/expenses/e1", "u1")).toBeNull();
     expect(pushRefFromPath("users/u1_duress/expenses/e1", "u1")).toBeNull();
     expect(pushRefFromPath("users/u1/expenses/e1", "u1_duress")).toBeNull();
-    expect(pushRefFromPath("users/u1/trips/t1", "u1")).toBeNull();
+    expect(pushRefFromPath("users/u1/notifications/n1", "u1")).toBeNull();
     expect(pushRefFromPath("users/u1/meta/outbox/acks/x", "u1")).toBeNull();
     expect(pushRefFromPath("users/u1", "u1")).toBeNull();
   });

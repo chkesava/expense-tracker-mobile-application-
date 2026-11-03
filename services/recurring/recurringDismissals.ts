@@ -38,11 +38,14 @@ export async function persistRemoteDismissal(
     const { doc, serverTimestamp, setDoc } = await import("@/lib/firestore");
     const db = getFirestoreDb();
     if (!db) return;
-    await setDoc(doc(db, "users", uid, "recurringDismissals", merchantKey), {
+    const ref = doc(db, "users", uid, "recurringDismissals", merchantKey);
+    await setDoc(ref, {
       merchantKey,
       reason,
       dismissedAt: serverTimestamp(),
     });
+    const { noteDirectWrites } = await import("@/lib/readModelWriteHooks");
+    noteDirectWrites(uid, [ref.path]);
   } catch {
     /* best-effort */
   }

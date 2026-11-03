@@ -108,7 +108,11 @@ describe("every direct writer of a synced collection calls a read-model hook", (
     }
   }
   const NAMES = [...[...SYNCED].map((c) => `"${c}"`), ...[...CONSTS].map((c) => `${c}\\b`)].join("|");
-  const SYNCED_REF = `(?:doc|collection)\\(\\s*(?:collection\\(\\s*)?\\w+\\s*,\\s*"users"\\s*,\\s*[\\w.]+\\s*,\\s*(?:${NAMES})`;
+  // Segments (`db, "users", uid, "expenses"`) or a template path (SPENDLY-591:
+  // useSips writes `users/${uid}/sipPlans`).
+  const SYNCED_REF =
+    `(?:doc|collection)\\(\\s*(?:collection\\(\\s*)?\\w+\\s*,\\s*` +
+    `(?:"users"\\s*,\\s*[\\w.]+\\s*,\\s*(?:${NAMES})|\`users/\\$\\{[\\w.]+\\}/(?:${[...SYNCED].join("|")})\`)`;
 
   function writesSyncedCollection(text: string): boolean {
     if (new RegExp(WRITE + SYNCED_REF).test(text)) return true;
@@ -138,6 +142,13 @@ describe("every direct writer of a synced collection calls a read-model hook", (
       "hooks/useCategories.ts",
       "services/portfolio/investmentCash.ts",
       "services/ledger/rebuildFinancialSummaries.ts",
+      // SPENDLY-590: found through name constants.
+      "hooks/useEpfContributions.ts",
+      "services/portfolio/holdingAdjustments.ts",
+      // SPENDLY-591: a template path, and plain literals.
+      "hooks/useSips.ts",
+      "hooks/useCategoryBudgets.ts",
+      "services/sip/executeSips.ts",
     ]) {
       expect(writers).toContain(known);
     }

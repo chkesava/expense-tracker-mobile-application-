@@ -137,6 +137,40 @@ describe("read-model mapping (SPENDLY-506)", () => {
     expect(Object.keys(profile)).not.toContain("uan");
   });
 
+  it("SPENDLY-591: trip and SIP dates are copied verbatim (no UTC day cut); SIP units keep their decimals", () => {
+    const trip = mapDocument(SPEC_BY_COLLECTION.get("trips")!, "u1", {
+      id: "t1",
+      updateTime: UPDATE_TIME,
+      data: { destination: "Goa", startDate: "2026-10-31T18:30:00.000Z", endDate: "2026-11-04T18:30:00.000Z", totalBudget: 20000, spentAmount: 4250.5, status: "active" },
+    });
+    expect(trip).toMatchObject({ start_date: "2026-10-31T18:30:00.000Z", end_date: "2026-11-04T18:30:00.000Z", spent_amount: 4250.5, mapping_status: "mapped" });
+    const plan = mapDocument(SPEC_BY_COLLECTION.get("sipPlans")!, "u1", {
+      id: "p1",
+      updateTime: UPDATE_TIME,
+      data: { symbol: "NIFTYBEES", investmentAmount: 5000, totalInvested: 15000, totalUnits: 55.12345678, executionDay: 5, executionCount: 3, nextExecutionDate: "2026-12-04T18:30:00.000Z", skipNextExecution: false, status: "active" },
+    });
+    expect(plan).toMatchObject({ total_units: 55.12345678, execution_count: 3, next_execution_date: "2026-12-04T18:30:00.000Z", mapping_status: "mapped" });
+  });
+
+  it("SPENDLY-591: ms timestamps map; arrays and maps stay in doc only", () => {
+    const decision = mapDocument(SPEC_BY_COLLECTION.get("decisions")!, "u1", {
+      id: "d1",
+      updateTime: UPDATE_TIME,
+      data: { title: "Buy a car?", category: "purchase", status: "decided", revision: 2, confidence: 4, createdAtMs: 1_790_000_000_000, decidedAtMs: 1_790_000_100_000, alternatives: [{ id: "a" }], context: { why: "x" } },
+    });
+    expect(decision).toMatchObject({ revision: 2, confidence: 4, created_at: new Date(1_790_000_000_000).toISOString(), decided_at: new Date(1_790_000_100_000).toISOString(), mapping_status: "mapped" });
+    expect(decision).not.toHaveProperty("alternatives");
+    expect(decision.doc).toMatchObject({ alternatives: [{ id: "a" }] });
+    const month = mapDocument(SPEC_BY_COLLECTION.get("netWorthHistory")!, "u1", {
+      id: "2026-10",
+      updateTime: UPDATE_TIME,
+      data: { month: "2026-10", schemaVersion: 1, points: { "01": { netWorth: 100, assets: 150, liabilities: 50, recordedAtMs: 1 } } },
+    });
+    // The contract's schema_version is the read model's; the doc's own is history_schema_version.
+    expect(month).toMatchObject({ month: "2026-10", history_schema_version: 1, mapping_status: "mapped" });
+    expect(month.doc).toMatchObject({ points: { "01": { netWorth: 100 } } });
+  });
+
   it("SPENDLY-609: maps a goal, including a legacy one with an empty deadline and no status", () => {
     const goals = SPEC_BY_COLLECTION.get("financialGoals")!;
     const v2 = mapDocument(goals, "u1", {
