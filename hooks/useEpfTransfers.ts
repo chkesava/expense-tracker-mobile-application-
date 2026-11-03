@@ -26,6 +26,7 @@ import { LISTEN_WITH_SYNC_STATE, onlyMetadataChanged } from "@/lib/firestoreSync
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { noteDirectWrites, noteTransactionWrites, trackedBatch } from "@/lib/readModelWriteHooks";
 import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
@@ -149,7 +150,7 @@ export function useEpfTransfers(options?: { enabled?: boolean }) {
 
       try {
         const ref = doc(collection(db, "users", uid, EPF_TRANSFERS_COLLECTION));
-        const batch = writeBatch(db);
+        const batch = trackedBatch(writeBatch(db));
         batch.set(
           ref,
           withoutUndefined({
@@ -172,6 +173,7 @@ export function useEpfTransfers(options?: { enabled?: boolean }) {
         );
 
         const outcome = await commitWrite(() => batch.commit(), { label: "EPF transfer" });
+        noteDirectWrites(uid, batch.writtenPaths());
         toast.success(writeSavedMessage(outcome, "Transfer recorded"));
         return ref.id;
       } catch (err) {
@@ -237,6 +239,7 @@ export function useEpfTransfers(options?: { enabled?: boolean }) {
             }),
           { label: "EPF transfer" }
         );
+        noteTransactionWrites(uid, [ref.path, eventRef.path]);
         toast.success(status === "completed" ? "Transfer completed" : "Transfer marked failed");
         return true;
       } catch (err) {
@@ -319,6 +322,7 @@ export function useEpfTransfers(options?: { enabled?: boolean }) {
             }),
           { label: "EPF transfer reversal" }
         );
+        noteTransactionWrites(uid, [ref.path, reversalRef.path, eventRef.path]);
         toast.success(writeSavedMessage(outcome, "Transfer reversed"));
         return true;
       } catch (err) {
@@ -360,6 +364,7 @@ export function useEpfTransfers(options?: { enabled?: boolean }) {
               .commit(),
           { label: "EPF transfer" }
         );
+        noteDirectWrites(uid, [`users/${uid}/${EPF_TRANSFERS_COLLECTION}/${transferId}`]);
         toast.success(writeSavedMessage(outcome, "Transfer confirmed"));
         return true;
       } catch (err) {

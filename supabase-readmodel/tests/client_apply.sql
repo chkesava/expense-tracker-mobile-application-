@@ -284,7 +284,10 @@ begin
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
-    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions'
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
+    'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history'
   ] loop
     res := public.rm_client_apply(t, jsonb_build_array(jsonb_build_object(
       'uid', 'user-a', 'doc_id', 'all-' || t, 'doc', '{}'::jsonb,

@@ -85,6 +85,58 @@ describe("read-model mapping (SPENDLY-506)", () => {
     expect(bad.mapping_status).toBe("unmapped");
   });
 
+  it("SPENDLY-590: quantities, prices and NAVs keep their decimals; money stays money", () => {
+    const holding = mapDocument(SPEC_BY_COLLECTION.get("holdings")!, "u1", {
+      id: "h1",
+      updateTime: UPDATE_TIME,
+      data: { profileId: "INE009A01021", symbol: "INFY", yahooSymbol: "INFY.NS", quantity: 12.345678, averageBuyPrice: 1523.12345678, datePurchased: "2026-04-01" },
+    });
+    expect(holding).toMatchObject({ symbol: "INFY", quantity: 12.345678, average_buy_price: 1523.12345678, date_purchased: "2026-04-01", mapping_status: "mapped" });
+    const trade = mapDocument(SPEC_BY_COLLECTION.get("portfolioTransactions")!, "u1", {
+      id: "t1",
+      updateTime: UPDATE_TIME,
+      // An ADJUSTMENT row carries a signed price (holdingAdjustments).
+      data: { holdingId: "h1", symbol: "INFY", type: "ADJUSTMENT", quantity: 0, price: -250.5, fees: 0, date: "2026-10-01", orderStatus: "executed" },
+    });
+    expect(trade).toMatchObject({ holding_id: "h1", type: "ADJUSTMENT", quantity: 0, price: -250.5, fees: 0, mapping_status: "mapped" });
+    const fund = mapDocument(SPEC_BY_COLLECTION.get("investments")!, "u1", {
+      id: "i1",
+      updateTime: UPDATE_TIME,
+      data: { name: "Index fund", kind: "mutual_fund", principal: 50000, startDate: "2025-01-10", units: 1234.5678, purchaseNav: 40.5, currentNav: 52.12345, annualInterestRate: 7.1 },
+    });
+    expect(fund).toMatchObject({ principal: 50000, units: 1234.5678, purchase_nav: 40.5, current_nav: 52.12345, annual_interest_rate: 7.1, mapping_status: "mapped" });
+    // Cash balance is a stored copy (R4.1); a non-number flags the row, never drops it.
+    const settings = SPEC_BY_COLLECTION.get("portfolioSettings")!;
+    expect(mapDocument(settings, "u1", { id: "main", updateTime: UPDATE_TIME, data: { cashBalance: 1200.5, onboardingComplete: true } }))
+      .toMatchObject({ cash_balance: 1200.5, onboarding_complete: true, mapping_status: "mapped" });
+    expect(mapDocument(settings, "u1", { id: "main", updateTime: UPDATE_TIME, data: { cashBalance: "lots" } }).mapping_status).toBe("unmapped");
+  });
+
+  it("SPENDLY-590: maps EPF contributions, their events (from/to) and wage history (createdAtMs)", () => {
+    const contribution = mapDocument(SPEC_BY_COLLECTION.get("epfContributions")!, "u1", {
+      id: "est1_2026-09",
+      updateTime: UPDATE_TIME,
+      data: { establishmentId: "est1", month: "2026-09", wage: 15000, employeeShare: 1800, employerShare: 1800, epsShare: 1250, employerEpfShare: 550, totalContribution: 3600, epfCredit: 2350, status: "credited", epsEligible: true },
+    });
+    expect(contribution).toMatchObject({ establishment_id: "est1", month: "2026-09", eps_share: 1250, epf_credit: 2350, status: "credited", mapping_status: "mapped" });
+    const event = mapDocument(SPEC_BY_COLLECTION.get("epfContributionEvents")!, "u1", {
+      id: "ev1",
+      updateTime: UPDATE_TIME,
+      data: { contributionId: "est1_2026-09", establishmentId: "est1", month: "2026-09", from: "none", to: "scheduled", actor: "system", at: "2026-10-01T00:00:00.000Z" },
+    });
+    expect(event).toMatchObject({ from_status: "none", to_status: "scheduled", actor: "system", at: "2026-10-01T00:00:00.000Z", mapping_status: "mapped" });
+    const wage = mapDocument(SPEC_BY_COLLECTION.get("epfWageHistory")!, "u1", {
+      id: "w1",
+      updateTime: UPDATE_TIME,
+      data: { establishmentId: "est1", effectiveFromMonth: "2026-04", wage: 21000, epsEligible: false, createdAtMs: 1_790_000_000_000 },
+    });
+    expect(wage).toMatchObject({ effective_from_month: "2026-04", wage: 21000, eps_eligible: false, created_at: new Date(1_790_000_000_000).toISOString() });
+    // The UAN and name stay in the doc only; the profile types just the active pointer.
+    const profile = mapDocument(SPEC_BY_COLLECTION.get("epfProfile")!, "u1", { id: "main", updateTime: UPDATE_TIME, data: { uan: "100000000000", employeeName: "A", activeEstablishmentId: null } });
+    expect(profile).toMatchObject({ active_establishment_id: null, mapping_status: "mapped" });
+    expect(Object.keys(profile)).not.toContain("uan");
+  });
+
   it("SPENDLY-609: maps a goal, including a legacy one with an empty deadline and no status", () => {
     const goals = SPEC_BY_COLLECTION.get("financialGoals")!;
     const v2 = mapDocument(goals, "u1", {

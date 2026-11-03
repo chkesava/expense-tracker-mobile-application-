@@ -12,6 +12,9 @@ begin
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
     'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
+    'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
     'sync_runs', 'sync_status', 'sync_checkpoints', 'sync_failures'
   ]) as t
   where not exists (select 1 from pg_tables where schemaname = 'public' and tablename = t);
@@ -53,7 +56,10 @@ begin
           'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
           'account_transfers', 'account_entries', 'account_payments',
           'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
-    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions', 'sync_status',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
+    'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history', 'sync_status',
           'v_active_expenses', 'v_active_incomes', 'v_cash_flow_by_month'
         )
       ))
@@ -99,8 +105,8 @@ begin
     raise exception 'unexpected policies: %', bad;
   end if;
   select count(*) into n from pg_policies where schemaname = 'public';
-  if n <> 18 then  -- 10 Wave 1 + sync_status + SPENDLY-609 goals (2) + SPENDLY-589 Wave 2 (5)
-    raise exception 'expected 18 owner-read policies, found %', n;
+  if n <> 32 then  -- 10 Wave 1 + sync_status + SPENDLY-609 goals (2) + SPENDLY-589 Wave 2 (5) + SPENDLY-590 Wave 3 (14)
+    raise exception 'expected 32 owner-read policies, found %', n;
   end if;
   if exists (
     select 1 from pg_policies
@@ -148,7 +154,10 @@ begin
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
-    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions'
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
+    'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history'
   ]) as t
   where (
     select count(*) from information_schema.columns c
@@ -215,7 +224,10 @@ begin
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
-    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions'
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
+    'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history'
   ]) as t
   where (
     select count(*) from information_schema.columns c

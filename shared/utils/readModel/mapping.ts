@@ -18,7 +18,8 @@ import { monthKeyOf } from "../dates";
  * typed column is null and `doc` keeps the data. Nothing is dropped.
  */
 
-export type FieldType = "text" | "money" | "date" | "timestamp" | "boolean" | "integer";
+// `decimal` (SPENDLY-590): quantities, prices, NAVs and rates, numeric(24,8).
+export type FieldType = "text" | "money" | "decimal" | "date" | "timestamp" | "boolean" | "integer";
 export type FieldSpec = { column: string; source: string; type: FieldType };
 export type TableSpec = { table: string; collection: string; fields: FieldSpec[]; derivedMonth?: boolean };
 
@@ -262,6 +263,198 @@ export const READ_MODEL_TABLES: TableSpec[] = [
       f("last_processed", "lastProcessed", "text"),
     ],
   },
+  // SPENDLY-590 Wave 3 (migration 20261101000000). Stored values are copies
+  // (R4.1); quantities, prices, NAVs and rates are `decimal` (numeric(24,8)).
+  {
+    table: "investments",
+    collection: "investments",
+    fields: [
+      f("name", "name", "text"),
+      f("kind", "kind", "text"),
+      f("principal", "principal", "money"),
+      f("start_date", "startDate", "date"),
+      f("annual_interest_rate", "annualInterestRate", "decimal"),
+      f("maturity_date", "maturityDate", "date"),
+      f("linked_account_id", "linkedAccountId", "text"),
+      f("units", "units", "decimal"),
+      f("purchase_nav", "purchaseNav", "decimal"),
+      f("current_nav", "currentNav", "decimal"),
+      f("status", "status", "text"),
+      f("closed_date", "closedDate", "date"),
+    ],
+  },
+  {
+    table: "holdings",
+    collection: "holdings",
+    fields: [
+      f("profile_id", "profileId", "text"),
+      f("symbol", "symbol", "text"),
+      f("yahoo_symbol", "yahooSymbol", "text"),
+      f("name", "name", "text"),
+      f("exchange", "exchange", "text"),
+      f("instrument_type", "instrumentType", "text"),
+      f("quantity", "quantity", "decimal"),
+      f("average_buy_price", "averageBuyPrice", "decimal"),
+      f("date_purchased", "datePurchased", "date"),
+    ],
+  },
+  {
+    table: "portfolio_transactions",
+    collection: "portfolioTransactions",
+    fields: [
+      f("holding_id", "holdingId", "text"),
+      f("profile_id", "profileId", "text"),
+      f("symbol", "symbol", "text"),
+      f("type", "type", "text"),
+      f("quantity", "quantity", "decimal"),
+      f("price", "price", "decimal"),
+      f("fees", "fees", "money"),
+      f("date", "date", "date"),
+      f("order_status", "orderStatus", "text"),
+    ],
+  },
+  {
+    table: "investment_cash_transactions",
+    collection: "investmentCashTransactions",
+    fields: [
+      f("type", "type", "text"),
+      f("amount", "amount", "money"),
+      f("direction", "direction", "text"),
+      f("date", "date", "date"),
+      f("holding_id", "holdingId", "text"),
+      f("symbol", "symbol", "text"),
+      f("quantity", "quantity", "decimal"),
+      f("price", "price", "decimal"),
+      f("account_id", "accountId", "text"),
+      f("account_entry_id", "accountEntryId", "text"),
+      f("reverses_id", "reversesId", "text"),
+      f("source", "source", "text"),
+    ],
+  },
+  {
+    table: "portfolio_settings",
+    collection: "portfolioSettings",
+    fields: [
+      f("initial_investment_amount", "initialInvestmentAmount", "money"),
+      f("cash_balance", "cashBalance", "money"),
+      f("has_existing_holdings", "hasExistingHoldings", "boolean"),
+      f("onboarding_complete", "onboardingComplete", "boolean"),
+    ],
+  },
+  {
+    table: "epf_profile",
+    collection: "epfProfile",
+    fields: [
+      f("active_establishment_id", "activeEstablishmentId", "text"),
+    ],
+  },
+  {
+    table: "epf_establishments",
+    collection: "epfEstablishments",
+    fields: [
+      f("profile_id", "profileId", "text"),
+      f("employer_name", "employerName", "text"),
+      f("date_joined", "dateJoined", "date"),
+      f("date_left", "dateLeft", "date"),
+      f("employment_status", "employmentStatus", "text"),
+      f("archived", "archived", "boolean"),
+      f("eps_member", "epsMember", "boolean"),
+    ],
+  },
+  {
+    table: "epf_contributions",
+    collection: "epfContributions",
+    fields: [
+      f("establishment_id", "establishmentId", "text"),
+      f("month", "month", "text"),
+      f("wage", "wage", "money"),
+      f("employee_share", "employeeShare", "money"),
+      f("employer_share", "employerShare", "money"),
+      f("eps_share", "epsShare", "money"),
+      f("employer_epf_share", "employerEpfShare", "money"),
+      f("total_contribution", "totalContribution", "money"),
+      f("epf_credit", "epfCredit", "money"),
+      f("status", "status", "text"),
+      f("source", "source", "text"),
+      f("eps_eligible", "epsEligible", "boolean"),
+      f("credit_date", "creditDate", "date"),
+      f("credited_amount", "creditedAmount", "money"),
+    ],
+  },
+  {
+    table: "epf_contribution_events",
+    collection: "epfContributionEvents",
+    fields: [
+      f("contribution_id", "contributionId", "text"),
+      f("establishment_id", "establishmentId", "text"),
+      f("month", "month", "text"),
+      f("from_status", "from", "text"),
+      f("to_status", "to", "text"),
+      f("amount", "amount", "money"),
+      f("actor", "actor", "text"),
+      f("at", "at", "timestamp"),
+    ],
+  },
+  {
+    table: "epf_transfers",
+    collection: "epfTransfers",
+    fields: [
+      f("source_establishment_id", "sourceEstablishmentId", "text"),
+      f("destination_establishment_id", "destinationEstablishmentId", "text"),
+      f("amount", "amount", "money"),
+      f("date", "date", "date"),
+      f("status", "status", "text"),
+      f("reversal_of", "reversalOf", "text"),
+      f("reversed_by", "reversedBy", "text"),
+    ],
+  },
+  {
+    table: "epf_transfer_events",
+    collection: "epfTransferEvents",
+    fields: [
+      f("transfer_id", "transferId", "text"),
+      f("from_status", "from", "text"),
+      f("to_status", "to", "text"),
+      f("amount", "amount", "money"),
+      f("actor", "actor", "text"),
+      f("at", "at", "timestamp"),
+    ],
+  },
+  {
+    table: "epf_interest_entries",
+    collection: "epfInterestEntries",
+    fields: [
+      f("establishment_id", "establishmentId", "text"),
+      f("financial_year", "financialYear", "text"),
+      f("rate", "rate", "decimal"),
+      f("basis", "basis", "text"),
+      f("opening_balance", "openingBalance", "money"),
+      f("interest", "interest", "money"),
+      f("closing_balance", "closingBalance", "money"),
+    ],
+  },
+  {
+    table: "epf_reconciliations",
+    collection: "epfReconciliations",
+    fields: [
+      f("establishment_id", "establishmentId", "text"),
+      f("date", "date", "date"),
+      f("actual_balance", "actualBalance", "money"),
+      f("calculated_balance", "calculatedBalance", "money"),
+      f("adjustment_amount", "adjustmentAmount", "money"),
+    ],
+  },
+  {
+    table: "epf_wage_history",
+    collection: "epfWageHistory",
+    fields: [
+      f("establishment_id", "establishmentId", "text"),
+      f("effective_from_month", "effectiveFromMonth", "text"),
+      f("wage", "wage", "money"),
+      f("eps_eligible", "epsEligible", "boolean"),
+      f("created_at", "createdAtMs", "timestamp"),
+    ],
+  },
 ];
 
 export const SPEC_BY_COLLECTION = new Map(READ_MODEL_TABLES.map((s) => [s.collection, s]));
@@ -330,6 +523,7 @@ function convert(type: FieldType, value: unknown): string | number | boolean {
     case "text":
       return typeof value === "string" ? value : bad();
     case "money":
+    case "decimal":
       return toMoney(value);
     case "date":
       return toDate(value);

@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest";
 import { MAX_PUSH_REFS, parsePushRequest, PUSHABLE_COLLECTIONS, pushRefFromPath } from "./pushRefs";
 
 describe("push refs (SPENDLY-583)", () => {
-  it("pushable collections are exactly the synced ones (Wave 1 + SPENDLY-609 goals + SPENDLY-589 Wave 2)", () => {
+  it("pushable collections are exactly the synced ones (Wave 1 + SPENDLY-609 goals + Waves 2 and 3)", () => {
     expect([...PUSHABLE_COLLECTIONS].sort()).toEqual([
       "accountEntries", "accountPayments", "accountTransfers", "accountTypes", "accounts",
-      "borrowingRepayments", "borrowings",
-      "categories", "creditCardBills", "expenses", "financialGoals", "goalEvents", "incomes", "ledgerEvents",
-      "receivableRepayments", "receivables", "subscriptions",
+      "borrowingRepayments", "borrowings", "categories", "creditCardBills",
+      "epfContributionEvents", "epfContributions", "epfEstablishments", "epfInterestEntries",
+      "epfProfile", "epfReconciliations", "epfTransferEvents", "epfTransfers", "epfWageHistory",
+      "expenses", "financialGoals", "goalEvents", "holdings", "incomes",
+      "investmentCashTransactions", "investments", "ledgerEvents", "portfolioSettings",
+      "portfolioTransactions", "receivableRepayments", "receivables", "subscriptions",
     ]);
     // The name lock is not data and is never pushed.
     expect(pushRefFromPath("users/u1/goalNames/n_car", "u1")).toBeNull();

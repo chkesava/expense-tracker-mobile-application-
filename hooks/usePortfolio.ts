@@ -23,6 +23,7 @@ import {
 
 import { getFirestoreDb } from "@/lib/firebase";
 import { writeSavedMessage } from "@/lib/firestoreWrite";
+import { noteDirectWrites } from "@/lib/readModelWriteHooks";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
@@ -329,6 +330,7 @@ function usePortfolioState(options?: {
         doc(db, "users", user.uid, "holdings", id),
         stripUndefined({ ...safe, updatedAt: serverTimestamp() })
       );
+      noteDirectWrites(user.uid, [`users/${user.uid}/holdings/${id}`]);
       return true;
     } catch (error) {
       logError("portfolio.updateHolding", error);
@@ -459,6 +461,7 @@ function usePortfolioState(options?: {
         stripUndefined({ ...updates, updatedAt: serverTimestamp(), createdAt: settings?.createdAt ?? serverTimestamp() }),
         { merge: true }
       );
+      noteDirectWrites(user.uid, [`users/${user.uid}/portfolioSettings/${SETTINGS_DOC_ID}`]);
       return true;
     } catch (error) {
       logError("portfolio.savePortfolioSettings", error);

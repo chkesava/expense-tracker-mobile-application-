@@ -27,6 +27,7 @@ import { LISTEN_WITH_SYNC_STATE, onlyMetadataChanged } from "@/lib/firestoreSync
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { noteDirectWrites, trackedBatch } from "@/lib/readModelWriteHooks";
 import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
@@ -199,7 +200,7 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
       if (years.length === 0 && staleIds.length === 0) return 0;
 
       try {
-        const batch = writeBatch(db);
+        const batch = trackedBatch(writeBatch(db));
         for (const year of years) {
           batch.set(
             doc(
@@ -228,6 +229,7 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
         // every contribution change and `interestEntriesRef` lags its own
         // write, so a delta could land twice.
         await commitWrite(() => batch.commit(), { label: "EPF interest" });
+        noteDirectWrites(uid, batch.writtenPaths());
         return years.length;
       } catch (err) {
         logError("epfinterest.recomputeinterest", err);
@@ -262,7 +264,7 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
         );
         const built = buildReconciliation(input);
 
-        const batch = writeBatch(db);
+        const batch = trackedBatch(writeBatch(db));
         batch.set(
           ref,
           withoutUndefined({
@@ -277,6 +279,7 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
           () => batch.commit(),
           { label: "EPF reconciliation" }
         );
+        noteDirectWrites(uid, batch.writtenPaths());
         toast.success(writeSavedMessage(outcome, "Balance reconciled"));
         return true;
       } catch (err) {

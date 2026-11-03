@@ -3,6 +3,7 @@ import { doc, getDoc, serverTimestamp, writeBatch } from "@/lib/firestore";
 import { getFirestoreDb } from "@/lib/firebase";
 import { newId } from "@/lib/id";
 import { commitWrite } from "@/lib/firestoreWrite";
+import { noteDirectWrites, trackedBatch } from "@/lib/readModelWriteHooks";
 import { loadCashEntries, ledgerCashForTrade, mockTradeCost, buildEntryDoc } from "@/services/portfolio/investmentCash";
 import { canAfford } from "@/shared/features/portfolio/utils/investmentCash";
 import type { Holding, PortfolioTransaction } from "@/shared/features/portfolio/types";
@@ -96,7 +97,7 @@ export async function executeMissingAcquisitionAdjustment(
   // committing it resolved straight away, so the app reported success and
   // nothing reached Firestore.
   const outcome = await commitWrite(() => {
-    const batch = writeBatch(db);
+    const batch = trackedBatch(writeBatch(db));
     batch.update(holdingRef, {
       quantity: nextQuantity,
       averageBuyPrice,
@@ -164,7 +165,9 @@ export async function executeMissingAcquisitionAdjustment(
       }
     );
 
-    return batch.commit();
+    const committing = batch.commit();
+    noteDirectWrites(owner, batch.writtenPaths());
+    return committing;
   }, { label: "holding adjustment" });
 
   return { outcome, adjustmentId };
@@ -198,7 +201,7 @@ export async function executeCostBasisAdjustment(
   const transactionId = newId();
 
   const outcome = await commitWrite(() => {
-    const batch = writeBatch(db);
+    const batch = trackedBatch(writeBatch(db));
     batch.update(holdingRef, {
       averageBuyPrice: newAveragePrice,
       updatedAt: serverTimestamp(),
@@ -246,7 +249,9 @@ export async function executeCostBasisAdjustment(
       }
     );
 
-    return batch.commit();
+    const committing = batch.commit();
+    noteDirectWrites(owner, batch.writtenPaths());
+    return committing;
   }, { label: "holding adjustment" });
 
   return { outcome, adjustmentId };

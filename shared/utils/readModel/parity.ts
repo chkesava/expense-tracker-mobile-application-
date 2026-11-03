@@ -16,6 +16,8 @@ function same(type: string, expected: unknown, actual: unknown): boolean {
   switch (type) {
     case "money":
       return Number(expected).toFixed(2) === Number(actual).toFixed(2);
+    case "decimal":
+      return Number(expected).toFixed(8) === Number(actual).toFixed(8);
     case "integer":
       return Number(expected) === Number(actual);
     case "date":

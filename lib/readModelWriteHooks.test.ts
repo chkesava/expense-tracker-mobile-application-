@@ -85,8 +85,7 @@ describe("every direct writer of a synced collection calls a read-model hook", (
     "lib/categoryRevision.ts": "the categories hook",
   };
   const HOOK = /\b(noteDirectWrites|noteTransactionWrites|noteCategoriesWritten|commitMutations)\(/;
-  const COLLS = READ_MODEL_TABLES.map((t) => t.collection).join("|");
-  const SYNCED_REF = `(?:doc|collection)\\(\\s*(?:collection\\(\\s*)?\\w+\\s*,\\s*"users"\\s*,\\s*[\\w.]+\\s*,\\s*"(?:${COLLS})"`;
+  const SYNCED = new Set(READ_MODEL_TABLES.map((t) => t.collection));
   const WRITE = "(?:\\b(?:setDoc|updateDoc|deleteDoc|addDoc)|\\.(?:set|update|delete))\\(\\s*";
 
   function sources(dir: string): string[] {
@@ -99,6 +98,18 @@ describe("every direct writer of a synced collection calls a read-model hook", (
     return out;
   }
 
+  const FILES = DIRS.flatMap((dir) => sources(join(ROOT, dir)));
+  // A name constant counts as the literal (SPENDLY-590: EPF and the portfolio
+  // use them, e.g. EPF_CONTRIBUTIONS_COLLECTION = "epfContributions").
+  const CONSTS = new Set<string>();
+  for (const file of FILES) {
+    for (const m of readFileSync(file, "utf8").matchAll(/\bconst\s+([A-Z][A-Z0-9_]*)\s*=\s*"(\w+)"/g)) {
+      if (SYNCED.has(m[2])) CONSTS.add(m[1]);
+    }
+  }
+  const NAMES = [...[...SYNCED].map((c) => `"${c}"`), ...[...CONSTS].map((c) => `${c}\\b`)].join("|");
+  const SYNCED_REF = `(?:doc|collection)\\(\\s*(?:collection\\(\\s*)?\\w+\\s*,\\s*"users"\\s*,\\s*[\\w.]+\\s*,\\s*(?:${NAMES})`;
+
   function writesSyncedCollection(text: string): boolean {
     if (new RegExp(WRITE + SYNCED_REF).test(text)) return true;
     // A ref variable to a synced document, then a write through it.
@@ -109,15 +120,13 @@ describe("every direct writer of a synced collection calls a read-model hook", (
   it("finds the direct writers, and each one calls a hook", () => {
     const writers: string[] = [];
     const missing: string[] = [];
-    for (const dir of DIRS) {
-      for (const file of sources(join(ROOT, dir))) {
-        const rel = relative(ROOT, file).replace(/\\/g, "/");
-        if (SKIP.test(rel)) continue;
-        const text = readFileSync(file, "utf8");
-        if (!writesSyncedCollection(text)) continue;
-        writers.push(rel);
-        if (!HOOK.test(text) && !ALLOWED[rel]) missing.push(rel);
-      }
+    for (const file of FILES) {
+      const rel = relative(ROOT, file).replace(/\\/g, "/");
+      if (SKIP.test(rel)) continue;
+      const text = readFileSync(file, "utf8");
+      if (!writesSyncedCollection(text)) continue;
+      writers.push(rel);
+      if (!HOOK.test(text) && !ALLOWED[rel]) missing.push(rel);
     }
     expect(missing, `direct writers of a synced collection with no read-model hook: ${missing.join(", ")}`).toEqual([]);
     // The scan must keep finding the known direct writers (it isn't vacuous).

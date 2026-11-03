@@ -14,6 +14,7 @@ import {
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { noteDirectWrites } from "@/lib/readModelWriteHooks";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
@@ -93,6 +94,7 @@ export function useInvestments(options?: { enabled?: boolean }) {
         const outcome = await commitWrite(() => setDoc(docRef, payload), {
           label: "investment",
         });
+        noteDirectWrites(uid, [docRef.path]);
         toast.success(
           writeSavedMessage(outcome, `Investment "${params.name}" added`)
         );
@@ -116,6 +118,7 @@ export function useInvestments(options?: { enabled?: boolean }) {
           () => updateDoc(doc(db, "users", uid, "investments", id), updates),
           { label: "investment" }
         );
+        noteDirectWrites(uid, [`users/${uid}/investments/${id}`]);
         toast.success(writeSavedMessage(outcome, "Investment updated"));
         return true;
       } catch (err: any) {
@@ -137,6 +140,7 @@ export function useInvestments(options?: { enabled?: boolean }) {
           () => deleteDoc(doc(db, "users", uid, "investments", id)),
           { label: "investment deletion" }
         );
+        noteDirectWrites(uid, [`users/${uid}/investments/${id}`]);
         toast.success(writeSavedMessage(outcome, "Investment deleted"));
         return true;
       } catch (err: any) {
