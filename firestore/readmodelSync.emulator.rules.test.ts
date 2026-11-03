@@ -7,6 +7,7 @@ import { runSync } from "../scripts/lib/readmodelSyncCore";
 import { memorySink } from "../scripts/lib/readmodelSyncMemory";
 import { firestoreCounter } from "../scripts/readmodel-verify";
 import { runVerify, type VerifySink } from "../scripts/lib/readmodelVerifyCore";
+import { READ_MODEL_TABLES } from "../shared/utils/readModel/mapping";
 
 /**
  * SPENDLY-506 end to end against the Firestore emulator: the real Admin SDK
@@ -69,8 +70,11 @@ describe("read-model sync against the Firestore emulator (SPENDLY-506)", () => {
     expect(m.row("expenses", "alice", "e2")).toMatchObject({ amount: 250 });
     expect(m.row("accounts", "alice", "old")?.source_deleted).toBe(true);
     expect(m.row("accounts", "alice", "bank")).toMatchObject({ current_balance: 640 });
-    // The 600 categories were not re-read: an incremental run costs a few reads, not the collection.
-    expect(second.readsUsed).toBeLessThan(40);
+    // The 600 categories were not re-read: an incremental run costs the user
+    // listing, at most 2 (mostly empty) queries per synced collection and the
+    // changed documents, not the collection. Scales with the table count
+    // (SPENDLY-590 took it from 10 to 31 tables).
+    expect(second.readsUsed).toBeLessThanOrEqual(1 + 2 * READ_MODEL_TABLES.length + 10);
     expect(second.upserts).toBe(3);
   });
 
@@ -105,8 +109,8 @@ describe("read-model sync against the Firestore emulator (SPENDLY-506)", () => {
     const agree = await runVerify(counter, verifySink(), vOpts);
     expect(agree.status).toBe("succeeded");
     expect(agree.byCollection.find((c) => c.collection === "categories")).toMatchObject({ firestore: 600, model: 600 });
-    // 600 categories counted for 1 read, not 600.
-    expect(agree.readsUsed).toBeLessThan(30);
+    // 600 categories counted for 1 read, not 600: about one count() per synced collection.
+    expect(agree.readsUsed).toBeLessThanOrEqual(1 + READ_MODEL_TABLES.length + 5);
 
     m.tables.get("expenses")!.delete("alice/e2");
     const caught = await runVerify(counter, verifySink(), vOpts);
