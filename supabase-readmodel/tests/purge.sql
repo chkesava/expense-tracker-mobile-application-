@@ -12,7 +12,8 @@ begin
   foreach t in array array[
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
-    'credit_card_bills', 'categories', 'financial_goals', 'goal_events'
+    'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions'
   ] loop
     perform public.readmodel_upsert(t, jsonb_build_array(
       jsonb_build_object('uid', 'user-a', 'doc_id', 'd1', 'doc', '{}'::jsonb, 'source_path', 'p',
@@ -36,13 +37,14 @@ declare
   left_over integer;
 begin
   result := public.readmodel_purge_user('user-a');
-  -- 12 tables (Wave 1 + SPENDLY-609 goals) × 2 uids + status + checkpoint + failure
-  if (result ->> 'rows')::int <> 27 then raise exception 'purge removed % rows, expected 27', result ->> 'rows'; end if;
+  -- 17 tables (Wave 1 + SPENDLY-609 goals + SPENDLY-589 Wave 2) × 2 uids + status + checkpoint + failure
+  if (result ->> 'rows')::int <> 37 then raise exception 'purge removed % rows, expected 37', result ->> 'rows'; end if;
 
   foreach t in array array[
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
-    'credit_card_bills', 'categories', 'financial_goals', 'goal_events', 'sync_status', 'sync_checkpoints', 'sync_failures'
+    'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions', 'sync_status', 'sync_checkpoints', 'sync_failures'
   ] loop
     execute format('select count(*) from public.%I where uid in (''user-a'', ''user-a_duress'')', t) into left_over;
     if left_over <> 0 then raise exception '% still holds % row(s) for the purged account', t, left_over; end if;

@@ -117,7 +117,7 @@ describe("read-model push (SPENDLY-583)", () => {
   it("rejects non-synced collections, paths and malformed bodies, without reading anything", async () => {
     const { p, calls } = ports();
     for (const body of [
-      { refs: [{ collection: "borrowings", docId: "b1" }] },
+      { refs: [{ collection: "trips", docId: "t1" }] },
       { refs: [{ collection: "expenses", docId: "a/b" }] },
       { refs: [{ collection: "expenses", docId: ".." }] },
       { refs: [] },

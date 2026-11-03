@@ -13,6 +13,8 @@ const sql = readdirSync(migrationsDir)
 const CONTRACT = new Set([
   "uid", "doc_id", "doc", "source_path", "source_update_time", "source_deleted",
   "deleted_at", "schema_version", "mapping_status", "synced_at",
+  // SPENDLY-669: who wrote the row (owned by the write functions, not mapped).
+  "written_by", "client_written_at",
 ]);
 
 function tableColumns(table: string): string[] {
@@ -50,6 +52,37 @@ describe("read-model mapping (SPENDLY-506)", () => {
     });
     expect(row.source_update_time).toBe(new Date(1_790_000_000_000).toISOString());
     expect(row.doc).toMatchObject({ note: "kept in doc", createdAt: new Date(1_790_000_000_000).toISOString() });
+  });
+
+  it("SPENDLY-589/668: an 'already deducted' lend has no source account; a legacy one has no source mode", () => {
+    const receivables = SPEC_BY_COLLECTION.get("receivables")!;
+    const deducted = mapDocument(receivables, "u1", {
+      id: "r1",
+      updateTime: UPDATE_TIME,
+      data: { personType: "FRIEND", personName: "A", originalAmount: 500, lentDate: "2026-10-01", sourceAccountId: null, sourceMode: "already_deducted", outstandingAmount: 500, status: "ACTIVE" },
+    });
+    expect(deducted).toMatchObject({ source_account_id: null, source_mode: "already_deducted", original_amount: 500, outstanding_amount: 500, mapping_status: "mapped" });
+    const legacy = mapDocument(receivables, "u1", { id: "r0", updateTime: UPDATE_TIME, data: { personName: "B", originalAmount: 10, lentDate: "2026-01-01", sourceAccountId: "bank" } });
+    expect(legacy).toMatchObject({ source_account_id: "bank", source_mode: null, mapping_status: "mapped" });
+  });
+
+  it("SPENDLY-589: repayments take their month from the date; subscriptions type their cadence", () => {
+    const repayment = mapDocument(SPEC_BY_COLLECTION.get("borrowingRepayments")!, "u1", {
+      id: "br1",
+      updateTime: UPDATE_TIME,
+      data: { borrowingId: "b1", amount: 1200, principalComponent: 1000, interestComponent: 200, paymentAccountId: "bank", date: "2026-10-05" },
+    });
+    expect(repayment).toMatchObject({ borrowing_id: "b1", amount: 1200, principal_component: 1000, interest_component: 200, month: "2026-10", mapping_status: "mapped" });
+    const subs = SPEC_BY_COLLECTION.get("subscriptions")!;
+    const sub = mapDocument(subs, "u1", {
+      id: "s1",
+      updateTime: UPDATE_TIME,
+      data: { name: "Gym", amount: 999, category: "Health", type: "subscription", dayOfMonth: 5, isActive: true, lastProcessed: "2026-10", frequency: "monthly" },
+    });
+    expect(sub).toMatchObject({ name: "Gym", amount: 999, day_of_month: 5, is_active: true, last_processed: "2026-10", frequency: "monthly", mapping_status: "mapped" });
+    // A malformed value is flagged unmapped, never dropped (R2.2).
+    const bad = mapDocument(subs, "u1", { id: "s2", updateTime: UPDATE_TIME, data: { name: "X", amount: 1, dayOfMonth: "5th", isActive: true } });
+    expect(bad.mapping_status).toBe("unmapped");
   });
 
   it("SPENDLY-609: maps a goal, including a legacy one with an empty deadline and no status", () => {

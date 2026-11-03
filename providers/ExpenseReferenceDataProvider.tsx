@@ -35,6 +35,7 @@ import {
   logQuerySnapshot,
 } from "@/lib/firestoreReadDebug";
 import { notifyReadModelSnapshot } from "@/lib/readModelPush";
+import { noteDirectWrites } from "@/lib/readModelWriteHooks";
 import { commitWrite } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
@@ -694,6 +695,7 @@ export function ExpenseReferenceDataProvider({
                 }),
               { label: "subscription" }
             );
+            noteDirectWrites(uid, [subRef.path]);
           } catch (err) {
             logError("subscriptions.processingDueSubscriptions", err);
           }

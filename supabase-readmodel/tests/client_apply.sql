@@ -283,7 +283,8 @@ begin
   foreach t in array array[
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
-    'credit_card_bills', 'categories', 'financial_goals', 'goal_events'
+    'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions'
   ] loop
     res := public.rm_client_apply(t, jsonb_build_array(jsonb_build_object(
       'uid', 'user-a', 'doc_id', 'all-' || t, 'doc', '{}'::jsonb,
