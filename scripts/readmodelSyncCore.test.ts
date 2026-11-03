@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { READ_MODEL_TABLES } from "../shared/utils/readModel/mapping";
 import { memorySink } from "./lib/readmodelSyncMemory";
 import { MASS_TOMBSTONE_MIN, OVERLAP_MS, runSync, type Page, type PageRequest, type SourcePort } from "./lib/readmodelSyncCore";
 
@@ -76,8 +77,9 @@ describe("read-model sync core (SPENDLY-506)", () => {
     const second = await runSync(fs.source, m.sink, opts("incremental", T0 + 3 * H));
     expect(second.upserts).toBe(0);
     expect(second.tombstones).toBe(0);
-    // 1 (users) + per user: 4 small collections in full + 6 × 2 empty queries.
-    expect(second.readsUsed).toBeLessThan(first.readsUsed + 40);
+    // 1 (users) + per user and synced collection at most 2 queries, each an
+    // empty page billed as 1 read (SPENDLY-590: the bound scales with the tables).
+    expect(second.readsUsed).toBeLessThanOrEqual(1 + 2 * 2 * READ_MODEL_TABLES.length);
   });
 
   it("never reads or writes a duress tree", async () => {
@@ -370,7 +372,7 @@ describe("account lifecycle (SPENDLY-508)", () => {
     expect(m.failures).toEqual([]);
   });
 
-  it("only ever requests the synced collections (Wave 1 + SPENDLY-609 goals + SPENDLY-589 Wave 2), and never a duress tree", async () => {
+  it("only ever requests the synced collections (Wave 1 + SPENDLY-609 goals + Waves 2 and 3), and never a duress tree", async () => {
     const fs = world();
     const requested: string[] = [];
     const watched: SourcePort = {
@@ -384,9 +386,12 @@ describe("account lifecycle (SPENDLY-508)", () => {
     const collections = new Set(requested.map((r) => r.split("/")[1]));
     expect([...collections].sort()).toEqual([
       "accountEntries", "accountPayments", "accountTransfers", "accountTypes", "accounts",
-      "borrowingRepayments", "borrowings",
-      "categories", "creditCardBills", "expenses", "financialGoals", "goalEvents", "incomes", "ledgerEvents",
-      "receivableRepayments", "receivables", "subscriptions",
+      "borrowingRepayments", "borrowings", "categories", "creditCardBills",
+      "epfContributionEvents", "epfContributions", "epfEstablishments", "epfInterestEntries",
+      "epfProfile", "epfReconciliations", "epfTransferEvents", "epfTransfers", "epfWageHistory",
+      "expenses", "financialGoals", "goalEvents", "holdings", "incomes",
+      "investmentCashTransactions", "investments", "ledgerEvents", "portfolioSettings",
+      "portfolioTransactions", "receivableRepayments", "receivables", "subscriptions",
     ]);
     for (const excluded of ["meta", "stats", "notifications", "financialSummaries", "daily_logs", "weight_history", "pandalMemberships", "goalNames"]) {
       expect(collections.has(excluded)).toBe(false);

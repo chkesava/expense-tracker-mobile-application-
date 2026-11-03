@@ -29,6 +29,7 @@ import { LISTEN_WITH_SYNC_STATE, onlyMetadataChanged } from "@/lib/firestoreSync
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { noteDirectWrites, noteTransactionWrites } from "@/lib/readModelWriteHooks";
 import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
@@ -227,6 +228,7 @@ export function useEpf(options?: { enabled?: boolean }) {
             ),
           { label: "EPF profile" }
         );
+        noteDirectWrites(uid, [ref.path]);
         toast.success(writeSavedMessage(outcome, "EPF profile saved"));
         return true;
       } catch (err) {
@@ -278,6 +280,11 @@ export function useEpf(options?: { enabled?: boolean }) {
           { merge: true }
         );
       });
+      // Every lock write touches the profile and this establishment only.
+      noteTransactionWrites(uid, [
+        profileRef.path,
+        `users/${uid}/${EPF_ESTABLISHMENTS_COLLECTION}/${establishmentId}`,
+      ]);
     },
     [uid]
   );
@@ -456,6 +463,7 @@ export function useEpf(options?: { enabled?: boolean }) {
                 }),
           { label: "EPF establishment" }
         );
+        if (!claiming && !releasing) noteDirectWrites(uid, [ref.path]);
         toast.success(
           writeSavedMessage(outcome, archived ? "Establishment archived" : "Establishment restored")
         );
@@ -530,6 +538,7 @@ export function useEpf(options?: { enabled?: boolean }) {
               : deleteDoc(ref),
           { label: "EPF establishment" }
         );
+        if (!wasCurrent) noteDirectWrites(uid, [ref.path]);
         toast.success(writeSavedMessage(outcome, "Establishment deleted"));
         return true;
       } catch (err) {

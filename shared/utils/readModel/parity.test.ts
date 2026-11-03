@@ -38,6 +38,15 @@ describe("read-model field parity (SPENDLY-510)", () => {
     expect(typedDifferences(spec, { ...expected, amount: null }, { ...stored, amount: 0 })).toEqual(["amount"]);
   });
 
+  it("SPENDLY-590: decimals compare at numeric(24,8), so a quantity drift is caught", () => {
+    const holdings = SPEC_BY_COLLECTION.get("holdings")!;
+    const row = mapDocument(holdings, "u", { id: "h1", updateTime: { seconds: 1_790_000_000, nanoseconds: 0 }, data: { symbol: "INFY", quantity: 0.123456789, averageBuyPrice: 1500 } });
+    const pg = { profile_id: null, symbol: "INFY", yahoo_symbol: null, name: null, exchange: null, instrument_type: null, quantity: "0.12345679", average_buy_price: "1500.00000000", date_purchased: null, mapping_status: "mapped" };
+    expect(typedDifferences(holdings, row, pg)).toEqual([]);
+    // Money's 2 places would hide this; decimal does not.
+    expect(typedDifferences(holdings, row, { ...pg, quantity: "0.12340000" })).toEqual(["quantity"]);
+  });
+
   it("a missing row is a difference", () => {
     expect(typedDifferences(spec, expected, undefined)).toEqual(["(row missing)"]);
   });

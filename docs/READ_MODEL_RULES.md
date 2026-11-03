@@ -39,12 +39,13 @@ These rules sit beside `CLAUDE.md` (Spendly safety invariants) and `docs/AGENT_W
 
 ## 2. New collections and fields
 
-**Synced today (17 collections):**
+**Synced today (31 collections):**
 - Wave 1: `expenses`, `incomes`, `ledgerEvents`, `accounts`, `accountTypes`, `accountTransfers`, `accountEntries`, `accountPayments`, `creditCardBills`, `categories`.
 - Save Goals (SPENDLY-609): `financialGoals`, `goalEvents`.
 - Wave 2 (SPENDLY-589): `borrowings`, `borrowingRepayments`, `receivables`, `receivableRepayments`, `subscriptions`.
+- Wave 3 (SPENDLY-590): `investments`, `holdings`, `portfolioTransactions`, `investmentCashTransactions`, `portfolioSettings`, `epfProfile`, `epfEstablishments`, `epfContributions`, `epfContributionEvents`, `epfTransfers`, `epfTransferEvents`, `epfInterestEntries`, `epfReconciliations`, `epfWageHistory`. Quantities, prices, NAVs and rates use the `decimal` field type (`numeric(24,8)`); money stays `numeric(18,2)`.
 
-Everything else is **not** in the read model. Waves 2 and 3 were first closed as won't-do (514–518, the no-Blaze decision); SPENDLY-586 brings them back: Wave 2 in 589, Wave 3 in 590.
+Everything else is **not** in the read model. Waves 2 and 3 were first closed as won't-do (514–518, the no-Blaze decision); SPENDLY-586 brings them back: Wave 2 in 589, Wave 3 in 590. Still not synced: `financialSummaries` (592), `holdingAdjustments`, `portfolioReconciliationAudits`, watchlists and SIP (591).
 
 - **R2.1** A new collection is **not** synced unless the story says so. If it must be, all of these go in the same story:
   - a migration in `supabase-readmodel/supabase/migrations/`, with the contract columns (`uid`, `doc_id`, `doc`, `source_path`, `source_update_time`, `source_deleted`, `deleted_at`, `schema_version`, `mapping_status`, `synced_at`), a primary key `(uid, doc_id)`, `(uid, …)` indexes, RLS on, an owner-only SELECT policy, and `grant select … to authenticated`;

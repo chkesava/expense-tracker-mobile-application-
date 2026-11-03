@@ -13,7 +13,10 @@ begin
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
-    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions'
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
+    'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history'
   ] loop
     perform public.readmodel_upsert(t, jsonb_build_array(
       jsonb_build_object('uid', 'user-a', 'doc_id', 'd1', 'doc', '{}'::jsonb, 'source_path', 'p',
@@ -37,14 +40,17 @@ declare
   left_over integer;
 begin
   result := public.readmodel_purge_user('user-a');
-  -- 17 tables (Wave 1 + SPENDLY-609 goals + SPENDLY-589 Wave 2) × 2 uids + status + checkpoint + failure
-  if (result ->> 'rows')::int <> 37 then raise exception 'purge removed % rows, expected 37', result ->> 'rows'; end if;
+  -- 31 tables (Wave 1 + SPENDLY-609 goals + Waves 2 and 3) × 2 uids + status + checkpoint + failure
+  if (result ->> 'rows')::int <> 65 then raise exception 'purge removed % rows, expected 65', result ->> 'rows'; end if;
 
   foreach t in array array[
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
-    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions', 'sync_status', 'sync_checkpoints', 'sync_failures'
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
+    'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history', 'sync_status', 'sync_checkpoints', 'sync_failures'
   ] loop
     execute format('select count(*) from public.%I where uid in (''user-a'', ''user-a_duress'')', t) into left_over;
     if left_over <> 0 then raise exception '% still holds % row(s) for the purged account', t, left_over; end if;
