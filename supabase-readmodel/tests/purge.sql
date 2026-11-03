@@ -20,7 +20,7 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists'
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items'
   ] loop
     perform public.readmodel_upsert(t, jsonb_build_array(
       jsonb_build_object('uid', 'user-a', 'doc_id', 'd1', 'doc', '{}'::jsonb, 'source_path', 'p',
@@ -30,6 +30,11 @@ begin
       jsonb_build_object('uid', 'user-b', 'doc_id', 'd1', 'doc', '{}'::jsonb, 'source_path', 'p',
         'source_update_time', '2026-10-01T00:00:00Z', 'schema_version', 1, 'mapping_status', 'mapped')));
   end loop;
+  -- SPENDLY-591: a nested row ("{listId}/{itemId}") goes with its owner too.
+  perform public.readmodel_upsert('watchlist_items', jsonb_build_array(
+    jsonb_build_object('uid', 'user-a', 'doc_id', 'default/INFY.NS', 'list_id', 'default', 'doc', '{}'::jsonb,
+      'source_path', 'users/user-a/watchlists/default/items/INFY.NS',
+      'source_update_time', '2026-10-01T00:00:00Z', 'schema_version', 1, 'mapping_status', 'mapped')));
   insert into public.sync_status (uid, collection) values ('user-a', 'expenses'), ('user-b', 'expenses');
   insert into public.sync_checkpoints (uid, collection) values ('user-a', 'expenses');
   insert into public.sync_failures (uid, collection, doc_id, error_class) values ('user-a', 'expenses', 'd1', 'mapping');
@@ -44,8 +49,9 @@ declare
   left_over integer;
 begin
   result := public.readmodel_purge_user('user-a');
-  -- 50 tables (Wave 1 + SPENDLY-609 goals + Waves 2 and 3 + SPENDLY-591) × 2 uids + status + checkpoint + failure
-  if (result ->> 'rows')::int <> 103 then raise exception 'purge removed % rows, expected 103', result ->> 'rows'; end if;
+  -- 51 tables (Wave 1 + SPENDLY-609 goals + Waves 2 and 3 + SPENDLY-591) × 2 uids + a nested watchlist item
+  -- + status + checkpoint + failure
+  if (result ->> 'rows')::int <> 106 then raise exception 'purge removed % rows, expected 106', result ->> 'rows'; end if;
 
   foreach t in array array[
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
@@ -58,7 +64,7 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'sync_status', 'sync_checkpoints', 'sync_failures'
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'sync_status', 'sync_checkpoints', 'sync_failures'
   ] loop
     execute format('select count(*) from public.%I where uid in (''user-a'', ''user-a_duress'')', t) into left_over;
     if left_over <> 0 then raise exception '% still holds % row(s) for the purged account', t, left_over; end if;

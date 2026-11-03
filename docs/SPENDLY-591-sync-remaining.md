@@ -5,6 +5,7 @@
 | Epic | SPENDLY-586 (plan v2) |
 | Branch | `feature/SPENDLY-591-sync-remaining` |
 | Part A migration | `supabase-readmodel/supabase/migrations/20261102000000_readmodel_remaining.sql` |
+| Part B migration | `supabase-readmodel/supabase/migrations/20261102010000_readmodel_watchlist_items.sql` |
 
 591 comes in three parts on one branch:
 - **A:** the flat collections (this section);
@@ -60,3 +61,44 @@ Already covered:
 - the push, sync-core and verify lists. Tests that used `trips` as their example of an unsynced collection now use `notifications`.
 
 **Nightly read budget:** not in the 503 baseline. The `mode=full` dry run before the backfill reports it (R7.2).
+
+## Part B — watchlist items, the first nested collection
+
+`users/{uid}/watchlists/{listId}/items/{itemId}` becomes the table `watchlist_items`:
+- typed columns: `list_id`, symbol, Yahoo symbol, name, exchange, instrument type, `sort_order` (from `order`, a fractional rank; `ORDER` is reserved in SQL), created/updated.
+
+**The key (a deviation from the ticket's suggested `(uid, list_id, doc_id)`).**
+- A nested row's `doc_id` is `"{listId}/{itemId}"`. Firestore ids never contain `/`, so this is unambiguous and just as unique.
+- The key stays `(uid, doc_id)`. So `rm_client_apply`, the version guard, tombstones, the purge and RLS work **unchanged**. That avoids a second, parallel key scheme in every write function.
+
+**What learned the nested path:**
+- **The mapping:** `TableSpec.parent = { collection: "watchlists", child: "items", column: "list_id" }`.
+  - The spec's `collection` is the logical key `"watchlists/items"`, used for checkpoints, failures, counts and the push allowlist.
+  - `firestorePathOf()` builds the real path.
+  - `list_id` comes from the path, so it survives an unmapped row.
+  - Parity compares it.
+- **Push refs:** `users/{uid}/watchlists/{L}/items/{I}` becomes `{ collection: "watchlists/items", docId: "L/I" }`.
+  - A nested ref needs exactly one `/`.
+  - A flat ref still takes none.
+  - Any other 6-part path (e.g. `meta/outbox/acks`) is refused.
+- **The push server:** reads `firestorePathOf(...)`, and returns the ref's composite id, not the snapshot's bare id.
+- **The client outbox:** unchanged. It builds entries from the push ref, so it gets the composite id and the real `source_path`. The RPC's `source_path` check (`users/{me}/…`) holds.
+- **The sync reader:**
+  - `scripts/lib/readmodelNestedPages.ts` pages every parent's children in turn, under one cursor.
+  - Parents come from `listDocuments()`, so children whose list document was deleted are still copied (and tombstoned on full runs once they're gone).
+  - Pages report their true read cost: the listing plus every child query, empty ones included. `Page.reads` feeds the run budget.
+- **Verify:** counts the items across every parent.
+- **The drill:** seeds and reads nested paths.
+
+**Writers:** `services/portfolio/watchlistStore.ts` already writes through `commitMutations`, so the push and the client outbox both cover it.
+
+**Tests:**
+- push refs: nested paths, malformed nested ids, a flat ref with `/`;
+- the mapper: composite key, `list_id`, real `source_path`, unmapped keeps `list_id`;
+- the nested pager: across page boundaries, read cost, one listing per pass, no parents;
+- the SQL tests:
+  - `client_apply` (nested write, the same symbol in two lists, nested tombstone);
+  - `purge` (a nested row goes with its owner: 106 rows);
+  - 52 policies;
+  - 51 tables.
+

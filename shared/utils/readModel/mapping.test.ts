@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { mapDocument, READ_MODEL_TABLES, SPEC_BY_COLLECTION, timestampMillis, toJsonDoc } from "./mapping";
+import { firestorePathOf, mapDocument, READ_MODEL_TABLES, SPEC_BY_COLLECTION, timestampMillis, toJsonDoc } from "./mapping";
 
 const migrationsDir = path.resolve(__dirname, "../../../supabase-readmodel/supabase/migrations");
 const sql = readdirSync(migrationsDir)
@@ -32,7 +32,7 @@ describe("read-model mapping (SPENDLY-506)", () => {
   it.each(READ_MODEL_TABLES.map((s) => [s.table, s] as const))("%s: spec covers exactly the typed columns", (table, spec) => {
     const typed = tableColumns(table).filter((c) => !CONTRACT.has(c));
     expect(typed.length).toBeGreaterThan(0);
-    const mapped = [...spec.fields.map((f) => f.column), ...(spec.derivedMonth ? ["month"] : [])];
+    const mapped = [...(spec.parent ? [spec.parent.column] : []), ...spec.fields.map((f) => f.column), ...(spec.derivedMonth ? ["month"] : [])];
     expect([...mapped].sort()).toEqual([...typed].sort());
   });
 
@@ -169,6 +169,23 @@ describe("read-model mapping (SPENDLY-506)", () => {
     // The contract's schema_version is the read model's; the doc's own is history_schema_version.
     expect(month).toMatchObject({ month: "2026-10", history_schema_version: 1, mapping_status: "mapped" });
     expect(month.doc).toMatchObject({ points: { "01": { netWorth: 100 } } });
+  });
+
+  it("SPENDLY-591: a nested watchlist item keys on '{listId}/{itemId}', with its list id and real path", () => {
+    const items = SPEC_BY_COLLECTION.get("watchlists/items")!;
+    const row = mapDocument(items, "u1", {
+      id: "wl_abc/INFY.NS",
+      updateTime: UPDATE_TIME,
+      data: { symbol: "INFY", yahooSymbol: "INFY.NS", name: "Infosys", exchange: "NSE", instrumentType: "EQUITY", order: 2.25 },
+    });
+    expect(row).toMatchObject({
+      doc_id: "wl_abc/INFY.NS", list_id: "wl_abc", source_path: "users/u1/watchlists/wl_abc/items/INFY.NS",
+      symbol: "INFY", sort_order: 2.25, mapping_status: "mapped",
+    });
+    expect(firestorePathOf(items, "u1", "wl_abc/INFY.NS")).toBe("users/u1/watchlists/wl_abc/items/INFY.NS");
+    // A bad field leaves the row unmapped but keeps the list id (it comes from the path).
+    const bad = mapDocument(items, "u1", { id: "wl_abc/X", updateTime: UPDATE_TIME, data: { order: "first" } });
+    expect(bad).toMatchObject({ mapping_status: "unmapped", list_id: "wl_abc", sort_order: null });
   });
 
   it("SPENDLY-609: maps a goal, including a legacy one with an empty deadline and no status", () => {

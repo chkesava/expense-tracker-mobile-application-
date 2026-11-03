@@ -383,7 +383,7 @@ describe("account lifecycle (SPENDLY-508)", () => {
       },
     };
     await runSync(watched, memorySink().sink, opts("full", T0));
-    const collections = new Set(requested.map((r) => r.split("/")[1]));
+    const collections = new Set(requested.map((r) => r.slice(r.indexOf("/") + 1)));
     expect([...collections].sort()).toEqual([
       "accountEntries", "accountPayments", "accountTransfers", "accountTypes", "accounts",
       "borrowingRepayments", "borrowings", "calendarReminders", "categories",
@@ -395,7 +395,7 @@ describe("account lifecycle (SPENDLY-508)", () => {
       "ledgerEvents", "merchantOverrides", "netWorthHistory", "portfolioSettings",
       "portfolioTransactions", "receivableRepayments", "receivables", "recurringDismissals",
       "runwayOverrides", "runwaySettings", "sipPlans", "sipTransactions", "spaces",
-      "subscriptions", "trips", "virtualPositions", "watchlists", "whatIfScenarios",
+      "subscriptions", "trips", "virtualPositions", "watchlists", "watchlists/items", "whatIfScenarios",
     ]);
     for (const excluded of ["meta", "stats", "notifications", "financialSummaries", "daily_logs", "weight_history", "pandalMemberships", "goalNames"]) {
       expect(collections.has(excluded)).toBe(false);

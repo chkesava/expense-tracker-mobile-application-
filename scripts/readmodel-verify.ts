@@ -14,6 +14,7 @@ import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { purgedUidsBatch } from "./lib/readmodelPurged";
+import { SPEC_BY_COLLECTION } from "../shared/utils/readModel/mapping";
 import { all } from "./lib/supabasePaging";
 import { renderVerifySummary, runVerify, type VerifyRecord, type VerifySink, type VerifySource } from "./lib/readmodelVerifyCore";
 
@@ -24,6 +25,14 @@ export function firestoreCounter(db: Firestore): VerifySource {
       return (await db.collection("users").listDocuments()).map((ref) => ref.id);
     },
     async count(uid, collection) {
+      const parent = SPEC_BY_COLLECTION.get(collection)?.parent;
+      if (parent) {
+        // SPENDLY-591: a nested collection counts across every parent, missing ones included.
+        const parents = await db.collection("users").doc(uid).collection(parent.collection).listDocuments();
+        let total = 0;
+        for (const ref of parents) total += (await ref.collection(parent.child).count().get()).data().count;
+        return total;
+      }
       const snap = await db.collection("users").doc(uid).collection(collection).count().get();
       return snap.data().count;
     },

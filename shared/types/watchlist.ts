@@ -9,7 +9,7 @@
  *   users/{uid}/watchlists/{listId}/items/{yahooSymbol}
  * The item id IS the normalized Yahoo symbol, so a list can never hold the
  * same symbol twice. The lists are synced to the read model (SPENDLY-591);
- * the items, the first nested collection, come in a later part of 591.
+ * the items too (`watchlist_items`, the first nested collection).
  */
 
 import type { Exchange, InstrumentType } from "../features/portfolio/types";

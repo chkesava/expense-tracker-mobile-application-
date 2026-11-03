@@ -7,6 +7,7 @@ import { purgedUidsBatch } from "../../scripts/lib/readmodelPurged";
 import { runSync } from "../../scripts/lib/readmodelSyncCore";
 import { firestoreReader, supabaseSink } from "../../scripts/readmodel-sync";
 import { handleReadModelPush, type PushEvent, type PushPorts, type PushResult } from "./_readmodelPushCore";
+import { firestorePathOf, SPEC_BY_COLLECTION } from "../../shared/utils/readModel/mapping";
 
 /**
  * SPENDLY-583 — Netlify wiring for the per-write push (rules and tests:
@@ -48,8 +49,9 @@ export function livePushPorts(input: {
       return data === true;
     },
     async readDocs(uid, refs) {
-      const snaps = await db.getAll(...refs.map((r) => db.doc(`users/${uid}/${r.collection}/${r.docId}`)));
-      return snaps.map((s) => (s.exists ? { id: s.id, data: s.data() ?? {}, updateTime: s.updateTime } : null));
+      const snaps = await db.getAll(...refs.map((r) => db.doc(firestorePathOf(SPEC_BY_COLLECTION.get(r.collection)!, uid, r.docId))));
+      // The ref's id, not the snapshot's: a nested row is keyed "{parentId}/{id}" (SPENDLY-591).
+      return snaps.map((s, i) => (s.exists ? { id: refs[i].docId, data: s.data() ?? {}, updateTime: s.updateTime } : null));
     },
     upsert: (table, rows) => sink.upsert(table, rows),
     tombstone: (table, uid, ids) => sink.tombstone(table, uid, ids),

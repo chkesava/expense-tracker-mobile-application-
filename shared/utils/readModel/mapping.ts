@@ -21,7 +21,14 @@ import { monthKeyOf } from "../dates";
 // `decimal` (SPENDLY-590): quantities, prices, NAVs and rates, numeric(24,8).
 export type FieldType = "text" | "money" | "decimal" | "date" | "timestamp" | "boolean" | "integer";
 export type FieldSpec = { column: string; source: string; type: FieldType };
-export type TableSpec = { table: string; collection: string; fields: FieldSpec[]; derivedMonth?: boolean };
+/**
+ * `parent` (SPENDLY-591): a collection nested under each document of another,
+ * e.g. users/{uid}/watchlists/{listId}/items/{itemId}. Its `collection` is the
+ * logical key `"watchlists/items"`; its read-model doc_id is `"{listId}/{itemId}"`
+ * (Firestore ids never contain "/"), and the parent id gets its own column.
+ */
+export type ParentSpec = { collection: string; child: string; column: string };
+export type TableSpec = { table: string; collection: string; fields: FieldSpec[]; derivedMonth?: boolean; parent?: ParentSpec };
 
 const f = (column: string, source: string, type: FieldType): FieldSpec => ({ column, source, type });
 
@@ -729,9 +736,40 @@ export const READ_MODEL_TABLES: TableSpec[] = [
       f("updated_at", "updatedAt", "timestamp"),
     ],
   },
+  // SPENDLY-591 part B (migration 20261102010000): the first nested collection.
+  {
+    table: "watchlist_items",
+    collection: "watchlists/items",
+    parent: { collection: "watchlists", child: "items", column: "list_id" },
+    fields: [
+      f("symbol", "symbol", "text"),
+      f("yahoo_symbol", "yahooSymbol", "text"),
+      f("name", "name", "text"),
+      f("exchange", "exchange", "text"),
+      f("instrument_type", "instrumentType", "text"),
+      // A fractional rank; `order` is reserved in SQL.
+      f("sort_order", "order", "decimal"),
+      f("created_at", "createdAt", "timestamp"),
+      f("updated_at", "updatedAt", "timestamp"),
+    ],
+  },
 ];
 
 export const SPEC_BY_COLLECTION = new Map(READ_MODEL_TABLES.map((s) => [s.collection, s]));
+
+/** The parent document id of a nested row's doc_id ("{parentId}/{id}"), else null. */
+export function parentIdOf(spec: TableSpec, docId: string): string | null {
+  if (!spec.parent) return null;
+  const parts = docId.split("/");
+  return parts.length === 2 && parts[0] && parts[1] ? parts[0] : null;
+}
+
+/** A row's Firestore path: `users/{uid}/{collection}/{docId}`, or the nested form. */
+export function firestorePathOf(spec: TableSpec, uid: string, docId: string): string {
+  if (!spec.parent) return `users/${uid}/${spec.collection}/${docId}`;
+  const [parentId, id] = docId.split("/");
+  return `users/${uid}/${spec.parent.collection}/${parentId}/${spec.parent.child}/${id}`;
+}
 
 /** Thrown inside a converter; turns the row `unmapped`. */
 class Unconvertible extends Error {}
@@ -849,12 +887,12 @@ export function mapDocumentWithReason(spec: TableSpec, uid: string, source: Sour
     uid,
     doc_id: source.id,
     doc: toJsonDoc(source.data),
-    source_path: `users/${uid}/${spec.collection}/${source.id}`,
+    source_path: firestorePathOf(spec, uid, source.id),
     source_update_time: toTimestampOrThrow(source.updateTime),
     schema_version: 1,
     mapping_status: "mapped",
   };
-  const typed: Record<string, unknown> = {};
+  const typed: Record<string, unknown> = spec.parent ? { [spec.parent.column]: parentIdOf(spec, source.id) } : {};
   try {
     for (const field of spec.fields) {
       const value = source.data[field.source];
@@ -875,7 +913,8 @@ export function mapDocumentWithReason(spec: TableSpec, uid: string, source: Sour
     if (!(error instanceof FieldUnconvertible)) throw error;
     const nulls = Object.fromEntries(spec.fields.map((field) => [field.column, null]));
     return {
-      row: { ...base, ...nulls, ...(spec.derivedMonth ? { month: null } : {}), mapping_status: "unmapped" },
+      // The parent id comes from the path, so it survives a bad field.
+      row: { ...base, ...nulls, ...(spec.parent ? { [spec.parent.column]: parentIdOf(spec, source.id) } : {}), ...(spec.derivedMonth ? { month: null } : {}), mapping_status: "unmapped" },
       reason: error.message,
     };
   }

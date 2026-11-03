@@ -48,7 +48,8 @@ export const MASS_TOMBSTONE_MIN = 20;
 export type PageRequest =
   | { kind: "all"; limit: number; after?: unknown }
   | { kind: "since"; field: "createdAt" | "updatedAt"; sinceMs: number; limit: number; after?: unknown };
-export type Page = { docs: SourceDoc[]; next?: unknown };
+/** `reads`: what the page cost, when not one per document (SPENDLY-591 nested pages). */
+export type Page = { docs: SourceDoc[]; next?: unknown; reads?: number };
 
 export type SourcePort = {
   /** Uids under `users/` (including ones with only subcollections). */
@@ -247,7 +248,7 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
       if (remaining() < 1) throw new BudgetExhausted();
       const limit = Math.min(PAGE_SIZE, remaining());
       const page = await source.readPage(uid, spec.collection, { ...request, limit, after } as PageRequest);
-      spend(Math.max(1, page.docs.length));
+      spend(page.reads ?? Math.max(1, page.docs.length));
       const rows: ReadModelRow[] = [];
       for (const doc of page.docs) {
         if (seen.has(doc.id)) continue;

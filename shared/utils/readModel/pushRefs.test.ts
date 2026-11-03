@@ -15,7 +15,7 @@ describe("push refs (SPENDLY-583)", () => {
       "ledgerEvents", "merchantOverrides", "netWorthHistory", "portfolioSettings",
       "portfolioTransactions", "receivableRepayments", "receivables", "recurringDismissals",
       "runwayOverrides", "runwaySettings", "sipPlans", "sipTransactions", "spaces",
-      "subscriptions", "trips", "virtualPositions", "watchlists", "whatIfScenarios",
+      "subscriptions", "trips", "virtualPositions", "watchlists", "watchlists/items", "whatIfScenarios",
     ]);
     // The name lock is not data and is never pushed.
     expect(pushRefFromPath("users/u1/goalNames/n_car", "u1")).toBeNull();
@@ -30,6 +30,20 @@ describe("push refs (SPENDLY-583)", () => {
     expect(pushRefFromPath("users/u1/notifications/n1", "u1")).toBeNull();
     expect(pushRefFromPath("users/u1/meta/outbox/acks/x", "u1")).toBeNull();
     expect(pushRefFromPath("users/u1", "u1")).toBeNull();
+  });
+
+  it("SPENDLY-591: nested paths become a '{parentId}/{id}' ref, and only for a nested synced collection", () => {
+    expect(pushRefFromPath("users/u1/watchlists/default/items/INFY.NS", "u1")).toEqual({ collection: "watchlists/items", docId: "default/INFY.NS" });
+    expect(pushRefFromPath("users/u1/watchlists/default", "u1")).toEqual({ collection: "watchlists", docId: "default" });
+    expect(pushRefFromPath("users/u2/watchlists/default/items/INFY.NS", "u1")).toBeNull();
+    expect(pushRefFromPath("users/u1/watchlists/default/other/x", "u1")).toBeNull();
+    expect(pushRefFromPath("users/u1/watchlists/default/items/x/deeper/y", "u1")).toBeNull();
+    expect(parsePushRequest({ refs: [{ collection: "watchlists/items", docId: "default/INFY.NS" }] }).ok).toBe(true);
+    // A nested ref needs exactly "{parent}/{id}"; a flat one never takes a "/".
+    for (const docId of ["INFY.NS", "a/b/c", "/x", "x/", "../x"]) {
+      expect(parsePushRequest({ refs: [{ collection: "watchlists/items", docId }] }).ok).toBe(false);
+    }
+    expect(parsePushRequest({ refs: [{ collection: "watchlists", docId: "a/b" }] }).ok).toBe(false);
   });
 
   it("parses refs, de-duplicates them, and caps the count", () => {
