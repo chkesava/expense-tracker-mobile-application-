@@ -21,6 +21,7 @@ import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { Trip } from "@/shared/types/trip";
+import { noteDirectWrites, trackedBatch } from "@/lib/readModelWriteHooks";
 
 export function useTrips(options?: { enabled?: boolean }) {
   const enabled = options?.enabled !== false;
@@ -144,7 +145,7 @@ export function useTrips(options?: { enabled?: boolean }) {
         return false;
       }
 
-      const batch = writeBatch(db);
+      const batch = trackedBatch(writeBatch(db));
 
       // Unlink each expense
       expensesSnap.docs.forEach((expDoc) => {
@@ -157,6 +158,7 @@ export function useTrips(options?: { enabled?: boolean }) {
       const outcome = await commitWrite(() => batch.commit(), {
         label: "trip deletion",
       });
+      noteDirectWrites(uid, batch.writtenPaths());
       toast.success(
         writeSavedMessage(outcome, "Trip deleted and expenses unlinked")
       );
@@ -183,7 +185,7 @@ export function useTrips(options?: { enabled?: boolean }) {
       const trip = trips.find((t) => t.id === tripId);
       if (!trip) return false;
 
-      const batch = writeBatch(db);
+      const batch = trackedBatch(writeBatch(db));
       batch.update(doc(db, "users", uid, "expenses", expenseId), {
         tripId,
         updatedAt: serverTimestamp(),
@@ -193,6 +195,7 @@ export function useTrips(options?: { enabled?: boolean }) {
       });
 
       await commitWrite(() => batch.commit(), { label: "trip link" });
+      noteDirectWrites(uid, batch.writtenPaths());
       return true;
     } catch (err) {
       logError("trips.linkexpensetotrip", err);
@@ -215,7 +218,7 @@ export function useTrips(options?: { enabled?: boolean }) {
       const trip = trips.find((t) => t.id === tripId);
       if (!trip) return false;
 
-      const batch = writeBatch(db);
+      const batch = trackedBatch(writeBatch(db));
       batch.update(doc(db, "users", uid, "expenses", expenseId), {
         tripId: null,
         updatedAt: serverTimestamp(),
@@ -225,6 +228,7 @@ export function useTrips(options?: { enabled?: boolean }) {
       });
 
       await commitWrite(() => batch.commit(), { label: "trip unlink" });
+      noteDirectWrites(uid, batch.writtenPaths());
       return true;
     } catch (err) {
       logError("trips.unlinkexpense", err);

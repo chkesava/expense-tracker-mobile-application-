@@ -23,6 +23,7 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useExpenseReferenceData } from "@/providers/ExpenseReferenceDataProvider";
 import type { Category } from "@/shared/types/expense";
+import { noteDirectWrites, trackedBatch } from "@/lib/readModelWriteHooks";
 
 /** The expense fields a category relabel needs for its dashboard delta. */
 type RelabelSource = {
@@ -286,7 +287,7 @@ export const useCategories = () => {
                 },
               }));
             })();
-        let batch = writeBatch(db);
+        let batch = trackedBatch(writeBatch(db));
         let ops = 0;
         // SPENDLY-563: the month's dashboard keys move with the expenses, in
         // the same batch as the chunk they belong to.
@@ -295,7 +296,8 @@ export const useCategories = () => {
           if (ops === 0) return;
           stageMutationOps(batch, db, dashboardOpsForRelabel(uid, relabels));
           await batch.commit();
-          batch = writeBatch(db);
+          noteDirectWrites(uid, batch.writtenPaths());
+          batch = trackedBatch(writeBatch(db));
           ops = 0;
           relabels = [];
         };
@@ -426,7 +428,7 @@ export const useCategories = () => {
         targetSubs.map((s) => s.name.toLowerCase())
       );
 
-      let batch = writeBatch(db);
+      let batch = trackedBatch(writeBatch(db));
       let ops = 0;
       // SPENDLY-563: moved expenses carry their dashboard amounts with them,
       // staged into the same batch as the chunk they were moved in.
@@ -435,7 +437,8 @@ export const useCategories = () => {
         if (ops === 0) return;
         stageMutationOps(batch, db, dashboardOpsForRelabel(uid, relabels));
         await batch.commit();
-        batch = writeBatch(db);
+        noteDirectWrites(uid, batch.writtenPaths());
+        batch = trackedBatch(writeBatch(db));
         ops = 0;
         relabels = [];
       };

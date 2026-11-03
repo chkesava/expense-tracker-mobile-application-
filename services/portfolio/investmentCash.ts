@@ -58,6 +58,7 @@ import type {
   InvestmentCashSource,
 } from "@/shared/features/portfolio/types";
 import type { HoldingFundingSource } from "@/shared/features/portfolio/schemas";
+import { noteDirectWrites, trackedBatch } from "@/lib/readModelWriteHooks";
 
 const SETTINGS_DOC_ID = "config";
 export const INVESTMENT_CASH_COLLECTION = "investmentCashTransactions";
@@ -240,7 +241,7 @@ export async function recordInvestmentCashEntry(
   const settingsRef = doc(db, "users", owner, "portfolioSettings", SETTINGS_DOC_ID);
 
   const outcome = await commitWrite(() => {
-    const batch = writeBatch(db);
+    const batch = trackedBatch(writeBatch(db));
     batch.set(entryRef, buildEntryDoc(input, entryId));
     const delta = signedDelta(input);
     batch.set(
@@ -248,7 +249,9 @@ export async function recordInvestmentCashEntry(
       { cashBalance: increment(delta), updatedAt: serverTimestamp() },
       { merge: true }
     );
-    return batch.commit();
+    const committing = batch.commit();
+    noteDirectWrites(owner, batch.writtenPaths());
+    return committing;
   }, { label: "investment cash entry" });
 
   return { id: entryId, outcome };
@@ -324,7 +327,7 @@ export async function transferInvestmentCashWithBank(
       });
 
   const outcome = await commitWrite(() => {
-    const batch = writeBatch(db);
+    const batch = trackedBatch(writeBatch(db));
     batch.set(
       doc(db, "users", owner, INVESTMENT_CASH_COLLECTION, entryId),
       stripUndefined({
@@ -367,7 +370,9 @@ export async function transferInvestmentCashWithBank(
       { merge: true }
     );
     stageMutationOps(batch, db, bankBalanceOps);
-    return batch.commit();
+    const committing = batch.commit();
+    noteDirectWrites(owner, batch.writtenPaths());
+    return committing;
   }, { label: "investment cash bank transfer" });
 
   return { entryId, accountEntryId, transferId, outcome };
@@ -454,7 +459,7 @@ export async function createHoldingWithCash(
   });
 
   const outcome = await commitWrite(() => {
-    const batch = writeBatch(db);
+    const batch = trackedBatch(writeBatch(db));
     stageStockProfileUpsert(batch, db, owner, profileId, {
       symbol: input.holding.symbol,
       yahooSymbol: input.holding.yahooSymbol,
@@ -525,7 +530,9 @@ export async function createHoldingWithCash(
       quantity > 0 && price > 0 ? acquisitionCost(quantity, price, fees) : 0;
     
 
-    return batch.commit();
+    const committing = batch.commit();
+    noteDirectWrites(owner, batch.writtenPaths());
+    return committing;
   }, { label: "holding" });
 
   return { holdingId, entryId, transactionId, profileId, outcome };
@@ -632,7 +639,7 @@ export async function deleteHoldingWithOptionalRefund(
     firstPurchase && roundMoney(Math.abs(Number(firstPurchase.amount) || 0)) === refunded;
 
   const outcome = await commitWrite(() => {
-    const batch = writeBatch(db);
+    const batch = trackedBatch(writeBatch(db));
     if (entryId) {
       batch.set(
         doc(db, "users", owner, INVESTMENT_CASH_COLLECTION, entryId),
@@ -658,7 +665,9 @@ export async function deleteHoldingWithOptionalRefund(
       );
     }
     batch.delete(doc(db, "users", owner, "holdings", holdingId));
-    return batch.commit();
+    const committing = batch.commit();
+    noteDirectWrites(owner, batch.writtenPaths());
+    return committing;
   }, { label: "holding delete" });
 
   return { outcome, refunded, entryId };
@@ -690,7 +699,7 @@ export async function overwriteHoldingsPreservingIds(
   const profileUpserts = planStockProfileUpserts(input.nextHoldings);
 
   const outcome = await commitWrite(() => {
-    const batch = writeBatch(db);
+    const batch = trackedBatch(writeBatch(db));
     let cacheDelta = 0;
 
     for (const upsert of profileUpserts) {
@@ -755,7 +764,9 @@ export async function overwriteHoldingsPreservingIds(
       );
     }
 
-    return batch.commit();
+    const committing = batch.commit();
+    noteDirectWrites(owner, batch.writtenPaths());
+    return committing;
   }, { label: "holdings import" });
 
   return { outcome };
@@ -915,7 +926,7 @@ export async function executeMockBuy(
   );
 
   const outcome = await commitWrite(() => {
-    const batch = writeBatch(db);
+    const batch = trackedBatch(writeBatch(db));
     batch.update(holdingRef, {
       quantity: nextQuantity,
       averageBuyPrice,
@@ -964,7 +975,9 @@ export async function executeMockBuy(
       );
       
     }
-    return batch.commit();
+    const committing = batch.commit();
+    noteDirectWrites(owner, batch.writtenPaths());
+    return committing;
   }, { label: "mock buy" });
 
   return { cashEntryId, transactionId, outcome };
@@ -1005,7 +1018,7 @@ export async function executeMockSell(
   const nextQuantity = existingQuantity - quantity;
 
   const outcome = await commitWrite(() => {
-    const batch = writeBatch(db);
+    const batch = trackedBatch(writeBatch(db));
     if (Math.abs(nextQuantity) < HOLDING_QUANTITY_EPS) {
       batch.delete(holdingRef);
     } else {
@@ -1058,7 +1071,9 @@ export async function executeMockSell(
       { merge: true }
     );
     
-    return batch.commit();
+    const committing = batch.commit();
+    noteDirectWrites(owner, batch.writtenPaths());
+    return committing;
   }, { label: "mock sell" });
 
   return { cashEntryId, transactionId, outcome };
@@ -1095,7 +1110,7 @@ export async function applyReconciliationRepairs(
   const startedAt = new Date().toISOString();
 
   const outcome = await commitWrite(() => {
-    const batch = writeBatch(db);
+    const batch = trackedBatch(writeBatch(db));
     const repairs: Record<string, unknown>[] = [];
 
     for (const finding of plan.findings) {
@@ -1138,7 +1153,9 @@ export async function applyReconciliationRepairs(
       source: options.source,
     });
 
-    return batch.commit();
+    const committing = batch.commit();
+    noteDirectWrites(owner, batch.writtenPaths());
+    return committing;
   }, { label: "portfolio reconciliation repair" });
 
   return { auditId: runId, repairedCount: plan.findings.length, outcome };

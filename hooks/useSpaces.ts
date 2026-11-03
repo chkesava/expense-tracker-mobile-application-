@@ -18,6 +18,7 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useExpenseReferenceData } from "@/providers/ExpenseReferenceDataProvider";
 import type { Space } from "@/shared/types/space";
+import { noteDirectWrites, trackedBatch } from "@/lib/readModelWriteHooks";
 
 /** Firestore caps a batch at 500 writes; stay comfortably under it. */
 const BATCH_CHUNK_SIZE = 400;
@@ -141,18 +142,20 @@ export function useSpaces(options?: { enabled?: boolean }) {
         }
 
         for (const group of chunk(linked.docs, BATCH_CHUNK_SIZE)) {
-          const batch = writeBatch(db);
+          const batch = trackedBatch(writeBatch(db));
           group.forEach((expenseDoc) =>
             batch.update(expenseDoc.ref, { spaceId: null, updatedAt: serverTimestamp() })
           );
           await commitWrite(() => batch.commit(), { label: "space unlink" });
+          noteDirectWrites(uid, batch.writtenPaths());
         }
 
-        const finalBatch = writeBatch(db);
+        const finalBatch = trackedBatch(writeBatch(db));
         finalBatch.delete(doc(db, "users", uid, "spaces", spaceId));
         const outcome = await commitWrite(() => finalBatch.commit(), {
           label: "space deletion",
         });
+        noteDirectWrites(uid, finalBatch.writtenPaths());
 
         retrySpaces();
         toast.success(
@@ -179,7 +182,7 @@ export function useSpaces(options?: { enabled?: boolean }) {
 
       try {
         for (const group of chunk(expenseIds, BATCH_CHUNK_SIZE)) {
-          const batch = writeBatch(db);
+          const batch = trackedBatch(writeBatch(db));
           group.forEach((expenseId) => {
             batch.update(doc(db, "users", uid, "expenses", expenseId), {
               spaceId,
@@ -187,6 +190,7 @@ export function useSpaces(options?: { enabled?: boolean }) {
             });
           });
           await commitWrite(() => batch.commit(), { label: "space assignment" });
+          noteDirectWrites(uid, batch.writtenPaths());
         }
 
         toast.success(

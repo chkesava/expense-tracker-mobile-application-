@@ -26,6 +26,7 @@ import { AppState } from "react-native";
 import { getFirestoreDb } from "@/lib/firebase";
 import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { notifyReadModelSnapshot } from "@/lib/readModelPush";
+import { noteDirectWrites, noteTransactionWrites } from "@/lib/readModelWriteHooks";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { friendlyErrorMessage, logError, logWarning } from "@/lib/errors";
 import { toast } from "@/lib/toast";
@@ -449,6 +450,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           }),
         { label: "credit card bill" }
       );
+      noteDirectWrites(user.uid, [ref.path]);
       return ref.id;
     },
     [
@@ -648,6 +650,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
               ),
             { label: "credit card bill" }
           );
+          noteDirectWrites(user.uid, [`users/${user.uid}/creditCardBills/${patch.billId}`]);
         } catch (err) {
           logError("creditCardBills.autoRefresh", err);
         }
@@ -707,7 +710,8 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
             });
             return true;
           });
-          if (!applied) {
+          if (applied) noteTransactionWrites(user.uid, [billRef.path]);
+          else {
             // Keep the in-memory view on the stored doc, not the skipped patch.
             patchedBills.set(allocation.billId, existing);
           }
@@ -745,6 +749,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
                 ),
               { label: "credit card bill" }
             );
+            noteDirectWrites(user.uid, [`users/${user.uid}/creditCardBills/${resolution.canonicalId}`]);
           } catch (err) {
             logError("creditCardBills.mergeDuplicate", err);
           }
@@ -759,6 +764,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
                 }),
               { label: "credit card bill" }
             );
+            noteDirectWrites(user.uid, [`users/${user.uid}/creditCardBills/${cancelId}`]);
           } catch (err) {
             logError("creditCardBills.cancelDuplicate", err);
           }
@@ -879,6 +885,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           }),
         { label: "credit card bill" }
       );
+      noteDirectWrites(user.uid, [`users/${user.uid}/creditCardBills/${id}`]);
 
       if (derived.status === "PAID" || derived.status === "CANCELLED") {
         await cancelBillReminders(id);
@@ -945,6 +952,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           }),
         { label: "credit card bill" }
       );
+      noteDirectWrites(user.uid, [`users/${user.uid}/creditCardBills/${billId}`]);
 
       if (derived.status === "PAID" || derived.status === "CANCELLED") {
         await cancelBillReminders(billId);
@@ -993,6 +1001,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           }),
         { label: "credit card bill payment stamp" }
       );
+      noteDirectWrites(user.uid, [`users/${user.uid}/creditCardBills/${billId}`]);
       if (derived.status === "PAID") {
         await cancelBillReminders(billId);
       }
