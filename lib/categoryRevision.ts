@@ -11,7 +11,8 @@
  */
 import { doc, increment, serverTimestamp, setDoc, type Firestore } from "@/lib/firestore";
 import { logWarning } from "@/lib/errors";
-import { notifyReadModelChanged, notifyReadModelWrites } from "@/lib/readModelPush";
+import { notifyReadModelChanged } from "@/lib/readModelPush";
+import { noteDirectWrites } from "@/lib/readModelWriteHooks";
 import {
   CATEGORIES_REVISION_FIELD,
   parseCategoriesLoadRecord,
@@ -36,7 +37,8 @@ export function noteCategoriesWritten(db: Firestore, uid: string, ids?: string[]
     { merge: true }
   ).catch((error) => logWarning("categories.revision", error));
   if (ids && ids.length > 0) {
-    notifyReadModelWrites(
+    // SPENDLY-671: the server push and the client write outbox.
+    noteDirectWrites(
       uid,
       ids.map((id) => `users/${uid}/categories/${id}`)
     );

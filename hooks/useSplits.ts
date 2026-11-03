@@ -84,6 +84,7 @@ import type { BalanceLeg } from "@/shared/utils/ledgerAccountDeltas";
 import { stageMutationOps } from "@/lib/stageMutationOps";
 import { computeDashboardDeleteOps, computeDashboardExpenseCreateOps } from "@/shared/utils/dashboardMutations";
 import type { MutationOp } from "@/shared/types/mutations";
+import { noteDirectWrites, trackedBatch } from "@/lib/readModelWriteHooks";
 
 async function loadSplitLedgerEntries(
   db: Firestore,
@@ -374,7 +375,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       const createdByName =
         user?.displayName || user?.email?.split("@")[0] || "Me";
 
-      const batch = writeBatch(db);
+      const batch = trackedBatch(writeBatch(db));
       const paymentRequestIds: string[] = [];
       let participants = keyedParticipants;
 
@@ -468,6 +469,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       }
 
       const outcome = await commitWrite(() => batch.commit(), { label: "split" });
+      noteDirectWrites(uid, batch.writtenPaths());
       toast.success(writeSavedMessage(outcome, "Split created successfully"));
       return docRef.id;
     } catch (err) {
@@ -530,7 +532,7 @@ export function useSplits(options?: { enabled?: boolean }) {
     // one batch, on an explicit user action, is the right trade.
 
     try {
-      const batch = writeBatch(db);
+      const batch = trackedBatch(writeBatch(db));
       const publicSlug = split.publicSlug || generatePaymentSlug(10);
       const newRequestIds: string[] = [];
       let participants = split.participants;
@@ -582,6 +584,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       );
 
       await commitWrite(() => batch.commit(), { label: "share link" });
+      noteDirectWrites(uid, batch.writtenPaths());
 
       return {
         ok: true,
@@ -668,7 +671,7 @@ export function useSplits(options?: { enabled?: boolean }) {
     const isAllPaid = updatedParticipants.every((p) => isParticipantShareSettled(p));
 
     try {
-      const batch = writeBatch(db);
+      const batch = trackedBatch(writeBatch(db));
       applyShareSideEffects(
         batch,
         db,
@@ -678,6 +681,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         { currency }
       );
       await commitWrite(() => batch.commit(), { label: "settlement status" });
+      noteDirectWrites(uid, batch.writtenPaths());
       return true;
     } catch (err) {
       logError("splits.toggleparticipantpaid", err);
@@ -715,7 +719,7 @@ export function useSplits(options?: { enabled?: boolean }) {
     }
 
     try {
-      const batch = writeBatch(db);
+      const batch = trackedBatch(writeBatch(db));
       batch.set(entryRef, { ...built.entry, createdAt: serverTimestamp() });
       applyShareSideEffects(
         batch,
@@ -738,6 +742,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         batch.delete(doc(db, "splitShareClaims", options.claimId));
       }
       await commitWrite(() => batch.commit(), { label: "collection" });
+      noteDirectWrites(uid, batch.writtenPaths());
       toast.success("Marked as collected");
       return true;
     } catch (err) {
@@ -766,7 +771,7 @@ export function useSplits(options?: { enabled?: boolean }) {
     }
 
     try {
-      const batch = writeBatch(db);
+      const batch = trackedBatch(writeBatch(db));
       const rawDeltas = await queueSplitReversals(
         batch,
         db,
@@ -791,6 +796,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         { currency }
       );
       await commitWrite(() => batch.commit(), { label: "collection" });
+      noteDirectWrites(uid, batch.writtenPaths());
       return true;
     } catch (err) {
       logError("splits.unmarkcollected", err);
@@ -829,7 +835,7 @@ export function useSplits(options?: { enabled?: boolean }) {
     }
 
     try {
-      const batch = writeBatch(db);
+      const batch = trackedBatch(writeBatch(db));
       if (built.expense) {
         batch.set(expenseRef, {
           ...built.expense,
@@ -872,6 +878,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       const outcome = await commitWrite(() => batch.commit(), {
         label: "gift purchase",
       });
+      noteDirectWrites(uid, batch.writtenPaths());
       toast.success(writeSavedMessage(outcome, "Gift purchase recorded"));
       return true;
     } catch (err) {
@@ -902,7 +909,7 @@ export function useSplits(options?: { enabled?: boolean }) {
     );
 
     try {
-      const batch = writeBatch(db);
+      const batch = trackedBatch(writeBatch(db));
       applyShareSideEffects(
         batch,
         db,
@@ -914,6 +921,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       const outcome = await commitWrite(() => batch.commit(), {
         label: "split settlement",
       });
+      noteDirectWrites(uid, batch.writtenPaths());
       toast.success(writeSavedMessage(outcome, "Split marked as fully settled!"));
       return true;
     } catch (err) {
@@ -944,7 +952,7 @@ export function useSplits(options?: { enabled?: boolean }) {
     }
 
     try {
-      const batch = writeBatch(db);
+      const batch = trackedBatch(writeBatch(db));
       applyShareSideEffects(
         batch,
         db,
@@ -954,6 +962,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         { currency }
       );
       await commitWrite(() => batch.commit(), { label: "split amount" });
+      noteDirectWrites(uid, batch.writtenPaths());
       toast.success("Split amount updated");
       return true;
     } catch (err) {
@@ -984,7 +993,7 @@ export function useSplits(options?: { enabled?: boolean }) {
     }
 
     try {
-      const batch = writeBatch(db);
+      const batch = trackedBatch(writeBatch(db));
       applyShareSideEffects(
         batch,
         db,
@@ -1001,6 +1010,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         { currency, paymentNote: built.title }
       );
       await commitWrite(() => batch.commit(), { label: "split details" });
+      noteDirectWrites(uid, batch.writtenPaths());
       toast.success("Split updated");
       return true;
     } catch (err) {
@@ -1032,7 +1042,7 @@ export function useSplits(options?: { enabled?: boolean }) {
     }
 
     try {
-      const batch = writeBatch(db);
+      const batch = trackedBatch(writeBatch(db));
       applyShareSideEffects(
         batch,
         db,
@@ -1045,6 +1055,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         batch.delete(doc(db, "splitShareClaims", options.claimId));
       }
       await commitWrite(() => batch.commit(), { label: "split opt-out" });
+      noteDirectWrites(uid, batch.writtenPaths());
       toast.success("Shares updated");
       return true;
     } catch (err) {
@@ -1076,7 +1087,7 @@ export function useSplits(options?: { enabled?: boolean }) {
     }
 
     try {
-      const batch = writeBatch(db);
+      const batch = trackedBatch(writeBatch(db));
       let participants = built.participants;
       const extraSplitFields: Record<string, unknown> = {
         settled: built.settled,
@@ -1126,6 +1137,7 @@ export function useSplits(options?: { enabled?: boolean }) {
         { currency }
       );
       await commitWrite(() => batch.commit(), { label: "split add person" });
+      noteDirectWrites(uid, batch.writtenPaths());
       toast.success(`${input.name.trim()} added`);
       return true;
     } catch (err) {
@@ -1170,7 +1182,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       "that person";
 
     try {
-      const batch = writeBatch(db);
+      const batch = trackedBatch(writeBatch(db));
       applyShareSideEffects(
         batch,
         db,
@@ -1191,6 +1203,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       const outcome = await commitWrite(() => batch.commit(), {
         label: "settlement status",
       });
+      noteDirectWrites(uid, batch.writtenPaths());
       toast.success(writeSavedMessage(outcome, `Recorded ${name}'s payment`));
       return true;
     } catch (err) {
@@ -1255,7 +1268,7 @@ export function useSplits(options?: { enabled?: boolean }) {
     }
 
     try {
-      const batch = writeBatch(db);
+      const batch = trackedBatch(writeBatch(db));
       applyShareSideEffects(
         batch,
         db,
@@ -1269,6 +1282,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       const outcome = await commitWrite(() => batch.commit(), {
         label: "share link",
       });
+      noteDirectWrites(uid, batch.writtenPaths());
       toast.success(
         writeSavedMessage(
           outcome,
@@ -1300,7 +1314,7 @@ export function useSplits(options?: { enabled?: boolean }) {
     }
 
     try {
-      const batch = writeBatch(db);
+      const batch = trackedBatch(writeBatch(db));
       const linked = linkedLedgerIds(split);
       const rawDeltas = await queueSplitReversals(
         batch,
@@ -1361,6 +1375,7 @@ export function useSplits(options?: { enabled?: boolean }) {
       const outcome = await commitWrite(() => batch.commit(), {
         label: "split deletion",
       });
+      noteDirectWrites(uid, batch.writtenPaths());
       toast.success(writeSavedMessage(outcome, "Split deleted"));
       return true;
     } catch (err) {
