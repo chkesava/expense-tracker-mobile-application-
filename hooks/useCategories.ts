@@ -1,16 +1,17 @@
 import { useCallback, useMemo } from "react";
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
   getDocs,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
   writeBatch,
 } from "@/lib/firestore";
+import { noteCategoriesWritten } from "@/lib/categoryRevision";
 import { stageMutationOps } from "@/lib/stageMutationOps";
 import { dashboardOpsForRelabel, type DashboardRelabel } from "@/shared/utils/dashboardMutations";
 
@@ -123,10 +124,13 @@ export const useCategories = () => {
   const patchCategory = async (id: string, data: Partial<Category>) => {
     const db = getFirestoreDb();
     if (!uid || !db) return;
-    await updateDoc(doc(db, "users", uid, "categories", id), {
+    // SPENDLY-660: start the write, then announce it (see noteCategoriesWritten).
+    const write = updateDoc(doc(db, "users", uid, "categories", id), {
       ...data,
       updatedAt: serverTimestamp(),
     });
+    noteCategoriesWritten(db, uid, [id]);
+    await write;
   };
 
   const addCategory = async (
@@ -136,8 +140,12 @@ export const useCategories = () => {
     const db = getFirestoreDb();
     if (!uid || !db || !name.trim()) return;
     try {
-      const parentRef = await addDoc(
-        collection(db, "users", uid, "categories"),
+      // SPENDLY-660: ids are made up front so the writes can be announced
+      // (noteCategoriesWritten) before they're awaited.
+      const parentRef = doc(collection(db, "users", uid, "categories"));
+      const writes: Promise<void>[] = [];
+      writes.push(setDoc(
+        parentRef,
         {
           name: name.trim(),
           kind: "category",
@@ -151,10 +159,13 @@ export const useCategories = () => {
           sortOrder: 1000,
           createdAt: serverTimestamp(),
         }
-      );
+      ));
+      const ids = [parentRef.id];
 
       if (options?.createDefaultSub !== false) {
-        await addDoc(collection(db, "users", uid, "categories"), {
+        const subRef = doc(collection(db, "users", uid, "categories"));
+        ids.push(subRef.id);
+        writes.push(setDoc(subRef, {
           name: "Other",
           kind: "subcategory",
           parentId: parentRef.id,
@@ -164,8 +175,10 @@ export const useCategories = () => {
           isFavorite: false,
           sortOrder: 0,
           createdAt: serverTimestamp(),
-        });
+        }));
       }
+      noteCategoriesWritten(db, uid, ids);
+      await Promise.all(writes);
 
       toast.success("Category added");
       return parentRef.id;
@@ -179,7 +192,8 @@ export const useCategories = () => {
     const db = getFirestoreDb();
     if (!uid || !db || !name.trim() || !parentId) return;
     try {
-      await addDoc(collection(db, "users", uid, "categories"), {
+      const subRef = doc(collection(db, "users", uid, "categories"));
+      const write = setDoc(subRef, {
         name: name.trim(),
         kind: "subcategory",
         parentId,
@@ -190,6 +204,8 @@ export const useCategories = () => {
         sortOrder: 100,
         createdAt: serverTimestamp(),
       });
+      noteCategoriesWritten(db, uid, [subRef.id]);
+      await write;
       toast.success("Subcategory added");
     } catch (err) {
       logError("categories.addSubcategory", err);
@@ -201,10 +217,12 @@ export const useCategories = () => {
     const db = getFirestoreDb();
     if (!uid || !db || !newName.trim()) return;
     try {
-      await updateDoc(doc(db, "users", uid, "categories", id), {
+      const write = updateDoc(doc(db, "users", uid, "categories", id), {
         name: newName.trim(),
         updatedAt: serverTimestamp(),
       });
+      noteCategoriesWritten(db, uid, [id]);
+      await write;
       toast.success("Category updated");
     } catch (err) {
       logError("categories.updateCategory", err);
@@ -227,10 +245,12 @@ export const useCategories = () => {
     if (oldName === trimmed) return;
 
     try {
-      await updateDoc(doc(db, "users", uid, "categories", id), {
+      const write = updateDoc(doc(db, "users", uid, "categories", id), {
         name: trimmed,
         updatedAt: serverTimestamp(),
       });
+      noteCategoriesWritten(db, uid, [id]);
+      await write;
 
       if (rewriteExpenses) {
         // SPENDLY-98: only skip the read when the in-memory ledger is the
@@ -348,10 +368,12 @@ export const useCategories = () => {
     const db = getFirestoreDb();
     if (!uid || !db) return;
     try {
-      await updateDoc(doc(db, "users", uid, "categories", id), {
+      const write = updateDoc(doc(db, "users", uid, "categories", id), {
         isArchived,
         updatedAt: serverTimestamp(),
       });
+      noteCategoriesWritten(db, uid, [id]);
+      await write;
       toast.success(isArchived ? "Category archived" : "Category restored");
     } catch (err) {
       logError("categories.updateCategoryStatus", err);
@@ -364,12 +386,12 @@ export const useCategories = () => {
     if (!uid || !db) return;
     try {
       const children = categories.filter((c) => c.parentId === id);
-      await Promise.all(
-        children.map((c) =>
-          deleteDoc(doc(db, "users", uid, "categories", c.id))
-        )
+      const writes = children.map((c) =>
+        deleteDoc(doc(db, "users", uid, "categories", c.id))
       );
-      await deleteDoc(doc(db, "users", uid, "categories", id));
+      writes.push(deleteDoc(doc(db, "users", uid, "categories", id)));
+      noteCategoriesWritten(db, uid, [...children.map((c) => c.id), id]);
+      await Promise.all(writes);
       toast.success("Category deleted");
     } catch (err) {
       logError("categories.deleteCategory", err);
@@ -506,6 +528,9 @@ export const useCategories = () => {
       batch.delete(doc(db, "users", uid, "categories", sourceId));
       ops++;
       await flush();
+      // SPENDLY-660: after the last batch, which holds the delete. Offline,
+      // other screens see the merge once it reaches the server.
+      noteCategoriesWritten(db, uid, [...sourceSubs.map((s) => s.id), sourceId]);
 
       toast.success(`Merged “${source.name}” into “${target.name}”`);
     } catch (err) {

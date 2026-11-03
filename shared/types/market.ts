@@ -304,3 +304,40 @@ interface ScreenerUniverseBase {
 export type ScreenerUniverseDTO =
   | (ScreenerUniverseBase & { available: true; rows: ScreenerRowDTO[] })
   | (ScreenerUniverseBase & { available: false; reason: ScreenerUnavailableReason; rows: [] });
+
+// --- SPENDLY-656: batched quotes for watchlists -----------------------------
+
+/**
+ * One symbol's latest price from the last two daily closes. Indices (`^NSEI`)
+ * are points, not money: `isIndex` tells the UI not to show a currency.
+ */
+export interface BatchQuoteDTO {
+  symbol: string;
+  price: number;
+  /** The previous session's close (the second-to-last daily close). */
+  previousClose: number | null;
+  change: number | null;
+  changePercent: number | null;
+  /** "INR" for NSE/BSE listings and Indian indices; null when the provider doesn't say. */
+  currency: "INR" | null;
+  isIndex: boolean;
+  /** The newest daily bar (its session start, ISO). */
+  asOf: string;
+}
+
+/** `GET /api/stock-quotes?symbols=…` success body. */
+export interface StockQuotesDTO {
+  success: true;
+  schemaVersion: 1;
+  provider: "yahoo";
+  fetchedAt: string;
+  stale: boolean;
+  status: MarketStatusDTO;
+  /** Requested symbols, normalized, sorted, de-duplicated. */
+  symbols: string[];
+  quotes: BatchQuoteDTO[];
+  /** Symbols the provider doesn't know (never priced; kept in the list). */
+  missing: string[];
+  /** Symbols whose batch failed this time (try again later). */
+  failed: string[];
+}

@@ -91,7 +91,7 @@ export function toGluestackVars(theme: Pick<ThemeTokens, "colors" | "chart">) {
     "--warning-foreground": c.warningForeground,
     "--border": c.border,
     "--input": c.border,
-    "--ring": c.primary,
+    "--ring": c.accent,
     "--chart-1": chart[0],
     "--chart-2": chart[1],
     "--chart-3": chart[2],

@@ -7,6 +7,7 @@ import {
   collection,
   doc,
   getDocs,
+  getDocsFromCache,
   limit,
   onSnapshot,
   orderBy,
@@ -51,6 +52,8 @@ import type { Subscription } from "@/shared/types/subscription";
 import { parseLocalDate, todayDateKey } from "@/shared/utils/dates";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import { perfEvent } from "@/lib/perf";
+import { readCategoriesLoadRecord, writeCategoriesLoadRecord } from "@/lib/categoryRevision";
+import { categoriesRevisionOf, loadCategoriesByRevision } from "@/shared/utils/categoryRevision";
 import {
   canAutoPostSubscriptions,
   evaluateSubscriptionDue,
@@ -251,6 +254,12 @@ export function ExpenseReferenceDataProvider({
     skippedAccountToastShown.current = false;
   }, [uid]);
 
+  // SPENDLY-660: categories are a near-static catalogue (~190 docs per user),
+  // so instead of a live listener (re-billed in full after every 30-minute
+  // gap) this listens to `meta/categories` (1 doc) and loads the catalogue
+  // when its revision changes: from the Firestore cache when this device
+  // already loaded that revision from the server, else from the server.
+  // Writers bump the revision (lib/categoryRevision.ts).
   useEffect(() => {
     if (!uid || !db) {
       setCategories([]);
@@ -259,41 +268,90 @@ export function ExpenseReferenceDataProvider({
     }
     setCategoriesLoading(true);
     const path = `users/${uid}/categories`;
+    const metaPath = `users/${uid}/meta/categories`;
+    const categoriesQuery = query(collection(db, "users", uid, "categories"), limit(500));
+    // A retry (categoriesAttempt > 0) skips the cache once.
+    let force = categoriesAttempt > 0;
+    let cancelled = false;
+    let loadedRevision: number | null = null;
+    let loadSeq = 0;
     let unsub: (() => void) | null = null;
+    const toCategories = (snap: { docs: { id: string; data(): unknown }[] }) =>
+      snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as Category));
+    const fail = (failure: LoadFailure) => {
+      if (cancelled) return;
+      setCategoriesError(failure);
+      setCategoriesLoading(false);
+    };
+
+    const apply = (seq: number, revision: number, loaded: Category[], fromCache: boolean) => {
+      if (cancelled || seq !== loadSeq) return;
+      perfEvent("firestore_first_snapshot", { collection: "categories", docCount: loaded.length, fromCache });
+      loadedRevision = revision;
+      setCategories(loaded);
+      setCategoriesError(null);
+      setCategoriesLoading(false);
+    };
+
+    // This device's own edit: the cache already holds it, and the list was
+    // current before it, so re-read the cache (no billed reads). The saved
+    // server record stays at the old revision, so the next launch confirms
+    // with the server once. Another device's concurrent edit arrives as a
+    // later server snapshot with a different revision and reloads normally.
+    const loadOwnWrite = (revision: number) => {
+      const seq = ++loadSeq;
+      getDocsFromCache(categoriesQuery)
+        .then((snap) => apply(seq, revision, toCategories(snap), true))
+        .catch(() => {
+          if (!cancelled && seq === loadSeq) load(revision);
+        });
+    };
+
+    const load = (revision: number) => {
+      const seq = ++loadSeq;
+      const forceThis = force;
+      force = false;
+      loadCategoriesByRevision<Category>({
+        revision,
+        force: forceThis,
+        nowMs: Date.now(),
+        readRecord: () => readCategoriesLoadRecord(uid),
+        writeRecord: (record) => writeCategoriesLoadRecord(uid, record),
+        fromCache: async () => {
+          const snap = await getDocsFromCache(categoriesQuery);
+          return { docs: toCategories(snap), fromCache: true };
+        },
+        fromServer: async () => {
+          const snap = await getDocs(categoriesQuery);
+          logDirectRead(path, snap.docs.length, snap.metadata.fromCache ? "cache" : "server", {
+            feature: "reference",
+            queryShape: "categories",
+          });
+          return { docs: toCategories(snap), fromCache: snap.metadata.fromCache };
+        },
+      })
+        .then(({ categories: loaded, source }) => apply(seq, revision, loaded, source === "cache"))
+        .catch(snapshotErrorHandler("snapshot.categories", fail, "Couldn't load your categories."));
+    };
+
     const cancelIdle = scheduleIdleWork(() => {
       perfEvent("firestore_listener_start", { collection: "categories" });
       unsub = onSnapshot(
-        // SPENDLY-412: defensive bound — categories are a small, user-curated
-        // list (observed <50 docs), not expected to need the full ledger's
-        // unbounded shape, but a cap keeps a runaway account from paying for it.
-        query(collection(db, "users", uid, "categories"), limit(500)),
+        doc(db, "users", uid, "meta", "categories"),
         (snap) => {
-          logQuerySnapshot(path, snap, { feature: "reference", queryShape: "categories" });
-          notifyReadModelSnapshot(snap);
-          perfEvent("firestore_first_snapshot", {
-            collection: "categories",
-            docCount: snap.docs.length,
-            fromCache: snap.metadata.fromCache,
-          });
-          setCategories(
-            snap.docs.map((d) => ({ id: d.id, ...d.data() } as Category))
-          );
-          setCategoriesError(null);
-          setCategoriesLoading(false);
+          logQuerySnapshot(metaPath, snap, { feature: "reference", queryShape: "categories revision" });
+          const revision = categoriesRevisionOf(snap.data());
+          if (revision === loadedRevision) return;
+          if (snap.metadata.hasPendingWrites && loadedRevision !== null) loadOwnWrite(revision);
+          else load(revision);
         },
-        snapshotErrorHandler(
-          "snapshot.categories",
-          (failure) => {
-            setCategoriesError(failure);
-            setCategoriesLoading(false);
-          },
-          "Couldn't load your categories."
-        )
+        snapshotErrorHandler("snapshot.categoriesRevision", fail, "Couldn't load your categories.")
       );
     });
     return () => {
+      cancelled = true;
       cancelIdle();
-      forgetSnapshotPath(path);
+      forgetSnapshotPath(metaPath);
       if (unsub) unsub();
     };
   }, [uid, db, categoriesAttempt, setCategoriesError]);

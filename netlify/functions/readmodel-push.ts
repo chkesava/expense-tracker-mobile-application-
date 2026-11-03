@@ -66,10 +66,12 @@ export function livePushPorts(input: {
       return { readsUsed: record.readsUsed, ok: record.status !== "failed" && record.failures === 0 };
     },
     async record(stats) {
-      await client.rpc("readmodel_push_record", {
+      // SPENDLY-662: supabase-js returns errors instead of throwing.
+      const { error } = await client.rpc("readmodel_push_record", {
         p_requests: stats.requests, p_docs: stats.docs, p_user_syncs: stats.userSyncs,
         p_rejected: stats.rejected, p_failed: stats.failed, p_reads: stats.reads,
       });
+      if (error) throw new Error(`readmodel_push_record: ${error.message}`);
     },
     log: input.log,
   };
@@ -116,7 +118,8 @@ export const handler = async (event: PushEvent): Promise<PushResult> => {
     const ports = configured()
       ? livePushPorts({
           ...init(),
-          verifyIdToken: (token) => getAuth().verifyIdToken(token, true),
+          // SPENDLY-662: no revocation check (see _readmodelPushCore.ts).
+          verifyIdToken: (token) => getAuth().verifyIdToken(token),
           enabled: true,
           limit: Number(env("READMODEL_PUSH_LIMIT") || 120),
           maxReadsPerDay: Number(env("READMODEL_MAX_READS_PER_DAY") || 12000),

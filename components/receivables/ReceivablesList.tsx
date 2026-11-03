@@ -233,7 +233,7 @@ export function ReceivablesList() {
                 }
               : undefined
           }
-          tip="Lent money decreases your account balance but is recorded as a receivable asset, never as an expense."
+          tip="Lent money decreases the account it was paid from (or none, if it was already recorded elsewhere) and is recorded as a receivable asset, never as an expense."
         />
       ) : (
         <View style={{ gap: 12 }}>

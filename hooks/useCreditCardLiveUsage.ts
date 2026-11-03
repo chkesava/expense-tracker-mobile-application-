@@ -9,6 +9,7 @@ import { useIncomes } from "@/hooks/useIncomes";
 import { useSettings } from "@/providers/SettingsProvider";
 import type { Account } from "@/shared/types/expense";
 import { computeOutstandingCredit } from "@/shared/utils/accountBalance";
+import { buildCreditCardLedger, type CreditCardLedger } from "@/shared/utils/creditCardLedger";
 import { todayDateKey } from "@/shared/utils/dates";
 import { roundMoney } from "@/shared/utils/money";
 
@@ -61,4 +62,40 @@ export function useCreditCardLiveUsage(cards: readonly Account[]): Map<string, L
     }
     return out;
   }, [cards, expenses, incomes, entries, transfers, payments, bills, today]);
+}
+
+/**
+ * SPENDLY-675 — the full ledger for one card, from the same inputs as
+ * {@link useCreditCardLiveUsage}, so a statement screen settles bills exactly
+ * as the card's Total outstanding and Statement due do. Pair with
+ * `creditCardBillView` instead of reading a bill's stored paid/remaining.
+ */
+export function useCreditCardLedger(card: Account | undefined): {
+  ledger: CreditCardLedger | undefined;
+  today: string;
+} {
+  const { expenses } = useExpenses();
+  const { incomes } = useIncomes();
+  const { entries } = useAccountEntries();
+  const { transfers } = useAccountTransfers();
+  const { payments } = useAccountPayments();
+  const { bills } = useCreditCardBills();
+  const { settings } = useSettings();
+  const today = todayDateKey(settings.timezone);
+
+  const ledger = useMemo(
+    () =>
+      card
+        ? buildCreditCardLedger({
+            account: card,
+            expenses,
+            payments,
+            bills,
+            movements: { incomes, entries, transfers },
+            today,
+          })
+        : undefined,
+    [card, expenses, incomes, entries, transfers, payments, bills, today]
+  );
+  return { ledger, today };
 }

@@ -39,12 +39,12 @@ const buttonStyle = tva({
       default:
         'bg-primary data-[hover=true]:bg-primary/90 data-[active=true]:bg-primary/90',
       destructive:
-        'bg-destructive data-[hover=true]:bg-destructive/90 data-[active=true]:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60',
+        'bg-destructive data-[hover=true]:bg-destructive/90 data-[active=true]:bg-destructive/90 focus-visible:ring-destructive/20',
       outline:
-        'border border-border bg-background shadow-xs data-[hover=true]:bg-accent data-[active=true]:bg-accent dark:bg-input/[0.045] dark:border-border/90 dark:data-[hover=true]:bg-input/[0.075] dark:data-[active=true]:bg-input/[0.075]',
+        'border border-border bg-background shadow-xs data-[hover=true]:bg-accent data-[active=true]:bg-accent',
       secondary:
         'bg-secondary text-secondary-foreground data-[hover=true]:bg-secondary/80 data-[active=true]:bg-secondary/80',
-      ghost: 'data-[hover=true]:bg-accent data-[active=true]:bg-accent dark:data-[hover=true]:bg-accent/50 dark:data-[active=true]:bg-accent/50',
+      ghost: 'data-[hover=true]:bg-accent data-[active=true]:bg-accent',
       link: 'text-primary underline-offset-4 data-[hover=true]:underline data-[active=true]:underline',
     },
     size: {
@@ -53,8 +53,37 @@ const buttonStyle = tva({
       lg: 'min-h-10 rounded-md px-8',
       icon: 'min-h-9 min-w-9',
     },
+    // SPENDLY-677: where the dark styles come from. "device" is the stock
+    // `dark:` behaviour (NativeWind follows the phone); the Spendly wrapper
+    // pins "light"/"dark" to the Expense palette (gluestackSchemeFor).
+    scheme: {
+      device: '',
+      light: '',
+      dark: '',
+    },
+  },
+  compoundVariants: [
+    { variant: 'destructive', scheme: 'device', class: 'dark:focus-visible:ring-destructive/40 dark:bg-destructive/60' },
+    { variant: 'destructive', scheme: 'dark', class: 'focus-visible:ring-destructive/40 bg-destructive/60' },
+    {
+      variant: 'outline',
+      scheme: 'device',
+      class:
+        'dark:bg-input/[0.045] dark:border-border/90 dark:data-[hover=true]:bg-input/[0.075] dark:data-[active=true]:bg-input/[0.075]',
+    },
+    {
+      variant: 'outline',
+      scheme: 'dark',
+      class: 'bg-input/[0.045] border-border/90 data-[hover=true]:bg-input/[0.075] data-[active=true]:bg-input/[0.075]',
+    },
+    { variant: 'ghost', scheme: 'device', class: 'dark:data-[hover=true]:bg-accent/50 dark:data-[active=true]:bg-accent/50' },
+    { variant: 'ghost', scheme: 'dark', class: 'data-[hover=true]:bg-accent/50 data-[active=true]:bg-accent/50' },
+  ],
+  defaultVariants: {
+    scheme: 'device',
   },
 });
+export { buttonStyle };
 const buttonTextStyle = tva({
   base: 'web:select-none font-sans',
   parentVariants: {
@@ -140,12 +169,12 @@ type IButtonProps = Omit<
 const Button = React.forwardRef<
   React.ElementRef<typeof UIButton>,
   IButtonProps
->(({ className, variant = 'default', size = 'default', ...props }, ref) => {
+>(({ className, variant = 'default', size = 'default', scheme = 'device', ...props }, ref) => {
   return (
     <UIButton
       ref={ref}
       {...props}
-      className={buttonStyle({ variant, size, class: className })}
+      className={buttonStyle({ variant, size, scheme, class: className })}
       context={{ variant, size }}
     />
   );

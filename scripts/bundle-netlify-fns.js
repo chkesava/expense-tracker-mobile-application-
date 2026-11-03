@@ -36,6 +36,8 @@ const FUNCTIONS = (module.exports.FUNCTIONS = [
   "market-overview",
   // SPENDLY-647: NIFTY 500 rows for the stock screener.
   "screener-universe",
+  // SPENDLY-656: batched watchlist quotes.
+  "stock-quotes",
   // SPENDLY-505: gives a signed-in user the role Supabase's read model needs.
   "readmodel-claims",
   // SPENDLY-583: copies a user's just-saved documents to the read model.

@@ -44,7 +44,7 @@ export const TopCategoriesWidget = React.memo(function TopCategoriesWidget({
   );
 
   /** Darkest = largest share; ramp carries no positive/negative meaning. */
-  const barColors = categoryRamp(theme.colors);
+  const barColors = categoryRamp(theme);
 
   const openAnalytics = () => router.push("/insights" as Href);
 

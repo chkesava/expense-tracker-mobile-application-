@@ -186,6 +186,7 @@ After this device saves synced documents, the app asks the Netlify function `rea
 | Change the per-account limit | Netlify env `READMODEL_PUSH_LIMIT` (default 120 cost units per 10 min: 1 per document, 30 per per-user sync) |
 | See what pushes are doing | The hourly health summary's "Per-write pushes today" line, or `select * from public.push_daily order by day desc;` |
 | Health warns "N per-write push(es) failed today" | Netlify → Functions → `readmodel-push` → logs. Common causes: Supabase paused, a migration not applied (`20261028000000`), or Netlify env missing. The nightly run repairs the data either way |
+| Health shows pushes **rejected**, or "—" while people are saving | Netlify → Functions → `readmodel-push` → logs. Since SPENDLY-662 every rejection is counted and logged as `[PUSH] rejected: <reason>`: `token <firebase code>` (e.g. `auth/id-token-expired` is normal now and then; a constant `auth/insufficient-permission` or `auth/argument-error` means the site's `FIREBASE_SERVICE_ACCOUNT` can't verify app tokens), `no-token`, `not-allowed`, `bad-request`, `purged`, `rate-limited`. `[PUSH] record failed` means the counters can't be written (migration `20261028000000` or the service-role key) |
 
 ## Recovery drills (SPENDLY-520)
 

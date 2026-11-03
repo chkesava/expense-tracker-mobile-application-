@@ -390,7 +390,7 @@ function TransactionsTab({
   const budgeted = useMemo(() => [...new Set(items.map((b) => b.category))], [items]);
   const scoped = useMemo(() => rows.filter((r) => budgeted.includes(r.category)), [rows, budgeted]);
   const summaryTotal = budgeted.reduce((sum, c) => sum + (current?.categoryTotals?.[c] ?? 0), 0);
-  const options = budgeted.map((c, i) => ({ value: c, label: c, color: spendingSliceColor(i, c, theme.colors, "") }));
+  const options = budgeted.map((c, i) => ({ value: c, label: c, color: spendingSliceColor(i, c, theme, "") }));
   if (budgeted.length === 0) {
     return (
       <EmptyState

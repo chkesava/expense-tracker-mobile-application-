@@ -384,10 +384,11 @@ function AppShellInner() {
 }
 
 /**
- * SPENDLY-604: the Expense app is always dark. One override at the shell
- * covers every screen, the nav, the header, modals, sheets and the Gluestack
- * overlay, without touching the user's saved theme (Ganesh Seva and Nutrition
- * render outside this layout and keep following it).
+ * SPENDLY-604: the Expense app renders in the user's Expense palette. One
+ * override at the shell covers every screen, the nav, the header, modals,
+ * sheets and the Gluestack overlay, without touching the user's saved theme
+ * (Ganesh Seva and Nutrition render outside this layout and keep following
+ * it). The palette is dark unless a light one is picked (SPENDLY-677).
  */
 export default function AppLayout() {
   // SPENDLY-618: the user's Expense palette (Midnight Slate by default).
@@ -396,7 +397,7 @@ export default function AppLayout() {
   useRegisterShellTheme(expensePalette);
   return (
     <ThemeOverride themeName={expensePalette}>
-      <StatusBar style="light" />
+      <StatusBar style={themeUsesDarkPalette(expensePalette) ? "light" : "dark"} />
       <ProtectedAppLayout />
     </ThemeOverride>
   );

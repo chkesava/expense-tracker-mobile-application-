@@ -127,6 +127,7 @@ export function screenerRowInstrument(row: ScreenerRowDTO): Instrument {
     changePercent: view.changePercent,
     direction: view.direction,
     accessibilityLabel: view.accessibilityLabel,
+    listing: `NSE · ${row.sector}`,
   };
   return { kind: "stock", item };
 }

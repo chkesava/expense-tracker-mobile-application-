@@ -79,7 +79,6 @@ function PortfolioDashboardInner({
 
   const {
     holdings,
-    watchlist,
     alerts,
     orders,
     snapshots,
@@ -89,8 +88,6 @@ function PortfolioDashboardInner({
     loading,
     saveSettings,
     saveDailySnapshot,
-    addToWatchlist,
-    removeFromWatchlist,
     addAlert,
     toggleAlert,
     deleteAlert,
@@ -110,12 +107,8 @@ function PortfolioDashboardInner({
           symbol: quoteKeyFor(h),
           instrumentType: h.instrumentType,
         })),
-        ...watchlist.map((w) => ({
-          symbol: w.yahooSymbol,
-          instrumentType: w.instrumentType,
-        })),
       ],
-    [holdings, watchlist]
+    [holdings]
   );
 
   const {
@@ -307,13 +300,7 @@ function PortfolioDashboardInner({
 
   const otherTab =
     subTab === "watchlist" ? (
-      <WatchlistTab
-        watchlist={watchlist}
-        quotes={quotes}
-        currency={displayCurrency}
-        onAdd={addToWatchlist}
-        onRemove={removeFromWatchlist}
-      />
+      <WatchlistTab />
     ) : subTab === "orders" ? (
       <OrdersTab
         orders={orders}
