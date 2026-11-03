@@ -108,7 +108,11 @@ describe("every direct writer of a synced collection calls a read-model hook", (
     }
   }
   const NAMES = [...[...SYNCED].map((c) => `"${c}"`), ...[...CONSTS].map((c) => `${c}\\b`)].join("|");
-  const SYNCED_REF = `(?:doc|collection)\\(\\s*(?:collection\\(\\s*)?\\w+\\s*,\\s*"users"\\s*,\\s*[\\w.]+\\s*,\\s*(?:${NAMES})`;
+  // Segments (`db, "users", uid, "expenses"`) or a template path (SPENDLY-591:
+  // useSips writes `users/${uid}/sipPlans`).
+  const SYNCED_REF =
+    `(?:doc|collection)\\(\\s*(?:collection\\(\\s*)?\\w+\\s*,\\s*` +
+    `(?:"users"\\s*,\\s*[\\w.]+\\s*,\\s*(?:${NAMES})|\`users/\\$\\{[\\w.]+\\}/(?:${[...SYNCED].join("|")})\`)`;
 
   function writesSyncedCollection(text: string): boolean {
     if (new RegExp(WRITE + SYNCED_REF).test(text)) return true;
@@ -138,7 +142,45 @@ describe("every direct writer of a synced collection calls a read-model hook", (
       "hooks/useCategories.ts",
       "services/portfolio/investmentCash.ts",
       "services/ledger/rebuildFinancialSummaries.ts",
+      // SPENDLY-590: found through name constants.
+      "hooks/useEpfContributions.ts",
+      "services/portfolio/holdingAdjustments.ts",
+      // SPENDLY-591: a template path, and plain literals.
+      "hooks/useSips.ts",
+      "hooks/useCategoryBudgets.ts",
+      "services/sip/executeSips.ts",
     ]) {
+      expect(writers).toContain(known);
+    }
+  });
+
+  // SPENDLY-591 part C: users/{uid} itself is copied (allowlisted fields only).
+  // A writer of it must tell the read model, unless it writes only fields the
+  // copy leaves out.
+  const ROOT_WRITE_OK: Record<string, string> = {
+    "providers/PrivacyPinProvider.tsx": "clears the legacy PIN fields (never copied)",
+    "components/onboarding/SetupWizardModal.tsx": "username and avatar (identity, never copied)",
+    "components/settings/sections/ProfileSection.tsx": "profile identity fields (never copied)",
+    "lib/ensureCategoryHierarchy.ts": "bulk migration: push user sync",
+  };
+  const ROOT_REF = `doc\\(\\s*\\w+\\s*,\\s*"users"\\s*,\\s*[\\w.]+\\s*\\)`;
+
+  it("every writer of the users/{uid} document calls a hook or writes only uncopied fields", () => {
+    const writers: string[] = [];
+    const missing: string[] = [];
+    for (const file of [...FILES, ...sources(join(ROOT, "theme"))]) {
+      const rel = relative(ROOT, file).replace(/\\/g, "/");
+      if (SKIP.test(rel)) continue;
+      const text = readFileSync(file, "utf8");
+      const vars = [...text.matchAll(new RegExp(`(?:const|let)\\s+(\\w+)\\s*=\\s*${ROOT_REF}`, "g"))].map((m) => m[1]);
+      const writes =
+        new RegExp(WRITE + ROOT_REF).test(text) || vars.some((v) => new RegExp(`${WRITE}${v}\\b`).test(text));
+      if (!writes) continue;
+      writers.push(rel);
+      if (!HOOK.test(text) && !ROOT_WRITE_OK[rel]) missing.push(rel);
+    }
+    expect(missing, `users/{uid} writers with no read-model hook: ${missing.join(", ")}`).toEqual([]);
+    for (const known of ["providers/SettingsProvider.tsx", "theme/ThemeProvider.tsx", "providers/PrivacyPinProvider.tsx"]) {
       expect(writers).toContain(known);
     }
   });

@@ -31,6 +31,11 @@ describe("buildClientEntry (SPENDLY-670)", () => {
     expect(buildClientEntry({ uid: "u1", collection: "expenses", docId: "e1", doc: null, at: at(1) })).toMatchObject({ key: "expenses/e1" });
     expect(buildClientEntry({ uid: "u1", collection: "expenses", docId: "e1", doc: null, at: at(1) })?.row).toBeUndefined();
     expect(buildClientEntry({ uid: "u1", collection: "watchlist", docId: "x", doc: null, at: at(1) })).toBeNull();
+    // SPENDLY-591: the users/{uid} copy is server-push only, never rm_client_apply.
+    expect(buildClientEntry({ uid: "u1", collection: "userSettings", docId: "settings", doc: { id: "u1", data: { currency: "INR" } }, at: at(1) })).toBeNull();
+    // A nested write keys on its composite id and keeps the real path.
+    const item = buildClientEntry({ uid: "u1", collection: "watchlists/items", docId: "default/INFY.NS", doc: { id: "INFY.NS", data: { symbol: "INFY" } }, at: at(1) });
+    expect(item).toMatchObject({ key: "watchlist_items/default/INFY.NS", row: { list_id: "default", source_path: "users/u1/watchlists/default/items/INFY.NS" } });
   });
 });
 

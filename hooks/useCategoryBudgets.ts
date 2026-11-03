@@ -1,14 +1,15 @@
 import { useEffect } from "react";
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
   serverTimestamp,
+  setDoc,
 } from "@/lib/firestore";
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { noteDirectWrites } from "@/lib/readModelWriteHooks";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
@@ -45,9 +46,11 @@ export const useCategoryBudgets = (options?: { enabled?: boolean }) => {
     if (!uid || !db || !category.trim() || !month || amount <= 0) return;
 
     try {
+      // A pre-made id (same as addDoc) so the read model can be told the path.
+      const ref = doc(collection(db, "users", uid, "categoryBudgets"));
       const outcome = await commitWrite(
         () =>
-          addDoc(collection(db, "users", uid, "categoryBudgets"), {
+          setDoc(ref, {
             category: category.trim(),
             ...(subcategory?.trim() ? { subcategory: subcategory.trim() } : {}),
             amount: Number(amount),
@@ -56,6 +59,7 @@ export const useCategoryBudgets = (options?: { enabled?: boolean }) => {
           }),
         { label: "budget" }
       );
+      noteDirectWrites(uid, [ref.path]);
       toast.success(
         writeSavedMessage(
           outcome,
@@ -79,6 +83,7 @@ export const useCategoryBudgets = (options?: { enabled?: boolean }) => {
         () => deleteDoc(doc(db, "users", uid, "categoryBudgets", id)),
         { label: "budget deletion" }
       );
+      noteDirectWrites(uid, [`users/${uid}/categoryBudgets/${id}`]);
       toast.success(writeSavedMessage(outcome, "Category budget deleted"));
     } catch (err) {
       logError("categoryBudgets.deleteCategoryBudget", err);

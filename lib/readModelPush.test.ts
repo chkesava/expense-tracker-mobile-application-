@@ -124,7 +124,7 @@ describe("the two hooks (SPENDLY-583)", () => {
     notifyReadModelWrites("u1", [
       "users/u1/expenses/e1",
       "users/u1/meta/outbox/acks/x",
-      "users/u1/trips/t1",
+      "users/u1/notifications/n1",
       "users/u1_duress/expenses/d1",
       "users/u2/expenses/z",
     ]);

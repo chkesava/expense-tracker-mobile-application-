@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { mapDocument, READ_MODEL_TABLES, SPEC_BY_COLLECTION, timestampMillis, toJsonDoc } from "./mapping";
+import { firestorePathOf, mapDocument, READ_MODEL_TABLES, SPEC_BY_COLLECTION, timestampMillis, toJsonDoc } from "./mapping";
 
 const migrationsDir = path.resolve(__dirname, "../../../supabase-readmodel/supabase/migrations");
 const sql = readdirSync(migrationsDir)
@@ -32,7 +32,7 @@ describe("read-model mapping (SPENDLY-506)", () => {
   it.each(READ_MODEL_TABLES.map((s) => [s.table, s] as const))("%s: spec covers exactly the typed columns", (table, spec) => {
     const typed = tableColumns(table).filter((c) => !CONTRACT.has(c));
     expect(typed.length).toBeGreaterThan(0);
-    const mapped = [...spec.fields.map((f) => f.column), ...(spec.derivedMonth ? ["month"] : [])];
+    const mapped = [...(spec.parent ? [spec.parent.column] : []), ...spec.fields.map((f) => f.column), ...(spec.derivedMonth ? ["month"] : [])];
     expect([...mapped].sort()).toEqual([...typed].sort());
   });
 
@@ -135,6 +135,86 @@ describe("read-model mapping (SPENDLY-506)", () => {
     const profile = mapDocument(SPEC_BY_COLLECTION.get("epfProfile")!, "u1", { id: "main", updateTime: UPDATE_TIME, data: { uan: "100000000000", employeeName: "A", activeEstablishmentId: null } });
     expect(profile).toMatchObject({ active_establishment_id: null, mapping_status: "mapped" });
     expect(Object.keys(profile)).not.toContain("uan");
+  });
+
+  it("SPENDLY-591: trip and SIP dates are copied verbatim (no UTC day cut); SIP units keep their decimals", () => {
+    const trip = mapDocument(SPEC_BY_COLLECTION.get("trips")!, "u1", {
+      id: "t1",
+      updateTime: UPDATE_TIME,
+      data: { destination: "Goa", startDate: "2026-10-31T18:30:00.000Z", endDate: "2026-11-04T18:30:00.000Z", totalBudget: 20000, spentAmount: 4250.5, status: "active" },
+    });
+    expect(trip).toMatchObject({ start_date: "2026-10-31T18:30:00.000Z", end_date: "2026-11-04T18:30:00.000Z", spent_amount: 4250.5, mapping_status: "mapped" });
+    const plan = mapDocument(SPEC_BY_COLLECTION.get("sipPlans")!, "u1", {
+      id: "p1",
+      updateTime: UPDATE_TIME,
+      data: { symbol: "NIFTYBEES", investmentAmount: 5000, totalInvested: 15000, totalUnits: 55.12345678, executionDay: 5, executionCount: 3, nextExecutionDate: "2026-12-04T18:30:00.000Z", skipNextExecution: false, status: "active" },
+    });
+    expect(plan).toMatchObject({ total_units: 55.12345678, execution_count: 3, next_execution_date: "2026-12-04T18:30:00.000Z", mapping_status: "mapped" });
+  });
+
+  it("SPENDLY-591: ms timestamps map; arrays and maps stay in doc only", () => {
+    const decision = mapDocument(SPEC_BY_COLLECTION.get("decisions")!, "u1", {
+      id: "d1",
+      updateTime: UPDATE_TIME,
+      data: { title: "Buy a car?", category: "purchase", status: "decided", revision: 2, confidence: 4, createdAtMs: 1_790_000_000_000, decidedAtMs: 1_790_000_100_000, alternatives: [{ id: "a" }], context: { why: "x" } },
+    });
+    expect(decision).toMatchObject({ revision: 2, confidence: 4, created_at: new Date(1_790_000_000_000).toISOString(), decided_at: new Date(1_790_000_100_000).toISOString(), mapping_status: "mapped" });
+    expect(decision).not.toHaveProperty("alternatives");
+    expect(decision.doc).toMatchObject({ alternatives: [{ id: "a" }] });
+    const month = mapDocument(SPEC_BY_COLLECTION.get("netWorthHistory")!, "u1", {
+      id: "2026-10",
+      updateTime: UPDATE_TIME,
+      data: { month: "2026-10", schemaVersion: 1, points: { "01": { netWorth: 100, assets: 150, liabilities: 50, recordedAtMs: 1 } } },
+    });
+    // The contract's schema_version is the read model's; the doc's own is history_schema_version.
+    expect(month).toMatchObject({ month: "2026-10", history_schema_version: 1, mapping_status: "mapped" });
+    expect(month.doc).toMatchObject({ points: { "01": { netWorth: 100 } } });
+  });
+
+  it("SPENDLY-591: the users/{uid} copy keeps only allowlisted settings; PIN, lock, role and identity never leave Firestore", () => {
+    const settings = SPEC_BY_COLLECTION.get("userSettings")!;
+    const row = mapDocument(settings, "u1", {
+      id: "u1",
+      updateTime: UPDATE_TIME,
+      data: {
+        currency: "INR", theme: "slate", themeMode: "dark", expensePalette: "forest", monthlyBudget: "45000",
+        enableInvestments: true, dashboardOrder: ["a", "b"],
+        // Never copied:
+        privacyPin: "1234", fakePin: "9999", lockPastMonths: true, lockOnInactivity: true, inactivityTimeout: 5,
+        lockOnAppSwitch: true, ghostMode: true, role: "SUPER_ADMIN", username: "kesava", email: "x@y.z",
+        displayName: "K", photoURL: "https://p", phone: "+91", avatar: "a1", upiId: "k@upi",
+        // The legacy nested map: its settings come along (top level wins), its PINs don't.
+        settings: { language: "te", currency: "USD", privacyPin: "1111", fakePin: "2222" },
+      },
+    });
+    expect(row).toMatchObject({
+      doc_id: "settings", source_path: "users/u1", currency: "INR", language: "te", theme: "slate", theme_mode: "dark",
+      expense_palette: "forest", monthly_budget: 45000, enable_investments: true, mapping_status: "mapped",
+    });
+    const copied = JSON.stringify(row);
+    for (const secret of ["1234", "9999", "1111", "2222", "SUPER_ADMIN", "kesava", "x@y.z", "https://p", "+91", "k@upi"]) {
+      expect(copied).not.toContain(secret);
+    }
+    expect(Object.keys(row.doc as object).sort()).toEqual(
+      ["currency", "dashboardOrder", "enableInvestments", "expensePalette", "language", "monthlyBudget", "theme", "themeMode"]
+    );
+  });
+
+  it("SPENDLY-591: a nested watchlist item keys on '{listId}/{itemId}', with its list id and real path", () => {
+    const items = SPEC_BY_COLLECTION.get("watchlists/items")!;
+    const row = mapDocument(items, "u1", {
+      id: "wl_abc/INFY.NS",
+      updateTime: UPDATE_TIME,
+      data: { symbol: "INFY", yahooSymbol: "INFY.NS", name: "Infosys", exchange: "NSE", instrumentType: "EQUITY", order: 2.25 },
+    });
+    expect(row).toMatchObject({
+      doc_id: "wl_abc/INFY.NS", list_id: "wl_abc", source_path: "users/u1/watchlists/wl_abc/items/INFY.NS",
+      symbol: "INFY", sort_order: 2.25, mapping_status: "mapped",
+    });
+    expect(firestorePathOf(items, "u1", "wl_abc/INFY.NS")).toBe("users/u1/watchlists/wl_abc/items/INFY.NS");
+    // A bad field leaves the row unmapped but keeps the list id (it comes from the path).
+    const bad = mapDocument(items, "u1", { id: "wl_abc/X", updateTime: UPDATE_TIME, data: { order: "first" } });
+    expect(bad).toMatchObject({ mapping_status: "unmapped", list_id: "wl_abc", sort_order: null });
   });
 
   it("SPENDLY-609: maps a goal, including a legacy one with an empty deadline and no status", () => {

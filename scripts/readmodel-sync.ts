@@ -19,11 +19,12 @@
  * Firestore (counting reads) and writes nothing anywhere.
  */
 import { applicationDefault, cert, initializeApp } from "firebase-admin/app";
-import { FieldPath, getFirestore, Timestamp, type DocumentSnapshot, type Firestore, type Query } from "firebase-admin/firestore";
+import { FieldPath, getFirestore, Timestamp, type CollectionReference, type DocumentSnapshot, type Firestore, type Query } from "firebase-admin/firestore";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-import type { ReadModelRow } from "../shared/utils/readModel/mapping";
-import { hashUid, runSync, type Checkpoint, type RunRecord, type SinkPort, type SourcePort, type SyncMode } from "./lib/readmodelSyncCore";
+import { SPEC_BY_COLLECTION, type ReadModelRow } from "../shared/utils/readModel/mapping";
+import { hashUid, runSync, type Checkpoint, type Page, type PageRequest, type RunRecord, type SinkPort, type SourcePort, type SyncMode } from "./lib/readmodelSyncCore";
+import { readNestedPage } from "./lib/readmodelNestedPages";
 import { purgedUidsBatch } from "./lib/readmodelPurged";
 import { memorySink } from "./lib/readmodelSyncMemory";
 
@@ -46,18 +47,42 @@ export function firestoreReader(db: Firestore): SourcePort {
       return (await db.collection("users").listDocuments()).map((ref) => ref.id);
     },
     async readPage(uid, collection, request) {
-      const base = db.collection("users").doc(uid).collection(collection);
-      let query: Query =
-        request.kind === "all"
-          ? base.orderBy(FieldPath.documentId())
-          : base.where(request.field, ">", Timestamp.fromMillis(request.sinceMs)).orderBy(request.field);
-      if (request.after) query = query.startAfter(request.after as DocumentSnapshot);
-      const snap = await query.limit(request.limit).get();
-      return {
-        docs: snap.docs.map((d) => ({ id: d.id, data: d.data(), updateTime: d.updateTime })),
-        next: snap.docs.length ? snap.docs[snap.docs.length - 1] : undefined,
-      };
+      const root = SPEC_BY_COLLECTION.get(collection)?.root;
+      if (root) {
+        // The users/{uid} document: one read, one page. It has no reliable
+        // updatedAt, so an incremental pass compares Firestore's update time.
+        if (request.after !== undefined) return { docs: [], reads: 0 };
+        const snap = await db.collection("users").doc(uid).get();
+        const fresh = request.kind === "all" || (snap.updateTime?.toMillis() ?? 0) > request.sinceMs;
+        return {
+          docs: snap.exists && fresh ? [{ id: root.docId, data: snap.data() ?? {}, updateTime: snap.updateTime }] : [],
+          reads: 1,
+        };
+      }
+      const parent = SPEC_BY_COLLECTION.get(collection)?.parent;
+      if (parent) {
+        const parents = db.collection("users").doc(uid).collection(parent.collection);
+        return readNestedPage(
+          async () => (await parents.listDocuments()).map((ref) => ref.id),
+          (parentId, childRequest) => readCollectionPage(parents.doc(parentId).collection(parent.child), childRequest),
+          request
+        );
+      }
+      return readCollectionPage(db.collection("users").doc(uid).collection(collection), request);
     },
+  };
+}
+
+async function readCollectionPage(base: CollectionReference, request: PageRequest): Promise<Page> {
+  let query: Query =
+    request.kind === "all"
+      ? base.orderBy(FieldPath.documentId())
+      : base.where(request.field, ">", Timestamp.fromMillis(request.sinceMs)).orderBy(request.field);
+  if (request.after) query = query.startAfter(request.after as DocumentSnapshot);
+  const snap = await query.limit(request.limit).get();
+  return {
+    docs: snap.docs.map((d) => ({ id: d.id, data: d.data(), updateTime: d.updateTime })),
+    next: snap.docs.length ? snap.docs[snap.docs.length - 1] : undefined,
   };
 }
 

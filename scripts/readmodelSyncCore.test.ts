@@ -372,7 +372,7 @@ describe("account lifecycle (SPENDLY-508)", () => {
     expect(m.failures).toEqual([]);
   });
 
-  it("only ever requests the synced collections (Wave 1 + SPENDLY-609 goals + Waves 2 and 3), and never a duress tree", async () => {
+  it("only ever requests the synced collections (Wave 1 + SPENDLY-609 goals + Waves 2 and 3 + SPENDLY-591), and never a duress tree", async () => {
     const fs = world();
     const requested: string[] = [];
     const watched: SourcePort = {
@@ -383,15 +383,19 @@ describe("account lifecycle (SPENDLY-508)", () => {
       },
     };
     await runSync(watched, memorySink().sink, opts("full", T0));
-    const collections = new Set(requested.map((r) => r.split("/")[1]));
+    const collections = new Set(requested.map((r) => r.slice(r.indexOf("/") + 1)));
     expect([...collections].sort()).toEqual([
       "accountEntries", "accountPayments", "accountTransfers", "accountTypes", "accounts",
-      "borrowingRepayments", "borrowings", "categories", "creditCardBills",
+      "borrowingRepayments", "borrowings", "calendarReminders", "categories",
+      "categorizationRules", "categoryBudgets", "creditCardBills", "decisions",
       "epfContributionEvents", "epfContributions", "epfEstablishments", "epfInterestEntries",
       "epfProfile", "epfReconciliations", "epfTransferEvents", "epfTransfers", "epfWageHistory",
-      "expenses", "financialGoals", "goalEvents", "holdings", "incomes",
-      "investmentCashTransactions", "investments", "ledgerEvents", "portfolioSettings",
-      "portfolioTransactions", "receivableRepayments", "receivables", "subscriptions",
+      "expenses", "feeReviews", "feeSignalDismissals", "financialGoals", "goalEvents",
+      "goalFundingPlans", "holdings", "incomes", "investmentCashTransactions", "investments",
+      "ledgerEvents", "merchantOverrides", "netWorthHistory", "portfolioSettings",
+      "portfolioTransactions", "receivableRepayments", "receivables", "recurringDismissals",
+      "runwayOverrides", "runwaySettings", "sipPlans", "sipTransactions", "spaces",
+      "subscriptions", "trips", "userSettings", "virtualPositions", "watchlists", "watchlists/items", "whatIfScenarios",
     ]);
     for (const excluded of ["meta", "stats", "notifications", "financialSummaries", "daily_logs", "weight_history", "pandalMemberships", "goalNames"]) {
       expect(collections.has(excluded)).toBe(false);

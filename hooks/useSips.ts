@@ -12,6 +12,7 @@ import {
 } from "@/lib/firestore";
 import { logError, friendlyErrorMessage } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { noteDirectWrites } from "@/lib/readModelWriteHooks";
 import { useAuth } from "@/providers/AuthProvider";
 import { toast } from "@/lib/toast";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
@@ -112,6 +113,7 @@ export function useSips(options?: { enabled?: boolean }) {
           updatedAt: serverTimestamp(),
         };
         await setDoc(newDocRef, newPlan);
+        noteDirectWrites(uid, [newDocRef.path]);
         toast.success("SIP Plan created successfully");
         return newDocRef.id;
       } catch (err: any) {
@@ -133,6 +135,7 @@ export function useSips(options?: { enabled?: boolean }) {
           status: newStatus,
           updatedAt: serverTimestamp(),
         });
+        noteDirectWrites(uid, [`users/${uid}/sipPlans/${id}`]);
       } catch (err) {
         logError("sips.toggleSipPlan", err);
         toast.error("Failed to toggle SIP Plan status");
@@ -147,6 +150,7 @@ export function useSips(options?: { enabled?: boolean }) {
       if (!uid || !db) return;
       try {
         await deleteDoc(doc(db, `users/${uid}/sipPlans`, id));
+        noteDirectWrites(uid, [`users/${uid}/sipPlans/${id}`]);
         toast.success("SIP Plan deleted");
       } catch (err) {
         logError("sips.deleteSipPlan", err);
@@ -165,6 +169,7 @@ export function useSips(options?: { enabled?: boolean }) {
           skipNextExecution: !currentVal,
           updatedAt: serverTimestamp(),
         });
+        noteDirectWrites(uid, [`users/${uid}/sipPlans/${id}`]);
       } catch (err) {
         logError("sips.skipNextExecution", err);
         toast.error("Failed to update execution setting");

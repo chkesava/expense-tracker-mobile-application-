@@ -27,7 +27,7 @@ import { getFirestore, Timestamp, type Firestore } from "firebase-admin/firestor
 import { purgeReadModel } from "../netlify/functions/_readmodelPurge";
 import { fullLedgerFixture } from "../shared/__fixtures__/readModel/fullLedger";
 import { convergence, summarizeConvergence, type ConvergenceReport, type ModelRow } from "../shared/utils/readModel/convergence";
-import { READ_MODEL_TABLES, type SourceDoc, type TableSpec } from "../shared/utils/readModel/mapping";
+import { firestorePathOf, READ_MODEL_TABLES, type SourceDoc, type TableSpec } from "../shared/utils/readModel/mapping";
 import { READ_MODEL_SCREENS } from "../shared/utils/readModelMode";
 import { handleReadModelPush } from "../netlify/functions/_readmodelPushCore";
 import { livePushPorts } from "../netlify/functions/readmodel-push";
@@ -159,7 +159,7 @@ async function seed(db: Firestore) {
     for (const spec of READ_MODEL_TABLES) {
       for (const row of fx[spec.collection] ?? []) {
         const { id, ...data } = row;
-        await db.doc(`users/${uid}/${spec.collection}/${String(id)}`).set({ ...data, createdAt: created, updatedAt: created });
+        await db.doc(firestorePathOf(spec, uid, String(id))).set({ ...data, createdAt: created, updatedAt: created });
       }
     }
   }
@@ -172,6 +172,21 @@ async function readSource(db: Firestore): Promise<Map<string, Map<string, Source
   for (const userRef of await db.collection("users").listDocuments()) {
     const byCollection = new Map<string, SourceDoc[]>();
     for (const spec of READ_MODEL_TABLES) {
+      if (spec.root) {
+        const snap = await userRef.get();
+        byCollection.set(spec.collection, snap.exists ? [{ id: spec.root.docId, data: snap.data() ?? {}, updateTime: snap.updateTime!.toMillis() }] : []);
+        continue;
+      }
+      if (spec.parent) {
+        // SPENDLY-591: nested rows are keyed "{parentId}/{id}".
+        const docs: SourceDoc[] = [];
+        for (const parentRef of await userRef.collection(spec.parent.collection).listDocuments()) {
+          const snap = await parentRef.collection(spec.parent.child).get();
+          docs.push(...snap.docs.map((d) => ({ id: `${parentRef.id}/${d.id}`, data: d.data(), updateTime: d.updateTime.toMillis() })));
+        }
+        byCollection.set(spec.collection, docs);
+        continue;
+      }
       const snap = await db.collection(`users/${userRef.id}/${spec.collection}`).get();
       byCollection.set(spec.collection, snap.docs.map((d) => ({ id: d.id, data: d.data(), updateTime: d.updateTime.toMillis() })));
     }

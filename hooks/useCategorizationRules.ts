@@ -8,6 +8,7 @@ import {
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { noteDirectWrites } from "@/lib/readModelWriteHooks";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useExpenseReferenceData } from "@/providers/ExpenseReferenceDataProvider";
@@ -36,7 +37,7 @@ export const useCategorizationRules = (options?: { enabled?: boolean }) => {
     if (!uid || !db || !keyword.trim() || !category.trim()) return;
 
     try {
-      await addDoc(
+      const ref = await addDoc(
         collection(db, "users", uid, "categorizationRules"),
         {
           keyword: keyword.trim().toLowerCase(),
@@ -45,6 +46,7 @@ export const useCategorizationRules = (options?: { enabled?: boolean }) => {
           createdAt: serverTimestamp(),
         }
       );
+      noteDirectWrites(uid, [ref.path]);
       // SPENDLY-412: categorizationRules is a one-shot read, not a realtime
       // listener — refetch so the shared state reflects this write.
       retryRules();
@@ -63,6 +65,7 @@ export const useCategorizationRules = (options?: { enabled?: boolean }) => {
       await deleteDoc(
         doc(db, "users", uid, "categorizationRules", id)
       );
+      noteDirectWrites(uid, [`users/${uid}/categorizationRules/${id}`]);
       retryRules();
       toast.success("Rule deleted");
     } catch (err) {

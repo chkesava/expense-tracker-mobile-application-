@@ -287,7 +287,11 @@ begin
     'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
     'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
-    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history'
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
+    'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
+    'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
+    'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items'
   ] loop
     res := public.rm_client_apply(t, jsonb_build_array(jsonb_build_object(
       'uid', 'user-a', 'doc_id', 'all-' || t, 'doc', '{}'::jsonb,
@@ -295,6 +299,50 @@ begin
       'schema_version', 1, 'mapping_status', 'mapped', 'client_written_at', now())));
     if (res->>'upserted')::int <> 1 then raise exception '% did not take a client write: %', t, res; end if;
   end loop;
+end
+$$;
+
+-- ─── 7a. The users/{uid} copy is server-only (SPENDLY-591) ─────────────────
+do $$
+begin
+  if ca_test.refused('user_settings', jsonb_build_array(jsonb_build_object(
+       'uid', 'user-a', 'doc_id', 'settings', 'doc', '{}'::jsonb, 'source_path', 'users/user-a/x',
+       'schema_version', 1, 'mapping_status', 'mapped', 'client_written_at', now()))) is distinct from '42501' then
+    raise exception 'a client write to user_settings was not refused';
+  end if;
+end
+$$;
+
+-- ─── 7b. A nested row (SPENDLY-591): doc_id "{listId}/{itemId}" ─────────────
+do $$
+declare
+  res jsonb;
+  r record;
+begin
+  res := public.rm_client_apply('watchlist_items', jsonb_build_array(jsonb_build_object(
+    'uid', 'user-a', 'doc_id', 'default/INFY.NS', 'list_id', 'default', 'symbol', 'INFY', 'sort_order', 1.5,
+    'doc', '{"symbol":"INFY"}'::jsonb, 'source_path', 'users/user-a/watchlists/default/items/INFY.NS',
+    'schema_version', 1, 'mapping_status', 'mapped', 'client_written_at', now())));
+  select * into r from public.watchlist_items where doc_id = 'default/INFY.NS';
+  if (res->>'upserted')::int <> 1 or r.list_id <> 'default' or r.sort_order <> 1.5 or r.written_by <> 'client' then
+    raise exception 'nested client write stored wrongly: % %', res, row_to_json(r);
+  end if;
+  -- The same symbol in another list is another row.
+  perform public.rm_client_apply('watchlist_items', jsonb_build_array(jsonb_build_object(
+    'uid', 'user-a', 'doc_id', 'wl_2/INFY.NS', 'list_id', 'wl_2', 'doc', '{}'::jsonb,
+    'source_path', 'users/user-a/watchlists/wl_2/items/INFY.NS',
+    'schema_version', 1, 'mapping_status', 'mapped', 'client_written_at', now())));
+  if (select count(*) from public.watchlist_items where uid = 'user-a' and doc_id like '%/INFY.NS') <> 2 then
+    raise exception 'one symbol in two lists did not make two rows';
+  end if;
+  -- A nested delete tombstones only that list's row.
+  res := public.rm_client_apply('watchlist_items', '[]'::jsonb,
+    jsonb_build_array(jsonb_build_object('uid', 'user-a', 'doc_id', 'default/INFY.NS', 'client_written_at', now() + interval '1 second')));
+  if (res->>'tombstoned')::int <> 1
+     or exists (select 1 from public.watchlist_items where doc_id = 'default/INFY.NS')
+     or not exists (select 1 from public.watchlist_items where doc_id = 'wl_2/INFY.NS') then
+    raise exception 'nested delete: %', res;
+  end if;
 end
 $$;
 

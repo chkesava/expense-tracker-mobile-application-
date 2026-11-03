@@ -19,6 +19,7 @@ import {
 
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite } from "@/lib/firestoreWrite";
+import { noteDirectWrites, trackedBatch } from "@/lib/readModelWriteHooks";
 import { fetchMarketQuote } from "@/services/marketDataService";
 import type { InstrumentType } from "@/shared/features/portfolio/types";
 import type { SipPlan, SipTransactionStatus, VirtualPosition } from "@/shared/features/sip/types";
@@ -211,9 +212,11 @@ export async function executeDueSips(
 
   for (const chunk of chunkSipOps(ops)) {
     await commitWrite(() => {
-      const batch = writeBatch(db);
+      const batch = trackedBatch(writeBatch(db));
       for (const op of chunk) applyOp(batch, owner, op, positions);
-      return batch.commit();
+      const committing = batch.commit();
+      noteDirectWrites(owner, batch.writtenPaths());
+      return committing;
     }, { label: "sip execute" });
   }
 

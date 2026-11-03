@@ -17,6 +17,7 @@ import { doc, setDoc } from "@/lib/firestore";
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite } from "@/lib/firestoreWrite";
+import { noteDirectWrites } from "@/lib/readModelWriteHooks";
 import { haptic } from "@/lib/haptics";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
@@ -152,6 +153,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             () => setDoc(doc(db, "users", user.uid), batch, { merge: true }),
             { label: "settings" }
           );
+          // The read model copies the allowlisted settings (SPENDLY-591, push only).
+          noteDirectWrites(user.uid, [`users/${user.uid}`]);
         } catch (err) {
           pendingRef.current = { ...batch, ...pendingRef.current };
           logError("settingsProvider.saveSettings", err);

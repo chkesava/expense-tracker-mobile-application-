@@ -8,7 +8,8 @@
  *   users/{uid}/watchlists/{listId}
  *   users/{uid}/watchlists/{listId}/items/{yahooSymbol}
  * The item id IS the normalized Yahoo symbol, so a list can never hold the
- * same symbol twice. Not synced to the read model (READ_MODEL_RULES R2.1).
+ * same symbol twice. The lists are synced to the read model (SPENDLY-591);
+ * the items too (`watchlist_items`, the first nested collection).
  */
 
 import type { Exchange, InstrumentType } from "../features/portfolio/types";
