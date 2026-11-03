@@ -23,12 +23,14 @@
 - Keep UI-only work separate from financial logic unless the Jira issue explicitly requires both.
 - Do not commit secrets, service-account credentials, or environment values.
 
-## Read-model architecture (SPENDLY-494)
-Firestore is the only write path; Supabase (`supabase-readmodel/`) is a read-only copy kept by a scheduled sync. Any feature that writes or reads user data, adds a collection or field, or deletes user data **must follow [docs/READ_MODEL_RULES.md](docs/READ_MODEL_RULES.md)**. In short:
-- writes go to Firestore only and stamp `createdAt`/`updatedAt`;
-- history/report/filter reads go through `lib/readModel/screenReadPath.ts` behind a per-screen switch that defaults to `firestore`;
-- current-state money never moves to the read model;
-- new synced data needs a migration, mapping, RLS and the purge.
+## Read-model architecture (SPENDLY-494, SPENDLY-586)
+**Firestore** is the source of truth. **Supabase** (`supabase-readmodel/`) is the read model. The app writes every save to both: to Firestore first, and to Supabase through the on-device outbox and the `rm_client_apply` RPC. The server push and the nightly sync then make Supabase match Firestore; **Firestore wins any difference**.
+
+Any feature that writes or reads user data, adds a collection or field, or deletes user data **must follow [docs/READ_MODEL_RULES.md](docs/READ_MODEL_RULES.md)**. In short:
+- **Writes** go through `commitMutations`, or the outbox hook for direct writers. They stamp `createdAt`/`updatedAt`. The app never writes a Supabase table except through `rm_client_apply`.
+- **Reads** go through the per-collection read switch (`firestore` by default), with a Firestore fallback.
+- **Money values** shown from Supabase are copies of Firestore's stored totals or the existing TypeScript helpers over rows. SQL never computes a displayed number.
+- **New synced data** needs a migration, mapping, RLS, the `rm_client_apply` allowlist and the purge.
 
 Operations: `docs/READMODEL_RUNBOOK.md`.
 
