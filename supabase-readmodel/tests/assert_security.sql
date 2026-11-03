@@ -11,6 +11,7 @@ begin
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
     'sync_runs', 'sync_status', 'sync_checkpoints', 'sync_failures'
   ]) as t
   where not exists (select 1 from pg_tables where schemaname = 'public' and tablename = t);
@@ -51,7 +52,8 @@ begin
         or table_name not in (
           'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
           'account_transfers', 'account_entries', 'account_payments',
-          'credit_card_bills', 'categories', 'financial_goals', 'goal_events', 'sync_status',
+          'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions', 'sync_status',
           'v_active_expenses', 'v_active_incomes', 'v_cash_flow_by_month'
         )
       ))
@@ -97,8 +99,8 @@ begin
     raise exception 'unexpected policies: %', bad;
   end if;
   select count(*) into n from pg_policies where schemaname = 'public';
-  if n <> 13 then  -- 10 Wave 1 + sync_status + SPENDLY-609 goals (2)
-    raise exception 'expected 13 owner-read policies, found %', n;
+  if n <> 18 then  -- 10 Wave 1 + sync_status + SPENDLY-609 goals (2) + SPENDLY-589 Wave 2 (5)
+    raise exception 'expected 18 owner-read policies, found %', n;
   end if;
   if exists (
     select 1 from pg_policies
@@ -145,7 +147,8 @@ begin
   from unnest(array[
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
-    'credit_card_bills', 'categories', 'financial_goals', 'goal_events'
+    'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions'
   ]) as t
   where (
     select count(*) from information_schema.columns c
@@ -211,7 +214,8 @@ begin
   from unnest(array[
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
-    'credit_card_bills', 'categories', 'financial_goals', 'goal_events'
+    'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions'
   ]) as t
   where (
     select count(*) from information_schema.columns c

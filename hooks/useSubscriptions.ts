@@ -15,6 +15,7 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useExpenseReferenceData } from "@/providers/ExpenseReferenceDataProvider";
 import type { Subscription } from "@/shared/types/subscription";
+import { noteDirectWrites } from "@/lib/readModelWriteHooks";
 
 /**
  * Firestore rejects `undefined` field values outright — the client throws
@@ -81,6 +82,7 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
           ),
         { label: "subscription" }
       );
+      noteDirectWrites(uid, [docRef.path]);
       toast.success(writeSavedMessage(outcome, "Subscription added"));
       return docRef.id;
     } catch (err) {
@@ -106,6 +108,7 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
           ),
         { label: "subscription" }
       );
+      noteDirectWrites(uid, [`users/${uid}/subscriptions/${id}`]);
       toast.success(writeSavedMessage(outcome, "Subscription updated"));
       return true;
     } catch (err) {
@@ -125,6 +128,7 @@ export function useSubscriptions(options?: { enabled?: boolean }) {
         () => deleteDoc(doc(db, "users", uid, "subscriptions", id)),
         { label: "subscription deletion" }
       );
+      noteDirectWrites(uid, [`users/${uid}/subscriptions/${id}`]);
       if (existing?.name) {
         void import("@/services/recurring/recurringSync").then((m) =>
           m.rememberDeletedSubscription(uid, existing)

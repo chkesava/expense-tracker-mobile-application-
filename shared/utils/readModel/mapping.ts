@@ -180,6 +180,88 @@ export const READ_MODEL_TABLES: TableSpec[] = [
       f("created_at", "createdAtMs", "timestamp"),
     ],
   },
+  // SPENDLY-589 Wave 2 (migration 20261031000000). The stored totals are
+  // copies of Firestore's values (R4.1), never recomputed for display.
+  {
+    table: "borrowings",
+    collection: "borrowings",
+    fields: [
+      f("lender_type", "lenderType", "text"),
+      f("lender_name", "lenderName", "text"),
+      f("principal_amount", "principalAmount", "money"),
+      f("borrowed_date", "borrowedDate", "date"),
+      f("due_date", "dueDate", "date"),
+      f("credited_account_id", "creditedAccountId", "text"),
+      f("outstanding_principal", "outstandingPrincipal", "money"),
+      f("total_outstanding", "totalOutstanding", "money"),
+      f("total_paid", "totalPaid", "money"),
+      f("status", "status", "text"),
+      f("settled_date", "settledDate", "date"),
+    ],
+  },
+  {
+    table: "borrowing_repayments",
+    collection: "borrowingRepayments",
+    derivedMonth: true,
+    fields: [
+      f("borrowing_id", "borrowingId", "text"),
+      f("amount", "amount", "money"),
+      f("principal_component", "principalComponent", "money"),
+      f("interest_component", "interestComponent", "money"),
+      f("payment_account_id", "paymentAccountId", "text"),
+      f("date", "date", "date"),
+    ],
+  },
+  // SPENDLY-668: `sourceMode` "already_deducted" has no `sourceAccountId`;
+  // a missing `sourceMode` (legacy) means "account".
+  {
+    table: "receivables",
+    collection: "receivables",
+    fields: [
+      f("person_type", "personType", "text"),
+      f("person_name", "personName", "text"),
+      f("original_amount", "originalAmount", "money"),
+      f("lent_date", "lentDate", "date"),
+      f("due_date", "dueDate", "date"),
+      f("source_account_id", "sourceAccountId", "text"),
+      f("source_mode", "sourceMode", "text"),
+      f("space_id", "spaceId", "text"),
+      f("total_received", "totalReceived", "money"),
+      f("outstanding_amount", "outstandingAmount", "money"),
+      f("status", "status", "text"),
+      f("settled_date", "settledDate", "date"),
+    ],
+  },
+  {
+    table: "receivable_repayments",
+    collection: "receivableRepayments",
+    derivedMonth: true,
+    fields: [
+      f("receivable_id", "receivableId", "text"),
+      f("amount", "amount", "money"),
+      f("principal_component", "principalComponent", "money"),
+      f("interest_component", "interestComponent", "money"),
+      f("received_account_id", "receivedAccountId", "text"),
+      f("date", "date", "date"),
+    ],
+  },
+  {
+    table: "subscriptions",
+    collection: "subscriptions",
+    fields: [
+      f("name", "name", "text"),
+      f("amount", "amount", "money"),
+      f("category", "category", "text"),
+      f("type", "type", "text"),
+      f("frequency", "frequency", "text"),
+      f("day_of_month", "dayOfMonth", "integer"),
+      f("is_active", "isActive", "boolean"),
+      f("is_completed", "isCompleted", "boolean"),
+      f("account_id", "accountId", "text"),
+      f("to_account_id", "toAccountId", "text"),
+      f("last_processed", "lastProcessed", "text"),
+    ],
+  },
 ];
 
 export const SPEC_BY_COLLECTION = new Map(READ_MODEL_TABLES.map((s) => [s.collection, s]));
