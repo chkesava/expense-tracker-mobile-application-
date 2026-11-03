@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  authErrorCode,
   bearerToken,
   claimsWithReadModelRole,
   hasReadModelRole,
@@ -56,5 +57,19 @@ describe("read-model identity (SPENDLY-505)", () => {
     expect(readModelAccess({ ...base, localTestMode: true })).toBe("test-mode");
     expect(readModelAccess({ ...base, uid: null })).toBe("signed-out");
     expect(readModelAccess({ ...base, uid: "u1_duress" })).toBe("duress");
+  });
+});
+
+describe("authErrorCode (SPENDLY-662)", () => {
+  it("returns the Firebase Admin code, from errorInfo or code", () => {
+    expect(authErrorCode({ errorInfo: { code: "auth/id-token-expired" } })).toBe("auth/id-token-expired");
+    expect(authErrorCode({ code: "auth/insufficient-permission" })).toBe("auth/insufficient-permission");
+  });
+
+  it("never returns free text that could carry a token", () => {
+    expect(authErrorCode(new Error("Decoding failed for eyJhbGciOi..."))).toBe("unknown");
+    expect(authErrorCode({ code: "eyJ hbG ci with spaces" })).toBe("unknown");
+    expect(authErrorCode({ code: "x".repeat(65) })).toBe("unknown");
+    expect(authErrorCode(null)).toBe("unknown");
   });
 });

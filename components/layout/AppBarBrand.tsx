@@ -45,7 +45,7 @@ export function AppBarBrand({ ink }: { ink?: string }) {
           },
         ]}
       >
-        <Activity size={15} color="#FFFFFF" strokeWidth={2.6} />
+        <Activity size={15} color={onImage && !isDark ? theme.colors.primaryForeground : "#FFFFFF"} strokeWidth={2.6} />
       </View>
       <Text
         style={[

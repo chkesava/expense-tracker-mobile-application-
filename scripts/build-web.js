@@ -190,6 +190,8 @@ function writeRedirectsAndHeaders() {
     '/api/market-overview /.netlify/functions/market-overview 200',
     // SPENDLY-647: stock screener universe (cached on Netlify's durable CDN).
     '/api/screener-universe /.netlify/functions/screener-universe 200',
+    // SPENDLY-656: batched watchlist quotes (cached on Netlify's durable CDN).
+    '/api/stock-quotes /.netlify/functions/stock-quotes 200',
     '/*                 /index.html             200',
     '',
   ].join('\n');

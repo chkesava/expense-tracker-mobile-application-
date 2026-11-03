@@ -1,6 +1,7 @@
 import React from "react";
 import { type StyleProp, type TextInputProps, type ViewStyle, View } from "react-native";
 import { useTheme } from "@/theme/ThemeProvider";
+import { gluestackSchemeFor } from "@/theme/tokens";
 import { Input as GluestackInput, InputField as GluestackInputField, InputSlot as GluestackInputSlot } from "@/components/ui/input/index";
 import { FormControl as GluestackFormControl, FormControlLabel as GluestackFormControlLabel, FormControlLabelText as GluestackFormControlLabelText, FormControlError as GluestackFormControlError, FormControlErrorText as GluestackFormControlErrorText, FormControlHelper as GluestackFormControlHelper, FormControlHelperText as GluestackFormControlHelperText } from "@/components/ui/form-control/index";
 
@@ -35,7 +36,7 @@ export function Input({
   editable,
   ...props
 }: InputProps) {
-  const { theme } = useTheme();
+  const { theme, themeName } = useTheme();
   const isInvalid = Boolean(error);
   const isDisabled = editable === false;
 
@@ -48,7 +49,7 @@ export function Input({
         </GluestackFormControlLabel>
       ) : null}
       
-      <GluestackInput className="min-h-[52px]">
+      <GluestackInput className="min-h-[52px]" scheme={gluestackSchemeFor(themeName)}>
         {leadingIcon && (
           <GluestackInputSlot className="pl-3">
             {leadingIcon}

@@ -73,6 +73,47 @@ describe("read-model push (SPENDLY-583)", () => {
     expect(calls.readDocs).toEqual([]);
   });
 
+  it("counts and logs every token rejection with its Firebase error code only (SPENDLY-662)", async () => {
+    const lines: string[] = [];
+    const { p, calls } = ports({
+      log: (l) => void lines.push(l),
+      verifyIdToken: async () => {
+        throw Object.assign(new Error("Firebase ID token has expired. secret-token-text"), {
+          errorInfo: { code: "auth/insufficient-permission" },
+        });
+      },
+    });
+    const r = await handleReadModelPush(post({ refs: [{ collection: "expenses", docId: "e1" }] }, "some-token"), p);
+    expect(r.statusCode).toBe(401);
+    expect(lines).toEqual(["[PUSH] rejected: token auth/insufficient-permission"]);
+    expect(lines.join(" ")).not.toContain("some-token");
+    expect(lines.join(" ")).not.toContain("secret-token-text");
+    expect(calls.record).toEqual([expect.objectContaining({ requests: 1, rejected: 1, docs: 0 })]);
+  });
+
+  it("counts a missing token and a duress uid too, logging no uid", async () => {
+    const lines: string[] = [];
+    const { p, calls } = ports({ log: (l) => void lines.push(l) });
+    await handleReadModelPush({ httpMethod: "POST", headers: {}, body: "{}" }, p);
+    await handleReadModelPush(post({ refs: [{ collection: "expenses", docId: "e1" }] }, "duress"), p);
+    expect(lines).toEqual(["[PUSH] rejected: no-token", "[PUSH] rejected: not-allowed"]);
+    expect(lines.join(" ")).not.toContain("u1");
+    expect(calls.record).toHaveLength(2);
+  });
+
+  it("logs a failed record instead of swallowing it, and still answers", async () => {
+    const lines: string[] = [];
+    const { p } = ports({
+      log: (l) => void lines.push(l),
+      record: async () => {
+        throw new Error("readmodel_push_record: permission denied");
+      },
+    });
+    const r = await handleReadModelPush(post({ refs: [{ collection: "expenses", docId: "e1" }] }), p);
+    expect(r.statusCode).toBe(200);
+    expect(lines).toEqual(["[PUSH] record failed: readmodel_push_record: permission denied"]);
+  });
+
   it("rejects non-synced collections, paths and malformed bodies, without reading anything", async () => {
     const { p, calls } = ports();
     for (const body of [

@@ -37,9 +37,12 @@ vi.mock("firebase/firestore", () => ({
     commit: async () => {},
   }),
   serverTimestamp: () => ({ _methodName: "serverTimestamp" }),
+  increment: (n: number) => ({ _methodName: "increment", n }),
 }));
 
 vi.mock("@/lib/firestoreReadDebug", () => ({ logDirectRead: vi.fn() }));
+const notifyReadModelChanged = vi.fn();
+vi.mock("@/lib/readModelPush", () => ({ notifyReadModelChanged: (uid: string) => notifyReadModelChanged(uid) }));
 
 const { ensureCategoryHierarchy, CATEGORY_HIERARCHY_VERSION } = await import("./ensureCategoryHierarchy");
 
@@ -106,5 +109,26 @@ describe("ensureCategoryHierarchy (SPENDLY-501 early exit)", () => {
     await ensureCategoryHierarchy(db, UID);
 
     expect(collectionReads).toContain(`users/${UID}/categories`);
+  });
+
+  it("bumps the categories revision and notifies the read-model push when it writes (SPENDLY-660)", async () => {
+    notifyReadModelChanged.mockClear();
+    docs.set(META, { categoryHierarchyVersion: 1, taxonomyFingerprint: taxonomyFingerprint() });
+
+    await ensureCategoryHierarchy(db, UID);
+
+    const stamp = setDocs.find((w) => w.path === META);
+    expect(stamp?.data.categoriesRevision).toEqual({ _methodName: "increment", n: 1 });
+    expect(notifyReadModelChanged).toHaveBeenCalledWith(UID);
+  });
+
+  it("neither bumps nor notifies on the early exit", async () => {
+    notifyReadModelChanged.mockClear();
+    docs.set(META, { categoryHierarchyVersion: CATEGORY_HIERARCHY_VERSION, taxonomyFingerprint: taxonomyFingerprint() });
+
+    await ensureCategoryHierarchy(db, UID);
+
+    expect(setDocs).toEqual([]);
+    expect(notifyReadModelChanged).not.toHaveBeenCalled();
   });
 });

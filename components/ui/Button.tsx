@@ -7,6 +7,8 @@ import {
 } from "@/components/ui/button/index"; // Import the gluestack implementation
 import { haptic as hapticFeedback } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
+import { gluestackSchemeFor } from "@/theme/tokens";
+import { contrastRatio, hexToRgb } from "./glassTokens";
 
 export type ButtonVariant =
   | "primary"
@@ -41,7 +43,7 @@ export function Button({
   style,
   ...props
 }: ButtonProps) {
-  const { theme } = useTheme();
+  const { theme, themeName } = useTheme();
   const isDisabled = disabled || loading;
 
   const handlePress = (e: any) => {
@@ -83,9 +85,15 @@ export function Button({
         ? { backgroundColor: theme.colors.card, ...theme.elevation[1] }
         : undefined;
 
+  // A bright action colour (Sunset's orange, SPENDLY-677) fills buttons well
+  // but is too light as text on a card; fall back to the tint, which reads.
+  const primaryText =
+    contrastRatio(hexToRgb(theme.colors.primary), hexToRgb(theme.colors.card)) >= 4.5
+      ? theme.colors.primary
+      : theme.colors.tint;
   const labelColor =
     variant === "text" || variant === "ghost" || variant === "outline"
-      ? theme.colors.primary
+      ? primaryText
       : variant === "tonal"
         ? theme.colors.onSecondaryContainer
         : undefined;
@@ -98,6 +106,7 @@ export function Button({
   return (
     <GluestackButton
       variant={mappedVariant}
+      scheme={gluestackSchemeFor(themeName)}
       size={mappedSize}
       isDisabled={isDisabled}
       onPress={handlePress}

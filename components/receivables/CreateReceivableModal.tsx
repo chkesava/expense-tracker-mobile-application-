@@ -23,6 +23,10 @@ import {
   type PersonType,
 } from "@/shared/types/receivable";
 import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
+import {
+  LEND_SOURCE_ALREADY_DEDUCTED,
+  resolveLendSource,
+} from "@/shared/utils/receivableSource";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { DateField } from "@/components/common/DateField";
@@ -46,6 +50,7 @@ export function CreateReceivableModal({
   const [personType, setPersonType] = useState<PersonType>("FRIEND");
   const [personName, setPersonName] = useState("");
   const [originalAmount, setOriginalAmount] = useState("");
+  // An account id, or LEND_SOURCE_ALREADY_DEDUCTED (SPENDLY-668).
   const [sourceAccountId, setSourceAccountId] = useState("");
   const [lentDate, setLentDate] = useState(todayDateKey());
   const [dueDate, setDueDate] = useState("");
@@ -82,6 +87,8 @@ export function CreateReceivableModal({
     setSpaceId("");
   };
 
+  const isAlreadyDeducted = sourceAccountId === LEND_SOURCE_ALREADY_DEDUCTED;
+
   const handleSave = async () => {
     if (!personName.trim()) {
       toast.error("Who did you lend money to?");
@@ -94,8 +101,9 @@ export function CreateReceivableModal({
       return;
     }
 
-    if (!sourceAccountId) {
-      toast.error("Select the account the money was paid from");
+    const source = resolveLendSource(sourceAccountId);
+    if (!source.ok) {
+      toast.error(source.error);
       return;
     }
 
@@ -122,7 +130,7 @@ export function CreateReceivableModal({
         personType,
         personName: personName.trim(),
         originalAmount: numAmount,
-        sourceAccountId,
+        ...source.fields,
         lentDate,
         dueDate: dueDate.trim() ? dueDate.trim() : null,
         purpose: purpose.trim(),
@@ -207,33 +215,36 @@ export function CreateReceivableModal({
           <Text style={[styles.label, { color: theme.colors.foreground }]}>
             Paid From Account *
           </Text>
-          {accounts.length === 0 ? (
-            <Text
-              style={[styles.helper, { color: theme.colors.mutedForeground }]}
-            >
-              Add an account first before recording money lent.
-            </Text>
-          ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.pillRow}
-            >
-              {accounts.map((account) => {
-                const isActive = sourceAccountId === account.id;
-                return (
-                  <Chip
-                    key={account.id}
-                    label={account.name}
-                    selected={isActive}
-                    onPress={() => setSourceAccountId(account.id)}
-                  />
-                );
-              })}
-            </ScrollView>
-          )}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.pillRow}
+          >
+            {accounts.map((account) => {
+              const isActive = sourceAccountId === account.id;
+              return (
+                <Chip
+                  key={account.id}
+                  label={account.name}
+                  selected={isActive}
+                  onPress={() => setSourceAccountId(account.id)}
+                  accessibilityLabel={`Paid from ${account.name}`}
+                />
+              );
+            })}
+            <Chip
+              label="None — already deducted"
+              selected={isAlreadyDeducted}
+              onPress={() => setSourceAccountId(LEND_SOURCE_ALREADY_DEDUCTED)}
+              accessibilityLabel="None, already deducted. No account balance change."
+            />
+          </ScrollView>
           <Text style={[styles.helper, { color: theme.colors.mutedForeground }]}>
-            Decreases this account&apos;s balance. Not counted as an expense.
+            {isAlreadyDeducted
+              ? "No account balance change. Use when this amount was already recorded elsewhere."
+              : accounts.length === 0
+                ? "No accounts yet. Choose None if this amount was already recorded elsewhere."
+                : "Decreases this account’s balance once. Not counted as an expense."}
           </Text>
         </View>
 

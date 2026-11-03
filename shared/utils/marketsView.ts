@@ -44,6 +44,8 @@ export type MoverView = {
   changePercent: string;
   direction: Direction;
   accessibilityLabel: string;
+  /** Sheet subtitle after the ticker; defaults to "NSE · NIFTY 50" (the movers). */
+  listing?: string;
 };
 
 export type BannerView = { tone: "warning" | "error" | "info"; text: string; retry: boolean };
@@ -236,5 +238,5 @@ export function instrumentHeader(instrument: Instrument): {
     };
   }
   const m = instrument.item;
-  return { title: m.name, subtitle: `${m.ticker} · NSE · NIFTY 50`, value: m.price, move: m.changePercent, direction: m.direction };
+  return { title: m.name, subtitle: `${m.ticker} · ${m.listing ?? "NSE · NIFTY 50"}`, value: m.price, move: m.changePercent, direction: m.direction };
 }

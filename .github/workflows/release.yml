@@ -92,6 +92,37 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Installed here rather than left to Gradle. The NDK is not on the runner
+      # image, so the Android Gradle plugin downloads it mid-configure, and twice
+      # (v5.0.3 build 130, then 2026-11-02 run 41477413170) that download came
+      # back corrupt ("Error on ZipFile unknown archive"). Gradle then left a
+      # half-extracted folder behind, so every retry in scripts/release.js
+      # failed on "did not have a source.properties file". Here a bad download
+      # is wiped and retried, and the build only starts on a complete NDK.
+      - name: Install Android NDK
+        run: |
+          set -euo pipefail
+          # The version React Native's Gradle plugin asks for (rootProject.ext.ndkVersion).
+          ndk=$(sed -n 's/^ndkVersion = "\(.*\)"$/\1/p' node_modules/react-native/gradle/libs.versions.toml)
+          if [ -z "$ndk" ]; then
+            echo "::error::Could not read ndkVersion from react-native/gradle/libs.versions.toml"
+            exit 1
+          fi
+          dir="$ANDROID_SDK_ROOT/ndk/$ndk"
+          for attempt in 1 2 3; do
+            if [ -f "$dir/source.properties" ]; then
+              break
+            fi
+            rm -rf "$dir"
+            echo "Installing NDK $ndk (attempt $attempt)"
+            sdkmanager --install "ndk;$ndk" > /dev/null || true
+          done
+          if [ ! -f "$dir/source.properties" ]; then
+            echo "::error::NDK $ndk did not install cleanly after 3 attempts"
+            exit 1
+          fi
+          grep Pkg.Revision "$dir/source.properties"
+
       # Same quality gate as android-release.yml, before secrets-heavy / APK work.
       - name: Unit + integration-lite suite
         run: npm test

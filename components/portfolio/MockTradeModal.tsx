@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Text, Modal, ScrollView, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { View, StyleSheet, Text, Modal, ScrollView, KeyboardAvoidingView, Platform, TouchableWithoutFeedback } from 'react-native';
+import { dismissKeyboardOnNative, keyboardDismissDisabled } from '@/lib/keyboardDismiss';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Amount } from '@/components/common/Amount';
@@ -119,7 +120,7 @@ export function MockTradeModal({ visible, holding, onClose, onBuy, onSell, cashB
         style={[styles.modalOverlay, { backgroundColor: theme.colors.scrim }, scopeVars]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <TouchableWithoutFeedback onPress={dismissKeyboardOnNative} disabled={keyboardDismissDisabled} accessible={false}>
           <View style={[styles.modalContent, cardBg]}>
             <View style={styles.header}>
               <Text style={[styles.title, textStyle]}>Trade {holding.symbol}</Text>
