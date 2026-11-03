@@ -182,6 +182,48 @@ begin
 end
 $$;
 
+-- 8. SPENDLY-669: the app's only write path. rm_client_apply is security
+--    definer with a fixed search_path, callable by authenticated only; every
+--    synced table records who wrote each row.
+do $$
+declare
+  fn oid := 'public.rm_client_apply(text, jsonb, jsonb)'::regprocedure;
+  missing text;
+begin
+  if not (select prosecdef from pg_proc where oid = fn) then
+    raise exception 'rm_client_apply must be security definer';
+  end if;
+  if not exists (select 1 from pg_proc where oid = fn and 'search_path=""' = any (proconfig)) then
+    raise exception 'rm_client_apply must pin search_path to empty';
+  end if;
+  if has_function_privilege('anon', fn, 'execute') then
+    raise exception 'anon (directly or via PUBLIC) can execute rm_client_apply';
+  end if;
+  if not has_function_privilege('authenticated', fn, 'execute') then
+    raise exception 'authenticated cannot execute rm_client_apply';
+  end if;
+  if has_function_privilege('authenticated', 'public.readmodel_upsert(text, jsonb)'::regprocedure, 'execute')
+     or has_function_privilege('authenticated', 'public.readmodel_repair(text, jsonb)'::regprocedure, 'execute')
+     or has_function_privilege('authenticated', 'public.readmodel_tombstone(text, text, text[])'::regprocedure, 'execute') then
+    raise exception 'a server write function is executable by authenticated';
+  end if;
+  select string_agg(t, ', ') into missing
+  from unnest(array[
+    'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
+    'account_transfers', 'account_entries', 'account_payments',
+    'credit_card_bills', 'categories', 'financial_goals', 'goal_events'
+  ]) as t
+  where (
+    select count(*) from information_schema.columns c
+    where c.table_schema = 'public' and c.table_name = t
+      and c.column_name in ('written_by', 'client_written_at')
+  ) <> 2;
+  if missing is not null then
+    raise exception 'tables missing written_by/client_written_at: %', missing;
+  end if;
+end
+$$;
+
 select 'read-model security assertions passed' as result;
 
 -- 7. SPENDLY-513: the Phase 3 views run as the caller (security_invoker), so
