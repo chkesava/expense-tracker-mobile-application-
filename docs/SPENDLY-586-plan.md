@@ -1,168 +1,171 @@
-# SPENDLY-586 — Supabase-first reads: implementation plan
+# SPENDLY-586 — Supabase-first reads and dual writes: implementation plan (v2)
 
-**Status:** plan only, written 2026-10-31 from `main` `ac108974`. Nothing is implemented. Epic and stories 587–601 are To Do in Jira.
-**Epic branch (when work starts):** `feature/SPENDLY-586-supabase-first-reads`, cut from `main`; one branch per story, cut from it (`docs/AGENT_WORKFLOW.md` §3).
-**Rules that bind every story:** `CLAUDE.md` safety invariants, `docs/READ_MODEL_RULES.md` (R1–R7), `docs/AGENT_WORKFLOW.md`.
+**v2, 2026-11-01; approved by the user 2026-11-02.** It replaces the v1 plan of 2026-10-31. Jira keys: P0 = **SPENDLY-662 (Done)**, N1–N6 = **SPENDLY-669 to 674**.
+
+**The user's decisions (2026-11-01):**
+
+| Decision | Choice |
+|---|---|
+| Go/no-go | **Go**: the whole app reads from Supabase |
+| Write path | **The app writes Supabase directly**: every write goes to Firestore **and** Supabase |
+| Offline | **An on-device copy of the user's Supabase rows** (SQLite) |
+| Money values | **From Supabase, as exact copies** of Firestore's stored totals; net worth by the same app code over Supabase rows |
+
+**Epic branch:** `feature/SPENDLY-586-supabase-first-reads`, worktree `C:\dev\worktrees\spendly-586`.
+
+**The rules every story follows:** `docs/AGENT_WORKFLOW.md`, `CLAUDE.md` and `docs/READ_MODEL_RULES.md`. Each story goes through its own branch, then approval, then a `--no-ff` merge into the epic.
 
 ---
 
-## 0. Where things stand (checked 2026-10-31)
+## 0. Where things stand (2026-11-01)
 
-| Precondition (epic "Depends on") | Evidence | State |
+| Item | State | Evidence |
 |---|---|---|
-| SPENDLY-510 14-day parity gate | Health run `41153306559` (2026-10-31 01:02 UTC): **"Parity gate: 7 of 14 clean days"**, 0 open failures; nightly sync runs green 10-23 → 10-30 | **Not met.** Earliest pass is **~2026-11-07**, if every night is clean (the epic said ~11-05) |
-| SPENDLY-583 per-write push deployed | Same health run: **"Per-write pushes today: —"**. The last Deploy Web run that succeeded was 2026-10-23 (`39950019574`); the redeploy with fix #238 (`39952284142`) was cancelled | **Met on 2026-10-31.** The user's web deploy `41178735321` succeeded, and both functions now return 401 to an unauthenticated probe instead of 404 |
-| Supabase plan | Free, project `spmsgncjbnbkxvsbpqlu` | Unchanged |
+| 587 ADR | Merged into the epic, In Progress | Must be **rewritten for v2** (story 587 below) |
+| 588 read inventory | Merged into the epic, In Progress | Lab: a cold launch was 464 reads, 62% `categories` |
+| SPENDLY-660 (categories by revision) | **On main `8a66d9dc`, Done; not released** | Lab: 464 → 178 reads per cold launch |
+| Parity gate (SPENDLY-510) | **8 / 14** | Health run 41287555747; passes around 11-07 |
+| **Per-write push (SPENDLY-583)** | **Broken: 0 pushes recorded since it went live (10-31)** | 6 health runs show "—", against ~113 Firestore writes a day. The function is configured (it answers 401, not 202 "disabled"), so the app's requests either never arrive or are rejected at the token check, which isn't counted. See story **P0** |
+| Firestore reads | **21K / 24 h** (user screenshot, Oct 31–Nov 1) | The **~4K spike at ~6 AM IST is the nightly full sync** (4,106 reads). The other spikes are app launches and Firebase console browsing (the console counts its own reads) |
 
-**Update 2026-10-31:** 587 is In Progress; see `docs/SPENDLY-586-adr.md`.
+### 0.1 Revisit: main since the plan (2026-11-02)
 
-**So:** no story can *finish* yet. 587 (ADR) can be **drafted and spiked** now, and 588 (read inventory) can start now. Neither changes production data.
+`main` is now at `51c68dd7`, and the epic branch is behind it. **The first step of 587 is `git merge main`** into the epic branch, with the tests re-run.
 
-### Drift between Jira, the docs and the repo (to fix on the epic, not silently)
-1. **Coverage is 12 collections, not 10.** `financialGoals` and `goalEvents` are synced (SPENDLY-609, `shared/utils/readModel/mapping.ts:159-173`, migration `20261029000000`). The epic description and `READ_MODEL_RULES.md` §2 ("Synced today") still list 10. **591 must drop `financialGoals`** from its candidates.
-2. **A sixth read-path screen exists:** `goals` (SPENDLY-611) is in `READ_MODEL_SCREENS`. The epic says "five history screens".
-3. **SPENDLY-633 changed the offline premise.** The epic was written when native Firestore persistence was memory-only. 633 (on `main`, RNFB 24 durable cache) makes Firestore's on-device cache **persistent** on native. That strengthens 587 offline option (b) and weakens the case for building our own SQLite cache in 594 (see §3, D1).
-4. **588 as written conflicts with R1.1.** It suggests sending read counts "to the read model". An app-side Supabase write is forbidden (R1.1), and there is no analytics vendor (`lib/shortcutTelemetry.ts` is console-only). See §3, D5.
-5. **The 494 parity gate date** moved from ~11-05 to ~11-07.
-
----
-
-## 1. Invariants every story preserves
-
-1. **Firestore is the only write path.** No app, Netlify or Edge write to Supabase beyond the sync, the push and the purge (R1.1).
-2. **One owner per number.** Displayed balances, dues, tiles, net worth and budgets are **copies** of Firestore's materialized values (`financialSummaries`, account balance fields). They are never recomputed in SQL or in a component (R3.6, R4.2, CLAUDE.md).
-3. **`firestore` mode is byte-for-byte today's behaviour**, with no read-model connection, proved by a test per screen key (R3.2).
-4. **Every screen key has its own kill switch** (`system_settings/global.readModel.<key>`, server-only writable) and a **bounded** Firestore fallback (R3.3, R3.9).
-5. **Duress never reads, caches or subscribes to Supabase** (`effectiveReadModelMode`, `readmodel_auth.uid()`).
-6. **Promotion ladder:** firestore → shadow → 7 clean days (14 for 599) → supabase, each step approved by the user (R3.9).
-7. **Production:** dry run → report → approval → apply (R7.2). One shared Firebase project, so QA runs on Spendly Test or the emulator only.
-8. **Listeners only come off when every consumer of that listener is migrated** (600). Shared providers are never half-removed.
+| On main | Effect on the epic | Tickets updated |
+|---|---|---|
+| **SPENDLY-624 watchlists** (`56983574`) | New collections `watchlists` and the **nested** `watchlists/{listId}/items/{itemId}` (writes already go through `commitMutations`). It is the first nested path, so the mapping, sync reader, push refs, RPC key, purge and RLS need parent-id support | 591, 669, 598, 671 |
+| **SPENDLY-668 lend already deducted** (`334719b2`) | `receivables.sourceMode` (`account` \| `already_deducted`); `sourceAccountId` is now nullable; no backfill (missing means `account`). The typed columns must be nullable, and parity mustn't expect an account leg | 589, 598, 671 |
+| **SPENDLY-675 card outstanding vs statement** (`d5ca8496`) | The card cycle numbers (`useCreditCardLiveUsage`) are **derived in TypeScript** from expenses, incomes, entries and transfers, while the stored `currentOutstanding` stays the displayed total. The bill allocation pass (a compare-and-set transaction) re-runs when **another device creates a bill**, so realtime must deliver bill inserts | 597, 671 |
+| **SPENDLY-677 light palettes** (`51c68dd7`) | `theme`, `themeMode`, `accentColor` and `expensePalette` are on `users/{uid}`, written by `ThemeProvider` with a direct `setDoc`. In `supabase` mode they must load from the on-device copy before the first paint (no palette flash) | 591, 671, 674 |
+| **SPENDLY-660 categories by revision** (`8a66d9dc`) | The revision mechanism stays as the `firestore`-mode path; `noteCategoriesWritten` also feeds the outbox | 671, 674 |
+| **SPENDLY-662 push fix** (`9603d2b3`) | P0 is done; server writers can rely on the push | — |
+| SPENDLY-659 (index previous close), README docs | No effect | — |
 
 ---
 
-## 2. Target architecture (what "done" means)
+## 1. Target architecture
 
 ```
- write:  screen → service → commitMutations ──► Firestore ──► readmodel-push (seconds) ──► Supabase rows
-                                   │                     └─► nightly full sync (safety net + parity)
-                                   └─► pending-write overlay (this device, instant)
+WRITE (every save)
+  screen → service → commitMutations ─┬─► Firestore            (truth; offline queue; rules)
+                                      └─► Supabase outbox (on device, durable)
+                                             └─► rm_client_apply RPC (RLS, allowlist, version guard) ─► Supabase rows
+  server writers (epf-cron, scripts) ─► readmodel-push core ─► Supabase rows
+  nightly: incremental sync + parity repair (Firestore wins)  ─► Supabase rows
 
- read:   screen → resolveReadModelBackend(key) ─┬─ firestore (default / fallback / duress / offline per D1)
-                                                ├─ shadow   (serve Firestore, diff Supabase, log)
-                                                └─ supabase (rows + realtime store + overlay + freshness badge)
+READ (every screen)
+  Supabase rows ─► realtime ping ─► refetch changed rows ─► on-device SQLite copy ─► providers ─► screens
+                                     this device's outbox ─┘ (own writes show at once, offline too)
+  fallback per collection: Firestore (kill switch system_settings/global.readModel.<key>)
 ```
 
-New pieces the epic adds, each one shared rather than built per screen:
-- **`lib/readModel/realtimeStore.ts`** (593): one channel per user, a table → row map, resubscribe and refetch since the last `synced_at`.
-- **An offline source** (594): its shape depends on D1.
-- **Copied summary tables** (592): `financial_summaries`, plus typed balance columns on `accounts`.
-- **New screen keys** in `READ_MODEL_SCREENS`: `journalLive`, `accounts`, `cards`, one per module for 598, `dashboard` and `budgets`.
+### Invariants (new or changed by v2)
+
+1. **Firestore stays the source of truth.** If Supabase and Firestore disagree, Firestore wins: the nightly parity repair rewrites the Supabase row. Dual writes exist for speed and for read savings, not for ownership.
+2. **One mapper.** The client and the server build Supabase rows with the same `shared/utils/readModel/mapping.ts` `TableSpec`s from the same Firestore document. The client maps the document as Firestore's local cache holds it right after the write (latency-compensated, 0 billed reads).
+3. **Clients write only through `rm_client_apply`.** It is an RPC, `security invoker`, granted only to `authenticated`, that:
+   - accepts allowlisted tables only;
+   - requires `uid = readmodel_auth.uid()` on every row;
+   - applies a version guard (a newer client write or a Firestore-sourced row is never overwritten by an older one);
+   - turns deletes into tombstones.
+
+   Tables stay **SELECT-only** for clients; there are no direct table write grants.
+4. **The duress, local-test and signed-out states never write or read Supabase**, unchanged.
+5. **No display number gets a second owner.** Stored totals are copies (`financialSummaries`, `currentBalance`, `currentOutstanding`). Derived numbers (net worth, safe-to-spend, budget progress) come from the existing TypeScript helpers over Supabase rows. SQL never computes a displayed number.
+6. **Every collection keeps a Firestore fallback and a server-side kill switch.** Promotion goes firestore → shadow (7 days with zero differences; 14 for money screens) → supabase, approved by the user.
+7. **Production changes:** dry run → report → approval → apply. Migrations are additive.
+
+### Main risks and how the stories contain them
+
+| Risk | Containment |
+|---|---|
+| The two writes diverge: one lands, the other doesn't (offline, crash, rejected) | Durable outbox with retry. Nightly parity repair with Firestore winning. A divergence metric in the health summary (N4) |
+| A modified or buggy client writes bad rows | The RPC validates the shape and the owner; it only affects that user's own rows; the nightly repair restores them from Firestore |
+| A writer outside `commitMutations` skips Supabase | Writer inventory, plus a guard test that fails for an unrouted writer (N3), as SPENDLY-660 did for categories |
+| The on-device copy is stale or leaks | Realtime plus refetch since the last `synced_at`. Cleared on sign-out and account deletion. Never in duress. Size cap |
+| Supabase pauses (Free plan) or goes down | Pro before the first money screen flips (595). The per-collection fallback to Firestore. The outbox backlog drains on recovery |
 
 ---
 
-## 3. Decisions 587 must settle (my recommendation and why)
+## 2. Stories
 
-| # | Decision | Options | Recommendation | Evidence to gather in 587 |
-|---|---|---|---|---|
-| **D1** | Offline | (a) own SQLite cache of read-model rows; (b) Firestore's persistent cache stays the offline source; (c) no offline | **(b)** for every money screen. It is now durable on native (633), and offline reads are exactly what `effectiveReadModelMode` already does (`!online → firestore`). **Consequence:** 600 can't remove a listener whose collection must still work offline, unless (a) is built for it. | Airplane-mode test on Spendly Test with listeners off: is the cache still warm enough? Cache age after N days with no listener |
-| **D2** | Realtime | Supabase Realtime `postgres_changes` under RLS, or polling `synced_at` | **Realtime, gated by a spike.** Under **third-party (Firebase) auth**, RLS policies call `readmodel_auth.uid()`, and Realtime must evaluate them per subscriber. This is unproven here. Polling is the fallback design | Spike on the drill project: subscribe as user A, write as B, confirm A sees nothing; latency; Free-plan limits (concurrent connections, messages/month) from **live, dated** pricing pages |
-| **D3** | Number ownership | Copy summaries vs recompute | **Copy only** (non-negotiable). Confirm `financialSummaries` writes go through `stageMutationOps` → `commitMutations` (they appear in `lib/stageMutationOps.ts`, `lib/summaryMonthStore.ts`, `shared/features/epf/utils/summarySync.ts`), so the push covers them. **EPF summary sync is a server-confirmed path (653): verify it reaches the push** | grep every `financialSummaries` writer; a list of the server writers (`epf-cron`) that bypass the push |
-| **D4** | Supabase plan | Free vs Pro ($25/mo) | **Pro, before the first money screen flips to `supabase`** (597). Not needed for Phase 0–2. As the primary read path, a Free pause = every screen on fallback, and there are no backups | Live pricing pages, dated; current DB size (~3 MB) × projected growth from 589–591 |
-| **D5** | Success metric and 588 telemetry | Production per-screen telemetry vs lab measurement | **Lab plus console:** (1) scripted cold launch and steady state on Spendly Test, with the existing `lib/firestoreReadDebug.ts` counters enabled by a perf flag, giving per-listener counts; (2) the Firebase console's daily reads (7-day export) for the real total. No production writes and no new Supabase writer. Production per-screen telemetry would need a new Netlify collector (credits) or an R1.1 exception, which only the user can grant | The ranking table from (1); the console export from (2) |
-| **D6** | Net read budget | — | **Must be in the ADR.** Every collection added in 589–592 is re-read **in full every night** by the sync (budget 6K/run, 12K/day). The savings from 600 must exceed the added nightly cost, or the epic loses reads. Today: ~18K app + ~4.3K sync per day, against 50K | Doc counts per new collection across all users × 1 read each, nightly |
-| **D7** | Go/no-go | — | **Go only if** D2's spike passes, D6 shows a net saving, and the user accepts D4's cost. Otherwise Won't Do, and keep the six read-path screens | — |
+Keys are existing Jira keys; the new stories N1–N6 are SPENDLY-669 to 674 (created 2026-11-02). Each story lists what it changes and its exit gate.
 
-**I recommend a scoped "go":** history screens (done), plus the live Journal (596), plus accounts and cards lists (597). Put 598/599 behind a second checkpoint after 600 has measured real savings from 596/597. This is offered to the user in 587, not decided for them.
+### Phase 0 — fix, decide, measure
 
----
-
-## 4. Story plan
-
-Each story has: its own branch → a Jira comment → **stop for merge approval** → **ask before the next story**. Its doc is `docs/SPENDLY-<n>-<slug>.md`, and the tracker is `docs/SPENDLY-586-supabase-first-reads.md` (created with 587).
-Validation every time: `npm test`, `npm run typecheck:shared`, `npx tsc -p tsconfig.json --noEmit`, plus the `readmodel-schema.yml` SQL suite when `supabase-readmodel/` changes, plus drills when the sync, mapping or migrations change.
-
-### Phase 0: go/no-go (can start now)
-
-**587: ADR and go/no-go.** *Docs and a spike; no app change.*
-- Files: `docs/SPENDLY-586-adr.md`, `docs/SPENDLY-586-supabase-first-reads.md` (tracker), a spike script under `supabase-readmodel/drills/` (realtime-RLS against `demo-readmodel-drill`, never prod).
-- Content: D1–D7 above, each with alternatives, evidence, choice, consequences and rollback.
-- Fix the drift: `READ_MODEL_RULES.md` §2 (12 collections, 6 screen keys), only if the user approves editing that doc in this story.
-- Exit: ADR merged; **user signs off in a Jira comment**; can't close before the 510 gate passes and 583 is live (both are inputs).
-
-**588: read inventory.** *In parallel with 587.*
-- Files: `lib/firestoreReadDebug.ts` (a perf-flag export of per-feature counts, no PII; already attributes by `feature`), a scenario script driving Spendly Test (cold launch → dashboard → journal → accounts → idle 10 min), `docs/SPENDLY-588-read-inventory.md`.
-- Check first: which listeners are tagged with a `feature`. Add tags where missing (providers: `FinanceDataProvider` expenses/incomes at L678/692 plus the group at L708–860, `CreditCardBillsProvider`, `BorrowingsReceivablesProvider`, `LedgerStateProvider`, `ExpenseReferenceDataProvider`, `RemindersInboxProvider`, `UserDocProvider`, `SettingsProvider`).
-- Tests: the attribution unit tests in `lib/firestoreReadDebug.test.ts`; counters are a no-op when the flag is off.
-- Exit: a ranking table (cold vs steady state per listener), the console 7-day total, and a recommended migration order into the ADR. **Jira says "one week of production data"; under D5 that becomes lab plus console, a change the user must accept.**
-
-### Phase 1: coverage (after a "go")
-
-The pattern is identical for 589/590/591 (R2.1): a migration (contract columns, PK `(uid, doc_id)`, `(uid, …)` indexes, RLS owner-read, `grant select … to authenticated`, **added to the `supabase_realtime` publication if D2 = realtime**), a `TableSpec` in `shared/utils/readModel/mapping.ts`, the purge (`netlify/functions/_readmodelPurge.ts` + purge migration), `tests/assert_security.sql`, `tests/rls_behaviour.sql`, `tests/purge.sql`, push coverage (`netlify/functions/_readmodelPushCore.ts` allow-list, listener `notifyReadModelSnapshot` hooks), a sync-core test, a golden fixture, and drills re-run.
-Production: **dry-run backfill → report → approval → apply**; then 14 clean parity days per new table.
-
-- **589 Wave 2:** `borrowings`, `borrowingRepayments`, `receivables`, `receivableRepayments`, `subscriptions`. Watch: receivable repayment totals (605) are copied, not summed.
-- **590 Wave 3:** investments, holdings, `portfolioTransactions`, `investmentCashTransactions`, `portfolioSettings`, EPF. Watch: the numeric precision of quantities and units (typed `numeric`, never float); `reversalOf`; EPF month bucketing; **`epf-cron` server writes need a push call or accept nightly lag**; 653's server-confirmed summary sync.
-- **591 rest:** driven by 588; `categoryBudgets`, `decisions`, calendar reminders, `feeReviews`, merchant corrections, settings docs. **Not** `financialGoals` (already synced). Explicitly out: Nutrition, Ganesh, duress trees, `meta/*`, shared top-level `splits`/`vaults`/`paymentRequests`.
-- **Order:** do 591 only for collections a planned screen migration actually needs (per 588), since every table adds nightly reads (D6).
-
-### Phase 2: foundations
-
-**592: copy authoritative values.** A `financial_summaries` table (the doc jsonb, plus typed keys `kind`, `period`), typed balance and due columns on `accounts`/`credit_card_bills` (R2.2 migration plus mapping), field parity nightly, a **test that no money source computes a display total** (a static guard over `lib/readModel/*Sources.ts`, like `auditNoListener.test.ts`), the "Updating…" behaviour while this device has an unpushed write (reuses `readModelSession` and the freshness badge), and R4 updated in the rules doc.
-
-**593: realtime** (if D2 = realtime). `lib/readModel/realtimeStore.ts`: one channel per uid, started only when some key is in `supabase` mode; resubscribe plus refetch `synced_at > lastSeen`; the overlay is kept until the pushed row arrives; a failure → that key falls back via the existing `readPath` session fallback; never in duress or local-test (the loopback gets a fake emitter for Spendly Test). Tests: store reducer (vitest, `shared/` if pure), fallback, duress. Drill: realtime outage. Measure messages per day.
-
-**594: offline.** Under D1 (b): **no new cache.** Codify "offline ⇒ firestore" per key (already in `effectiveReadModelMode`), and add the constraint to 600 that listeners stay for collections needed offline. Under D1 (a): SQLite (`expo-sqlite`), cleared on sign-out and account deletion, never in duress, size cap; this is a new native dependency, so a new build. Acceptance either way: the airplane-mode drill on every migrated key.
-
-**595: plan and capacity.** Measure egress, connections, messages and DB size; the user decides Free or Pro with a dated cost; if Pro, a restore drill; pause/limit alerting added to `Read-model sync health`; runbook cost watch updated.
-
-### Phase 3: screens (each: new key → firestore default → shadow 7 days → supabase, approved by the user)
-
-| Story | Key(s) | Replaces | Display values from |
+| Key | Story | Changes | Exit |
 |---|---|---|---|
-| **596** live Journal + recent activity | `journalLive` | `FinanceDataProvider` newest-window listeners (expenses/incomes) for *this consumer only*; the provider keeps running for the others | rows (lists only); prerequisite: the `journal` key itself flipped to `supabase` under 494 |
-| **597** accounts, cards, bills | `accounts`, `cards` | account/bill screens' reads | 592 copies, checked to the paisa |
-| **598** investments, EPF, FD, loans, subs | one per module | module providers | 592 copies; live prices stay on the Netlify market functions |
-| **599** dashboard, net worth, budgets, STS, goals | `dashboard`, `budgets` | summary reads | 592 copies + overlay; **14-day** shadow |
+| **P0 = SPENDLY-662 (Done 2026-11-01)** | **The per-write push copies nothing** | **Confirmed 2026-11-01:**<br>• Netlify logs show the app's requests arrive (~17 calls Oct 31–Nov 1, 150–660 ms each, no errors logged).<br>• `push_daily` has **no rows ever**.<br>• Expenses changed in the last 48 h reached Supabase **8–15 h** later, so only the nightly sync copied them.<br>Every Supabase-side failure throws and would be logged, so the requests stop at the **token check**: `verifyIdToken(token, true)` fails and returns 401, which is neither logged nor counted. **Most likely, `FIREBASE_SERVICE_ACCOUNT` on the `spendly-share` site is for a different Firebase project than `expenseapp-27f94`.**<br>**Fix:** log the rejection reason (the error code only), count rejections in `push_daily`, check the `rpc` errors in `record`, and correct the Netlify env. Needs one web deploy | Health shows pushes > 0 per day; a save on device A appears in Supabase within 10 s |
+| **587** | **ADR v2 + rule changes + spike** | Rewrite `docs/SPENDLY-586-adr.md` for the user's v2 decisions. Change READ_MODEL_RULES R1.1 (client writes via `rm_client_apply` only) and the read-model paragraph of `CLAUDE.md` (**the user approves the wording**). Spike, on local Docker Supabase: (a) the `rm_client_apply` RPC and (b) a Realtime Broadcast ping, both under Firebase-issued tokens, including the duress and expired-token cases | The user signs off; the spike passes |
+| **588** | **Read inventory: production baseline** | Add the post-660 and post-633 7-day console reads to the report | Baseline recorded |
 
-For every screen story: a source in `lib/readModel/<x>Sources.ts`, a query in **both** `supabaseBackend` and `loopbackBackend` (`lib/readModel/backend.ts`), a shadow comparator, the freshness badge, the overlay plus `locallyRemovedIds`, a perf query in `supabase-readmodel/tests/perf/perf_queries.sql` (p95 < 300 ms at 30K txns), **the new key added to `lib/readModel/outageDrill.test.ts`**, and a test that pins the `firestore`-mode query and asserts that `connect` isn't called. UI review by the user on local Expo web (no web deploy).
+### Phase 1 — coverage: every collection a screen reads
 
-### Phase 4: savings and readiness
+| Key | Story | Notes |
+|---|---|---|
+| **589** | Sync Wave 2: borrowings, repayments, receivables, subscriptions | As in the R2 contract. **Plus** each table goes on the `rm_client_apply` allowlist |
+| **590** | Sync Wave 3: investments, holdings, portfolio, investment cash, EPF | Money precision (`numeric`); `epf-cron` server writes go through the push core |
+| **591** | Sync the remaining collections from the 588 inventory: budgets, decisions, reminders, fee reviews, merchant overrides, settings, runway, what-if, SIP… | Out: Nutrition, Ganesh, duress trees, `meta/*` (except as N2 needs), shared top-level `splits`/`vaults`/`paymentRequests` unless the ADR adds them |
+| **592** | Copy the stored money values | `financialSummaries` (dashboard months, EPF), typed `currentBalance`/`currentOutstanding`. Field parity nightly; a guard test that no display total is computed in SQL |
 
-**600: listeners off.** A per-provider gate: a listener isn't mounted only when **every** consumer key of that collection is in effective `supabase` mode, and the collection isn't in D1's offline-required set. Expect `FinanceDataProvider` (2,098 lines, ~6 listener groups) to be the hardest. It needs a consumer map first (from 588). Measure 7 days before and after per step in the tracker. Test: no listener is mounted in `supabase` mode; fallback remounts the listener once, with no loop.
+### Phase 2 — the write path (new)
 
-**601: drills and readiness.** Extend `supabase-readmodel/drills/run_drills.sh` and `lib/readModel/outageDrill.test.ts`: realtime outage, airplane mode, Supabase pause, push outage, nightly-only, **all keys back to `firestore` at once with no release**, and a bad mapping on a money table (a variant of runbook drill D5). Runbook rewrite; readiness review against §1; user sign-off.
+| Key | Story | Changes | Exit |
+|---|---|---|---|
+| **N1 (SPENDLY-669)** | **`rm_client_apply` RPC** | A migration: the function (an allowlist, an owner check, the version guard: `client_written_at` vs `source_update_time`, tombstones), `revoke … from public, anon`, `grant execute … to authenticated`. New columns `written_by` (`client`/`server`) and `client_written_at`. `assert_security.sql` and `rls_behaviour.sql` cover cross-user writes, duress, expired tokens and non-allowlisted tables. Drills re-run | The SQL suite and drills are green; perf p95 is under 100 ms per batch of 50 |
+| **N2 (SPENDLY-670)** | **The on-device Supabase outbox** | `commitMutations` hands the written paths to the outbox. The outbox reads each document from the Firestore cache, maps it with the shared mapper, persists the entry (SQLite, with N5), and sends batches to `rm_client_apply` with backoff. Each entry is idempotent on `(table, doc_id, client_written_at)`. Nothing is sent in duress or local-test mode; in Spendly Test the loopback is used. The SPENDLY-583 push stays for server writers and as a fallback | Airplane-mode, kill-app and Supabase-down tests: every write lands once, in order. Unit tests for the mapper path and the retry |
+| **N3 (SPENDLY-671)** | **Route every direct writer** | Inventory the writers outside `commitMutations` (bills, borrowings/receivables, EPF, investment cash, splits, categories via 660's `noteCategoriesWritten`…). Move each into `commitMutations` or the outbox hook. A guard test fails for an unrouted writer of a synced collection | Guard green; the outbox count matches Firestore writes in the lab |
+| **N4 (SPENDLY-672)** | **The sync becomes the safety net, not the copier** | The nightly run becomes changed-only (`updatedAt`) plus parity repair (Firestore wins), with a weekly full run. Health reports the divergence count (client rows the repair had to rewrite) and the outbox backlog | Nightly Firestore reads drop from ~4.1K to well under 1K; the divergence count is reported |
+
+### Phase 3 — read foundations
+
+| Key | Story | Changes |
+|---|---|---|
+| **593** | **Realtime** | Broadcast ping on a private `user:<uid>` topic (`realtime.messages` RLS via `readmodel_auth.uid()`). The ping carries `{table, doc_id, synced_at}` only. The client refetches. One channel per user; `setAuth` on token refresh; a fallback to polling `max(synced_at)` |
+| **594** | **The on-device Supabase copy (SQLite)** | `expo-sqlite` (a native module, so a new build). Hydrated on sign-in, kept fresh by realtime and refetch since the last `synced_at`. This device's outbox is overlaid. Cleared on sign-out and account deletion; never in duress; size cap. Web: IndexedDB through the same interface |
+| **N5 (SPENDLY-673)** | **The read store and provider switch** | One read-store API over the SQLite copy (`query`, `subscribe`). Each provider (`FinanceDataProvider`, `ExpenseReferenceDataProvider`, `CreditCardBillsProvider`, `BorrowingsReceivablesProvider`, the investments/EPF hooks…) reads the store when `readModel.<collection>` is `supabase`, and keeps its Firestore listener only in `firestore`/`shadow` mode. Shadow compares the two |
+| **595** | **The Supabase plan** | Pro ($25/month) before the first money screen flips. Daily backups verified by a restore drill. Pause and limit alerting |
+
+### Phase 4 — collections and screens flip (each: shadow, then 7 days / 14 for money, then the user approves)
+
+| Key | Scope | Gate |
+|---|---|---|
+| **596** | The live Journal + recent activity (`expenses`, `incomes`, `ledgerEvents`) | 7 days |
+| **597** | Accounts, balances, cards, bills | 14 days, balances to the paisa |
+| **598** | Investments, EPF, FD, loans, subscriptions | 14 days |
+| **599** | Dashboard tiles, net worth, budgets, safe-to-spend, goals | 14 days on every tile |
+| **N6 (SPENDLY-674)** | Reference data: categories, spaces, rules, reminders, settings documents | 7 days |
+
+### Phase 5 — savings and readiness
+
+| Key | Story |
+|---|---|
+| **600** | Turn off the Firestore listeners per collection once every consumer is on `supabase`; measure 7 days before and after each step |
+| **601** | Drills and runbook: Supabase down while writing (the outbox backlog drains), an RPC rejection, a dual-write divergence (repair), realtime down, airplane mode, Supabase paused, every collection back to Firestore in one switch, a bad mapping on a money table. Readiness review against §1. The user signs off |
 
 ---
 
-## 5. Critical path and calendar
+## 3. Order and critical path
 
 ```
-now ─ 587 draft + D2 spike ─┐
-now ─ 588 lab inventory ────┤
-~11-07 510 gate passes ─────┤
-web deploy (583 live) ──────┴─► 587 sign-off (GO / scoped GO / NO-GO)
-                                   ├─► 589 ┐  each: backfill + 14 parity days
-                                   ├─► 590 ┤
-                                   ├─► 591 ┘
-                                   ├─► 592 (14 parity days) ─┐
-                                   ├─► 593 ─► 594 ───────────┤
-                                   └─► 595 (Pro before 597) ─┤
-                     596 (needs 494 journal flip) ─► 7d shadow
-                     597 ─► 7d shadow     598 ─► 7d shadow
-                                     599 ─► 14d shadow ─► 600 (per step, 7d before/after) ─► 601
+P0 push fix ─────────────────────────────┐
+587 ADR v2 + spike (needs Docker) ───────┼─► N1 RPC ─► N2 outbox ─► N3 writers ─► N4 sync
+588 baseline (console)                   │
+589 / 590 / 591 / 592 coverage ──────────┘ (in parallel, each with parity days)
+                       593 realtime ─► 594 SQLite copy ─► N5 read store
+                                                   └─► 596 → 597 → 598 → 599 → N6 (shadow periods)
+                                                                     595 Pro before 597
+                                                                               └─► 600 ─► 601
 ```
 
-The waits dominate, not the code: realistically **8–12 weeks** of calendar time after a GO, mostly parity and shadow windows that can overlap.
+**Effort:** this is now the largest epic in the repo. It adds a second write path, a native local database and a new provider read layer, on top of v1's sync and screen work. Expect **10–14 weeks** of calendar time, much of it shadow and parity periods. Phases 1 and 2 can overlap.
 
 ---
 
-## 6. What I need from the user
+## 4. What the user needs to do first
 
-1. **Web deploy timing** (to make 583 live), when the Netlify credits allow. I won't trigger it.
-2. **D5:** accept lab plus console measurement for 588 instead of production telemetry (or grant an R1.1 exception, or accept a Netlify collector).
-3. **Permission to correct the drift** in the epic description and in `READ_MODEL_RULES.md` §2 during 587.
-4. Whether 587 should present the **scoped GO** (§3) as an option.
-
-## 7. First action when approved
-
-Create `feature/SPENDLY-586-supabase-first-reads` from `main` → move 587 to In Progress → branch `feature/SPENDLY-587-adr-go-no-go` → write the ADR skeleton and tracker, run the realtime-RLS spike on the drill project → stop for review.
+1. **Netlify function logs for `readmodel-push`** (Netlify → the `spendly-share` site → Functions → `readmodel-push` → Logs), around a time you saved an expense. That makes P0 a quick fix.
+2. **Install Docker Desktop** (`winget install Docker.DockerDesktop`, then open it once) for the 587 spike.
+3. **Approve this v2 plan.** Then I create N1–N6 and P0 in Jira and update the descriptions of 587, 589–601 to match.
+4. **Release SPENDLY-660** (Release — Expense). It's independent of this epic and cuts ~60% of cold-launch reads now.
