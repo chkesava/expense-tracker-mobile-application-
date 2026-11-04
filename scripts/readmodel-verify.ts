@@ -34,8 +34,13 @@ export function firestoreCounter(db: Firestore): VerifySource {
         for (const ref of parents) total += (await ref.collection(parent.child).count().get()).data().count;
         return total;
       }
-      const snap = await db.collection("users").doc(uid).collection(collection).count().get();
-      return snap.data().count;
+      const base = db.collection("users").doc(uid).collection(collection);
+      const total = (await base.count().get()).data().count;
+      // SPENDLY-592: documents the read model never copies don't count either.
+      const excluded = SPEC_BY_COLLECTION.get(collection)?.excludeDocIds ?? [];
+      if (!excluded.length) return total;
+      const present = (await db.getAll(...excluded.map((id) => base.doc(id)))).filter((s) => s.exists).length;
+      return total - present;
     },
   };
 }

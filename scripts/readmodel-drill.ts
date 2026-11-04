@@ -27,7 +27,7 @@ import { getFirestore, Timestamp, type Firestore } from "firebase-admin/firestor
 import { purgeReadModel } from "../netlify/functions/_readmodelPurge";
 import { fullLedgerFixture } from "../shared/__fixtures__/readModel/fullLedger";
 import { convergence, summarizeConvergence, type ConvergenceReport, type ModelRow } from "../shared/utils/readModel/convergence";
-import { firestorePathOf, READ_MODEL_TABLES, type SourceDoc, type TableSpec } from "../shared/utils/readModel/mapping";
+import { firestorePathOf, isExcludedDoc, READ_MODEL_TABLES, type SourceDoc, type TableSpec } from "../shared/utils/readModel/mapping";
 import { READ_MODEL_SCREENS } from "../shared/utils/readModelMode";
 import { handleReadModelPush } from "../netlify/functions/_readmodelPushCore";
 import { livePushPorts } from "../netlify/functions/readmodel-push";
@@ -188,7 +188,10 @@ async function readSource(db: Firestore): Promise<Map<string, Map<string, Source
         continue;
       }
       const snap = await db.collection(`users/${userRef.id}/${spec.collection}`).get();
-      byCollection.set(spec.collection, snap.docs.map((d) => ({ id: d.id, data: d.data(), updateTime: d.updateTime.toMillis() })));
+      byCollection.set(
+        spec.collection,
+        snap.docs.filter((d) => !isExcludedDoc(spec, d.id)).map((d) => ({ id: d.id, data: d.data(), updateTime: d.updateTime.toMillis() }))
+      );
     }
     out.set(userRef.id, byCollection);
   }

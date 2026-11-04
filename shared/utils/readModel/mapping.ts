@@ -43,6 +43,13 @@ export type TableSpec = {
   derivedMonth?: boolean;
   parent?: ParentSpec;
   root?: RootSpec;
+  /**
+   * Documents of this collection that are never copied (SPENDLY-592: the
+   * retired `financialSummaries/netWorth` and `/investments`, which nothing
+   * reads and which disagree with what the app shows). Skipped by the sync,
+   * the push, the client outbox and verify.
+   */
+  excludeDocIds?: readonly string[];
 };
 
 const f = (column: string, source: string, type: FieldType): FieldSpec => ({ column, source, type });
@@ -751,6 +758,28 @@ export const READ_MODEL_TABLES: TableSpec[] = [
       f("updated_at", "updatedAt", "timestamp"),
     ],
   },
+  // SPENDLY-592 (migration 20261103000000): Firestore's stored summaries,
+  // copied exactly (R4.1): `dashboard_{YYYY-MM}` (month totals) and `epf`.
+  // Never recomputed in SQL. The category map stays in `doc`.
+  {
+    table: "financial_summaries",
+    collection: "financialSummaries",
+    excludeDocIds: ["netWorth", "investments"],
+    fields: [
+      f("period", "period", "text"),
+      f("total_expenses", "totalExpenses", "money"),
+      f("total_income", "totalIncome", "money"),
+      f("transaction_count", "transactionCount", "integer"),
+      f("current_balance", "currentBalance", "money"),
+      f("employee_contribution_total", "employeeContributionTotal", "money"),
+      f("employer_contribution_total", "employerContributionTotal", "money"),
+      f("interest_total", "interestTotal", "money"),
+      f("adjustments_total", "adjustmentsTotal", "money"),
+      f("last_credit_period", "lastCreditPeriod", "text"),
+      f("summary_version", "summaryVersion", "integer"),
+      f("calculated_at", "calculatedAt", "timestamp"),
+    ],
+  },
   // SPENDLY-591 part C (migration 20261102020000): the users/{uid} settings
   // document. Server push only (never rm_client_apply). NOT copied: the PIN and
   // lock fields (privacyPin, fakePin, lockPastMonths, lockOnInactivity,
@@ -805,6 +834,11 @@ export const READ_MODEL_TABLES: TableSpec[] = [
 ];
 
 export const SPEC_BY_COLLECTION = new Map(READ_MODEL_TABLES.map((s) => [s.collection, s]));
+
+/** True when this document is one its collection never copies (SPENDLY-592). */
+export function isExcludedDoc(spec: TableSpec, docId: string): boolean {
+  return spec.excludeDocIds?.includes(docId) ?? false;
+}
 
 /** The parent document id of a nested row's doc_id ("{parentId}/{id}"), else null. */
 export function parentIdOf(spec: TableSpec, docId: string): string | null {

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { isDuressUid } from "../../shared/utils/duress";
 import { typedColumns, typedDifferences } from "../../shared/utils/readModel/parity";
-import { mapDocumentWithReason, READ_MODEL_TABLES, type ReadModelRow, type SourceDoc, type TableSpec } from "../../shared/utils/readModel/mapping";
+import { isExcludedDoc, mapDocumentWithReason, READ_MODEL_TABLES, type ReadModelRow, type SourceDoc, type TableSpec } from "../../shared/utils/readModel/mapping";
 
 /**
  * SPENDLY-506 — the read-model sync, as a pure function of its ports
@@ -251,6 +251,8 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
       spend(page.reads ?? Math.max(1, page.docs.length));
       const rows: ReadModelRow[] = [];
       for (const doc of page.docs) {
+        // Never copied (SPENDLY-592); read in passing, so the read still counts.
+        if (isExcludedDoc(spec, doc.id)) continue;
         if (seen.has(doc.id)) continue;
         seen.add(doc.id);
         const { row, reason } = mapDocumentWithReason(spec, uid, doc);

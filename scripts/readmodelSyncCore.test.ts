@@ -63,6 +63,35 @@ function world() {
   });
 }
 
+describe("stored summaries (SPENDLY-592)", () => {
+  it("copies the dashboard months and EPF exactly, and never the retired netWorth/investments docs", async () => {
+    const at = T0 - 48 * H;
+    const fs = fakeFirestore({
+      alice: {
+        financialSummaries: [
+          { id: "dashboard_2026-10", data: { period: "2026-10", totalExpenses: 12345.67, totalIncome: 50000, transactionCount: 41, categoryTotals: { Food: 4200.5 }, summaryVersion: 2 }, updateMs: at },
+          { id: "epf", data: { currentBalance: 812345.5, employeeContributionTotal: 400000, employerContributionTotal: 150000, interestTotal: 262345.5, adjustmentsTotal: 0, lastCreditPeriod: "2026-09" }, updateMs: at },
+          { id: "netWorth", data: { total: 999 }, updateMs: at },
+          { id: "investments", data: { total: 111 }, updateMs: at },
+        ],
+      },
+    });
+    const m = memorySink();
+    const run = await runSync(fs.source, m.sink, opts("full", T0));
+    expect(run.status).toBe("succeeded");
+    expect(m.row("financial_summaries", "alice", "dashboard_2026-10")).toMatchObject({
+      period: "2026-10", total_expenses: 12345.67, total_income: 50000, transaction_count: 41, mapping_status: "mapped",
+      doc: expect.objectContaining({ categoryTotals: { Food: 4200.5 } }),
+    });
+    expect(m.row("financial_summaries", "alice", "epf")).toMatchObject({ current_balance: 812345.5, interest_total: 262345.5, last_credit_period: "2026-09" });
+    expect(m.row("financial_summaries", "alice", "netWorth")).toBeUndefined();
+    expect(m.row("financial_summaries", "alice", "investments")).toBeUndefined();
+    // A second full pass doesn't treat the skipped docs as anything to tombstone.
+    const again = await runSync(fs.source, m.sink, opts("full", T0 + H));
+    expect(again.tombstones).toBe(0);
+  });
+});
+
 describe("read-model sync core (SPENDLY-506)", () => {
   it("first run copies everything, then an unchanged incremental run reads little and writes nothing", async () => {
     const fs = world();
@@ -390,14 +419,14 @@ describe("account lifecycle (SPENDLY-508)", () => {
       "categorizationRules", "categoryBudgets", "creditCardBills", "decisions",
       "epfContributionEvents", "epfContributions", "epfEstablishments", "epfInterestEntries",
       "epfProfile", "epfReconciliations", "epfTransferEvents", "epfTransfers", "epfWageHistory",
-      "expenses", "feeReviews", "feeSignalDismissals", "financialGoals", "goalEvents",
+      "expenses", "feeReviews", "feeSignalDismissals", "financialGoals", "financialSummaries", "goalEvents",
       "goalFundingPlans", "holdings", "incomes", "investmentCashTransactions", "investments",
       "ledgerEvents", "merchantOverrides", "netWorthHistory", "portfolioSettings",
       "portfolioTransactions", "receivableRepayments", "receivables", "recurringDismissals",
       "runwayOverrides", "runwaySettings", "sipPlans", "sipTransactions", "spaces",
       "subscriptions", "trips", "userSettings", "virtualPositions", "watchlists", "watchlists/items", "whatIfScenarios",
     ]);
-    for (const excluded of ["meta", "stats", "notifications", "financialSummaries", "daily_logs", "weight_history", "pandalMemberships", "goalNames"]) {
+    for (const excluded of ["meta", "stats", "notifications", "daily_logs", "weight_history", "pandalMemberships", "goalNames"]) {
       expect(collections.has(excluded)).toBe(false);
     }
     expect(requested.some((r) => r.startsWith("alice_duress/"))).toBe(false);

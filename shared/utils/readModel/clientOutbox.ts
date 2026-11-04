@@ -18,7 +18,7 @@
  *   Firestore's version anyway. A failed batch (network, server) stays and is
  *   retried with backoff.
  */
-import { mapDocumentWithReason, SPEC_BY_COLLECTION, type ReadModelRow } from "./mapping";
+import { isExcludedDoc, mapDocumentWithReason, SPEC_BY_COLLECTION, type ReadModelRow } from "./mapping";
 
 /** `rm_client_apply` takes at most this many rows and deletes per call. */
 export const MAX_BATCH = 50;
@@ -59,7 +59,7 @@ export function buildClientEntry(input: {
 }): ClientWriteEntry | null {
   const spec = SPEC_BY_COLLECTION.get(input.collection);
   // The users/{uid} copy is server-push only (SPENDLY-591): never via rm_client_apply.
-  if (!spec || spec.root) return null;
+  if (!spec || spec.root || isExcludedDoc(spec, input.docId)) return null;
   const base = { key: `${spec.table}/${input.docId}`, table: spec.table, uid: input.uid, docId: input.docId, at: input.at, attempts: 0 };
   if (!input.doc) return base;
   // The mapper needs an update time; the RPC sets source_update_time from
