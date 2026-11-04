@@ -14,7 +14,7 @@
 | 1 | SPENDLY-590 sync Wave 3 | `feature/SPENDLY-590-sync-wave3` | **Merged into the epic** (`6c4b469f`); migration `20261101000000` applied to production |
 | 1 | SPENDLY-591 remaining collections (`financialGoals` already synced, 609) | `feature/SPENDLY-591-sync-remaining` | **Merged into the epic** (`44961430`); migrations `20261102000000`, `20261102010000`, `20261102020000` applied to production |
 | 2 | SPENDLY-592 copy authoritative values | `feature/SPENDLY-592-copy-money-values` | **Merged into the epic** (`47bf3e38`); migration `20261103000000` applied to production; 14-day parity gate after the epic reaches main |
-| 2 | SPENDLY-593 realtime (Broadcast ping + refetch, ADR D2) | — | To Do |
+| 2 | SPENDLY-593 realtime (Broadcast ping + refetch, ADR D2) | `feature/SPENDLY-593-realtime` | **Merged into the epic** (`f138e130`); migration `20261104000000` applied |
 | 2 | SPENDLY-594 offline (Firestore cache, ADR D1) | — | To Do |
 | 2 | SPENDLY-595 Supabase plan | — | To Do |
 | 3 | SPENDLY-596 live Journal | — | To Do |
@@ -50,3 +50,4 @@
 - **2026-11-04 (672):** the nightly sync as the safety net: `READMODEL_NIGHTLY_MODE` (default `full`: no change on merge; `safety-net`: changed-only nights via collection-group queries + Sunday full), divergence counting before every upsert, health (divergences, app writes, weekly-full gap), 96 collection-group field overrides in `firestore.indexes.json` (deploy needs approval), runbook + R1.2b. The user chose collection-group queries (~450 reads/night vs ~2,800 per-user, ~5,300 full). 529 test files + rules suite green.
 - **2026-11-04:** 672 merged into the epic. No migration; nightly behaviour unchanged until `READMODEL_NIGHTLY_MODE=safety-net`. Pending: the collection-group index deploy (96 overrides, manual, at or before the epic merge) and the switch after the release + `clientWrites`.
 - **2026-11-04 (593):** realtime: statement-level ping triggers on all 53 synced tables (one Broadcast per user per statement to private `user:<uid>`, no data, `resync` over 100 rows), `readmodel_changes_since` catch-up (tombstones included), owner-only topic policy, migration `20261104000000`; client feed `lib/readModelRealtime.ts` behind `readModel.realtime` (off), consumed by 594. CI realtime stub in `bootstrap_roles.sql`. 530 test files + rules + schema CI green.
+- **2026-11-04:** 593 merged into the epic (`f138e130`). **Migration `20261104000000` applied to production** after the checks (no active queries, last sync succeeded). Verified: 106 ping triggers (53 tables × 2), `readmodel_ping` security definer, `readmodel_changes_since` authenticated-only, topic policy present, rows untouched. Pings now flow on every change; nothing listens until `readModel.realtime` (after 594).
