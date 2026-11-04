@@ -217,7 +217,12 @@ export function createClientWriteOutbox(deps: ClientWritesDeps) {
     return { ...s, ...counts };
   }
 
-  return { note, flush, kick, forget, resume, stats };
+  /** SPENDLY-594: the unsent entries already loaded for `uid` (the local copy's overlay). Never another uid's. */
+  function pending(uid: string): ClientWriteEntry[] {
+    return queue?.uid === uid ? [...queue.entries] : [];
+  }
+
+  return { note, flush, kick, forget, resume, stats, pending };
 }
 
 type ClientWriteOutbox = ReturnType<typeof createClientWriteOutbox>;
@@ -234,6 +239,11 @@ export function configureClientWrites(deps: ClientWritesDeps): ClientWriteOutbox
 export function notifyClientWrites(uid: string, paths: string[]): void {
   if (!outbox) return;
   void outbox.note(uid, paths).catch(() => undefined);
+}
+
+/** SPENDLY-594: this device's unsent writes for `uid`, for the local copy's overlay. */
+export function pendingClientWrites(uid: string): ClientWriteEntry[] {
+  return outbox?.pending(uid) ?? [];
 }
 
 export function clientWritesStats(): ClientWritesStats | null {

@@ -95,9 +95,12 @@ import {
 } from "@/lib/firestoreReadDebug";
 import { configureReadModelPush, notifyReadModelSnapshot } from "@/lib/readModelPush";
 import { connectReadModel } from "@/lib/readModelClient";
-import { CLIENT_OUTBOX_STORAGE_PREFIX, configureClientWrites } from "@/lib/readModelClientWrites";
-import { configureReadModelRealtime, type ChangesSinceRow } from "@/lib/readModelRealtime";
-import { clientWritesEnabled, realtimeEnabled } from "@/shared/utils/readModelMode";
+import { CLIENT_OUTBOX_STORAGE_PREFIX, configureClientWrites, pendingClientWrites } from "@/lib/readModelClientWrites";
+import { configureReadModelRealtime, onReadModelChanges, type ChangesSinceRow } from "@/lib/readModelRealtime";
+import { platformStoreFactory, setAppLocalCopy, supabaseFetchers } from "@/lib/readModelLocal/appCopy";
+import { createLocalCopy } from "@/lib/readModelLocal/localCopy";
+import type { LocalStoreFactory } from "@/lib/readModelLocal/store";
+import { clientWritesEnabled, localCopyEnabled, realtimeEnabled } from "@/shared/utils/readModelMode";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import { perfEvent } from "@/lib/perf";
@@ -413,13 +416,70 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     });
     return () => realtimeRef.current?.stop();
   }, []);
-  const realtimeOn = realtimeEnabled(systemSettings.readModel);
+  // SPENDLY-594: the on-device copy of the user's read-model rows (the offline
+  // source once screens read Supabase, SPENDLY-673). Off unless
+  // system_settings/global.readModel.localCopy is true; never opened in duress,
+  // signed out or Spendly Test. Realtime pings keep it fresh.
+  const localCopyRef = useRef<ReturnType<typeof createLocalCopy> | null>(null);
   useEffect(() => {
-    const rt = realtimeRef.current;
-    if (!rt) return;
-    if (uid && realtimeOn && !isDuress) void rt.start(uid);
-    else rt.stop();
-  }, [uid, realtimeOn, isDuress]);
+    let factory: Promise<LocalStoreFactory> | null = null;
+    const platformFactory = () => (factory ??= platformStoreFactory());
+    const copy = createLocalCopy({
+      factory: {
+        open: async (id) => (await platformFactory()).open(id),
+        destroy: async () => (await platformFactory()).destroy(),
+      },
+      canUse: () => {
+        const rm = readModelRef.current;
+        return localCopyEnabled(rm.setting) && isReadModelEnvConfigured() && !rm.localTestMode && !rm.duress && !!userRef.current;
+      },
+      ...supabaseFetchers(async () => {
+        const u = userRef.current;
+        return u ? (await connectReadModel(u)).client : null;
+      }),
+      pending: pendingClientWrites,
+      now: () => Date.now(),
+      log: (event, detail) => logWarning(event, detail),
+    });
+    localCopyRef.current = copy;
+    setAppLocalCopy(copy);
+    const off = onReadModelChanges((event) => void copy.applyEvent(event));
+    return () => {
+      off();
+      setAppLocalCopy(null);
+      void copy.stop();
+    };
+  }, []);
+
+  // One sequence per change, so nothing races: the previous user's copy leaves
+  // the device (sign-out or a switch; entering duress only stops it), then the
+  // copy opens, then realtime starts from the copy's last change seen (so a
+  // reconnect catches up instead of rehydrating).
+  const realtimeOn = realtimeEnabled(systemSettings.readModel);
+  const localCopyOn = localCopyEnabled(systemSettings.readModel);
+  const localCopyUidRef = useRef<string | undefined>(undefined);
+  const readModelSequence = useRef<Promise<void>>(Promise.resolve());
+  useEffect(() => {
+    const previous = localCopyUidRef.current;
+    localCopyUidRef.current = uid;
+    readModelSequence.current = readModelSequence.current.then(async () => {
+      const copy = localCopyRef.current;
+      const rt = realtimeRef.current;
+      try {
+        if (copy && previous && previous !== uid && !isDuress) await copy.wipe();
+        let since: string | null = null;
+        if (copy) {
+          if (uid && localCopyOn && !isDuress) since = (await copy.start(uid))?.lastSeen ?? null;
+          else await copy.stop();
+        }
+        if (!rt) return;
+        if (uid && realtimeOn && !isDuress) await rt.start(uid, since);
+        else rt.stop();
+      } catch (error) {
+        logWarning("readModel.localCopy.sequence", error);
+      }
+    });
+  }, [uid, realtimeOn, localCopyOn, isDuress]);
   /** SPENDLY-512: where read-model history paging resumes (Firestore keeps its own cursor). */
   const supabaseExpenseCursorRef = useRef<SupabaseCursor>(null);
   const supabaseIncomeCursorRef = useRef<SupabaseCursor>(null);

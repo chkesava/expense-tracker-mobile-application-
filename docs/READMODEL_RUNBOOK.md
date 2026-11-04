@@ -260,6 +260,25 @@ Run it from the workflow with `mode = full`, first with `dry_run = true` to see 
 
 **Turning it off:** set `readModel.realtime = false`. The copy (594) falls back to refetching on focus and polling.
 
+## The on-device copy (SPENDLY-594)
+
+**What it is:** each device keeps a copy of its user's read-model rows (`lib/readModelLocal/`): SQLite on Android and iOS (`spendly-readmodel.db`), IndexedDB on web.
+- It hydrates on first start (resumable), catches up on every start (`readmodel_changes_since`), and stays fresh from realtime pings.
+- Reads layer the device's unsent writes on top.
+
+**Switch:** `system_settings/global.readModel.localCopy = true` (default off). It's never opened in duress, signed out or Spendly Test.
+
+**Safety:**
+- The store has one owner uid; opening it for another uid wipes it first.
+- Sign-out and account deletion delete it.
+- Money is shown exactly as PostgREST returned it (R4).
+
+**Cap:** 50,000 rows per table. A table past it keeps its newest rows by `synced_at`, is marked partial, and older history is paged from Supabase online.
+
+**Problems:**
+- *A device's copy looks wrong:* sign out and in (it wipes and rehydrates), or set `localCopy = false` (the screens read as before).
+- *A mapping change:* the changed table is dropped and rehydrated automatically on the next start.
+
 ## Recovery drills (SPENDLY-520)
 
 Every procedure above has been exercised end to end on a local stack: the production scripts unchanged, the Firebase emulator, a local Postgres with the real migrations, and PostgREST (Supabase's API). The latest log is in `docs/SPENDLY-520-drill-log.md`. Re-run the drills after any change to the sync, the mapping or the migrations:
