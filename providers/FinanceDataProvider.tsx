@@ -97,8 +97,11 @@ import { configureReadModelPush, notifyReadModelSnapshot } from "@/lib/readModel
 import { connectReadModel } from "@/lib/readModelClient";
 import { CLIENT_OUTBOX_STORAGE_PREFIX, configureClientWrites, pendingClientWrites } from "@/lib/readModelClientWrites";
 import { configureReadModelRealtime, onReadModelChanges, type ChangesSinceRow } from "@/lib/readModelRealtime";
-import { platformStoreFactory, setAppLocalCopy, supabaseFetchers } from "@/lib/readModelLocal/appCopy";
+import { getAppLocalCopy, platformStoreFactory, setAppLocalCopy, supabaseFetchers } from "@/lib/readModelLocal/appCopy";
 import { createLocalCopy } from "@/lib/readModelLocal/localCopy";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs } from "@/lib/readModelLocal/readSource";
+import { COPY_LEDGER_WINDOW, copyPendingCount as pendingFor, copySnapshot, loadOlderFromCopy as olderFromCopy } from "@/lib/readModelLocal/ledgerWindow";
 import type { LocalStoreFactory } from "@/lib/readModelLocal/store";
 import { clientWritesEnabled, localCopyEnabled, realtimeEnabled } from "@/shared/utils/readModelMode";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
@@ -273,6 +276,17 @@ const IncomesContext = createContext<IncomesContextType | undefined>(undefined);
 const AccountsContext = createContext<AccountsContextType | undefined>(undefined);
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
+
+/** SPENDLY-596: this device's unsent writes for a table (the copy's "waiting to sync"). */
+function copyPendingCount(table: string): number {
+  const uid = getAppLocalCopy()?.status().uid;
+  return uid ? pendingFor(pendingClientWrites(uid), table) : 0;
+}
+
+/** SPENDLY-596: the next older page from the copy (supabase mode). */
+function loadOlderFromCopy<T extends { id?: string }>(collectionName: "expenses" | "incomes", offsetRef: { current: number }) {
+  return olderFromCopy<T>(getAppLocalCopy(), collectionName, offsetRef);
+}
 
 export function FinanceDataProvider({ children }: { children: ReactNode }) {
   const { user, isDuress } = useAuth();
@@ -503,6 +517,16 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   }, [paginatedExpenses]);
 
   const lastExpenseDocRef = useRef<QueryDocumentSnapshot | null>(null);
+  // SPENDLY-596: the Journal window's read switch (readModel.expenses / incomes).
+  const expensesSource = useReadModelSource("expenses");
+  const incomesSource = useReadModelSource("incomes");
+  const expensesModeRef = useRef(expensesSource.mode);
+  expensesModeRef.current = expensesSource.mode;
+  const incomesModeRef = useRef(incomesSource.mode);
+  incomesModeRef.current = incomesSource.mode;
+  /** How many copy rows (newest first, deleted included) the window and older pages have used. */
+  const copyExpensesOffsetRef = useRef(LEDGER_STAGED_LIMIT);
+  const copyIncomesOffsetRef = useRef(LEDGER_STAGED_LIMIT);
   const [expensesLoading, setExpensesLoading] = useState(true);
   const [expensesComplete, setExpensesComplete] = useState(false);
   const [hasMoreExpenses, setHasMoreExpenses] = useState(false);
@@ -728,19 +752,21 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     // nothing could tell a 300-row page from the whole ledger. `fromFullQuery`
     // is the only difference — it marks the unlimited listener.
     const makeApplyExpensesSnap =
-      (fromFullQuery: boolean) => (snap: QuerySnapshot) => {
+      (fromFullQuery: boolean, fromCopy = false) => (snap: QuerySnapshot) => {
         if (!expensesHydratedRef.current) {
           perfEvent("firestore_first_snapshot", { collection: "expenses", docCount: snap.docs.length });
         }
-        logQuerySnapshot(expensePath, snap, {
-          feature: "finance",
-          queryShape: fromFullQuery ? "unlimited" : `limit=${LEDGER_STAGED_LIMIT}`,
-        });
-        notifyReadModelSnapshot(snap);
+        if (!fromCopy) {
+          logQuerySnapshot(expensePath, snap, {
+            feature: "finance",
+            queryShape: fromFullQuery ? "unlimited" : `limit=${LEDGER_STAGED_LIMIT}`,
+          });
+          notifyReadModelSnapshot(snap);
+        }
         const { items, pendingWrites } = foldLedgerSnapshot<Expense>(snap.docs, {
           activeOnly: true,
         });
-        if (shouldApplySnapshotDocs(snap, expensesHydratedRef.current)) {
+        if (fromCopy || shouldApplySnapshotDocs(snap, expensesHydratedRef.current)) {
           // If docs that were in the previous realtime snapshot were pushed out past the limit,
           // preserve them in paginatedExpenses so no docs disappear when new ones arrive
           if (realtimeExpensesRef.current.length > 0 && paginatedExpensesRef.current.length > 0) {
@@ -757,14 +783,14 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
 
           setRealtimeExpenses(items);
 
-          if (snap.docs.length > 0 && paginatedExpensesRef.current.length === 0) {
+          if (!fromCopy && snap.docs.length > 0 && paginatedExpensesRef.current.length === 0) {
             lastExpenseDocRef.current = snap.docs[snap.docs.length - 1];
           }
         }
-        pendingExpensesCountRef.current = pendingWrites;
+        pendingExpensesCountRef.current = fromCopy ? copyPendingCount("expenses") : pendingWrites;
         updatePendingSyncCount();
-        setIsFromCache(snap.metadata.fromCache);
-        noteServerSync(snap.metadata.fromCache);
+        setIsFromCache(fromCopy ? false : snap.metadata.fromCache);
+        if (!fromCopy) noteServerSync(snap.metadata.fromCache);
         expensesHydratedRef.current = true;
         setFinanceError(null);
         setExpensesLoading(false);
@@ -780,12 +806,16 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         }
       };
 
-    const applyExpensesSnap = makeApplyExpensesSnap(false);
+    const applyExpensesFirestore = makeApplyExpensesSnap(false);
+    const applyExpensesSnap = (snap: QuerySnapshot) => {
+      applyExpensesFirestore(snap);
+      if (expensesSource.mode === "shadow") void expensesSource.shadow(toSourceDocs(snap), { windowed: true });
+    };
 
     // SPENDLY-109: same factory shape as expenses above — `fromFullQuery`
     // marks the unlimited listener, which is the only difference.
     const makeApplyIncomesSnap =
-      (fromFullQuery: boolean) => (snap: QuerySnapshot) => {
+      (fromFullQuery: boolean, fromCopy = false) => (snap: QuerySnapshot) => {
         if (!incomesHydratedRef.current) {
           perfEvent("firestore_first_snapshot", {
             collection: "incomes",
@@ -793,15 +823,17 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             fromCache: snap.metadata.fromCache,
           });
         }
-        logQuerySnapshot(incomePath, snap, {
-          feature: "finance",
-          queryShape: fromFullQuery ? "unlimited" : `limit=${LEDGER_STAGED_LIMIT}`,
-        });
-        notifyReadModelSnapshot(snap);
+        if (!fromCopy) {
+          logQuerySnapshot(incomePath, snap, {
+            feature: "finance",
+            queryShape: fromFullQuery ? "unlimited" : `limit=${LEDGER_STAGED_LIMIT}`,
+          });
+          notifyReadModelSnapshot(snap);
+        }
         const { items, pendingWrites } = foldLedgerSnapshot<Income>(snap.docs, {
           activeOnly: true,
         });
-        if (shouldApplySnapshotDocs(snap, incomesHydratedRef.current)) {
+        if (fromCopy || shouldApplySnapshotDocs(snap, incomesHydratedRef.current)) {
           // If docs that were in the previous realtime snapshot were pushed out past the limit,
           // preserve them in paginatedIncomes so no docs disappear when new ones arrive
           if (realtimeIncomesRef.current.length > 0 && paginatedIncomesRef.current.length > 0) {
@@ -818,13 +850,13 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
 
           setRealtimeIncomes(items);
 
-          if (snap.docs.length > 0 && paginatedIncomesRef.current.length === 0) {
+          if (!fromCopy && snap.docs.length > 0 && paginatedIncomesRef.current.length === 0) {
             lastIncomeDocRef.current = snap.docs[snap.docs.length - 1];
           }
         }
-        pendingIncomesCountRef.current = pendingWrites;
+        pendingIncomesCountRef.current = fromCopy ? copyPendingCount("incomes") : pendingWrites;
         updatePendingSyncCount();
-        noteServerSync(snap.metadata.fromCache);
+        if (!fromCopy) noteServerSync(snap.metadata.fromCache);
         incomesHydratedRef.current = true;
         setFinanceError(null);
         setIncomesLoading(false);
@@ -840,14 +872,23 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         }
       };
 
-    const applyIncomesSnap = makeApplyIncomesSnap(false);
+    const applyIncomesFirestore = makeApplyIncomesSnap(false);
+    const applyIncomesSnap = (snap: QuerySnapshot) => {
+      applyIncomesFirestore(snap);
+      if (incomesSource.mode === "shadow") void incomesSource.shadow(toSourceDocs(snap), { windowed: true });
+    };
+    // SPENDLY-596: the copy's rows go through the same fold, window and completeness rules.
+    copyExpensesOffsetRef.current = LEDGER_STAGED_LIMIT;
+    copyIncomesOffsetRef.current = LEDGER_STAGED_LIMIT;
 
     // SPENDLY-409: Bounded startup page is the permanent realtime listener.
     // The automatic idle upgrade to unbounded queries is removed to eliminate
     // the P0 read explosion (~20K+ unnecessary daily reads). Full history is
     // paginated on demand via cursor pagination (SPENDLY-410).
     perfEvent("firestore_listener_start", { collection: "expenses" });
-    const expensesUnsub = onSnapshot(
+    const expensesUnsub = expensesSource.mode === "supabase"
+      ? expensesSource.subscribe((docs) => makeApplyExpensesSnap(false, true)(copySnapshot(docs)), COPY_LEDGER_WINDOW)
+      : onSnapshot(
       query(expensesCol, orderBy("createdAt", "desc"), limit(LEDGER_STAGED_LIMIT)),
       FINANCE_SNAPSHOT_LISTEN_OPTIONS,
       applyExpensesSnap,
@@ -861,7 +902,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       )
     );
     perfEvent("firestore_listener_start", { collection: "incomes" });
-    const incomesUnsub = onSnapshot(
+    const incomesUnsub = incomesSource.mode === "supabase"
+      ? incomesSource.subscribe((docs) => makeApplyIncomesSnap(false, true)(copySnapshot(docs)), COPY_LEDGER_WINDOW)
+      : onSnapshot(
       query(incomesCol, orderBy("createdAt", "desc"), limit(LEDGER_STAGED_LIMIT)),
       FINANCE_SNAPSHOT_LISTEN_OPTIONS,
       applyIncomesSnap,
@@ -957,7 +1000,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       forgetSnapshotPath(accountTypePath);
       unsubscribers.forEach((unsub) => unsub());
     };
-  }, [uid, db, updatePendingSyncCount, financeAttempt, setFinanceError]);
+    // SPENDLY-596: expensesSource.mode, incomesSource.mode (the read switch, a session fallback included).
+  }, [uid, db, updatePendingSyncCount, financeAttempt, setFinanceError, expensesSource.mode, incomesSource.mode]);
 
   // ─── Deferred: Secondary ledger collections ─────────────────────────────────
 
@@ -1830,6 +1874,26 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const u = userRef.current;
     const database = getFirestoreDb();
     if (!u || !database || fetchingMoreExpensesRef.current || !hasMoreExpensesRef.current) return;
+    if (expensesModeRef.current === "supabase") {
+      fetchingMoreExpensesRef.current = true;
+      setIsFetchingMoreExpenses(true);
+      try {
+        const page = await loadOlderFromCopy<Expense>("expenses", copyExpensesOffsetRef);
+        if (!page) return;
+        setPaginatedExpenses((prev) => [...prev, ...unseenRows(prev, realtimeExpensesRef.current, page.items)]);
+        if (page.exhausted) {
+          setHasMoreExpenses(false);
+          setExpensesComplete(true);
+        }
+      } catch (err) {
+        logError("financeProvider.loadMoreExpenses.copy", err);
+        toast.error(friendlyErrorMessage(err, "Failed to load older expenses"));
+      } finally {
+        fetchingMoreExpensesRef.current = false;
+        setIsFetchingMoreExpenses(false);
+      }
+      return;
+    }
     const cursor = lastExpenseDocRef.current;
     if (!cursor) return;
 
@@ -1960,6 +2024,26 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const u = userRef.current;
     const database = getFirestoreDb();
     if (!u || !database || fetchingMoreIncomesRef.current || !hasMoreIncomesRef.current) return;
+    if (incomesModeRef.current === "supabase") {
+      fetchingMoreIncomesRef.current = true;
+      setIsFetchingMoreIncomes(true);
+      try {
+        const page = await loadOlderFromCopy<Income>("incomes", copyIncomesOffsetRef);
+        if (!page) return;
+        setPaginatedIncomes((prev) => [...prev, ...unseenRows(prev, realtimeIncomesRef.current, page.items)]);
+        if (page.exhausted) {
+          setHasMoreIncomes(false);
+          setIncomesComplete(true);
+        }
+      } catch (err) {
+        logError("financeProvider.loadMoreIncomes.copy", err);
+        toast.error(friendlyErrorMessage(err, "Failed to load older income"));
+      } finally {
+        fetchingMoreIncomesRef.current = false;
+        setIsFetchingMoreIncomes(false);
+      }
+      return;
+    }
     const cursor = lastIncomeDocRef.current;
     if (!cursor) return;
 

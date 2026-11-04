@@ -17,7 +17,12 @@ import { READ_MODEL_COLLECTIONS } from "@/shared/utils/readModel/collectionMode"
  */
 const ROOT = join(__dirname, "..", "..");
 
-const INTEGRATED = ["borrowingRepayments", "borrowings", "categoryBudgets", "creditCardBills", "investments", "receivableRepayments", "receivables"];
+const INTEGRATED = [
+  "borrowingRepayments", "borrowings", "categoryBudgets", "creditCardBills",
+  // SPENDLY-596: the Journal's newest-300 window (FinanceDataProvider).
+  "expenses", "incomes",
+  "investments", "receivableRepayments", "receivables",
+];
 
 const NOT_YET: Record<string, string> = {
   subscriptions: "drives due-subscription auto-posting, which waits for server-confirmed data (SPENDLY-525); 598",
@@ -31,8 +36,6 @@ const NOT_YET: Record<string, string> = {
   epfReconciliations: "the EPF summary sync writes from EPF sources; 598",
   financialSummaries: "the EPF summary sync compares against the stored summary; 599",
   categories: "loaded by revision (SPENDLY-660), not a plain listener; 674",
-  expenses: "the windowed Journal; 596",
-  incomes: "the windowed Journal; 596",
   accounts: "balances, pending-sync counts and hydration guards; 597",
   accountTypes: "with accounts; 597",
   accountEntries: "the ledger fold and pending-sync counts; 597",

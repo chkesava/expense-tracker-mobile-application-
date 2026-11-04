@@ -17,7 +17,7 @@
 | 2 | SPENDLY-593 realtime (Broadcast ping + refetch, ADR D2) | `feature/SPENDLY-593-realtime` | **Merged into the epic** (`f138e130`); migration `20261104000000` applied |
 | 2 | SPENDLY-594 offline (on-device SQLite/IndexedDB copy, ADR D1) | `feature/SPENDLY-594-offline-copy` | **Merged into the epic**; no migration; native build (`expo-sqlite`) |
 | 2 | SPENDLY-595 Supabase plan | — | To Do |
-| 3 | SPENDLY-596 live Journal | — | To Do |
+| 3 | SPENDLY-596 live Journal | `feature/SPENDLY-596-journal-live` | **Built**; awaiting merge |
 | 3 | SPENDLY-597 accounts, cards, bills | — | To Do |
 | 3 | SPENDLY-598 investments, EPF, loans, subs | — | To Do; behind the 600 checkpoint (ADR D7) |
 | 3 | SPENDLY-599 dashboard, net worth, budgets | — | To Do; behind the 600 checkpoint; net worth via `composeNetWorth`, not a copy (ADR D3) |
@@ -55,3 +55,4 @@
 - **2026-11-04:** 594 merged into the epic. No migration; `expo-sqlite` makes the post-merge release a native build. Copy off until `readModel.localCopy`.
 - **2026-11-04 (673):** read store + per-collection switch (`readModel.<collection>`: firestore|shadow|supabase; supabase waits for a ready copy; session fallback), shadow compare (counts only, via the shared mapper + parity), `useReadModelSource`; wired: creditCardBills, borrowings/receivables + repayments, categoryBudgets, investments. Deferred with reasons (guarded by a test): write-driving collections (subscriptions, SIP, EPF → 598), journal (596), accounts ledger (597), goals/summaries (599), categories (674). R4.3a added. 535 test files + rules green.
 - **2026-11-04:** 673 merged into the epic. No migration. The user accepted the scope: write-driving collections and the journal/ledger/goals/categories stay on Firestore until 596–599/674.
+- **2026-11-04 (596):** the Journal's newest-300 window (`expenses`, `incomes`) through the read switch: copy rows through the same fold/window/completeness code (`fromCopy`), load-more from the copy by position, windowed shadow, outbox-based waiting-to-sync. `ledgerEvents` stays on the existing `audit` switch (online). 536 test files + rules green.
