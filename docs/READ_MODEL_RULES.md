@@ -60,6 +60,7 @@ Everything else is **not** in the read model. Waves 2 and 3 were first closed as
   - a migration in `supabase-readmodel/supabase/migrations/`, with the contract columns (`uid`, `doc_id`, `doc`, `source_path`, `source_update_time`, `source_deleted`, `deleted_at`, `schema_version`, `mapping_status`, `synced_at`), a primary key `(uid, doc_id)`, `(uid, …)` indexes, RLS on, an owner-only SELECT policy, and `grant select … to authenticated`;
   - a `TableSpec` in `shared/utils/readModel/mapping.ts`;
   - the purge function covering it;
+  - the realtime ping triggers `<table>_rm_ping_ins` / `<table>_rm_ping_upd` (SPENDLY-593; `assert_security` fails without them);
   - updated lists in `tests/assert_security.sql` and `tests/rls_behaviour.sql`;
   - a sync-core test.
 

@@ -96,7 +96,8 @@ import {
 import { configureReadModelPush, notifyReadModelSnapshot } from "@/lib/readModelPush";
 import { connectReadModel } from "@/lib/readModelClient";
 import { CLIENT_OUTBOX_STORAGE_PREFIX, configureClientWrites } from "@/lib/readModelClientWrites";
-import { clientWritesEnabled } from "@/shared/utils/readModelMode";
+import { configureReadModelRealtime, type ChangesSinceRow } from "@/lib/readModelRealtime";
+import { clientWritesEnabled, realtimeEnabled } from "@/shared/utils/readModelMode";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import { perfEvent } from "@/lib/perf";
@@ -380,6 +381,45 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (isOnline) clientWritesRef.current?.kick();
   }, [isOnline]);
+
+  // SPENDLY-593: other devices' changes, pinged by the read model on the
+  // user's private topic. Off unless system_settings/global.readModel.realtime
+  // is true; never in duress, signed out or Spendly Test. SPENDLY-594's
+  // on-device copy consumes the stream (onReadModelChanges).
+  const realtimeRef = useRef<ReturnType<typeof configureReadModelRealtime> | null>(null);
+  useEffect(() => {
+    const clientFor = async () => {
+      const u = userRef.current;
+      return u ? (await connectReadModel(u)).client : null;
+    };
+    realtimeRef.current = configureReadModelRealtime({
+      canListen: () => {
+        const rm = readModelRef.current;
+        return realtimeEnabled(rm.setting) && isReadModelEnvConfigured() && !rm.localTestMode && !rm.duress && !!userRef.current;
+      },
+      channel: async (id) => (await clientFor())?.channel(`user:${id}`, { config: { private: true } }) ?? null,
+      removeChannel: (channel) => {
+        void clientFor().then((c) => c?.removeChannel(channel as never));
+      },
+      changesSince: async (since, limit) => {
+        const c = await clientFor();
+        if (!c) return { data: null, error: "read model not connected" };
+        const { data, error } = await c.rpc("readmodel_changes_since", { p_since: since, p_limit: limit });
+        return { data: (data as ChangesSinceRow[] | null) ?? null, error };
+      },
+      setInterval: (fn, ms) => setInterval(fn, ms),
+      clearInterval: (handle) => clearInterval(handle as ReturnType<typeof setInterval>),
+      log: (event, detail) => logWarning(event, detail),
+    });
+    return () => realtimeRef.current?.stop();
+  }, []);
+  const realtimeOn = realtimeEnabled(systemSettings.readModel);
+  useEffect(() => {
+    const rt = realtimeRef.current;
+    if (!rt) return;
+    if (uid && realtimeOn && !isDuress) void rt.start(uid);
+    else rt.stop();
+  }, [uid, realtimeOn, isDuress]);
   /** SPENDLY-512: where read-model history paging resumes (Firestore keeps its own cursor). */
   const supabaseExpenseCursorRef = useRef<SupabaseCursor>(null);
   const supabaseIncomeCursorRef = useRef<SupabaseCursor>(null);
