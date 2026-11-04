@@ -60,7 +60,7 @@ Other consumers checked:
 
 ## Acceptance (after the epic reaches main)
 
-- **SPENDLY-595, Supabase Pro, before any of these is set to `supabase`.**
+- **The Free plan (595):** health's capacity checks green before any of these is set to `supabase`.
 - Shadow: **14 days with zero differences, balances to the paisa**, including the cycle numbers (they follow from the rows).
 - The own-write overlay and realtime, including **a bill created on another device triggering the pass**: the bill reaches the copy through realtime, and the pass runs on focus, verifying on Firestore.
 - Fallback and offline drills; the read delta (588 meter). Expect a few Firestore reads per focus when the pass has work.

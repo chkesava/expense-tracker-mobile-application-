@@ -293,6 +293,30 @@ begin
 end
 $$;
 
+-- 10. SPENDLY-595: the Free-plan capacity reading is numbers only, for the
+--     health check (service role), never for clients.
+do $$
+declare
+  fn regprocedure := 'public.readmodel_capacity()'::regprocedure;
+  c jsonb;
+begin
+  if not (select prosecdef from pg_proc where oid = fn) or not exists (select 1 from pg_proc where oid = fn and 'search_path=""' = any (proconfig)) then
+    raise exception 'readmodel_capacity must be security definer with an empty search_path';
+  end if;
+  if has_function_privilege('anon', fn, 'execute') or has_function_privilege('authenticated', fn, 'execute')
+     or not has_function_privilege('service_role', fn, 'execute') then
+    raise exception 'readmodel_capacity: service_role only';
+  end if;
+  c := public.readmodel_capacity();
+  if (c->>'db_bytes')::bigint <= 0 or not (c ? 'realtime_messages_24h') or jsonb_typeof(c->'largest_tables') <> 'array' then
+    raise exception 'readmodel_capacity returned %', c;
+  end if;
+  if (select count(*) from jsonb_object_keys(c)) <> 3 then
+    raise exception 'readmodel_capacity returns exactly db_bytes, realtime_messages_24h, largest_tables: %', c;
+  end if;
+end
+$$;
+
 select 'read-model security assertions passed' as result;
 
 -- 7. SPENDLY-513: the Phase 3 views run as the caller (security_invoker), so

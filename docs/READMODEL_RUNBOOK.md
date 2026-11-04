@@ -318,11 +318,31 @@ POSTGREST_BIN=<path to postgrest> bash supabase-readmodel/drills/run_drills.sh
 
 **In production**, only with approval and never with Firestore writes: D4 (the switch) and the D1 dry run are safe. The rest are proven locally and are the procedures for a real incident.
 
+## The Free plan (SPENDLY-595)
+
+**Decision (the user, 2026-11-04):** the read model runs on Supabase's Free plan, permanently. No Pro.
+
+**Why it's safe:**
+- Firestore is written first and stays the source of truth, so the read model is a **rebuildable copy**: a full sync rebuilds it.
+- Every screen falls back to Firestore.
+- The app's outbox keeps unsent writes until Supabase answers again.
+
+| Free limit | How it's watched | If it's near |
+|---|---|---|
+| **Database 500 MB** (17 MB on 2026-11-04) | Hourly health: warns at 50%, fails at 80% (`readmodel_capacity`) | Look at the largest tables (health logs them); trim or stop syncing a heavy collection; at worst set its switch back to `firestore` |
+| **Realtime messages, 2M a month** | Hourly health: the last 24 h × 30, warns at 50%, fails at 80% | Pings are one per write statement, per user. If it grows, turn `readModel.realtime` off: the copy then refreshes on launch and on focus |
+| **Egress 5 GB a month** | Monthly: the Supabase dashboard (Usage) | The copy's hydrate is the big one (about 21 MB per 30K-transaction user, per device, once). Avoid forced rehydrates |
+| **Realtime connections, 200 at once** | Monthly: the dashboard | One per open app; far under the limit |
+| **Pause after a week of inactivity** | The nightly sync and the hourly health count as activity. Health fails with "unreachable or paused" | Restore the project in the dashboard. While it is paused, every screen reads Firestore and the outbox holds the app's writes |
+| **No backups** | Not needed: **rebuild instead of restore**, `mode=full` (drill D1) | After any data loss, run the full sync. Every row comes back from Firestore |
+
+**Monthly check (first Monday):** the dashboard's Usage page for egress, connections and database size. Compare with the health rows.
+
 ## Cost watch
 
 - **Expected cost:** ₹0 on the current plans (SPENDLY-519 §3): Firestore Spark, Supabase Free, Netlify Free, Actions free (public repo).
 - **Firestore reads:** the sync budgets are 1,500 per incremental run, 6,000 per full run and 12,000 per day. Monthly, `sync_runs.reads_used` per day plus the Firebase console's daily reads must stay well under the 50K/day Spark quota.
-- **Supabase Free:** 500 MB database (today ≈ 3 MB), 5 GB egress, pause after a week of inactivity (the sync's own runs count as activity). Upgrade to Pro ($25/month) only if usage passes half of a limit; backups are not needed for a rebuildable copy.
+- **Supabase Free, permanently** (the user's decision, 2026-11-04; see "The Free plan" below).
 - **Netlify credits:** `readmodel-claims` runs once per sign-in, not per read. Check the credit meter monthly; exhausting credits pauses every site.
 
 ## Decision record: keep the Firestore fallback paths

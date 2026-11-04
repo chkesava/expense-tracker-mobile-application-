@@ -22,7 +22,7 @@ Evidence grades: **M-prod** = measured in production, **M-local** = measured on 
 | D1 | Offline | **An on-device SQLite copy** of the user's Supabase rows (§4) | **User** (my recommendation in v2) |
 | D3 | Money values | **Exact copies** of Firestore's stored totals; derived numbers from the existing TypeScript helpers over Supabase rows; never SQL | **User** (my recommendation) |
 | D2 | Realtime | **A Broadcast ping on a private `user:<uid>` topic, then a refetch.** Not `postgres_changes` | Recommended; **the spike passed** (§3) |
-| D4 | Supabase plan | Free until a money collection flips; **Pro ($25/month) before 597** | Recommended (595) |
+| D4 | Supabase plan | **The Free plan, permanently** (₹0). The user can't take on Pro, 2026-11-04. Safe because the read model is a rebuildable copy: Firestore stays the source of truth, a full sync rebuilds it, and every screen falls back to Firestore. Guardrails in 595 | **User** (2026-11-04) |
 | D5 | Success metric | Firestore reads per day (7-day console average): the baseline after the 660/633 releases, measured per step by 600 | Recommended (588) |
 
 **Unchanged from v1:**
@@ -202,4 +202,4 @@ These change project rules, so nothing is edited until the user approves this wo
 - [ ] §2 consequences accepted: divergence repaired by the push and nightly, Firestore wins, the clock-skew window.
 - [ ] Spike results (§3) accepted; real-token verification is deferred to the first `shadow` flip.
 - [ ] **Rule wording §6.1 (`CLAUDE.md`) and §6.2 (`READ_MODEL_RULES.md`) approved as written, or edited.**
-- [ ] D4: Pro before 597.
+- [x] D4: the Free plan (the user, 2026-11-04); guardrails in 595.

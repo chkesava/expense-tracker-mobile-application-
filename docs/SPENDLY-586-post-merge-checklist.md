@@ -25,9 +25,9 @@ Last updated: 2026-11-04, with 15 of 21 stories merged (597 added).
 | 11 | SPENDLY-593 realtime | ✅ merged (`f138e130`) | Migration `20261104000000` **applied 2026-11-04**; `readModel.realtime = true` **after 594 ships**; the hosted RS256 Realtime check; message volume (§4 step 9a) |
 | 12 | SPENDLY-594 on-device SQLite copy | ✅ merged | **`expo-sqlite` = a new native build** (§4 step 4); `readModel.localCopy = true` with or before realtime (§4 step 9a); airplane drill and phone measurement after 673 |
 | 13 | SPENDLY-673 read store + provider switch | ✅ merged | Per-collection `readModel.<collection>` switches (§4 step 9); 7 collections wired (bills, borrowings/receivables + repayments, budgets, investments); the rest in 596–599/674 |
-| 14 | SPENDLY-595 Supabase plan (Pro) | ⏳ to do | *(added when merged: Pro before any money screen flips)* |
+| 14 | SPENDLY-595 Supabase plan: **Free** | 🔄 built, awaiting merge | Migration `20261105000000` (capacity reading); health shows database size and realtime messages against the Free limits (§4 step 2); monthly dashboard check of egress and connections |
 | 15 | SPENDLY-596 Journal on the read model | ✅ merged | `readModel.expenses` / `readModel.incomes`: shadow 7 days, then supabase (§4 step 9) |
-| 16 | SPENDLY-597 accounts, cards, bills | ✅ merged | `readModel.accounts` / `accountTypes` / `accountPayments` / `accountEntries` / `accountTransfers` (+ `creditCardBills`): **595 Pro first**, shadow 14 days to the paisa, then supabase; the bill pass verifies on Firestore (a few reads per focus when it has work) |
+| 16 | SPENDLY-597 accounts, cards, bills | ✅ merged | `readModel.accounts` / `accountTypes` / `accountPayments` / `accountEntries` / `accountTransfers` (+ `creditCardBills`): shadow 14 days to the paisa (Free plan: health's capacity checks green), then supabase; the bill pass verifies on Firestore (a few reads per focus when it has work) |
 | 17 | SPENDLY-598 investments, EPF, loans, subs | ⏳ to do | *(added when merged: 14-day shadow)* |
 | 18 | SPENDLY-599 dashboard, net worth, budgets | ⏳ to do | *(added when merged: 14-day shadow)* |
 | 19 | SPENDLY-674 reference data | ⏳ to do | *(added when merged: 7-day shadow)* |
@@ -77,7 +77,7 @@ Every production step below needs the user's approval when it happens. Dry runs 
 ### Step 2: Confirm the database
 
 - [ ] `supabase db push --dry-run`: nothing pending.
-- [ ] Health (`readmodel-health.yml`, run it manually): OK.
+- [ ] Health (`readmodel-health.yml`, run it manually): OK, including the Free plan's capacity rows (database size, realtime messages).
 
 ### Step 3: Deploy the read-model push function (Netlify)
 
@@ -144,13 +144,13 @@ Each wired collection has `system_settings/global.readModel.<collection>`:
 - first set it to `shadow`, and watch `readModel.shadow.<collection>` (none means equal);
 - after the shadow period (7 days, 14 where money is shown) and the user's approval, set it to `supabase`.
 
-It needs `readModel.localCopy = true` (step 9a). Wired by 673: `creditCardBills`, `borrowings`, `borrowingRepayments`, `receivables`, `receivableRepayments`, `categoryBudgets`, `investments`. Wired by 596: `expenses`, `incomes` (the Journal's live window; 7-day shadow). Wired by 597: `accounts`, `accountTypes`, `accountPayments`, `accountEntries`, `accountTransfers` (14-day shadow, to the paisa; **595 Pro first**).
+It needs `readModel.localCopy = true` (step 9a). Wired by 673: `creditCardBills`, `borrowings`, `borrowingRepayments`, `receivables`, `receivableRepayments`, `categoryBudgets`, `investments`. Wired by 596: `expenses`, `incomes` (the Journal's live window; 7-day shadow). Wired by 597: `accounts`, `accountTypes`, `accountPayments`, `accountEntries`, `accountTransfers` (14-day shadow, to the paisa).
 
 **Rollback:** `firestore`.
 
 *(596–599 and 674 add their collections here when they merge.)*
 
-Each screen has `system_settings/global.readModel.<screen>`: `firestore` → `shadow` → `supabase`. Shadow lasts 7 days, or 14 where money is shown, and the user approves each flip. Supabase Pro (595) comes before the first money screen.
+Each screen has `system_settings/global.readModel.<screen>`: `firestore` → `shadow` → `supabase`. Shadow lasts 7 days, or 14 where money is shown, and the user approves each flip. The project stays on the Free plan (595): before each flip, health's capacity checks are green.
 
 ### Step 10: Measure (588, 600)
 
