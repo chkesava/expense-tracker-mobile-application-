@@ -35,7 +35,9 @@ export function rowToDoc(row: ReadModelRow): SourceDoc {
 
 export type QueryOptions = {
   where?: (doc: SourceDoc) => boolean;
-  orderBy?: { field: string; direction?: "asc" | "desc" }[];
+  /** `by` gives the sort key when the field isn't a plain string or number (a Timestamp, say). */
+  orderBy?: { field: string; direction?: "asc" | "desc"; by?: (doc: SourceDoc) => string | number | null | undefined }[];
+  offset?: number;
   limit?: number;
 };
 
@@ -45,18 +47,20 @@ export async function queryCopy(copy: CopyLike, collection: string, options: Que
   if (!spec) throw new Error(`read store: ${collection} is not synced`);
   let docs = (await copy.read(spec.table)).map(rowToDoc);
   if (options.where) docs = docs.filter(options.where);
-  for (const { field, direction } of [...(options.orderBy ?? [])].reverse()) {
+  for (const { field, direction, by } of [...(options.orderBy ?? [])].reverse()) {
     const sign = direction === "desc" ? -1 : 1;
+    const key = by ?? ((d: SourceDoc) => d.data[field] as string | number | null | undefined);
     docs = [...docs].sort((a, b) => {
-      const x = a.data[field] as string | number | null | undefined;
-      const y = b.data[field] as string | number | null | undefined;
+      const x = key(a);
+      const y = key(b);
       if (x === y) return 0;
       if (x === undefined || x === null) return 1;
       if (y === undefined || y === null) return -1;
       return (x < y ? -1 : 1) * sign;
     });
   }
-  return options.limit === undefined ? docs : docs.slice(0, options.limit);
+  const from = options.offset ?? 0;
+  return options.limit === undefined ? docs.slice(from) : docs.slice(from, from + options.limit);
 }
 
 export function createCollectionSource(deps: {
@@ -102,7 +106,7 @@ export function createCollectionSource(deps: {
     },
 
     /** `shadow` mode: compare what Firestore just served with the copy; log differences (counts only). */
-    async shadow(firestore: SourceDoc[]): Promise<ShadowResult | null> {
+    async shadow(firestore: SourceDoc[], shadowOptions: { windowed?: boolean } = {}): Promise<ShadowResult | null> {
       const copy = deps.copy();
       const uid = copy?.status().uid;
       if (!copy || !spec || !uid || copy.status().state !== "ready") return null;
@@ -112,6 +116,8 @@ export function createCollectionSource(deps: {
         const result = shadowCompare(spec, uid, firestore, rows, (d) =>
           parent ? `${String(d.data[parent.column] ?? d.data.listId ?? "")}/${d.id}` : d.id
         );
+        // A windowed listener (the newest N) can't see older rows: they aren't "extra".
+        if (shadowOptions.windowed) result.extra = 0;
         lastShadow = result;
         if (!isClean(result) && now() - lastShadowLog >= SHADOW_LOG_MS) {
           lastShadowLog = now();
