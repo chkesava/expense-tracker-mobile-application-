@@ -4,7 +4,7 @@
 
 Each story that merges into the epic adds its own steps here.
 
-Last updated: 2026-11-04, with 12 of 21 stories merged (594 added).
+Last updated: 2026-11-04, with 13 of 21 stories merged (673 added).
 
 ---
 
@@ -24,7 +24,7 @@ Last updated: 2026-11-04, with 12 of 21 stories merged (594 added).
 | 10 | SPENDLY-672 sync safety net | ✅ merged | **Index deploy**, then the `safety-net` switch (§4 steps 1 and 8) |
 | 11 | SPENDLY-593 realtime | ✅ merged (`f138e130`) | Migration `20261104000000` **applied 2026-11-04**; `readModel.realtime = true` **after 594 ships**; the hosted RS256 Realtime check; message volume (§4 step 9a) |
 | 12 | SPENDLY-594 on-device SQLite copy | ✅ merged | **`expo-sqlite` = a new native build** (§4 step 4); `readModel.localCopy = true` with or before realtime (§4 step 9a); airplane drill and phone measurement after 673 |
-| 13 | SPENDLY-673 read store + provider switch | 🔄 built, awaiting merge | Per-collection `readModel.<collection>` switches (§4 step 9); 7 collections wired (bills, borrowings/receivables + repayments, budgets, investments); the rest in 596–599/674 |
+| 13 | SPENDLY-673 read store + provider switch | ✅ merged | Per-collection `readModel.<collection>` switches (§4 step 9); 7 collections wired (bills, borrowings/receivables + repayments, budgets, investments); the rest in 596–599/674 |
 | 14 | SPENDLY-595 Supabase plan (Pro) | ⏳ to do | *(added when merged: Pro before any money screen flips)* |
 | 15 | SPENDLY-596 Journal on the read model | ⏳ to do | *(added when merged: 7-day shadow)* |
 | 16 | SPENDLY-597 accounts, cards, bills | ⏳ to do | *(added when merged: 14-day shadow)* |
