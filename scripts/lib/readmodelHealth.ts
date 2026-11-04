@@ -29,6 +29,8 @@ export type HealthInput = {
   openFailures: HealthFailure[];
   status: HealthStatus[];
   push?: HealthPush | null;
+  /** SPENDLY-672: rows the app wrote directly (written_by = 'client') in the last 24 h; null when not counted. */
+  clientWrites24h?: number | null;
 };
 
 /**
@@ -53,7 +55,27 @@ export const THRESHOLDS = {
    */
   maxLagP95Hours: 26,
   dailyReadBudget: 12_000,
+  /**
+   * SPENDLY-672: divergences in 24 h above this warn. Normal use is 0: the
+   * app's direct writes should always agree with Firestore.
+   */
+  maxDivergencesPerDay: 0,
 };
+
+/** SPENDLY-672: in safety-net mode the full pass is weekly: a week plus two hours of slack. */
+export const SAFETY_NET_FULL_GAP_HOURS = 7 * 24 + 2;
+
+/** SPENDLY-672: divergences recorded by the last 24 h of sync runs, per table. */
+export function divergencesByTable(runs: HealthRun[], now: number): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const run of runs) {
+    if (hoursSince(run.startedAt, now) > 24) continue;
+    for (const [table, n] of Object.entries((run.notes?.divergences as Record<string, number> | undefined) ?? {})) {
+      out[table] = (out[table] ?? 0) + n;
+    }
+  }
+  return out;
+}
 
 export type HealthReport = {
   ok: boolean;
@@ -71,6 +93,10 @@ export type HealthReport = {
     statusRows: number;
     /** SPENDLY-510: consecutive clean days toward the 14-day gate. */
     parityStreakDays: number;
+    /** SPENDLY-672: client-written rows Firestore's version replaced because they differed, last 24 h. */
+    divergences24h: number;
+    divergencesByTable: Record<string, number>;
+    clientWrites24h: number | null;
   };
 };
 
@@ -96,6 +122,7 @@ export function evaluateHealth(input: HealthInput, now: number, thresholds = THR
       metrics: {
         runs24h: 0, reads24h: 0, lastSyncAgeHours: null, lastFullAgeHours: null, openFailures: 0,
         lagP50Hours: null, lagP95Hours: null, lagMaxHours: null, statusRows: 0, parityStreakDays: 0,
+        divergences24h: 0, divergencesByTable: {}, clientWrites24h: null,
       },
     };
   }
@@ -123,6 +150,14 @@ export function evaluateHealth(input: HealthInput, now: number, thresholds = THR
       lastFullAge === null
         ? "No full sync run recorded: deletes and unstamped edits are not being caught."
         : `No full sync run for ${round1(lastFullAge)} h (limit ${thresholds.maxFullGapHours} h).`
+    );
+  }
+  const diverged = divergencesByTable(input.runs, now);
+  const divergences24h = Object.values(diverged).reduce((a, b) => a + b, 0);
+  if (divergences24h > thresholds.maxDivergencesPerDay) {
+    warnings.push(
+      `${divergences24h} app write(s) in 24 h disagreed with Firestore and were replaced (${Object.entries(diverged).sort().map(([t, n]) => `${t} ×${n}`).join(", ")}). ` +
+        "A writer may be mapping differently from the server; see the read-model runbook, \"Divergences\"."
     );
   }
   if (lastSync?.status === "failed") {
@@ -199,6 +234,9 @@ export function evaluateHealth(input: HealthInput, now: number, thresholds = THR
       lagMaxHours: round1(lags.length ? lags[lags.length - 1] : null),
       statusRows: lags.length,
       parityStreakDays: parityGate(input.runs, now).streak,
+      divergences24h,
+      divergencesByTable: diverged,
+      clientWrites24h: input.clientWrites24h ?? null,
     },
   };
 }
@@ -221,6 +259,8 @@ export function renderHealthSummary(report: HealthReport, recent: HealthRun[], p
     `| Parity gate (SPENDLY-510) | ${m.parityStreakDays} of ${GATE_DAYS} clean days |`,
     `| Copy age p50 / p95 / max | ${m.lagP50Hours ?? "—"} / ${m.lagP95Hours ?? "—"} / ${m.lagMaxHours ?? "—"} h (${m.statusRows} user-collections) |`,
     `| Per-write pushes today (SPENDLY-583) | ${push ? `${push.requests} requests · ${push.docs} docs · ${push.userSyncs} user syncs · ${push.rejected} rejected · ${push.failed} failed · ${push.reads} reads` : "—"} |`,
+    `| App direct writes in 24 h (SPENDLY-670) | ${m.clientWrites24h ?? "—"} rows (vs ${push ? push.docs : "—"} pushed docs today) |`,
+    `| Divergences in 24 h (SPENDLY-672) | ${m.divergences24h}${m.divergences24h ? ` (${Object.entries(m.divergencesByTable).sort().map(([t, n]) => `${t} ×${n}`).join(", ")})` : ""} |`,
     "",
     "| Started (UTC) | Mode | Status | Reads | Failures | Unmapped |",
     "|---|---|---|---|---|---|",

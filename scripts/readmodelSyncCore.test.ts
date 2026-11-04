@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { READ_MODEL_TABLES } from "../shared/utils/readModel/mapping";
 import { memorySink } from "./lib/readmodelSyncMemory";
-import { MASS_TOMBSTONE_MIN, OVERLAP_MS, runSync, type Page, type PageRequest, type SourcePort } from "./lib/readmodelSyncCore";
+import { ALWAYS_FULL, MASS_TOMBSTONE_MIN, OVERLAP_MS, runSync, type Page, type PageRequest, type SourcePort } from "./lib/readmodelSyncCore";
 
 /**
  * A fake Firestore: documents with createdAt / updatedAt (ms) and an
@@ -15,6 +15,7 @@ type FakeDoc = { id: string; data: Record<string, unknown>; updateMs: number };
 
 function fakeFirestore(users: Record<string, Record<string, FakeDoc[]>>) {
   let reads = 0;
+  let crossUserQueries = 0;
   const source: SourcePort = {
     async listUserIds() {
       return Object.keys(users);
@@ -36,8 +37,24 @@ function fakeFirestore(users: Record<string, Record<string, FakeDoc[]>>) {
         next: page.length === request.limit ? start + page.length : undefined,
       };
     },
+    // SPENDLY-672: a collection-group query, every user's documents at once (duress trees included, as Firestore would).
+    async readChangedAcrossUsers(collection, request) {
+      const docs = Object.entries(users)
+        .flatMap(([uid, cols]) => (cols[collection] ?? []).map((d) => ({ uid, d })))
+        .filter(({ d }) => typeof d.data[request.field] === "number" && (d.data[request.field] as number) > request.sinceMs)
+        .sort((a, b) => (a.d.data[request.field] as number) - (b.d.data[request.field] as number) || `${a.uid}/${a.d.id}`.localeCompare(`${b.uid}/${b.d.id}`));
+      const start = typeof request.after === "number" ? request.after : 0;
+      const page = docs.slice(start, start + request.limit);
+      reads += Math.max(1, page.length);
+      crossUserQueries += 1;
+      return {
+        docs: page.map(({ uid, d }) => ({ uid, id: d.id, data: d.data, updateTime: { toMillis: () => d.updateMs } })),
+        next: page.length === request.limit ? start + page.length : undefined,
+        reads: Math.max(1, page.length),
+      };
+    },
   };
-  return { source, reads: () => reads, users };
+  return { source, reads: () => reads, crossUserQueries: () => crossUserQueries, users };
 }
 
 const T0 = Date.UTC(2026, 9, 22, 0, 0);
@@ -62,6 +79,82 @@ function world() {
     bob: { expenses: [exp("b1", 75, T0 - 48 * H)] },
   });
 }
+
+describe("the sync as the safety net (SPENDLY-672)", () => {
+  it("counts a client row that disagrees with Firestore as a divergence, and Firestore's version replaces it", async () => {
+    const fs = world();
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    // The app's direct writes landed in Supabase: e1 agrees with Firestore, e2 doesn't.
+    const e1 = m.row("expenses", "alice", "e1")!;
+    const e2 = m.row("expenses", "alice", "e2")!;
+    Object.assign(e1, { written_by: "client", client_written_at: new Date(T0).toISOString() });
+    Object.assign(e2, { written_by: "client", client_written_at: new Date(T0).toISOString(), amount: 999 });
+    // Both change in Firestore afterwards, so the nightly incremental run reads them.
+    for (const d of fs.users.alice.expenses) Object.assign(d, { updateMs: T0 + H, data: { ...d.data, updatedAt: T0 + H } });
+
+    const run = await runSync(fs.source, m.sink, opts("incremental", T0 + 2 * H));
+    expect(run.status).toBe("succeeded");
+    expect(run.notes.divergences).toEqual({ expenses: 1 });
+    expect(run.notes.clientRowsReplaced).toEqual({ expenses: 2 });
+    expect(m.row("expenses", "alice", "e2")).toMatchObject({ amount: 250, written_by: "server", client_written_at: null });
+  });
+
+  it("cross-user nights: one query pair per collection, not per user; duress never copied; a global checkpoint", async () => {
+    const fs = world();
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    fs.users.alice.expenses.push(exp("e3", 40, T0 + H));
+    fs.users.bob.expenses.push(exp("b2", 60, T0 + H));
+    fs.users.alice_duress.expenses.push(exp("decoy2", 1, T0 + H));
+    const before = fs.reads();
+
+    const run = await runSync(fs.source, m.sink, opts("incremental", T0 + 2 * H, { crossUser: true }));
+    expect(run.status).toBe("succeeded");
+    expect(m.row("expenses", "alice", "e3")).toMatchObject({ amount: 40 });
+    expect(m.row("expenses", "bob", "b2")).toMatchObject({ amount: 60 });
+    expect(m.row("expenses", "alice_duress", "decoy2")).toBeUndefined();
+    expect(m.checkpoints.get("*/expenses")?.highWaterMs).toBe(T0 + 2 * H);
+    // Every collection but the 4 always-full ones and the users/{uid} doc, with createdAt + updatedAt.
+    const crossed = READ_MODEL_TABLES.filter((t) => !t.root && !ALWAYS_FULL.has(t.collection)).length;
+    expect(run.notes.crossUserCollections).toBe(crossed);
+    expect(fs.crossUserQueries()).toBe(2 * crossed);
+    // 2 users: the listing, the cross-user queries (+1 for the page holding both new docs),
+    // and per user the always-full collections and the settings doc.
+    expect(fs.reads() - before).toBeLessThanOrEqual(1 + 2 * crossed + 2 + 2 * (ALWAYS_FULL.size + 1) + 5);
+  });
+
+  it("cross-user: a client row that disagrees is a divergence too", async () => {
+    const fs = world();
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    Object.assign(m.row("expenses", "bob", "b1")!, { written_by: "client", client_written_at: new Date(T0).toISOString(), amount: 1 });
+    Object.assign(fs.users.bob.expenses[0], { updateMs: T0 + H, data: { ...fs.users.bob.expenses[0].data, updatedAt: T0 + H } });
+    const run = await runSync(fs.source, m.sink, opts("incremental", T0 + 2 * H, { crossUser: true }));
+    expect(run.notes.divergences).toEqual({ expenses: 1 });
+    expect(m.row("expenses", "bob", "b1")).toMatchObject({ amount: 75, written_by: "server" });
+  });
+
+  it("cross-user: a collection some user was never copied for goes per user this time", async () => {
+    const fs = world();
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    m.checkpoints.delete("bob/incomes");
+    const run = await runSync(fs.source, m.sink, opts("incremental", T0 + H, { crossUser: true }));
+    expect(run.status).toBe("succeeded");
+    expect(m.checkpoints.get("*/incomes")).toBeUndefined();
+    expect(m.checkpoints.get("*/expenses")).toBeDefined();
+  });
+
+  it("an agreeing or server-written row is never a divergence", async () => {
+    const fs = world();
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    const again = await runSync(fs.source, m.sink, opts("full", T0 + H));
+    expect(again.notes.divergences).toBeUndefined();
+    expect(again.notes.clientRowsReplaced).toBeUndefined();
+  });
+});
 
 describe("stored summaries (SPENDLY-592)", () => {
   it("copies the dashboard months and EPF exactly, and never the retired netWorth/investments docs", async () => {

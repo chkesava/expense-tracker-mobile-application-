@@ -42,8 +42,9 @@ export function memorySink(initial: { reads24h?: number; lastNotes?: Record<stri
       for (const row of rows) {
         const key = `${row.uid}/${row.doc_id}`;
         const existing = table(name).get(key);
-        if (existing && !(row.source_update_time > existing.source_update_time || existing.source_deleted)) continue;
-        table(name).set(key, { ...row, source_deleted: false, deleted_at: null });
+        // As readmodel_upsert (669): newer, a tombstone, or a client row (Firestore wins).
+        if (existing && !(row.source_update_time > existing.source_update_time || existing.source_deleted || existing.written_by === "client")) continue;
+        table(name).set(key, { ...row, source_deleted: false, deleted_at: null, written_by: "server", client_written_at: null });
         n += 1;
       }
       return n;
@@ -82,8 +83,8 @@ export function memorySink(initial: { reads24h?: number; lastNotes?: Record<stri
       for (const row of rows) {
         const key = `${row.uid}/${row.doc_id}`;
         const existing = table(name).get(key);
-        if (existing && row.source_update_time < existing.source_update_time) continue;
-        table(name).set(key, { ...row, source_deleted: false, deleted_at: null });
+        if (existing && row.source_update_time < existing.source_update_time && existing.written_by !== "client") continue;
+        table(name).set(key, { ...row, source_deleted: false, deleted_at: null, written_by: "server", client_written_at: null });
         n += 1;
       }
       return n;

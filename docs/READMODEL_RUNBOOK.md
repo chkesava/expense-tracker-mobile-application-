@@ -188,6 +188,49 @@ After this device saves synced documents, the app asks the Netlify function `rea
 | Health warns "N per-write push(es) failed today" | Netlify → Functions → `readmodel-push` → logs. Common causes: Supabase paused, a migration not applied (`20261028000000`), or Netlify env missing. The nightly run repairs the data either way |
 | Health shows pushes **rejected**, or "—" while people are saving | Netlify → Functions → `readmodel-push` → logs. Since SPENDLY-662 every rejection is counted and logged as `[PUSH] rejected: <reason>`: `token <firebase code>` (e.g. `auth/id-token-expired` is normal now and then; a constant `auth/insufficient-permission` or `auth/argument-error` means the site's `FIREBASE_SERVICE_ACCOUNT` can't verify app tokens), `no-token`, `not-allowed`, `bad-request`, `purged`, `rate-limited`. `[PUSH] record failed` means the counters can't be written (migration `20261028000000` or the service-role key) |
 
+## The nightly schedule and divergences (SPENDLY-672)
+
+**The schedule:** nightly at 20:30 UTC (02:00 IST). The repository variable `READMODEL_NIGHTLY_MODE` chooses what it does:
+- **unset or `full`** (the default): a full pass every night, then count parity and parity findings.
+- **`safety-net`:**
+  - Monday to Saturday: a changed-only pass. Changes are found by `createdAt`/`updatedAt` with collection-group queries, and the always-full account collections and `users/{uid}` run per user. It costs about 450 reads, against about 5,300 for a full pass.
+  - Sunday (IST): a full pass, then count parity and parity findings.
+  - Health then allows 7 days plus 2 hours between full passes, not 26 hours.
+
+**Switching to `safety-net` (in order):**
+1. The app dual-writes in production: a release with 670/671, then `system_settings/global.readModel.clientWrites = true`, and health shows app writes.
+2. Deploy the collection-group indexes:
+   - first diff the live indexes against the repo (`firebase firestore:indexes`), and dry-run;
+   - then run `firebase deploy --only firestore:indexes`;
+   - wait until every index is **Enabled** in the console. A collection-group query without its index fails, and its run records a `pair_failed` failure.
+3. Trigger the sync manually with `mode = nightly`, `dry_run = true`, and set `READMODEL_NIGHTLY_MODE=safety-net` for that test. Check the reads and that `crossUserCollections` is about 48.
+4. Set the repository variable `READMODEL_NIGHTLY_MODE = safety-net`. Watch the reads in `sync_runs.reads_used` for 7 days; the target is under 1K a night.
+
+**Back to full nightly:** clear the variable, or set it to `full`. Nothing else changes.
+
+**The indexes and the drift check:**
+- The daily "Live vs repo drift" job (`firestore-rules-deploy.yml`) fails while `firestore.indexes.json` has overrides that aren't live. So deploy the collection-group indexes **when the epic reaches main, or before it**.
+- Adding indexes is harmless before anything queries them; they only add a little index-write cost.
+- Deploy them with the manual "Deploy Firestore rules" workflow (`deploy_indexes`), dry run first. It refuses a deploy that would delete live indexes.
+
+**What a divergence is:** a row the app wrote directly (`written_by = 'client'`) that differed, in a typed column, from what the server maps from Firestore. The sync counts it in `sync_runs.notes.divergences` (per table), and Firestore's version replaces the row. Health warns when there are more than `READMODEL_DIVERGENCE_WARN` in 24 hours (default 0). Normal use is 0.
+
+**When a divergence warning appears:**
+1. Health names the tables. Look at that day's runs: `select started_at, notes->'divergences' from sync_runs where notes ? 'divergences' order by started_at desc`.
+2. Usual causes:
+   - the app's outbox mapped from a stale cache document;
+   - a writer changed a field after its commit without notifying;
+   - the app and server mappers differ, because a device runs an old build after a mapping change. That one clears as devices update.
+3. A steady divergence on one table means a bug: find the writer, fix it, and add a test.
+
+**When to run a manual full pass:**
+- after a mapping change;
+- after a known missed writer;
+- after a restore;
+- after any day health shows divergences or failures you can't explain.
+
+Run it from the workflow with `mode = full`, first with `dry_run = true` to see the reads.
+
 ## Recovery drills (SPENDLY-520)
 
 Every procedure above has been exercised end to end on a local stack: the production scripts unchanged, the Firebase emulator, a local Postgres with the real migrations, and PostgREST (Supabase's API). The latest log is in `docs/SPENDLY-520-drill-log.md`. Re-run the drills after any change to the sync, the mapping or the migrations:

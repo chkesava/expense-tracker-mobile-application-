@@ -34,7 +34,14 @@ These rules sit beside `CLAUDE.md` (Spendly safety invariants) and `docs/AGENT_W
   - **`categories` has no live listener** (SPENDLY-660): its writers call `noteCategoriesWritten` (`lib/categoryRevision.ts`), which notifies the push and bumps the revision other devices load by.
   - A new writer that does neither must call `notifyReadModelWrites(uid, paths)` after its commit, or `notifyReadModelChanged(uid)` if it can't name its documents.
   - Never send document data to the server; it reads Firestore itself.
-- **R1.3** Prefer soft deletes (`deletedAt`) for ledger rows, as today. A hard delete reaches the read model only on the nightly run, except in the always-full collections (`accounts`, `accountTypes`, `accountTransfers`, `accountEntries`).
+- **R1.2b** The nightly sync (SPENDLY-672) depends on the repository variable `READMODEL_NIGHTLY_MODE`.
+  - **Unset or `full`:** today's behaviour, a full pass every night.
+  - **`safety-net`:** changed-only nights, with a full pass on Sunday (IST). Changes are found by `createdAt`/`updatedAt` with **one collection-group query per collection** across all users; only `users/{uid}/…` paths are copied. The always-full account collections and the `users/{uid}` document still run per user.
+  - **Before any upsert,** the sync compares each client-written row (`written_by = 'client'`) with Firestore's version. A typed-column difference is a **divergence**: it is counted in the run's notes and reported by health. Firestore's version replaces the row.
+  - **Prerequisites for `safety-net`:**
+    - every writer dual-writes in production (670/671 released, `readModel.clientWrites` on);
+    - the collection-group field overrides in `firestore.indexes.json` are deployed (`scripts/readmodelCrossUserIndexes.test.ts` keeps them in step with the synced collections).
+- **R1.3** Prefer soft deletes (`deletedAt`) for ledger rows, as today. A hard delete reaches the read model through the push, the app's dual write, or the next **full** pass. That pass is nightly by default, and weekly in `safety-net` mode. The always-full collections (`accounts`, `accountTypes`, `accountTransfers`, `accountEntries`) are the exception: they run in full every night.
 - **R1.4** Never write anything under `users/{uid}_duress`. The read model never reads duress trees, and nothing may make it do so.
 
 ## 2. New collections and fields

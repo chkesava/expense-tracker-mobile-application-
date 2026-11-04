@@ -10,7 +10,9 @@ import { appendFileSync } from "node:fs";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { all } from "./lib/supabasePaging";
-import { evaluateHealth, renderHealthSummary, THRESHOLDS, type HealthInput, type HealthPush, type HealthRun } from "./lib/readmodelHealth";
+import { READ_MODEL_TABLES } from "../shared/utils/readModel/mapping";
+import { evaluateHealth, renderHealthSummary, SAFETY_NET_FULL_GAP_HOURS, THRESHOLDS, type HealthInput, type HealthPush, type HealthRun } from "./lib/readmodelHealth";
+import { nightlySetting } from "./lib/readmodelNightlyMode";
 
 
 /** SPENDLY-583: today's push counters, or null (no row yet, or the migration isn't applied). */
@@ -21,6 +23,26 @@ async function loadPushToday(client: SupabaseClient, now: number): Promise<Healt
     if (error || !data) return null;
     const d = data as Record<string, number>;
     return { requests: d.requests, docs: d.docs, userSyncs: d.user_syncs, rejected: d.rejected, failed: d.failed, reads: d.reads };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * SPENDLY-672: rows the app wrote directly in the last 24 h, across every synced
+ * table (head-only counts: no rows leave Supabase). Null if any count fails.
+ */
+async function loadClientWrites(client: SupabaseClient, now: number): Promise<number | null> {
+  try {
+    const since = new Date(now - 24 * 3600 * 1000).toISOString();
+    let total = 0;
+    for (const { table } of READ_MODEL_TABLES) {
+      const { count, error } = await client.from(table).select("doc_id", { count: "exact", head: true })
+        .eq("written_by", "client").gte("client_written_at", since);
+      if (error) return null;
+      total += count ?? 0;
+    }
+    return total;
   } catch {
     return null;
   }
@@ -47,6 +69,7 @@ export async function loadHealthInput(client: SupabaseClient, now: number): Prom
       openFailures: failures.map((f) => ({ uid: String(f.uid), collection: String(f.collection), errorClass: String(f.error_class), firstSeen: String(f.first_seen) })),
       status: status.map((s) => ({ collection: String(s.collection), lastSyncedAt: (s.last_synced_at as string | null) ?? null })),
       push: await loadPushToday(client, now),
+      clientWrites24h: await loadClientWrites(client, now),
     };
   } catch (error) {
     // A paused or unreachable project fails every query; report that, not a crash.
@@ -62,7 +85,10 @@ async function main() {
   const now = Date.now();
   const input = await loadHealthInput(client, now);
   const dailyReadBudget = Number(process.env.READMODEL_MAX_READS_PER_DAY ?? THRESHOLDS.dailyReadBudget);
-  const report = evaluateHealth(input, now, { ...THRESHOLDS, dailyReadBudget });
+  // SPENDLY-672: in safety-net mode the full pass is weekly.
+  const maxFullGapHours = nightlySetting(process.env.READMODEL_NIGHTLY_MODE) === "safety-net" ? SAFETY_NET_FULL_GAP_HOURS : THRESHOLDS.maxFullGapHours;
+  const maxDivergencesPerDay = Number(process.env.READMODEL_DIVERGENCE_WARN ?? THRESHOLDS.maxDivergencesPerDay);
+  const report = evaluateHealth(input, now, { ...THRESHOLDS, dailyReadBudget, maxFullGapHours, maxDivergencesPerDay });
   const summary = renderHealthSummary(report, input.runs as HealthRun[], input.push);
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
