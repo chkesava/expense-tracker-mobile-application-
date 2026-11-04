@@ -10,7 +10,7 @@ describe("push refs (SPENDLY-583)", () => {
       "categorizationRules", "categoryBudgets", "creditCardBills", "decisions",
       "epfContributionEvents", "epfContributions", "epfEstablishments", "epfInterestEntries",
       "epfProfile", "epfReconciliations", "epfTransferEvents", "epfTransfers", "epfWageHistory",
-      "expenses", "feeReviews", "feeSignalDismissals", "financialGoals", "goalEvents",
+      "expenses", "feeReviews", "feeSignalDismissals", "financialGoals", "financialSummaries", "goalEvents",
       "goalFundingPlans", "holdings", "incomes", "investmentCashTransactions", "investments",
       "ledgerEvents", "merchantOverrides", "netWorthHistory", "portfolioSettings",
       "portfolioTransactions", "receivableRepayments", "receivables", "recurringDismissals",
@@ -36,6 +36,10 @@ describe("push refs (SPENDLY-583)", () => {
     expect(pushRefFromPath("users/u1/userSettings/settings", "u1")).toBeNull();
     expect(parsePushRequest({ refs: [{ collection: "userSettings", docId: "settings" }] }).ok).toBe(true);
     expect(parsePushRequest({ refs: [{ collection: "userSettings", docId: "other" }] }).ok).toBe(false);
+    // SPENDLY-592: the stored summaries push; the retired docs never do.
+    expect(pushRefFromPath("users/u1/financialSummaries/dashboard_2026-10", "u1")).toEqual({ collection: "financialSummaries", docId: "dashboard_2026-10" });
+    expect(pushRefFromPath("users/u1/financialSummaries/netWorth", "u1")).toBeNull();
+    expect(parsePushRequest({ refs: [{ collection: "financialSummaries", docId: "investments" }] }).ok).toBe(false);
   });
 
   it("SPENDLY-591: nested paths become a '{parentId}/{id}' ref, and only for a nested synced collection", () => {

@@ -31,6 +31,9 @@ describe("buildClientEntry (SPENDLY-670)", () => {
     expect(buildClientEntry({ uid: "u1", collection: "expenses", docId: "e1", doc: null, at: at(1) })).toMatchObject({ key: "expenses/e1" });
     expect(buildClientEntry({ uid: "u1", collection: "expenses", docId: "e1", doc: null, at: at(1) })?.row).toBeUndefined();
     expect(buildClientEntry({ uid: "u1", collection: "watchlist", docId: "x", doc: null, at: at(1) })).toBeNull();
+    // SPENDLY-592: a stored summary dual-writes; a retired one never does.
+    expect(buildClientEntry({ uid: "u1", collection: "financialSummaries", docId: "dashboard_2026-10", doc: { id: "dashboard_2026-10", data: { totalExpenses: 10 } }, at: at(1) })?.row).toMatchObject({ total_expenses: 10 });
+    expect(buildClientEntry({ uid: "u1", collection: "financialSummaries", docId: "netWorth", doc: { id: "netWorth", data: {} }, at: at(1) })).toBeNull();
     // SPENDLY-591: the users/{uid} copy is server-push only, never rm_client_apply.
     expect(buildClientEntry({ uid: "u1", collection: "userSettings", docId: "settings", doc: { id: "u1", data: { currency: "INR" } }, at: at(1) })).toBeNull();
     // A nested write keys on its composite id and keeps the real path.

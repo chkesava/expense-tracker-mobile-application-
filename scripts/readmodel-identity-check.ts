@@ -31,7 +31,7 @@ const TABLES = [
   "category_budgets", "decisions", "calendar_reminders", "fee_reviews", "fee_signal_dismissals",
   "merchant_overrides", "recurring_dismissals", "spaces", "categorization_rules", "trips",
   "runway_settings", "runway_overrides", "what_if_scenarios", "goal_funding_plans", "sip_plans",
-  "sip_transactions", "virtual_positions", "net_worth_history", "watchlists", "watchlist_items", "user_settings", "sync_status",
+  "sip_transactions", "virtual_positions", "net_worth_history", "watchlists", "watchlist_items", "user_settings", "financial_summaries", "sync_status",
 ];
 const PROJECT = "expenseapp-27f94";
 

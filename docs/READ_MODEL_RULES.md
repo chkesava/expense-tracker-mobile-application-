@@ -39,14 +39,15 @@ These rules sit beside `CLAUDE.md` (Spendly safety invariants) and `docs/AGENT_W
 
 ## 2. New collections and fields
 
-**Synced today (52 tables):**
+**Synced today (53 tables):**
 - Wave 1: `expenses`, `incomes`, `ledgerEvents`, `accounts`, `accountTypes`, `accountTransfers`, `accountEntries`, `accountPayments`, `creditCardBills`, `categories`.
 - Save Goals (SPENDLY-609): `financialGoals`, `goalEvents`.
 - Wave 2 (SPENDLY-589): `borrowings`, `borrowingRepayments`, `receivables`, `receivableRepayments`, `subscriptions`.
 - Wave 3 (SPENDLY-590): `investments`, `holdings`, `portfolioTransactions`, `investmentCashTransactions`, `portfolioSettings`, `epfProfile`, `epfEstablishments`, `epfContributions`, `epfContributionEvents`, `epfTransfers`, `epfTransferEvents`, `epfInterestEntries`, `epfReconciliations`, `epfWageHistory`. Quantities, prices, NAVs and rates use the `decimal` field type (`numeric(24,8)`); money stays `numeric(18,2)`.
 - Remaining screen collections (SPENDLY-591 part A): `categoryBudgets`, `decisions`, `calendarReminders`, `feeReviews`, `feeSignalDismissals`, `merchantOverrides`, `recurringDismissals`, `spaces`, `categorizationRules`, `trips`, `runwaySettings`, `runwayOverrides`, `whatIfScenarios`, `goalFundingPlans`, `sipPlans`, `sipTransactions`, `virtualPositions`, `netWorthHistory`, `watchlists`. Dates stored as full ISO strings (trip and SIP plan dates) are copied as text, never cut to a UTC day.
+- Stored summaries (SPENDLY-592): `financialSummaries` (`dashboard_{YYYY-MM}`, `epf`), copied exactly (R4.1).
 
-Everything else is **not** in the read model. Waves 2 and 3 were first closed as won't-do (514–518, the no-Blaze decision); SPENDLY-586 brings them back: Wave 2 in 589, Wave 3 in 590. Still not synced: `financialSummaries` (592), `holdingAdjustments`, `portfolioReconciliationAudits`, `decisionEvents`; the `users/{uid}` settings document is copied as `user_settings` (591 part C): allowlisted fields only (`RootSpec.docKeys`; never PIN, lock, role or identity), server-only (not on the client allowlist). Nested collections (591 part B, `watchlists/{listId}/items`) key on doc_id `"{parentId}/{id}"` with a `TableSpec.parent`.
+Everything else is **not** in the read model. Waves 2 and 3 were first closed as won't-do (514–518, the no-Blaze decision); SPENDLY-586 brings them back: Wave 2 in 589, Wave 3 in 590. Still not synced: `financialSummaries/netWorth` and `/investments` (retired; R4.1a), `holdingAdjustments`, `portfolioReconciliationAudits`, `decisionEvents`; the `users/{uid}` settings document is copied as `user_settings` (591 part C): allowlisted fields only (`RootSpec.docKeys`; never PIN, lock, role or identity), server-only (not on the client allowlist). Nested collections (591 part B, `watchlists/{listId}/items`) key on doc_id `"{parentId}/{id}"` with a `TableSpec.parent`.
 
 - **R2.1** A new collection is **not** synced unless the story says so. If it must be, all of these go in the same story:
   - a migration in `supabase-readmodel/supabase/migrations/`, with the contract columns (`uid`, `doc_id`, `doc`, `source_path`, `source_update_time`, `source_deleted`, `deleted_at`, `schema_version`, `mapping_status`, `synced_at`), a primary key `(uid, doc_id)`, `(uid, …)` indexes, RLS on, an owner-only SELECT policy, and `grant select … to authenticated`;
@@ -90,7 +91,18 @@ Everything else is **not** in the read model. Waves 2 and 3 were first closed as
 
 ## 4. Current-state money: copies only
 
-- **R4.1** Current-state money may be shown from Supabase **only** as copies of Firestore's stored totals (`currentBalance`, `currentOutstanding`, `financialSummaries`), or as the existing TypeScript helpers over rows. SQL never computes a displayed number. Every money collection needs a 14-day zero-difference shadow before it flips.
+- **R4.1** Current-state money may be shown from Supabase **only** in one of two forms:
+  - copies of Firestore's stored totals: `currentBalance`/`currentOutstanding` and the stored loan, bill and cash fields, or the `financial_summaries` rows (SPENDLY-592: `dashboard_{YYYY-MM}` and `epf`);
+  - the existing TypeScript helpers over rows (`composeNetWorth`, …).
+
+  SQL never computes a displayed number. Every money collection needs a 14-day zero-difference shadow before it flips.
+- **R4.1a** The retired `financialSummaries/netWorth` and `/investments` are never copied (`TableSpec.excludeDocIds`). Net worth has one definition: `composeNetWorth`, computed live.
+- **R4.1b** `scripts/readmodelMoneyGuard.test.ts` enforces R4 in three ways:
+  - every SQL view or function that aggregates must be listed with its purpose: reconciliation (R4.2) or a history report;
+  - none may aggregate the stored-copy tables;
+  - the app may read only the history report among them, never a recomputed balance.
+
+  A new aggregating object fails the test until someone classifies it.
 - **R4.2** Don't create a parallel ledger, or recompute an authoritative summary in a component or in SQL (`CLAUDE.md` safety invariants). SQL may recompute only **for reconciliation** (`readmodel_invariants`, parity), never for display.
 - **R4.3** Until a collection's read switch is `supabase` (SPENDLY-673), its live window, realtime listeners and anything a user just wrote are served from Firestore, as before.
 

@@ -1,5 +1,5 @@
 import { isDuressUid } from "../duress";
-import { READ_MODEL_TABLES, SPEC_BY_COLLECTION } from "./mapping";
+import { isExcludedDoc, READ_MODEL_TABLES, SPEC_BY_COLLECTION } from "./mapping";
 
 /**
  * SPENDLY-583 — the documents a client may ask the server to push to the read
@@ -43,6 +43,7 @@ export function isPushableRefDocId(collection: string, docId: unknown): docId is
   const spec = SPEC_BY_COLLECTION.get(collection);
   if (!spec) return false;
   if (spec.root) return docId === spec.root.docId;
+  if (typeof docId === "string" && isExcludedDoc(spec, docId)) return false;
   if (!spec.parent) return isPushableDocId(docId);
   if (typeof docId !== "string") return false;
   const parts = docId.split("/");
