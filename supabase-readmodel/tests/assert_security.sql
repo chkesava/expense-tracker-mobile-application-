@@ -260,6 +260,39 @@ begin
 end
 $$;
 
+-- 9. SPENDLY-593: realtime. Every synced table pings its owner's private topic
+--    (insert and update statement triggers); the ping function and the
+--    catch-up function are security definer with a pinned search_path; only
+--    authenticated may catch up; only a topic's owner may join it.
+do $$
+declare
+  missing text;
+  fn regprocedure;
+begin
+  select string_agg(c.table_name, ', ' order by c.table_name) into missing
+  from information_schema.columns c
+  where c.table_schema = 'public' and c.column_name = 'written_by' and public.readmodel_sync_table_ok(c.table_name)
+    and (select count(*) from pg_trigger g
+         where g.tgrelid = format('public.%I', c.table_name)::regclass
+           and g.tgname in (c.table_name || '_rm_ping_ins', c.table_name || '_rm_ping_upd')) <> 2;
+  if missing is not null then
+    raise exception 'synced tables without both realtime ping triggers: %', missing;
+  end if;
+  foreach fn in array array['public.readmodel_ping()'::regprocedure, 'public.readmodel_changes_since(timestamptz, integer)'::regprocedure] loop
+    if not (select prosecdef from pg_proc where oid = fn) or not exists (select 1 from pg_proc where oid = fn and 'search_path=""' = any (proconfig)) then
+      raise exception '% must be security definer with an empty search_path', fn;
+    end if;
+  end loop;
+  if has_function_privilege('anon', 'public.readmodel_changes_since(timestamptz, integer)', 'execute')
+     or not has_function_privilege('authenticated', 'public.readmodel_changes_since(timestamptz, integer)', 'execute') then
+    raise exception 'readmodel_changes_since: authenticated only';
+  end if;
+  if not exists (select 1 from pg_policies where schemaname = 'realtime' and tablename = 'messages' and policyname = 'readmodel_user_topic_read') then
+    raise exception 'the private-topic policy on realtime.messages is missing';
+  end if;
+end
+$$;
+
 select 'read-model security assertions passed' as result;
 
 -- 7. SPENDLY-513: the Phase 3 views run as the caller (security_invoker), so
