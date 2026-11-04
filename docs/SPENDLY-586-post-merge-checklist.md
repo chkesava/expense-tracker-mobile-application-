@@ -24,7 +24,7 @@ Last updated: 2026-11-04, with 12 of 21 stories merged (594 added).
 | 10 | SPENDLY-672 sync safety net | ✅ merged | **Index deploy**, then the `safety-net` switch (§4 steps 1 and 8) |
 | 11 | SPENDLY-593 realtime | ✅ merged (`f138e130`) | Migration `20261104000000` **applied 2026-11-04**; `readModel.realtime = true` **after 594 ships**; the hosted RS256 Realtime check; message volume (§4 step 9a) |
 | 12 | SPENDLY-594 on-device SQLite copy | ✅ merged | **`expo-sqlite` = a new native build** (§4 step 4); `readModel.localCopy = true` with or before realtime (§4 step 9a); airplane drill and phone measurement after 673 |
-| 13 | SPENDLY-673 read store + provider switch | ⏳ to do | *(added when merged)* |
+| 13 | SPENDLY-673 read store + provider switch | 🔄 built, awaiting merge | Per-collection `readModel.<collection>` switches (§4 step 9); 7 collections wired (bills, borrowings/receivables + repayments, budgets, investments); the rest in 596–599/674 |
 | 14 | SPENDLY-595 Supabase plan (Pro) | ⏳ to do | *(added when merged: Pro before any money screen flips)* |
 | 15 | SPENDLY-596 Journal on the read model | ⏳ to do | *(added when merged: 7-day shadow)* |
 | 16 | SPENDLY-597 accounts, cards, bills | ⏳ to do | *(added when merged: 14-day shadow)* |
@@ -138,7 +138,17 @@ Only after step 1 (indexes Enabled) and step 6 (app writes live and divergences 
 
 **Rollback:** set `realtime = false` and/or `localCopy = false`. With the copy off nothing is opened; sign-out still wipes any copy left on the device.
 
-### Step 9: Screen switches (596–599, 674): to be completed when those stories merge
+### Step 9: Collection and screen switches (673; then 596–599, 674)
+
+Each wired collection has `system_settings/global.readModel.<collection>`:
+- first set it to `shadow`, and watch `readModel.shadow.<collection>` (none means equal);
+- after the shadow period (7 days, 14 where money is shown) and the user's approval, set it to `supabase`.
+
+It needs `readModel.localCopy = true` (step 9a). Wired by 673: `creditCardBills`, `borrowings`, `borrowingRepayments`, `receivables`, `receivableRepayments`, `categoryBudgets`, `investments`.
+
+**Rollback:** `firestore`.
+
+*(596–599 and 674 add their collections here when they merge.)*
 
 Each screen has `system_settings/global.readModel.<screen>`: `firestore` → `shadow` → `supabase`. Shadow lasts 7 days, or 14 where money is shown, and the user approves each flip. Supabase Pro (595) comes before the first money screen.
 

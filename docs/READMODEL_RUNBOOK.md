@@ -279,6 +279,21 @@ Run it from the workflow with `mode = full`, first with `dry_run = true` to see 
 - *A device's copy looks wrong:* sign out and in (it wipes and rehydrates), or set `localCopy = false` (the screens read as before).
 - *A mapping change:* the changed table is dropped and rehydrated automatically on the next start.
 
+## Per-collection read switches (SPENDLY-673)
+
+**The switch:** `system_settings/global.readModel.<collection>` = `firestore` (default) | `shadow` | `supabase`.
+- It needs `readModel.localCopy` on.
+- `supabase` waits until the device's copy is hydrated.
+- Duress, Spendly Test and signed out are always `firestore`.
+
+**Wired so far:** `creditCardBills`, `borrowings`, `borrowingRepayments`, `receivables`, `receivableRepayments`, `categoryBudgets`, `investments`. Others ignore the setting until their story wires them (see `docs/SPENDLY-673-read-store.md`).
+
+**Shadow:** watch the logs for `readModel.shadow.<collection>`. These carry counts only (missing, extra, differing, and the differing columns), at most every 10 minutes per device, and only when there's a difference. None for the whole period means the copy matches.
+
+**Fallback:**
+- `readModel.fallback.<collection>` means a device's copy failed for that collection. It went back to Firestore for the rest of the session.
+- Repeated fallbacks mean: set the switch back to `firestore` and check the copy (runbook, "The on-device copy").
+
 ## Recovery drills (SPENDLY-520)
 
 Every procedure above has been exercised end to end on a local stack: the production scripts unchanged, the Firebase emulator, a local Postgres with the real migrations, and PostgREST (Supabase's API). The latest log is in `docs/SPENDLY-520-drill-log.md`. Re-run the drills after any change to the sync, the mapping or the migrations:
