@@ -6,7 +6,7 @@
  * (service role, server-side only; the SQL functions in migration
  * 20261023000000 do the writing).
  *
- *   npx tsx scripts/readmodel-sync.ts [--mode=incremental|full] [--dry-run]
+ *   npx tsx scripts/readmodel-sync.ts [--mode=incremental|full|nightly] [--dry-run]
  *     [--max-reads-per-run=N] [--max-reads-per-day=N]
  *
  * Environment:
@@ -18,6 +18,8 @@
  * A dry run with no Supabase key uses an in-memory sink: it reads and maps
  * Firestore (counting reads) and writes nothing anywhere.
  */
+import { appendFileSync } from "node:fs";
+
 import { applicationDefault, cert, initializeApp } from "firebase-admin/app";
 import { FieldPath, getFirestore, Timestamp, type CollectionReference, type DocumentSnapshot, type Firestore, type Query } from "firebase-admin/firestore";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -25,6 +27,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { SPEC_BY_COLLECTION, type ReadModelRow } from "../shared/utils/readModel/mapping";
 import { hashUid, runSync, type Checkpoint, type Page, type PageRequest, type RunRecord, type SinkPort, type SourcePort, type SyncMode } from "./lib/readmodelSyncCore";
 import { readNestedPage } from "./lib/readmodelNestedPages";
+import { userDocOf } from "./lib/readmodelPaths";
+import { nightlyMode, nightlySetting } from "./lib/readmodelNightlyMode";
 import { purgedUidsBatch } from "./lib/readmodelPurged";
 import { memorySink } from "./lib/readmodelSyncMemory";
 
@@ -45,6 +49,27 @@ export function firestoreReader(db: Firestore): SourcePort {
   return {
     async listUserIds() {
       return (await db.collection("users").listDocuments()).map((ref) => ref.id);
+    },
+    async readChangedAcrossUsers(collection, request) {
+      const spec = SPEC_BY_COLLECTION.get(collection);
+      if (!spec || spec.root) return { docs: [], reads: 0 };
+      // Same-named collections elsewhere (Ganesh pandals, Nutrition) come back
+      // too; the path filter keeps only users/{uid}/… of this spec.
+      let query: Query = db
+        .collectionGroup(spec.parent ? spec.parent.child : collection)
+        .where(request.field, ">", Timestamp.fromMillis(request.sinceMs))
+        .orderBy(request.field);
+      if (request.after) query = query.startAfter(request.after as DocumentSnapshot);
+      const snap = await query.limit(request.limit).get();
+      const docs = snap.docs.flatMap((d) => {
+        const at = userDocOf(spec, d.ref.path);
+        return at ? [{ uid: at.uid, id: at.id, data: d.data(), updateTime: d.updateTime }] : [];
+      });
+      return {
+        docs,
+        reads: Math.max(1, snap.docs.length),
+        next: snap.docs.length === request.limit ? snap.docs[snap.docs.length - 1] : undefined,
+      };
     },
     async readPage(uid, collection, request) {
       const root = SPEC_BY_COLLECTION.get(collection)?.root;
@@ -243,8 +268,13 @@ function arg(argv: string[], name: string): string | undefined {
 
 async function main() {
   const argv = process.argv.slice(2);
-  const mode = (arg(argv, "mode") ?? "incremental") as SyncMode;
-  if (mode !== "incremental" && mode !== "full") throw new Error("--mode must be incremental or full");
+  // SPENDLY-672: "nightly" is the scheduled run; READMODEL_NIGHTLY_MODE decides it.
+  const requested = arg(argv, "mode") ?? "incremental";
+  const mode = (requested === "nightly" ? nightlyMode(process.env.READMODEL_NIGHTLY_MODE, new Date()) : requested) as SyncMode;
+  if (mode !== "incremental" && mode !== "full") throw new Error("--mode must be incremental, full or nightly");
+  // Later workflow steps (count parity, parity findings) run after full passes only.
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `mode=${mode}\n`);
+  console.log(`[MODE] ${mode}${requested === "nightly" ? ` (nightly, READMODEL_NIGHTLY_MODE=${nightlySetting(process.env.READMODEL_NIGHTLY_MODE)})` : ""}`);
   const dryRun = argv.includes("--dry-run");
   const maxReadsPerRun = Number(arg(argv, "max-reads-per-run") ?? process.env.READMODEL_MAX_READS_PER_RUN ?? (mode === "full" ? 6000 : 1500));
   const maxReadsPerDay = Number(arg(argv, "max-reads-per-day") ?? process.env.READMODEL_MAX_READS_PER_DAY ?? 12000);
@@ -273,10 +303,21 @@ async function main() {
       perCollection.set(collection, entry);
       return page;
     },
+    async readChangedAcrossUsers(collection, request) {
+      const page = await source.readChangedAcrossUsers!(collection, request);
+      const entry = perCollection.get(collection) ?? { docs: 0, unmapped: 0 };
+      entry.docs += page.docs.length;
+      perCollection.set(collection, entry);
+      return page;
+    },
   };
 
+  // SPENDLY-672: the safety-net nights (and --cross-user) find changes with one
+  // collection-group query per collection. Needs the collection-group indexes
+  // in firestore.indexes.json deployed.
+  const crossUser = argv.includes("--cross-user") || (requested === "nightly" && mode === "incremental");
   const record = await runSync(counted, sink, {
-    mode, dryRun, maxReadsPerRun, maxReadsPerDay, now: () => Date.now(), log: (line) => console.log(line),
+    mode, dryRun, maxReadsPerRun, maxReadsPerDay, crossUser, now: () => Date.now(), log: (line) => console.log(line),
   });
 
   console.log(`\nSync ${record.mode} (${mode}): ${record.status}`);
