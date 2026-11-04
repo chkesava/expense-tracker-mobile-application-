@@ -4,7 +4,7 @@
 
 Each story that merges into the epic adds its own steps here.
 
-Last updated: 2026-11-04, with 13 of 21 stories merged (673 added).
+Last updated: 2026-11-04, with 14 of 21 stories merged (596 added).
 
 ---
 
@@ -26,7 +26,7 @@ Last updated: 2026-11-04, with 13 of 21 stories merged (673 added).
 | 12 | SPENDLY-594 on-device SQLite copy | ✅ merged | **`expo-sqlite` = a new native build** (§4 step 4); `readModel.localCopy = true` with or before realtime (§4 step 9a); airplane drill and phone measurement after 673 |
 | 13 | SPENDLY-673 read store + provider switch | ✅ merged | Per-collection `readModel.<collection>` switches (§4 step 9); 7 collections wired (bills, borrowings/receivables + repayments, budgets, investments); the rest in 596–599/674 |
 | 14 | SPENDLY-595 Supabase plan (Pro) | ⏳ to do | *(added when merged: Pro before any money screen flips)* |
-| 15 | SPENDLY-596 Journal on the read model | 🔄 built, awaiting merge | `readModel.expenses` / `readModel.incomes`: shadow 7 days, then supabase (§4 step 9) |
+| 15 | SPENDLY-596 Journal on the read model | ✅ merged | `readModel.expenses` / `readModel.incomes`: shadow 7 days, then supabase (§4 step 9) |
 | 16 | SPENDLY-597 accounts, cards, bills | ⏳ to do | *(added when merged: 14-day shadow)* |
 | 17 | SPENDLY-598 investments, EPF, loans, subs | ⏳ to do | *(added when merged: 14-day shadow)* |
 | 18 | SPENDLY-599 dashboard, net worth, budgets | ⏳ to do | *(added when merged: 14-day shadow)* |
