@@ -33,6 +33,8 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs } from "@/lib/readModelLocal/readSource";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -182,6 +184,8 @@ function refreshDerivedFields(
 
 export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  // SPENDLY-673: firestore (default) | shadow | supabase, per readModel.creditCardBills.
+  const billsSource = useReadModelSource("creditCardBills");
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
   const {
@@ -260,21 +264,11 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     }
 
     setBillsLoading(true);
-    const path = `users/${user.uid}/creditCardBills`;
-    perfEvent("firestore_listener_start", { collection: "creditCardBills" });
-    const unsub = onSnapshot(
-      query(collection(db, "users", user.uid, "creditCardBills")),
-      (snap) => {
-        logQuerySnapshot(path, snap, { feature: "creditCardBills", queryShape: "creditCardBills" });
-        notifyReadModelSnapshot(snap);
-        perfEvent("firestore_first_snapshot", {
-          collection: "creditCardBills",
-          docCount: snap.docs.length,
-          fromCache: snap.metadata.fromCache,
-        });
+    // SPENDLY-673: the same mapping for either source (Firestore or the on-device copy).
+    const apply = (docs: { id: string; data: Record<string, unknown> }[]) => {
         setBills(
-          snap.docs.map((d) => {
-            const data = d.data() as Partial<CreditCardBill>;
+          docs.map((d) => {
+            const data = d.data as Partial<CreditCardBill>;
             const statementAmount = Number(data.statementAmount) || 0;
             const amountPaid = Number(data.amountPaid) || 0;
             return {
@@ -307,6 +301,24 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           })
         );
         setBillsLoading(false);
+    };
+    if (billsSource.mode === "supabase") return billsSource.subscribe(apply);
+
+    const path = `users/${user.uid}/creditCardBills`;
+    perfEvent("firestore_listener_start", { collection: "creditCardBills" });
+    const unsub = onSnapshot(
+      query(collection(db, "users", user.uid, "creditCardBills")),
+      (snap) => {
+        logQuerySnapshot(path, snap, { feature: "creditCardBills", queryShape: "creditCardBills" });
+        notifyReadModelSnapshot(snap);
+        perfEvent("firestore_first_snapshot", {
+          collection: "creditCardBills",
+          docCount: snap.docs.length,
+          fromCache: snap.metadata.fromCache,
+        });
+        const docs = toSourceDocs(snap);
+        apply(docs);
+        if (billsSource.mode === "shadow") void billsSource.shadow(docs);
       },
       () => setBillsLoading(false)
     );
@@ -314,7 +326,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       forgetSnapshotPath(path);
       unsub();
     };
-  }, [user?.uid, timezone, shouldListen]);
+  }, [user?.uid, timezone, shouldListen, billsSource.mode]);
 
   const writeReminderLog = useCallback(
     async (entry: Omit<CreditCardBillReminderLog, "id" | "sentAt" | "channel">) => {

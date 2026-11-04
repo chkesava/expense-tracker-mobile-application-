@@ -36,6 +36,8 @@ import type { MutationOp } from "@/shared/types/mutations";
 import type { LedgerRow } from "@/shared/utils/ledgerAccountDeltas";
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -197,6 +199,11 @@ export function BorrowingsReceivablesProvider({
 }) {
   const { user } = useAuth();
   const uid = user?.uid;
+  // SPENDLY-673: firestore (default) | shadow | supabase, per readModel.<collection>.
+  const borrowingsSource = useReadModelSource("borrowings");
+  const borrowingRepaymentsSource = useReadModelSource("borrowingRepayments");
+  const receivablesSource = useReadModelSource("receivables");
+  const receivableRepaymentsSource = useReadModelSource("receivableRepayments");
   const { settings } = useSettings();
   const today = todayDateKey(settings.timezone);
 
@@ -319,8 +326,19 @@ export function BorrowingsReceivablesProvider({
     const borrowingsPath = `users/${uid}/borrowings`;
     const borrowingRepaymentsPath = `users/${uid}/borrowingRepayments`;
 
+    // SPENDLY-673: the same mapping for either source.
+    const applyBorrowings = (docs: SourceDoc[]) => {
+      setBorrowings(docs.map((d) => ({ id: d.id, ...(d.data as Omit<Borrowing, "id">) })));
+      setBorrowingsError(null);
+      setBorrowingsLoading(false);
+    };
+    const applyBorrowingRepayments = (docs: SourceDoc[]) =>
+      setBorrowingRepayments(docs.map((d) => ({ id: d.id, ...(d.data as Omit<BorrowingRepayment, "id">) })));
+
     perfEvent("firestore_listener_start", { collection: "borrowings" });
-    const unsubBorrowings = onSnapshot(
+    const unsubBorrowings = borrowingsSource.mode === "supabase"
+      ? borrowingsSource.subscribe(applyBorrowings, { orderBy: [{ field: "borrowedDate", direction: "desc" }] })
+      : onSnapshot(
       query(collection(db, ...base, "borrowings"), orderBy("borrowedDate", "desc")),
       (snapshot) => {
         logQuerySnapshot(borrowingsPath, snapshot, { feature: "borrowings", queryShape: "borrowings" });
@@ -329,14 +347,9 @@ export function BorrowingsReceivablesProvider({
           docCount: snapshot.docs.length,
           fromCache: snapshot.metadata.fromCache,
         });
-        setBorrowings(
-          snapshot.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...(docSnap.data() as Omit<Borrowing, "id">),
-          }))
-        );
-        setBorrowingsError(null);
-        setBorrowingsLoading(false);
+        const docs = toSourceDocs(snapshot);
+        applyBorrowings(docs);
+        if (borrowingsSource.mode === "shadow") void borrowingsSource.shadow(docs);
       },
       snapshotErrorHandler(
         "snapshot.borrowings",
@@ -351,7 +364,9 @@ export function BorrowingsReceivablesProvider({
     let unsubBorrowingRepayments: (() => void) | null = null;
     const cancelIdle = scheduleIdleWork(() => {
       perfEvent("firestore_listener_start", { collection: "borrowingRepayments" });
-      unsubBorrowingRepayments = onSnapshot(
+      unsubBorrowingRepayments = borrowingRepaymentsSource.mode === "supabase"
+        ? borrowingRepaymentsSource.subscribe(applyBorrowingRepayments, { orderBy: [{ field: "date", direction: "desc" }] })
+        : onSnapshot(
         query(
           collection(db, ...base, "borrowingRepayments"),
           orderBy("date", "desc")
@@ -366,12 +381,9 @@ export function BorrowingsReceivablesProvider({
             docCount: snapshot.docs.length,
             fromCache: snapshot.metadata.fromCache,
           });
-          setBorrowingRepayments(
-            snapshot.docs.map((docSnap) => ({
-              id: docSnap.id,
-              ...(docSnap.data() as Omit<BorrowingRepayment, "id">),
-            }))
-          );
+          const docs = toSourceDocs(snapshot);
+          applyBorrowingRepayments(docs);
+          if (borrowingRepaymentsSource.mode === "shadow") void borrowingRepaymentsSource.shadow(docs);
         },
         (err) => logWarning("snapshot.borrowing.repayments", err)
       );
@@ -384,7 +396,7 @@ export function BorrowingsReceivablesProvider({
       unsubBorrowings();
       if (unsubBorrowingRepayments) unsubBorrowingRepayments();
     };
-  }, [uid, borrowingsAttempt, setBorrowingsError, shouldListenBorrowings]);
+  }, [uid, borrowingsAttempt, setBorrowingsError, shouldListenBorrowings, borrowingsSource.mode, borrowingRepaymentsSource.mode]);
 
   useEffect(() => {
     if (!shouldListenReceivables) {
@@ -409,9 +421,20 @@ export function BorrowingsReceivablesProvider({
     let unsubReceivables: (() => void) | null = null;
     let unsubReceivableRepayments: (() => void) | null = null;
 
+    // SPENDLY-673: the same mapping for either source.
+    const applyReceivables = (docs: SourceDoc[]) => {
+      setReceivables(docs.map((d) => ({ id: d.id, ...(d.data as Omit<Receivable, "id">) })));
+      setReceivablesError(null);
+      setReceivablesLoading(false);
+    };
+    const applyReceivableRepayments = (docs: SourceDoc[]) =>
+      setReceivableRepayments(docs.map((d) => ({ id: d.id, ...(d.data as Omit<ReceivableRepayment, "id">) })));
+
     const cancelIdle = scheduleIdleWork(() => {
       perfEvent("firestore_listener_start", { collection: "receivables" });
-      unsubReceivables = onSnapshot(
+      unsubReceivables = receivablesSource.mode === "supabase"
+        ? receivablesSource.subscribe(applyReceivables, { orderBy: [{ field: "lentDate", direction: "desc" }] })
+        : onSnapshot(
         query(collection(db, ...base, "receivables"), orderBy("lentDate", "desc")),
         (snapshot) => {
           logQuerySnapshot(receivablesPath, snapshot, {
@@ -423,14 +446,9 @@ export function BorrowingsReceivablesProvider({
             docCount: snapshot.docs.length,
             fromCache: snapshot.metadata.fromCache,
           });
-          setReceivables(
-            snapshot.docs.map((docSnap) => ({
-              id: docSnap.id,
-              ...(docSnap.data() as Omit<Receivable, "id">),
-            }))
-          );
-          setReceivablesError(null);
-          setReceivablesLoading(false);
+          const docs = toSourceDocs(snapshot);
+          applyReceivables(docs);
+          if (receivablesSource.mode === "shadow") void receivablesSource.shadow(docs);
         },
         snapshotErrorHandler(
           "snapshot.receivables",
@@ -443,7 +461,9 @@ export function BorrowingsReceivablesProvider({
       );
 
       perfEvent("firestore_listener_start", { collection: "receivableRepayments" });
-      unsubReceivableRepayments = onSnapshot(
+      unsubReceivableRepayments = receivableRepaymentsSource.mode === "supabase"
+        ? receivableRepaymentsSource.subscribe(applyReceivableRepayments, { orderBy: [{ field: "date", direction: "desc" }] })
+        : onSnapshot(
         query(
           collection(db, ...base, "receivableRepayments"),
           orderBy("date", "desc")
@@ -458,12 +478,9 @@ export function BorrowingsReceivablesProvider({
             docCount: snapshot.docs.length,
             fromCache: snapshot.metadata.fromCache,
           });
-          setReceivableRepayments(
-            snapshot.docs.map((docSnap) => ({
-              id: docSnap.id,
-              ...(docSnap.data() as Omit<ReceivableRepayment, "id">),
-            }))
-          );
+          const docs = toSourceDocs(snapshot);
+          applyReceivableRepayments(docs);
+          if (receivableRepaymentsSource.mode === "shadow") void receivableRepaymentsSource.shadow(docs);
         },
         (err) => logWarning("snapshot.receivable.repayments", err)
       );
@@ -476,7 +493,7 @@ export function BorrowingsReceivablesProvider({
       if (unsubReceivables) unsubReceivables();
       if (unsubReceivableRepayments) unsubReceivableRepayments();
     };
-  }, [uid, receivablesAttempt, setReceivablesError, shouldListenReceivables]);
+  }, [uid, receivablesAttempt, setReceivablesError, shouldListenReceivables, receivablesSource.mode, receivableRepaymentsSource.mode]);
 
   // ─── Borrowings ─────────────────────────────────────────────────────────
 

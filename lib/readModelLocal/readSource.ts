@@ -127,3 +127,8 @@ export function createCollectionSource(deps: {
     lastShadow: () => lastShadow,
   };
 }
+
+/** A Firestore snapshot's documents as `{ id, data }`, the shape both sources deliver. */
+export function toSourceDocs(snapshot: { docs: { id: string; data(): unknown }[] }): SourceDoc[] {
+  return snapshot.docs.map((d) => ({ id: d.id, data: (d.data() ?? {}) as Record<string, unknown> }));
+}

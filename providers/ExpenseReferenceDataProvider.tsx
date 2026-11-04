@@ -39,6 +39,8 @@ import { noteDirectWrites } from "@/lib/readModelWriteHooks";
 import { commitWrite } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { postDueSubscriptionCharge } from "@/services/subscriptions/duePost";
@@ -107,6 +109,8 @@ export function ExpenseReferenceDataProvider({
 }) {
   const { user } = useAuth();
   const uid = user?.uid;
+  // SPENDLY-673: firestore (default) | shadow | supabase, per readModel.categoryBudgets.
+  const budgetsSource = useReadModelSource("categoryBudgets");
   const db = getFirestoreDb();
   const { settings } = useSettings();
   const timezone = settings.timezone;
@@ -550,6 +554,15 @@ export function ExpenseReferenceDataProvider({
       return;
     }
     setBudgetsLoading(true);
+    // SPENDLY-673: the same mapping for either source.
+    const applyBudgets = (docs: SourceDoc[]) => {
+      setBudgets(docs.map((d) => ({ id: d.id, ...d.data } as CategoryBudget)));
+      setBudgetsError(null);
+      setBudgetsLoading(false);
+    };
+    if (budgetsSource.mode === "supabase") {
+      return budgetsSource.subscribe(applyBudgets, { orderBy: [{ field: "month", direction: "desc" }] });
+    }
     const path = `users/${uid}/categoryBudgets`;
     perfEvent("firestore_listener_start", { collection: "categoryBudgets" });
     const unsub = onSnapshot(
@@ -564,11 +577,9 @@ export function ExpenseReferenceDataProvider({
           docCount: snap.docs.length,
           fromCache: snap.metadata.fromCache,
         });
-        setBudgets(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() } as CategoryBudget))
-        );
-        setBudgetsError(null);
-        setBudgetsLoading(false);
+        const docs = toSourceDocs(snap);
+        applyBudgets(docs);
+        if (budgetsSource.mode === "shadow") void budgetsSource.shadow(docs);
       },
       snapshotErrorHandler(
         "snapshot.categoryBudgets",
@@ -583,7 +594,7 @@ export function ExpenseReferenceDataProvider({
       forgetSnapshotPath(path);
       unsub();
     };
-  }, [uid, db, budgetsAttempt, setBudgetsError, shouldListenBudgets]);
+  }, [uid, db, budgetsAttempt, setBudgetsError, shouldListenBudgets, budgetsSource.mode]);
 
   useEffect(() => {
     if (!shouldListenGoals) {

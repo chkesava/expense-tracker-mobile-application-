@@ -113,6 +113,7 @@ Everything else is **not** in the read model. Waves 2 and 3 were first closed as
   A new aggregating object fails the test until someone classifies it.
 - **R4.2** Don't create a parallel ledger, or recompute an authoritative summary in a component or in SQL (`CLAUDE.md` safety invariants). SQL may recompute only **for reconciliation** (`readmodel_invariants`, parity), never for display.
 - **R4.3** Until a collection's read switch is `supabase` (SPENDLY-673), its live window, realtime listeners and anything a user just wrote are served from Firestore, as before.
+- **R4.3a** A collection whose data **drives a write** stays on Firestore until that writer reads Firestore directly: due-subscription auto-posting, SIP execution, the EPF summary sync. `lib/readModelLocal/providerSwitch.test.ts` lists them and refuses a read switch on them.
 
 ## 5. Deletion
 
