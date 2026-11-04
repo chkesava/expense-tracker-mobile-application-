@@ -70,7 +70,20 @@ export function createLocalCopy(deps: LocalCopyDeps) {
   let store: LocalRowStore | null = null;
   let generation = 0;
   let chain: Promise<unknown> = Promise.resolve();
-  let state: "off" | "hydrating" | "ready" | "error" = "off";
+  type CopyState = "off" | "hydrating" | "ready" | "error";
+  let state: CopyState = "off";
+  const stateListeners = new Set<(state: CopyState) => void>();
+  function setState(next: CopyState) {
+    if (next === state) return;
+    state = next;
+    for (const l of stateListeners) {
+      try {
+        l(next);
+      } catch (error) {
+        deps.log?.("readModel.localCopy.listener", error);
+      }
+    }
+  }
 
   /**
    * Store work runs one task at a time; a task from an older start does
@@ -81,7 +94,7 @@ export function createLocalCopy(deps: LocalCopyDeps) {
     const mine = generation;
     const next = chain.then(async () => (store && mine === generation ? task(store, mine) : null));
     const settled = next.catch((error) => {
-      if (mine === generation) state = "error";
+      if (mine === generation) setState("error");
       deps.log?.("readModel.localCopy", error);
       return null;
     });
@@ -186,7 +199,7 @@ export function createLocalCopy(deps: LocalCopyDeps) {
   }
 
   async function hydrateAll(s: LocalRowStore, mine: number, tables: string[]) {
-    state = "hydrating";
+    setState("hydrating");
     const mark = (await s.getMeta(HYDRATE_MARK)) ?? new Date(deps.now() - HYDRATE_SKEW_MS).toISOString();
     await s.setMeta(HYDRATE_MARK, mark);
     for (const t of tables) {
@@ -214,7 +227,7 @@ export function createLocalCopy(deps: LocalCopyDeps) {
       try {
         opened = await deps.factory.open(uid);
       } catch (error) {
-        state = "error";
+        setState("error");
         deps.log?.("readModel.localCopy.open", error);
         return null;
       }
@@ -234,7 +247,7 @@ export function createLocalCopy(deps: LocalCopyDeps) {
         } else if (missing.length) {
           await hydrateAll(s, g, missing);
         }
-        if (g === generation) state = "ready";
+        if (g === generation) setState("ready");
       });
       return { lastSeen: (await run((s) => s.getMeta(LAST_SEEN))) ?? null };
     },
@@ -245,7 +258,7 @@ export function createLocalCopy(deps: LocalCopyDeps) {
         if (event.kind === "changes") return applyChanges(s, event.changes);
         const tables = event.table ? (specs.has(event.table) ? [event.table] : []) : [...specs.keys()];
         if (tables.length) await hydrateAll(s, g, tables);
-        if (g === generation) state = "ready";
+        if (g === generation) setState("ready");
       });
     },
 
@@ -279,7 +292,7 @@ export function createLocalCopy(deps: LocalCopyDeps) {
       generation += 1;
       const s = store;
       store = null;
-      state = "off";
+      setState("off");
       await chain.catch(() => undefined);
       await s?.close();
     },
@@ -291,5 +304,11 @@ export function createLocalCopy(deps: LocalCopyDeps) {
     },
 
     status: () => ({ state, uid: store?.uid ?? null }),
+
+    /** Notified when the copy's state changes (SPENDLY-673: `supabase` waits for `ready`). */
+    onState(listener: (state: CopyState) => void): () => void {
+      stateListeners.add(listener);
+      return () => stateListeners.delete(listener);
+    },
   };
 }
