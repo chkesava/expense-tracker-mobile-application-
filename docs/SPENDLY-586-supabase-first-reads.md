@@ -16,7 +16,7 @@
 | 2 | SPENDLY-592 copy authoritative values | `feature/SPENDLY-592-copy-money-values` | **Merged into the epic** (`47bf3e38`); migration `20261103000000` applied to production; 14-day parity gate after the epic reaches main |
 | 2 | SPENDLY-593 realtime (Broadcast ping + refetch, ADR D2) | `feature/SPENDLY-593-realtime` | **Merged into the epic** (`f138e130`); migration `20261104000000` applied |
 | 2 | SPENDLY-594 offline (on-device SQLite/IndexedDB copy, ADR D1) | `feature/SPENDLY-594-offline-copy` | **Merged into the epic**; no migration; native build (`expo-sqlite`) |
-| 2 | SPENDLY-595 Supabase plan: **Free** | `feature/SPENDLY-595-free-plan` | **Built**; awaiting merge |
+| 2 | SPENDLY-595 Supabase plan: **Free** | `feature/SPENDLY-595-free-plan` | **Merged into the epic** (`9be457d1`); migration `20261105000000` applied |
 | 3 | SPENDLY-596 live Journal | `feature/SPENDLY-596-journal-live` | **Merged into the epic**; no migration |
 | 3 | SPENDLY-597 accounts, cards, bills | `feature/SPENDLY-597-accounts-ledger` | **Merged into the epic**; no migration |
 | 3 | SPENDLY-598 investments, EPF, loans, subs | — | To Do; behind the 600 checkpoint (ADR D7) |
@@ -60,3 +60,4 @@
 - **2026-11-04 (597):** accounts + account ledger through the read switch. Found: the credit card bill pass (and the account baseline repair) write from provider data, and 673/596 had wired two of its inputs (bills, expenses) — a gap in their R4.3a review, harmless while switches are `firestore`. The user chose "read Firestore for the write": the pass checks for work on the screen's data (free) and only then re-reads its inputs from Firestore (`billPass.ts`); the baseline repair confirms on Firestore. Guarded by tests. 537 test files + rules green.
 - **2026-11-04:** 597 merged into the epic. The user: **no Supabase Pro; the epic runs on the Free plan.** 595 is re-scoped to Free-plan guardrails.
 - **2026-11-04 (595, re-scoped):** the Free plan, permanently (the user). `readmodel_capacity()` (migration `20261105000000`, service role only) feeds hourly health: database size vs 500 MB and realtime messages vs 2M/month (warn 50%, fail 80%); rebuild-from-Firestore instead of backups; pause handling and monthly dashboard check in the runbook; ADR D4, plan, 597 and the checklist no longer require Pro.
+- **2026-11-05:** 595 merged (`9be457d1`). **Migration `20261105000000` applied to production** after the checks; `readmodel_capacity()` reads 17 MB, 0 realtime messages in 24 h; not executable by anon or authenticated.

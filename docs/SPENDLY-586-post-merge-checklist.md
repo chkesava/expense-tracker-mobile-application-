@@ -4,7 +4,7 @@
 
 Each story that merges into the epic adds its own steps here.
 
-Last updated: 2026-11-04, with 15 of 21 stories merged (597 added).
+Last updated: 2026-11-05, with 16 of 21 stories merged (595 added).
 
 ---
 
@@ -25,7 +25,7 @@ Last updated: 2026-11-04, with 15 of 21 stories merged (597 added).
 | 11 | SPENDLY-593 realtime | ✅ merged (`f138e130`) | Migration `20261104000000` **applied 2026-11-04**; `readModel.realtime = true` **after 594 ships**; the hosted RS256 Realtime check; message volume (§4 step 9a) |
 | 12 | SPENDLY-594 on-device SQLite copy | ✅ merged | **`expo-sqlite` = a new native build** (§4 step 4); `readModel.localCopy = true` with or before realtime (§4 step 9a); airplane drill and phone measurement after 673 |
 | 13 | SPENDLY-673 read store + provider switch | ✅ merged | Per-collection `readModel.<collection>` switches (§4 step 9); 7 collections wired (bills, borrowings/receivables + repayments, budgets, investments); the rest in 596–599/674 |
-| 14 | SPENDLY-595 Supabase plan: **Free** | 🔄 built, awaiting merge | Migration `20261105000000` (capacity reading); health shows database size and realtime messages against the Free limits (§4 step 2); monthly dashboard check of egress and connections |
+| 14 | SPENDLY-595 Supabase plan: **Free** | ✅ merged | Migration `20261105000000` **applied 2026-11-05** (capacity reading); health shows database size and realtime messages against the Free limits (§4 step 2); monthly dashboard check of egress and connections |
 | 15 | SPENDLY-596 Journal on the read model | ✅ merged | `readModel.expenses` / `readModel.incomes`: shadow 7 days, then supabase (§4 step 9) |
 | 16 | SPENDLY-597 accounts, cards, bills | ✅ merged | `readModel.accounts` / `accountTypes` / `accountPayments` / `accountEntries` / `accountTransfers` (+ `creditCardBills`): shadow 14 days to the paisa (Free plan: health's capacity checks green), then supabase; the bill pass verifies on Firestore (a few reads per focus when it has work) |
 | 17 | SPENDLY-598 investments, EPF, loans, subs | ⏳ to do | *(added when merged: 14-day shadow)* |
