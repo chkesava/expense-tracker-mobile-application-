@@ -38,7 +38,7 @@ grant execute on all functions in schema rt_test to authenticated, anon, service
 set local role service_role;
 do $$
 declare
-  mark bigint := coalesce((select max(id) from realtime.messages), 0);
+  mark bigint := coalesce((select max(id) from rt_test.pings(0)), 0);
   m record;
   n integer;
 begin
@@ -60,7 +60,7 @@ begin
   if m.payload ? 'doc' or m.payload::text like '%amount%' then raise exception 'a ping carried document data: %', m.payload; end if;
 
   -- The same version again changes nothing, so nothing is sent.
-  mark := (select max(id) from realtime.messages);
+  mark := (select max(id) from rt_test.pings(0));
   perform public.readmodel_upsert('expenses', jsonb_build_array(rt_test.row('user-a', 'e1', 10, now() - interval '1 hour')));
   if exists (select 1 from rt_test.pings(mark)) then raise exception 'an unchanged row sent a ping'; end if;
 
@@ -72,7 +72,7 @@ begin
   end if;
 
   -- Over 100 rows for one user: one `resync` ping instead of a list.
-  mark := (select max(id) from realtime.messages);
+  mark := (select max(id) from rt_test.pings(0));
   perform public.readmodel_upsert('expenses',
     (select jsonb_agg(rt_test.row('user-a', 'bulk' || g, g, now() - interval '1 hour')) from generate_series(1, 101) g));
   select count(*) into n from rt_test.pings(mark);
