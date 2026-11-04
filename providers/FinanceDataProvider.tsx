@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   limit,
   onSnapshot,
@@ -100,7 +101,7 @@ import { configureReadModelRealtime, onReadModelChanges, type ChangesSinceRow } 
 import { getAppLocalCopy, platformStoreFactory, setAppLocalCopy, supabaseFetchers } from "@/lib/readModelLocal/appCopy";
 import { createLocalCopy } from "@/lib/readModelLocal/localCopy";
 import { useReadModelSource } from "@/hooks/useReadModelSource";
-import { toSourceDocs } from "@/lib/readModelLocal/readSource";
+import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
 import { COPY_LEDGER_WINDOW, copyPendingCount as pendingFor, copySnapshot, loadOlderFromCopy as olderFromCopy } from "@/lib/readModelLocal/ledgerWindow";
 import type { LocalStoreFactory } from "@/lib/readModelLocal/store";
 import { clientWritesEnabled, localCopyEnabled, realtimeEnabled } from "@/shared/utils/readModelMode";
@@ -524,6 +525,12 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   expensesModeRef.current = expensesSource.mode;
   const incomesModeRef = useRef(incomesSource.mode);
   incomesModeRef.current = incomesSource.mode;
+  // SPENDLY-597: accounts and the account ledger.
+  const accountsSource = useReadModelSource("accounts");
+  const accountTypesSource = useReadModelSource("accountTypes");
+  const paymentsSource = useReadModelSource("accountPayments");
+  const entriesSource = useReadModelSource("accountEntries");
+  const transfersSource = useReadModelSource("accountTransfers");
   /** How many copy rows (newest first, deleted included) the window and older pages have used. */
   const copyExpensesOffsetRef = useRef(LEDGER_STAGED_LIMIT);
   const copyIncomesOffsetRef = useRef(LEDGER_STAGED_LIMIT);
@@ -655,7 +662,17 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       if (repairedTodayBaselinesRef.current.has(account.id)) continue;
       repairedTodayBaselinesRef.current.add(account.id);
       const accountId = account.id;
-      void commitMutations(
+      // SPENDLY-597 (R4.3a): a write from what was read: when accounts come
+      // from the on-device copy, confirm on Firestore first (one read).
+      const confirmed =
+        accountsSource.mode === "supabase"
+          ? getDoc(doc(db, "users", uid, "accounts", accountId)).then((snap) =>
+              isAccidentalBalanceBaseline((snap.data() as Partial<Account> | undefined)?.balanceAsOfDate, today)
+            )
+          : Promise.resolve(true);
+      void confirmed.then((stillAccidental) => {
+        if (!stillAccidental) return;
+        return commitMutations(
         uid,
         [
           {
@@ -671,12 +688,13 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             logError("financeDataProvider.clearAccidentalBaseline", error);
           },
         }
-      ).catch((error) => {
+      );
+      }).catch((error) => {
         repairedTodayBaselinesRef.current.delete(accountId);
         logError("financeDataProvider.clearAccidentalBaseline", error);
       });
     }
-  }, [accounts, accountsLoading, db, uid]);
+  }, [accounts, accountsLoading, db, uid, accountsSource.mode]);
 
   // ─── Critical listeners (First paint) ────────────────────────────────────────
 
@@ -920,8 +938,27 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
 
     perfEvent("firestore_listener_start", { collection: "accounts" });
     perfEvent("firestore_listener_start", { collection: "accountTypes" });
+    // SPENDLY-597: the copy's rows, the same mapping; waiting-to-sync from the outbox.
+    const applyAccountsCopy = (docs: SourceDoc[]) => {
+      setAccounts(docs.map((d) => ({ id: d.id, ...(d.data as object) } as Account)));
+      pendingAccountsCountRef.current = copyPendingCount("accounts");
+      updatePendingSyncCount();
+      accountsHydratedRef.current = true;
+      setFinanceError(null);
+      setAccountsLoading(false);
+    };
+    const applyAccountTypesCopy = (docs: SourceDoc[]) => {
+      setAccountTypes(docs.map((d) => ({ id: d.id, ...(d.data as object) } as AccountType)));
+      pendingAccountTypesCountRef.current = copyPendingCount("account_types");
+      updatePendingSyncCount();
+      accountTypesHydratedRef.current = true;
+      setFinanceError(null);
+      setAccountTypesLoading(false);
+    };
     const unsubscribers = [
-      onSnapshot(
+      accountsSource.mode === "supabase"
+        ? accountsSource.subscribe(applyAccountsCopy)
+        : onSnapshot(
         query(collection(db, ...base, "accounts")),
         FINANCE_SNAPSHOT_LISTEN_OPTIONS,
         (snap) => {
@@ -937,6 +974,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
               snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as Account))
             );
           }
+          if (accountsSource.mode === "shadow") void accountsSource.shadow(toSourceDocs(snap));
           pendingAccountsCountRef.current = snap.docs.filter(
             (d) => d.metadata.hasPendingWrites
           ).length;
@@ -955,7 +993,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           "Couldn't load your accounts."
         )
       ),
-      onSnapshot(
+      accountTypesSource.mode === "supabase"
+        ? accountTypesSource.subscribe(applyAccountTypesCopy)
+        : onSnapshot(
         query(collection(db, ...base, "accountTypes")),
         FINANCE_SNAPSHOT_LISTEN_OPTIONS,
         (snap) => {
@@ -971,6 +1011,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
               snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as AccountType))
             );
           }
+          if (accountTypesSource.mode === "shadow") void accountTypesSource.shadow(toSourceDocs(snap));
           pendingAccountTypesCountRef.current = snap.docs.filter(
             (d) => d.metadata.hasPendingWrites
           ).length;
@@ -1001,7 +1042,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       unsubscribers.forEach((unsub) => unsub());
     };
     // SPENDLY-596: expensesSource.mode, incomesSource.mode (the read switch, a session fallback included).
-  }, [uid, db, updatePendingSyncCount, financeAttempt, setFinanceError, expensesSource.mode, incomesSource.mode]);
+  }, [uid, db, updatePendingSyncCount, financeAttempt, setFinanceError, expensesSource.mode, incomesSource.mode, accountsSource.mode, accountTypesSource.mode]);
 
   // ─── Deferred: Secondary ledger collections ─────────────────────────────────
 
@@ -1021,13 +1062,23 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         let transfersHydrated = false;
 
         secondaryUnsubs = [
-          onSnapshot(
+          paymentsSource.mode === "supabase"
+            ? paymentsSource.subscribe((docs) => {
+                const { items } = foldLedgerSnapshot<AccountPayment>(copySnapshot(docs).docs as never);
+                setPayments(sortLedgerByDateDesc(items));
+                pendingPaymentsCountRef.current = copyPendingCount("account_payments");
+                updatePendingSyncCount();
+                setFinanceError(null);
+                setPaymentsLoading(false);
+              })
+            : onSnapshot(
             query(collection(db, ...base, "accountPayments")),
             FINANCE_SNAPSHOT_LISTEN_OPTIONS,
             (snap) => {
               logQuerySnapshot(paymentPath, snap, { feature: "finance", queryShape: "accountPayments" });
               notifyReadModelSnapshot(snap);
               const { items, pendingWrites } = foldLedgerSnapshot<AccountPayment>(snap.docs);
+              if (paymentsSource.mode === "shadow") void paymentsSource.shadow(toSourceDocs(snap));
               if (shouldApplySnapshotDocs(snap, paymentsHydrated)) {
                 setPayments(sortLedgerByDateDesc(items));
               }
@@ -1047,13 +1098,23 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
               "Couldn't load your payments."
             )
           ),
-          onSnapshot(
+          entriesSource.mode === "supabase"
+            ? entriesSource.subscribe((docs) => {
+                const { items } = foldLedgerSnapshot<AccountEntry>(copySnapshot(docs).docs as never);
+                setEntries(sortLedgerByDateDesc(items));
+                pendingEntriesCountRef.current = copyPendingCount("account_entries");
+                updatePendingSyncCount();
+                setFinanceError(null);
+                setEntriesLoading(false);
+              })
+            : onSnapshot(
             query(collection(db, ...base, "accountEntries")),
             FINANCE_SNAPSHOT_LISTEN_OPTIONS,
             (snap) => {
               logQuerySnapshot(entryPath, snap, { feature: "finance", queryShape: "accountEntries" });
               notifyReadModelSnapshot(snap);
               const { items, pendingWrites } = foldLedgerSnapshot<AccountEntry>(snap.docs);
+              if (entriesSource.mode === "shadow") void entriesSource.shadow(toSourceDocs(snap));
               if (shouldApplySnapshotDocs(snap, entriesHydrated)) {
                 setEntries(sortLedgerByDateDesc(items));
               }
@@ -1073,13 +1134,23 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
               "Couldn't load your account entries."
             )
           ),
-          onSnapshot(
+          transfersSource.mode === "supabase"
+            ? transfersSource.subscribe((docs) => {
+                const { items } = foldLedgerSnapshot<AccountTransfer>(copySnapshot(docs).docs as never);
+                setTransfers(sortLedgerByDateDesc(items));
+                pendingTransfersCountRef.current = copyPendingCount("account_transfers");
+                updatePendingSyncCount();
+                setFinanceError(null);
+                setTransfersLoading(false);
+              })
+            : onSnapshot(
             query(collection(db, ...base, "accountTransfers")),
             FINANCE_SNAPSHOT_LISTEN_OPTIONS,
             (snap) => {
               logQuerySnapshot(transferPath, snap, { feature: "finance", queryShape: "accountTransfers" });
               notifyReadModelSnapshot(snap);
               const { items, pendingWrites } = foldLedgerSnapshot<AccountTransfer>(snap.docs);
+              if (transfersSource.mode === "shadow") void transfersSource.shadow(toSourceDocs(snap));
               if (shouldApplySnapshotDocs(snap, transfersHydrated)) {
                 setTransfers(sortLedgerByDateDesc(items));
               }
@@ -1111,7 +1182,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       forgetSnapshotPath(transferPath);
       secondaryUnsubs.forEach((unsub) => unsub());
     };
-  }, [uid, db, updatePendingSyncCount, financeAttempt, setFinanceError]);
+    // SPENDLY-597: the read switch modes (a session fallback included).
+  }, [uid, db, updatePendingSyncCount, financeAttempt, setFinanceError, paymentsSource.mode, entriesSource.mode, transfersSource.mode]);
 
   // ─── Actions ─────────────────────────────────────────────────────────────────
 

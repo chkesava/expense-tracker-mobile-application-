@@ -27,7 +27,7 @@ Last updated: 2026-11-04, with 14 of 21 stories merged (596 added).
 | 13 | SPENDLY-673 read store + provider switch | ✅ merged | Per-collection `readModel.<collection>` switches (§4 step 9); 7 collections wired (bills, borrowings/receivables + repayments, budgets, investments); the rest in 596–599/674 |
 | 14 | SPENDLY-595 Supabase plan (Pro) | ⏳ to do | *(added when merged: Pro before any money screen flips)* |
 | 15 | SPENDLY-596 Journal on the read model | ✅ merged | `readModel.expenses` / `readModel.incomes`: shadow 7 days, then supabase (§4 step 9) |
-| 16 | SPENDLY-597 accounts, cards, bills | ⏳ to do | *(added when merged: 14-day shadow)* |
+| 16 | SPENDLY-597 accounts, cards, bills | 🔄 built, awaiting merge | `readModel.accounts` / `accountTypes` / `accountPayments` / `accountEntries` / `accountTransfers` (+ `creditCardBills`): **595 Pro first**, shadow 14 days to the paisa, then supabase; the bill pass verifies on Firestore (a few reads per focus when it has work) |
 | 17 | SPENDLY-598 investments, EPF, loans, subs | ⏳ to do | *(added when merged: 14-day shadow)* |
 | 18 | SPENDLY-599 dashboard, net worth, budgets | ⏳ to do | *(added when merged: 14-day shadow)* |
 | 19 | SPENDLY-674 reference data | ⏳ to do | *(added when merged: 7-day shadow)* |
@@ -144,7 +144,7 @@ Each wired collection has `system_settings/global.readModel.<collection>`:
 - first set it to `shadow`, and watch `readModel.shadow.<collection>` (none means equal);
 - after the shadow period (7 days, 14 where money is shown) and the user's approval, set it to `supabase`.
 
-It needs `readModel.localCopy = true` (step 9a). Wired by 673: `creditCardBills`, `borrowings`, `borrowingRepayments`, `receivables`, `receivableRepayments`, `categoryBudgets`, `investments`. Wired by 596: `expenses`, `incomes` (the Journal's live window; 7-day shadow).
+It needs `readModel.localCopy = true` (step 9a). Wired by 673: `creditCardBills`, `borrowings`, `borrowingRepayments`, `receivables`, `receivableRepayments`, `categoryBudgets`, `investments`. Wired by 596: `expenses`, `incomes` (the Journal's live window; 7-day shadow). Wired by 597: `accounts`, `accountTypes`, `accountPayments`, `accountEntries`, `accountTransfers` (14-day shadow, to the paisa; **595 Pro first**).
 
 **Rollback:** `firestore`.
 

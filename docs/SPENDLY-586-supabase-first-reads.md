@@ -18,7 +18,7 @@
 | 2 | SPENDLY-594 offline (on-device SQLite/IndexedDB copy, ADR D1) | `feature/SPENDLY-594-offline-copy` | **Merged into the epic**; no migration; native build (`expo-sqlite`) |
 | 2 | SPENDLY-595 Supabase plan | — | To Do |
 | 3 | SPENDLY-596 live Journal | `feature/SPENDLY-596-journal-live` | **Merged into the epic**; no migration |
-| 3 | SPENDLY-597 accounts, cards, bills | — | To Do |
+| 3 | SPENDLY-597 accounts, cards, bills | `feature/SPENDLY-597-accounts-ledger` | **Built**; awaiting merge |
 | 3 | SPENDLY-598 investments, EPF, loans, subs | — | To Do; behind the 600 checkpoint (ADR D7) |
 | 3 | SPENDLY-599 dashboard, net worth, budgets | — | To Do; behind the 600 checkpoint; net worth via `composeNetWorth`, not a copy (ADR D3) |
 | 4 | SPENDLY-600 listeners off + measure | — | To Do |
@@ -57,3 +57,4 @@
 - **2026-11-04:** 673 merged into the epic. No migration. The user accepted the scope: write-driving collections and the journal/ledger/goals/categories stay on Firestore until 596–599/674.
 - **2026-11-04 (596):** the Journal's newest-300 window (`expenses`, `incomes`) through the read switch: copy rows through the same fold/window/completeness code (`fromCopy`), load-more from the copy by position, windowed shadow, outbox-based waiting-to-sync. `ledgerEvents` stays on the existing `audit` switch (online). 536 test files + rules green.
 - **2026-11-04:** 596 merged into the epic. No migration.
+- **2026-11-04 (597):** accounts + account ledger through the read switch. Found: the credit card bill pass (and the account baseline repair) write from provider data, and 673/596 had wired two of its inputs (bills, expenses) — a gap in their R4.3a review, harmless while switches are `firestore`. The user chose "read Firestore for the write": the pass checks for work on the screen's data (free) and only then re-reads its inputs from Firestore (`billPass.ts`); the baseline repair confirms on Firestore. Guarded by tests. 537 test files + rules green.
