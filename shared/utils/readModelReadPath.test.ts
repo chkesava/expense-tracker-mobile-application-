@@ -122,3 +122,13 @@ describe("clientWritesEnabled (SPENDLY-670)", () => {
     }
   });
 });
+
+describe("realtimeEnabled (SPENDLY-593)", () => {
+  it("is on only when readModel.realtime is exactly true", async () => {
+    const { realtimeEnabled } = await import("./readModelMode");
+    expect(realtimeEnabled({ realtime: true })).toBe(true);
+    for (const v of [undefined, null, {}, { realtime: "true" }, { realtime: 1 }, { realtime: false }, { clientWrites: true }, "x"]) {
+      expect(realtimeEnabled(v)).toBe(false);
+    }
+  });
+});

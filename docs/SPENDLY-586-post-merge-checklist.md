@@ -22,7 +22,7 @@ Last updated: 2026-11-04, epic at `4f6d533b`, with 10 of 21 stories merged.
 | 8 | SPENDLY-591 remaining collections | ✅ merged | Backfill and the 14-day parity gate |
 | 9 | SPENDLY-592 money summaries | ✅ merged | Backfill and the 14-day field-parity gate |
 | 10 | SPENDLY-672 sync safety net | ✅ merged | **Index deploy**, then the `safety-net` switch (§4 steps 1 and 8) |
-| 11 | SPENDLY-593 realtime | ⏳ to do | *(added when merged)* |
+| 11 | SPENDLY-593 realtime | 🔄 built, awaiting merge | Migration `20261104000000` (applied when the story merges); `readModel.realtime = true` **after 594 ships**; the hosted RS256 Realtime check; message volume (§4 step 9a) |
 | 12 | SPENDLY-594 on-device SQLite copy | ⏳ to do | *(added when merged: a native module, so a new build)* |
 | 13 | SPENDLY-673 read store + provider switch | ⏳ to do | *(added when merged)* |
 | 14 | SPENDLY-595 Supabase plan (Pro) | ⏳ to do | *(added when merged: Pro before any money screen flips)* |
@@ -127,6 +127,15 @@ Only after step 1 (indexes Enabled) and step 6 (app writes live and divergences 
 3. **Acceptance:** for 7 days, `sync_runs.reads_used` stays under 1K on changed-only nights, and divergences stay at 0. The Sunday full pass runs count parity.
 
 **Rollback:** clear the variable, or set it to `full`.
+
+### Step 9a: Turn on realtime (593), after 594 ships
+
+1. In the Supabase dashboard (Realtime settings), check that private channels require authorization.
+2. In the Firebase console, `system_settings/global` → `readModel` → set `realtime = true`.
+3. **Check:** a save on device A shows on device B within 10 s; a soft delete disappears on B.
+4. Count messages for a week (runbook, "Realtime"), against the plan limits.
+
+**Rollback:** set `realtime = false`.
 
 ### Step 9: Screen switches (596–599, 674): to be completed when those stories merge
 

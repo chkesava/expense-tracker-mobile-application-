@@ -231,6 +231,35 @@ After this device saves synced documents, the app asks the Netlify function `rea
 
 Run it from the workflow with `mode = full`, first with `dry_run = true` to see the reads.
 
+## Realtime (SPENDLY-593)
+
+**How it works:**
+- On every real change to a synced table, the database sends a **ping** to the owner's private Broadcast topic `user:<uid>`.
+  - It sends one per user per write statement. Over 100 rows, it sends one `resync` ping instead of a list.
+  - A ping carries the table, doc ids, the deleted flag and `synced_at`, never document data.
+  - Unchanged rows send nothing: the version guard skips them.
+- The app (`lib/readModelRealtime.ts`) listens on one private channel and refetches through PostgREST. After a reconnect, or every 30 seconds while the channel is down, it calls `readmodel_changes_since(p_since, p_limit)`.
+  - That function returns ids and times only, tombstones included, for the caller's own uid. RLS hides tombstones from plain reads, which is why it's a function.
+- Who may join a topic: `realtime.messages` policy `readmodel_user_topic_read`. Only `user:<own uid>` is allowed, through `readmodel_auth.uid()`, so duress and expired tokens get nothing.
+
+**Switch:** `system_settings/global.readModel.realtime = true`. It's off by default, and never on in duress, when signed out, or in Spendly Test. Turn it on **after** SPENDLY-594 ships; nothing consumes the stream before that.
+
+**Before turning it on (hosted project):**
+- In the Supabase dashboard, Realtime settings: check that private channels require authorization. The spike tested the policy with Firebase-shaped tokens; the hosted check of a real RS256 Firebase token for Realtime is still open (ADR §3).
+- Confirm one device's save pings another within 10 s (the 593 acceptance).
+
+**Message volume:**
+- Messages are stored for a few days in `realtime.messages`. To count them:
+
+  ```sql
+  select date_trunc('day', inserted_at) d, count(*) from realtime.messages where topic like 'user:%' group by 1 order by 1 desc;
+  ```
+
+- Billing counts each message delivered to each subscribed client. The free plan allows 2M messages a month and 200 concurrent connections.
+- Expected volume: about one ping per save, per open device, plus the nightly run's changed batches.
+
+**Turning it off:** set `readModel.realtime = false`. The copy (594) falls back to refetching on focus and polling.
+
 ## Recovery drills (SPENDLY-520)
 
 Every procedure above has been exercised end to end on a local stack: the production scripts unchanged, the Firebase emulator, a local Postgres with the real migrations, and PostgREST (Supabase's API). The latest log is in `docs/SPENDLY-520-drill-log.md`. Re-run the drills after any change to the sync, the mapping or the migrations:

@@ -62,3 +62,11 @@ export function effectiveReadModelMode(c: ReadModelConditions): ReadModelMode {
 export function clientWritesEnabled(readModelSetting: unknown): boolean {
   return !!readModelSetting && typeof readModelSetting === "object" && (readModelSetting as Record<string, unknown>).clientWrites === true;
 }
+
+/**
+ * SPENDLY-593: whether the app listens for read-model change pings
+ * (`system_settings/global.readModel.realtime`). Off unless exactly true.
+ */
+export function realtimeEnabled(readModelSetting: unknown): boolean {
+  return !!readModelSetting && typeof readModelSetting === "object" && (readModelSetting as Record<string, unknown>).realtime === true;
+}
