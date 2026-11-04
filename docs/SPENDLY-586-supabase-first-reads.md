@@ -4,6 +4,7 @@
 - **Plan:** `docs/SPENDLY-586-plan.md`
 - **ADR:** `docs/SPENDLY-586-adr.md`
 - **Rules:** `docs/READ_MODEL_RULES.md`, `docs/AGENT_WORKFLOW.md`
+- **After the epic merges to main:** `docs/SPENDLY-586-post-merge-checklist.md` (every deploy, switch and gate, in order)
 
 | # | Story | Branch | State |
 |---|---|---|---|
