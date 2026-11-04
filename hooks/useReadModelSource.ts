@@ -88,3 +88,11 @@ export function useReadModelSource(collection: string) {
     shadow: source.shadow,
   };
 }
+
+/**
+ * SPENDLY-597: only the effective mode of a collection, for code that must
+ * know where its inputs come from (the bill pass, R4.3a) without reading them.
+ */
+export function useReadModelMode(collection: string): CollectionMode {
+  return useReadModelSource(collection).mode;
+}

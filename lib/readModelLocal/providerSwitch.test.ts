@@ -18,6 +18,8 @@ import { READ_MODEL_COLLECTIONS } from "@/shared/utils/readModel/collectionMode"
 const ROOT = join(__dirname, "..", "..");
 
 const INTEGRATED = [
+  // SPENDLY-597: accounts and the account ledger.
+  "accountEntries", "accountPayments", "accountTransfers", "accountTypes", "accounts",
   "borrowingRepayments", "borrowings", "categoryBudgets", "creditCardBills",
   // SPENDLY-596: the Journal's newest-300 window (FinanceDataProvider).
   "expenses", "incomes",
@@ -36,11 +38,6 @@ const NOT_YET: Record<string, string> = {
   epfReconciliations: "the EPF summary sync writes from EPF sources; 598",
   financialSummaries: "the EPF summary sync compares against the stored summary; 599",
   categories: "loaded by revision (SPENDLY-660), not a plain listener; 674",
-  accounts: "balances, pending-sync counts and hydration guards; 597",
-  accountTypes: "with accounts; 597",
-  accountEntries: "the ledger fold and pending-sync counts; 597",
-  accountPayments: "the ledger fold and pending-sync counts; 597",
-  accountTransfers: "the ledger fold and pending-sync counts; 597",
   financialGoals: "pending-write state per goal (SPENDLY-613); 599",
   userSettings: "allowlisted fields only: never a source",
 };
@@ -91,5 +88,20 @@ describe("provider read switches (SPENDLY-673)", () => {
     expect(count(u.text, `if (${u.variable}.mode === "shadow") void ${u.variable}.shadow(`)).toBe(count(u.text, `${u.variable}.shadow(`));
     // …and the effect re-runs when the mode changes (a session fallback included).
     expect(u.text).toMatch(new RegExp(`\\b${u.variable}\\.mode[,\\]]`));
+  });
+
+  // SPENDLY-597 (R4.3a): writers that write from what the screens read.
+  it("the credit card bill pass never writes from the copy: it checks its inputs' modes and verifies on Firestore", () => {
+    const text = readFileSync(join(ROOT, "providers", "CreditCardBillsProvider.tsx"), "utf8");
+    expect(text).toMatch(/billPassReadsCopy\(passInputModesRef\.current\)/);
+    expect(text).toMatch(/loadAuthoritativeBillInputs\(firestoreBillReader\(/);
+    for (const c of ["expenses", "accountPayments", "accounts", "accountTypes"]) {
+      expect(text).toContain(`useReadModelMode("${c}")`);
+    }
+  });
+
+  it("the account baseline repair confirms on Firestore when accounts come from the copy", () => {
+    const text = readFileSync(join(ROOT, "providers", "FinanceDataProvider.tsx"), "utf8");
+    expect(text).toMatch(/accountsSource\.mode === "supabase"\s*\?\s*getDoc\(doc\(db, "users", uid, "accounts", accountId\)\)/);
   });
 });

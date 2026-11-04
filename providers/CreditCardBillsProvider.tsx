@@ -3,6 +3,7 @@ import {
   arrayUnion,
   collection,
   doc,
+  getDocs,
   increment,
   onSnapshot,
   query,
@@ -10,6 +11,7 @@ import {
   setDoc,
   runTransaction,
   updateDoc,
+  where,
 } from "@/lib/firestore";
 import {
   createContext,
@@ -24,7 +26,7 @@ import {
 import { AppState } from "react-native";
 
 import { getFirestoreDb } from "@/lib/firebase";
-import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
+import { forgetSnapshotPath, logDirectRead, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { notifyReadModelSnapshot } from "@/lib/readModelPush";
 import { noteDirectWrites, noteTransactionWrites } from "@/lib/readModelWriteHooks";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
@@ -33,7 +35,8 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
-import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { useReadModelMode, useReadModelSource } from "@/hooks/useReadModelSource";
+import { billPassHasWork, billPassReadsCopy, loadAuthoritativeBillInputs, toCreditCardBill, type AuthoritativeReader, type BillPassInputs } from "@/lib/readModelLocal/billPass";
 import { toSourceDocs } from "@/lib/readModelLocal/readSource";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useExpenses } from "@/hooks/useExpenses";
@@ -136,6 +139,27 @@ const CreditCardBillsContext = createContext<
   CreditCardBillsContextType | undefined
 >(undefined);
 
+/**
+ * SPENDLY-597: the bill pass's Firestore reads when its inputs are served by
+ * the on-device copy (never the copy). Metered like every direct read.
+ */
+function firestoreBillReader(db: NonNullable<ReturnType<typeof getFirestoreDb>>, uid: string): AuthoritativeReader {
+  const read = async (run: () => ReturnType<typeof getDocs>, path: string, shape: string) => {
+    const snap = await run();
+    logDirectRead(path, snap.docs.length, snap.metadata.fromCache ? "cache" : "server", { feature: "creditCardBills", queryShape: shape });
+    return snap.docs.map((d) => ({ id: d.id, data: (d.data() ?? {}) as Record<string, unknown> }));
+  };
+  return {
+    all: (name) => read(() => getDocs(query(collection(db, "users", uid, name))), `users/${uid}/${name}`, "bill pass inputs"),
+    where: (name, field, value) =>
+      read(
+        () => getDocs(query(collection(db, "users", uid, name), where(field, "==", value))),
+        `users/${uid}/${name}?${field}`,
+        "bill pass card expenses"
+      ),
+  };
+}
+
 function refreshDerivedFields(
   bill: Pick<
     CreditCardBill,
@@ -186,6 +210,13 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   // SPENDLY-673: firestore (default) | shadow | supabase, per readModel.creditCardBills.
   const billsSource = useReadModelSource("creditCardBills");
+  // SPENDLY-597: where the bill pass's inputs come from (R4.3a).
+  const expensesMode = useReadModelMode("expenses");
+  const paymentsMode = useReadModelMode("accountPayments");
+  const accountsMode = useReadModelMode("accounts");
+  const accountTypesMode = useReadModelMode("accountTypes");
+  const passInputModesRef = useRef<string[]>([]);
+  passInputModesRef.current = [billsSource.mode, expensesMode, paymentsMode, accountsMode, accountTypesMode];
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
   const {
@@ -266,40 +297,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     setBillsLoading(true);
     // SPENDLY-673: the same mapping for either source (Firestore or the on-device copy).
     const apply = (docs: { id: string; data: Record<string, unknown> }[]) => {
-        setBills(
-          docs.map((d) => {
-            const data = d.data as Partial<CreditCardBill>;
-            const statementAmount = Number(data.statementAmount) || 0;
-            const amountPaid = Number(data.amountPaid) || 0;
-            return {
-              ...data,
-              id: d.id,
-              statementAmount,
-              amountPaid,
-              remainingAmount:
-                data.remainingAmount == null
-                  ? computeRemainingAmount(statementAmount, amountPaid)
-                  : Number(data.remainingAmount),
-              paymentIds: data.paymentIds ?? [],
-              // CANCELLED is a manual, undoable-only-by-edit override; every
-              // other status is a pure function of amountPaid/dueDate and
-              // must be recomputed on every read, not trusted from storage —
-              // a write path can correctly update `amountPaid` without ever
-              // touching `status` (e.g. an out-of-band payment reconciled
-              // later), and nothing else ever revisits a stored status once
-              // it exists (SPENDLY-417: paid historical bills stuck OVERDUE).
-              status:
-                data.status === "CANCELLED"
-                  ? "CANCELLED"
-                  : computeCreditCardBillStatus({
-                      today: todayDateKey(timezone),
-                      dueDate: data.dueDate || "",
-                      amountPaid,
-                      statementAmount,
-                    }),
-            } as CreditCardBill;
-          })
-        );
+        setBills(docs.map((d) => toCreditCardBill(d, todayDateKey(timezone))));
         setBillsLoading(false);
     };
     if (billsSource.mode === "supabase") return billsSource.subscribe(apply);
@@ -496,7 +494,10 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     if (autoGenerateInFlight.current) return;
     autoGenerateInFlight.current = true;
     passSeenBillIds.current = new Set(bills.map((bill) => bill.id));
-    try {
+
+    // The pass itself, unchanged; it runs on whichever inputs the gate below chose.
+    const runBillPass = async (inputs: BillPassInputs) => {
+      const { accounts, accountTypes, expenses, payments, bills } = inputs;
       const typeNameById = new Map(
         accountTypes.map((type) => [type.id, type.name])
       );
@@ -784,6 +785,23 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       }
 
       lastAutoBillFingerprintRef.current = fingerprint;
+    };
+
+    try {
+      // SPENDLY-597 (READ_MODEL_RULES R4.3a): this pass writes statements from
+      // what it reads, so it never writes from the on-device copy. When any
+      // input is served by the copy: check for work on the screen's data
+      // (free), and only if there is some, run on Firestore's inputs.
+      const stateInputs: BillPassInputs = { accounts, accountTypes, expenses, payments, bills };
+      if (!billPassReadsCopy(passInputModesRef.current)) {
+        await runBillPass(stateInputs);
+        return;
+      }
+      const today = todayDateKey(timezone);
+      if (!billPassHasWork(stateInputs, today, (bill) => refreshDerivedFields(bill, timezone, globalPrefs.enabled))) return;
+      await runBillPass(await loadAuthoritativeBillInputs(firestoreBillReader(db, user.uid), today));
+    } catch (err) {
+      logError("creditCardBills.autoPass", err);
     } finally {
       autoGenerateInFlight.current = false;
     }

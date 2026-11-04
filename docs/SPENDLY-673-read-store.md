@@ -92,3 +92,5 @@ The ticket asked for every provider. These keep reading Firestore, each for a re
 ## After the epic reaches main
 
 Per collection: set `readModel.<collection> = shadow` and watch `readModel.shadow.<collection>` (none means equal). Then `supabase`, after the shadow period: 7 days, or 14 where money is shown, and the user's approval. That needs `readModel.localCopy` on (594).
+
+> **Correction (SPENDLY-597):** `creditCardBills` (and 596's `expenses`) also feed the credit card bill pass, which writes statements. That was missed here. 597 makes the pass verify on Firestore before writing (R4.3a).
