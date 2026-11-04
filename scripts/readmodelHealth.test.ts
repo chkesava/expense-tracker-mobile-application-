@@ -174,6 +174,41 @@ describe("the sync as the safety net (SPENDLY-672)", () => {
   });
 });
 
+describe("the Free plan's limits (SPENDLY-595)", () => {
+  const MB = 1024 * 1024;
+  const withCapacity = (dbMb: number, messages24h: number | null) => ({
+    ...healthy(),
+    capacity: { dbBytes: dbMb * MB, realtimeMessages24h: messages24h, largestTables: [] },
+  });
+
+  it("is quiet well under the limits, and says so in the summary", () => {
+    const input = withCapacity(17, 120);
+    const report = evaluateHealth(input, NOW);
+    expect(report.ok).toBe(true);
+    expect(report.warnings.join(" ")).not.toMatch(/Free plan/);
+    const summary = renderHealthSummary(report, input.runs, null);
+    expect(summary).toContain("| Database size (Free plan: 500 MB) | 17 MB (3%) |");
+    expect(summary).toContain("| Realtime messages in 24 h (Free plan: 2M a month) | 120 |");
+  });
+
+  it("warns from half a limit and fails from 80%", () => {
+    expect(evaluateHealth(withCapacity(260, 0), NOW)).toMatchObject({ ok: true });
+    expect(evaluateHealth(withCapacity(260, 0), NOW).warnings.join(" ")).toContain("260 MB of the Free plan's 500 MB (52%)");
+    const full = evaluateHealth(withCapacity(410, 0), NOW);
+    expect(full.ok).toBe(false);
+    expect(full.problems.join(" ")).toContain("410 MB");
+    // 40K messages a day ≈ 1.2M a month = 60% of 2M: a warning; 60K a day = 90%: a problem.
+    expect(evaluateHealth(withCapacity(17, 40_000), NOW).warnings.join(" ")).toContain("about 60% of the Free plan's monthly allowance");
+    expect(evaluateHealth(withCapacity(17, 60_000), NOW).ok).toBe(false);
+  });
+
+  it("no capacity reading (before the migration, or an error): nothing is claimed", () => {
+    const report = evaluateHealth({ ...healthy(), capacity: null }, NOW);
+    expect(report.metrics.dbBytes).toBeNull();
+    expect(renderHealthSummary(report, [], null)).toContain("| Database size (Free plan: 500 MB) | — |");
+  });
+});
+
 describe("health loader (SPENDLY-507)", () => {
   /** A supabase-js-like query builder whose every query resolves to `result`. */
   const client = (result: { data: unknown[] | null; error: { message: string } | null }) => {
@@ -194,6 +229,6 @@ describe("health loader (SPENDLY-507)", () => {
     const { loadHealthInput } = await import("./readmodel-health");
     const input = await loadHealthInput(client({ data: [], error: null }), NOW);
     // clientWrites24h: the fake builder can't count, so it is null (not a crash).
-    expect(input).toEqual({ reachable: true, runs: [], openFailures: [], status: [], push: null, clientWrites24h: null });
+    expect(input).toEqual({ reachable: true, runs: [], openFailures: [], status: [], push: null, clientWrites24h: null, capacity: null });
   });
 });

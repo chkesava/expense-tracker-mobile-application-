@@ -84,7 +84,7 @@ READ (every screen)
 | A modified or buggy client writes bad rows | The RPC validates the shape and the owner; it only affects that user's own rows; the nightly repair restores them from Firestore |
 | A writer outside `commitMutations` skips Supabase | Writer inventory, plus a guard test that fails for an unrouted writer (N3), as SPENDLY-660 did for categories |
 | The on-device copy is stale or leaks | Realtime plus refetch since the last `synced_at`. Cleared on sign-out and account deletion. Never in duress. Size cap |
-| Supabase pauses (Free plan) or goes down | Pro before the first money screen flips (595). The per-collection fallback to Firestore. The outbox backlog drains on recovery |
+| Supabase pauses (Free plan) or goes down | The Free plan stays (the user, 2026-11-04). The nightly sync and hourly health keep the project active; health flags a pause; every collection falls back to Firestore; the outbox backlog drains on recovery (595) |
 
 ---
 
@@ -125,7 +125,7 @@ Keys are existing Jira keys; the new stories N1–N6 are SPENDLY-669 to 674 (cre
 | **593** | **Realtime** | Broadcast ping on a private `user:<uid>` topic (`realtime.messages` RLS via `readmodel_auth.uid()`). The ping carries `{table, doc_id, synced_at}` only. The client refetches. One channel per user; `setAuth` on token refresh; a fallback to polling `max(synced_at)` |
 | **594** | **The on-device Supabase copy (SQLite)** | `expo-sqlite` (a native module, so a new build). Hydrated on sign-in, kept fresh by realtime and refetch since the last `synced_at`. This device's outbox is overlaid. Cleared on sign-out and account deletion; never in duress; size cap. Web: IndexedDB through the same interface |
 | **N5 (SPENDLY-673)** | **The read store and provider switch** | One read-store API over the SQLite copy (`query`, `subscribe`). Each provider (`FinanceDataProvider`, `ExpenseReferenceDataProvider`, `CreditCardBillsProvider`, `BorrowingsReceivablesProvider`, the investments/EPF hooks…) reads the store when `readModel.<collection>` is `supabase`, and keeps its Firestore listener only in `firestore`/`shadow` mode. Shadow compares the two |
-| **595** | **The Supabase plan** | Pro ($25/month) before the first money screen flips. Daily backups verified by a restore drill. Pause and limit alerting |
+| **595** | **The Supabase plan: Free** | The user's decision (2026-11-04): the Free plan, no Pro. Capacity alerts in health (database size, realtime messages); rebuild-from-Firestore (drill D1) instead of backups; pause handling documented |
 
 ### Phase 4 — collections and screens flip (each: shadow, then 7 days / 14 for money, then the user approves)
 
@@ -155,7 +155,7 @@ P0 push fix ──────────────────────�
 589 / 590 / 591 / 592 coverage ──────────┘ (in parallel, each with parity days)
                        593 realtime ─► 594 SQLite copy ─► N5 read store
                                                    └─► 596 → 597 → 598 → 599 → N6 (shadow periods)
-                                                                     595 Pro before 597
+                                                                     595 Free-plan guardrails
                                                                                └─► 600 ─► 601
 ```
 

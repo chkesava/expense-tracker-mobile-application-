@@ -11,7 +11,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { all } from "./lib/supabasePaging";
 import { READ_MODEL_TABLES } from "../shared/utils/readModel/mapping";
-import { evaluateHealth, renderHealthSummary, SAFETY_NET_FULL_GAP_HOURS, THRESHOLDS, type HealthInput, type HealthPush, type HealthRun } from "./lib/readmodelHealth";
+import { evaluateHealth, renderHealthSummary, SAFETY_NET_FULL_GAP_HOURS, THRESHOLDS, type HealthCapacity, type HealthInput, type HealthPush, type HealthRun } from "./lib/readmodelHealth";
 import { nightlySetting } from "./lib/readmodelNightlyMode";
 
 
@@ -48,6 +48,22 @@ async function loadClientWrites(client: SupabaseClient, now: number): Promise<nu
   }
 }
 
+/** SPENDLY-595: database size and realtime messages (readmodel_capacity); null before the migration or on error. */
+async function loadCapacity(client: SupabaseClient): Promise<HealthCapacity | null> {
+  try {
+    const { data, error } = await client.rpc("readmodel_capacity");
+    if (error || !data) return null;
+    const d = data as { db_bytes: number; realtime_messages_24h: number | null; largest_tables: { table: string; bytes: number }[] };
+    return {
+      dbBytes: Number(d.db_bytes),
+      realtimeMessages24h: d.realtime_messages_24h === null ? null : Number(d.realtime_messages_24h),
+      largestTables: (d.largest_tables ?? []).map((t) => ({ table: t.table, bytes: Number(t.bytes) })),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function loadHealthInput(client: SupabaseClient, now: number): Promise<HealthInput> {
   try {
     // 16 days: enough for the SPENDLY-510 parity-gate streak.
@@ -70,6 +86,7 @@ export async function loadHealthInput(client: SupabaseClient, now: number): Prom
       status: status.map((s) => ({ collection: String(s.collection), lastSyncedAt: (s.last_synced_at as string | null) ?? null })),
       push: await loadPushToday(client, now),
       clientWrites24h: await loadClientWrites(client, now),
+      capacity: await loadCapacity(client),
     };
   } catch (error) {
     // A paused or unreachable project fails every query; report that, not a crash.
