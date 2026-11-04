@@ -70,3 +70,11 @@ export function clientWritesEnabled(readModelSetting: unknown): boolean {
 export function realtimeEnabled(readModelSetting: unknown): boolean {
   return !!readModelSetting && typeof readModelSetting === "object" && (readModelSetting as Record<string, unknown>).realtime === true;
 }
+
+/**
+ * SPENDLY-594: whether the app keeps the on-device copy of its read-model rows
+ * (`system_settings/global.readModel.localCopy`). Off unless exactly true.
+ */
+export function localCopyEnabled(readModelSetting: unknown): boolean {
+  return !!readModelSetting && typeof readModelSetting === "object" && (readModelSetting as Record<string, unknown>).localCopy === true;
+}

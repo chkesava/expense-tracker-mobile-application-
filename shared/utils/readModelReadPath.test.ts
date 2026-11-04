@@ -132,3 +132,13 @@ describe("realtimeEnabled (SPENDLY-593)", () => {
     }
   });
 });
+
+describe("localCopyEnabled (SPENDLY-594)", () => {
+  it("is on only when readModel.localCopy is exactly true", async () => {
+    const { localCopyEnabled } = await import("./readModelMode");
+    expect(localCopyEnabled({ localCopy: true })).toBe(true);
+    for (const v of [undefined, null, {}, { localCopy: "true" }, { localCopy: 1 }, { realtime: true }, "x"]) {
+      expect(localCopyEnabled(v)).toBe(false);
+    }
+  });
+});

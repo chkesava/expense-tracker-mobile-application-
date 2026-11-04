@@ -23,7 +23,7 @@ Last updated: 2026-11-04, with 11 of 21 stories merged (593 added).
 | 9 | SPENDLY-592 money summaries | ✅ merged | Backfill and the 14-day field-parity gate |
 | 10 | SPENDLY-672 sync safety net | ✅ merged | **Index deploy**, then the `safety-net` switch (§4 steps 1 and 8) |
 | 11 | SPENDLY-593 realtime | ✅ merged (`f138e130`) | Migration `20261104000000` **applied 2026-11-04**; `readModel.realtime = true` **after 594 ships**; the hosted RS256 Realtime check; message volume (§4 step 9a) |
-| 12 | SPENDLY-594 on-device SQLite copy | ⏳ to do | *(added when merged: a native module, so a new build)* |
+| 12 | SPENDLY-594 on-device SQLite copy | 🔄 built, awaiting merge | **`expo-sqlite` = a new native build** (§4 step 4); `readModel.localCopy = true` with or before realtime (§4 step 9a); airplane drill and phone measurement after 673 |
 | 13 | SPENDLY-673 read store + provider switch | ⏳ to do | *(added when merged)* |
 | 14 | SPENDLY-595 Supabase plan (Pro) | ⏳ to do | *(added when merged: Pro before any money screen flips)* |
 | 15 | SPENDLY-596 Journal on the read model | ⏳ to do | *(added when merged: 7-day shadow)* |
@@ -48,7 +48,7 @@ SPENDLY-662 (the push fix, P0) is already on `main` and Done.
 | `.github/workflows/readmodel-*.yml` | Nightly mode, health, schema | Take effect on merge | None: the default `full` keeps today's behaviour |
 | App code (outbox, write hooks, mappings) | 670/671/589–592 | **No** | **Expense release** (§4 step 4) |
 | `firestore.rules`, `storage.rules` | No change | — | None |
-| `package.json` (native modules) | No change *(594 will add `expo-sqlite`)* | — | — |
+| `package.json` (native modules) | **`expo-sqlite` ~57.0.4** (594); `fake-indexeddb` (dev only) | — | **A native Android/iOS build**: the Expense release must rebuild (prebuild), not an OTA/JS-only update |
 
 ---
 
@@ -89,7 +89,7 @@ Every production step below needs the user's approval when it happens. Dry runs 
 ### Step 4: Ship the Expense release (app code)
 
 - **How:** the Expense release workflow.
-- **What it carries:** the outbox (670), the write hooks (671), and the mappings for every synced collection.
+- **What it carries:** the outbox (670), the write hooks (671), the mappings for every synced collection, and **the `expo-sqlite` native module (594)**. So it must be a full native build: prebuild regenerates `android/`, so back up and restore the release signing; see the memory note about prebuild.
 - **Why it's safe while switched off:** without `clientWrites` the outbox stays off, so the app keeps writing only Firestore, plus the push.
 - **Check:** device QA on Spendly Test (the emulator, never the real app). Add, edit and delete across expenses, bills, loans, EPF, investments, a watchlist item and the theme setting.
 
@@ -128,14 +128,15 @@ Only after step 1 (indexes Enabled) and step 6 (app writes live and divergences 
 
 **Rollback:** clear the variable, or set it to `full`.
 
-### Step 9a: Turn on realtime (593), after 594 ships
+### Step 9a: Turn on the local copy (594) and realtime (593)
 
 1. In the Supabase dashboard (Realtime settings), check that private channels require authorization.
-2. In the Firebase console, `system_settings/global` → `readModel` → set `realtime = true`.
-3. **Check:** a save on device A shows on device B within 10 s; a soft delete disappears on B.
-4. Count messages for a week (runbook, "Realtime"), against the plan limits.
+2. In the Firebase console, `system_settings/global` → `readModel` → set `localCopy = true`, then `realtime = true`. The copy hydrates on each device's next start: about 21 MB and a few seconds for a 30K-transaction user.
+3. Measure the hydration time and database size on a phone for the heaviest user (594 acceptance).
+4. **Check:** a save on device A shows on device B within 10 s; a soft delete disappears on B.
+5. Count messages for a week (runbook, "Realtime"), against the plan limits.
 
-**Rollback:** set `realtime = false`.
+**Rollback:** set `realtime = false` and/or `localCopy = false`. With the copy off nothing is opened; sign-out still wipes any copy left on the device.
 
 ### Step 9: Screen switches (596–599, 674): to be completed when those stories merge
 
