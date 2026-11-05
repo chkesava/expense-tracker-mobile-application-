@@ -22,7 +22,7 @@
 | 3 | SPENDLY-598 investments, EPF, loans, subs | `feature/SPENDLY-598-investments-epf` | **Merged into the epic** (`d5df3467`); no migration |
 | 3 | SPENDLY-599 dashboard, net worth, budgets | `feature/SPENDLY-599-dashboard-networth-budgets` | **Merged into the epic** (`61eaad6b`); no migration; net worth via `composeNetWorth` (ADR D3) |
 | 3 | SPENDLY-674 reference data (N6) | `feature/SPENDLY-674-reference-data` | **Merged into the epic** (`1be425b6`); no migration |
-| 5 | SPENDLY-679 spaces/trips dual write + per-site guard | `feature/SPENDLY-679-spaces-trips-dual-write` | **Built**; awaiting merge; no migration |
+| 5 | SPENDLY-679 spaces/trips dual write + per-site guard | `feature/SPENDLY-679-spaces-trips-dual-write` | **Merged into the epic** (`18f53918`); no migration |
 | 5 | SPENDLY-680 server writers push | — | To Do |
 | 5 | SPENDLY-681 safety-net blind spot (`*Ms`/`at` stamps) | — | To Do; before `READMODEL_NIGHTLY_MODE=safety-net` |
 | 4 | SPENDLY-600 listeners off + measure | `feature/SPENDLY-600-listeners-off` | **Merged into the epic** (`58819b5d`); no migration; measuring happens after the epic reaches main |
