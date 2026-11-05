@@ -2,8 +2,9 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { changeFieldsOf, READ_MODEL_TABLES } from "../shared/utils/readModel/mapping";
 import { memorySink } from "./lib/readmodelSyncMemory";
-import { MASS_TOMBSTONE_MIN, OVERLAP_MS, runSync, type Page, type PageRequest, type SourcePort } from "./lib/readmodelSyncCore";
+import { ALWAYS_FULL, MASS_TOMBSTONE_MIN, OVERLAP_MS, runSync, type Page, type PageRequest, type SourcePort } from "./lib/readmodelSyncCore";
 
 /**
  * A fake Firestore: documents with createdAt / updatedAt (ms) and an
@@ -14,6 +15,7 @@ type FakeDoc = { id: string; data: Record<string, unknown>; updateMs: number };
 
 function fakeFirestore(users: Record<string, Record<string, FakeDoc[]>>) {
   let reads = 0;
+  let crossUserQueries = 0;
   const source: SourcePort = {
     async listUserIds() {
       return Object.keys(users);
@@ -35,8 +37,24 @@ function fakeFirestore(users: Record<string, Record<string, FakeDoc[]>>) {
         next: page.length === request.limit ? start + page.length : undefined,
       };
     },
+    // SPENDLY-672: a collection-group query, every user's documents at once (duress trees included, as Firestore would).
+    async readChangedAcrossUsers(collection, request) {
+      const docs = Object.entries(users)
+        .flatMap(([uid, cols]) => (cols[collection] ?? []).map((d) => ({ uid, d })))
+        .filter(({ d }) => typeof d.data[request.field] === "number" && (d.data[request.field] as number) > request.sinceMs)
+        .sort((a, b) => (a.d.data[request.field] as number) - (b.d.data[request.field] as number) || `${a.uid}/${a.d.id}`.localeCompare(`${b.uid}/${b.d.id}`));
+      const start = typeof request.after === "number" ? request.after : 0;
+      const page = docs.slice(start, start + request.limit);
+      reads += Math.max(1, page.length);
+      crossUserQueries += 1;
+      return {
+        docs: page.map(({ uid, d }) => ({ uid, id: d.id, data: d.data, updateTime: { toMillis: () => d.updateMs } })),
+        next: page.length === request.limit ? start + page.length : undefined,
+        reads: Math.max(1, page.length),
+      };
+    },
   };
-  return { source, reads: () => reads, users };
+  return { source, reads: () => reads, crossUserQueries: () => crossUserQueries, users };
 }
 
 const T0 = Date.UTC(2026, 9, 22, 0, 0);
@@ -62,6 +80,154 @@ function world() {
   });
 }
 
+describe("change fields beyond createdAt/updatedAt (SPENDLY-681)", () => {
+  const reminder = (id: string, stamp: Record<string, number>, updateMs: number): FakeDoc => ({
+    id,
+    data: { title: "Rent", category: "bills", recurrence: "monthly", startDate: "2026-10-01", ...stamp },
+    updateMs,
+  });
+
+  it("a changed-only night finds a document stamped only with a millisecond field", async () => {
+    const fs = world();
+    fs.users.alice.calendarReminders = [reminder("r1", { createdAtMs: T0 - 48 * H }, T0 - 48 * H)];
+    const fields: string[] = [];
+    const read = fs.source.readChangedAcrossUsers!.bind(fs.source);
+    fs.source.readChangedAcrossUsers = (collection, request) => {
+      if (collection === "calendarReminders") fields.push(`${request.field}:${request.fieldType ?? "timestamp"}`);
+      return read(collection, request);
+    };
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    // Edited after the full pass: only updatedAtMs moves (no createdAt/updatedAt Timestamp at all).
+    fs.users.alice.calendarReminders[0] = reminder("r1", { createdAtMs: T0 - 48 * H, updatedAtMs: T0 + H }, T0 + H);
+    fs.users.alice.calendarReminders.push(reminder("r2", { createdAtMs: T0 + H }, T0 + H));
+
+    const run = await runSync(fs.source, m.sink, opts("incremental", T0 + 2 * H, { crossUser: true }));
+    expect(run.status).toBe("succeeded");
+    expect(m.row("calendar_reminders", "alice", "r1")?.source_update_time).toBe(new Date(T0 + H).toISOString());
+    expect(m.row("calendar_reminders", "alice", "r2")).toBeTruthy();
+    expect(fields).toEqual(["createdAt:timestamp", "updatedAt:timestamp", "createdAtMs:millis", "updatedAtMs:millis"]);
+  });
+
+  it("the per-user incremental pass queries the same fields", async () => {
+    const fs = world();
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    fs.users.alice.goalEvents = [{ id: "ev1", data: { goalId: "g1", kind: "contribution", amount: 10, createdAtMs: T0 + H }, updateMs: T0 + H }];
+    const run = await runSync(fs.source, m.sink, opts("incremental", T0 + 2 * H));
+    expect(run.status).toBe("succeeded");
+    expect(m.row("goal_events", "alice", "ev1")).toBeTruthy();
+  });
+});
+
+describe("the sync as the safety net (SPENDLY-672)", () => {
+  it("counts a client row that disagrees with Firestore as a divergence, and Firestore's version replaces it", async () => {
+    const fs = world();
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    // The app's direct writes landed in Supabase: e1 agrees with Firestore, e2 doesn't.
+    const e1 = m.row("expenses", "alice", "e1")!;
+    const e2 = m.row("expenses", "alice", "e2")!;
+    Object.assign(e1, { written_by: "client", client_written_at: new Date(T0).toISOString() });
+    Object.assign(e2, { written_by: "client", client_written_at: new Date(T0).toISOString(), amount: 999 });
+    // Both change in Firestore afterwards, so the nightly incremental run reads them.
+    for (const d of fs.users.alice.expenses) Object.assign(d, { updateMs: T0 + H, data: { ...d.data, updatedAt: T0 + H } });
+
+    const run = await runSync(fs.source, m.sink, opts("incremental", T0 + 2 * H));
+    expect(run.status).toBe("succeeded");
+    expect(run.notes.divergences).toEqual({ expenses: 1 });
+    expect(run.notes.clientRowsReplaced).toEqual({ expenses: 2 });
+    expect(m.row("expenses", "alice", "e2")).toMatchObject({ amount: 250, written_by: "server", client_written_at: null });
+  });
+
+  it("cross-user nights: one query per change field per collection, not per user; duress never copied; a global checkpoint", async () => {
+    const fs = world();
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    fs.users.alice.expenses.push(exp("e3", 40, T0 + H));
+    fs.users.bob.expenses.push(exp("b2", 60, T0 + H));
+    fs.users.alice_duress.expenses.push(exp("decoy2", 1, T0 + H));
+    const before = fs.reads();
+
+    const run = await runSync(fs.source, m.sink, opts("incremental", T0 + 2 * H, { crossUser: true }));
+    expect(run.status).toBe("succeeded");
+    expect(m.row("expenses", "alice", "e3")).toMatchObject({ amount: 40 });
+    expect(m.row("expenses", "bob", "b2")).toMatchObject({ amount: 60 });
+    expect(m.row("expenses", "alice_duress", "decoy2")).toBeUndefined();
+    expect(m.checkpoints.get("*/expenses")?.highWaterMs).toBe(T0 + 2 * H);
+    // Every collection but the 4 always-full ones and the users/{uid} doc, one
+    // query per change field (createdAt + updatedAt, plus *Ms/event times: SPENDLY-681).
+    const crossedSpecs = READ_MODEL_TABLES.filter((t) => !t.root && !ALWAYS_FULL.has(t.collection));
+    const crossed = crossedSpecs.length;
+    const queries = crossedSpecs.reduce((n, t) => n + changeFieldsOf(t).length, 0);
+    expect(run.notes.crossUserCollections).toBe(crossed);
+    expect(fs.crossUserQueries()).toBe(queries);
+    // 2 users: the listing, the cross-user queries (+1 for the page holding both new docs),
+    // and per user the always-full collections and the settings doc.
+    expect(fs.reads() - before).toBeLessThanOrEqual(1 + queries + 2 + 2 * (ALWAYS_FULL.size + 1) + 5);
+  });
+
+  it("cross-user: a client row that disagrees is a divergence too", async () => {
+    const fs = world();
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    Object.assign(m.row("expenses", "bob", "b1")!, { written_by: "client", client_written_at: new Date(T0).toISOString(), amount: 1 });
+    Object.assign(fs.users.bob.expenses[0], { updateMs: T0 + H, data: { ...fs.users.bob.expenses[0].data, updatedAt: T0 + H } });
+    const run = await runSync(fs.source, m.sink, opts("incremental", T0 + 2 * H, { crossUser: true }));
+    expect(run.notes.divergences).toEqual({ expenses: 1 });
+    expect(m.row("expenses", "bob", "b1")).toMatchObject({ amount: 75, written_by: "server" });
+  });
+
+  it("cross-user: a collection some user was never copied for goes per user this time", async () => {
+    const fs = world();
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    m.checkpoints.delete("bob/incomes");
+    const run = await runSync(fs.source, m.sink, opts("incremental", T0 + H, { crossUser: true }));
+    expect(run.status).toBe("succeeded");
+    expect(m.checkpoints.get("*/incomes")).toBeUndefined();
+    expect(m.checkpoints.get("*/expenses")).toBeDefined();
+  });
+
+  it("an agreeing or server-written row is never a divergence", async () => {
+    const fs = world();
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    const again = await runSync(fs.source, m.sink, opts("full", T0 + H));
+    expect(again.notes.divergences).toBeUndefined();
+    expect(again.notes.clientRowsReplaced).toBeUndefined();
+  });
+});
+
+describe("stored summaries (SPENDLY-592)", () => {
+  it("copies the dashboard months and EPF exactly, and never the retired netWorth/investments docs", async () => {
+    const at = T0 - 48 * H;
+    const fs = fakeFirestore({
+      alice: {
+        financialSummaries: [
+          { id: "dashboard_2026-10", data: { period: "2026-10", totalExpenses: 12345.67, totalIncome: 50000, transactionCount: 41, categoryTotals: { Food: 4200.5 }, summaryVersion: 2 }, updateMs: at },
+          { id: "epf", data: { currentBalance: 812345.5, employeeContributionTotal: 400000, employerContributionTotal: 150000, interestTotal: 262345.5, adjustmentsTotal: 0, lastCreditPeriod: "2026-09" }, updateMs: at },
+          { id: "netWorth", data: { total: 999 }, updateMs: at },
+          { id: "investments", data: { total: 111 }, updateMs: at },
+        ],
+      },
+    });
+    const m = memorySink();
+    const run = await runSync(fs.source, m.sink, opts("full", T0));
+    expect(run.status).toBe("succeeded");
+    expect(m.row("financial_summaries", "alice", "dashboard_2026-10")).toMatchObject({
+      period: "2026-10", total_expenses: 12345.67, total_income: 50000, transaction_count: 41, mapping_status: "mapped",
+      doc: expect.objectContaining({ categoryTotals: { Food: 4200.5 } }),
+    });
+    expect(m.row("financial_summaries", "alice", "epf")).toMatchObject({ current_balance: 812345.5, interest_total: 262345.5, last_credit_period: "2026-09" });
+    expect(m.row("financial_summaries", "alice", "netWorth")).toBeUndefined();
+    expect(m.row("financial_summaries", "alice", "investments")).toBeUndefined();
+    // A second full pass doesn't treat the skipped docs as anything to tombstone.
+    const again = await runSync(fs.source, m.sink, opts("full", T0 + H));
+    expect(again.tombstones).toBe(0);
+  });
+});
+
 describe("read-model sync core (SPENDLY-506)", () => {
   it("first run copies everything, then an unchanged incremental run reads little and writes nothing", async () => {
     const fs = world();
@@ -76,8 +242,10 @@ describe("read-model sync core (SPENDLY-506)", () => {
     const second = await runSync(fs.source, m.sink, opts("incremental", T0 + 3 * H));
     expect(second.upserts).toBe(0);
     expect(second.tombstones).toBe(0);
-    // 1 (users) + per user: 4 small collections in full + 6 × 2 empty queries.
-    expect(second.readsUsed).toBeLessThan(first.readsUsed + 40);
+    // 1 (users) + per user and synced collection one query per change field,
+    // each an empty page billed as 1 read (SPENDLY-590/681: the bound scales).
+    const perUser = READ_MODEL_TABLES.reduce((n, t) => n + changeFieldsOf(t).length, 0);
+    expect(second.readsUsed).toBeLessThanOrEqual(1 + 2 * perUser);
   });
 
   it("never reads or writes a duress tree", async () => {
@@ -370,7 +538,7 @@ describe("account lifecycle (SPENDLY-508)", () => {
     expect(m.failures).toEqual([]);
   });
 
-  it("only ever requests the synced collections (Wave 1 + SPENDLY-609 goals), and never a duress tree", async () => {
+  it("only ever requests the synced collections (Wave 1 + SPENDLY-609 goals + Waves 2 and 3 + SPENDLY-591), and never a duress tree", async () => {
     const fs = world();
     const requested: string[] = [];
     const watched: SourcePort = {
@@ -381,12 +549,21 @@ describe("account lifecycle (SPENDLY-508)", () => {
       },
     };
     await runSync(watched, memorySink().sink, opts("full", T0));
-    const collections = new Set(requested.map((r) => r.split("/")[1]));
+    const collections = new Set(requested.map((r) => r.slice(r.indexOf("/") + 1)));
     expect([...collections].sort()).toEqual([
       "accountEntries", "accountPayments", "accountTransfers", "accountTypes", "accounts",
-      "categories", "creditCardBills", "expenses", "financialGoals", "goalEvents", "incomes", "ledgerEvents",
+      "borrowingRepayments", "borrowings", "calendarReminders", "categories",
+      "categorizationRules", "categoryBudgets", "creditCardBills", "decisions",
+      "epfContributionEvents", "epfContributions", "epfEstablishments", "epfInterestEntries",
+      "epfProfile", "epfReconciliations", "epfTransferEvents", "epfTransfers", "epfWageHistory",
+      "expenses", "feeReviews", "feeSignalDismissals", "financialGoals", "financialSummaries", "goalEvents",
+      "goalFundingPlans", "holdings", "incomes", "investmentCashTransactions", "investments",
+      "ledgerEvents", "merchantOverrides", "netWorthHistory", "portfolioSettings",
+      "portfolioTransactions", "receivableRepayments", "receivables", "recurringDismissals",
+      "runwayOverrides", "runwaySettings", "sipPlans", "sipTransactions", "spaces",
+      "subscriptions", "trips", "userSettings", "virtualPositions", "watchlists", "watchlists/items", "whatIfScenarios",
     ]);
-    for (const excluded of ["meta", "stats", "notifications", "financialSummaries", "daily_logs", "weight_history", "pandalMemberships", "goalNames"]) {
+    for (const excluded of ["meta", "stats", "notifications", "daily_logs", "weight_history", "pandalMemberships", "goalNames"]) {
       expect(collections.has(excluded)).toBe(false);
     }
     expect(requested.some((r) => r.startsWith("alice_duress/"))).toBe(false);
@@ -458,5 +635,15 @@ describe("readmodel-sync never writes Firestore", () => {
     const source = readFileSync(path.resolve(__dirname, "lib/readmodelSyncCore.ts"), "utf8").replace(/createHash\([^)]*\)\.update\(/g, "");
     expect(source).not.toMatch(FIRESTORE_WRITES);
     expect(source).not.toMatch(/firebase-admin|@supabase\/supabase-js/);
+  });
+});
+
+describe("change values in the Firestore reader (SPENDLY-681)", () => {
+  it("a millisecond field compares as a number, the rest as a Timestamp", async () => {
+    const { changeValue } = await import("./readmodel-sync");
+    expect(changeValue({ fieldType: "millis", sinceMs: 1234 })).toBe(1234);
+    const ts = changeValue({ fieldType: "timestamp", sinceMs: 1234 }) as { toMillis(): number };
+    expect(ts.toMillis()).toBe(1234);
+    expect((changeValue({ sinceMs: 5 }) as { toMillis(): number }).toMillis()).toBe(5);
   });
 });

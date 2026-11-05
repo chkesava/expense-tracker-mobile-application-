@@ -45,8 +45,8 @@ export function useFinancialCalendar(range: CalendarRange, options?: { includeCa
   const { goals, loading: goalsLoading, error: goalsError } = useFinancialGoals();
   const { investments, loading: investmentsLoading, error: investmentsError } = useInvestments();
   const { plans, loading: sipLoading, error: sipError } = useSipPlans();
-  const { contributions, loading: epfLoading, error: epfError } = useEpfAllContributions();
-  const { establishments } = useEpf();
+  const { contributions, loading: epfLoading, error: epfError } = useEpfAllContributions({ readFrom: "copy" });
+  const { establishments } = useEpf({ readFrom: "copy" });
   const { decisions, loading: decisionsLoading, error: decisionsError } = useDecisions();
   const { uid, reminders, loading: remindersLoading, error: remindersError } = useCalendarReminders();
 

@@ -7,6 +7,10 @@ import { runSync } from "../scripts/lib/readmodelSyncCore";
 import { memorySink } from "../scripts/lib/readmodelSyncMemory";
 import { firestoreCounter } from "../scripts/readmodel-verify";
 import { runVerify, type VerifySink } from "../scripts/lib/readmodelVerifyCore";
+import { changeFieldsOf, READ_MODEL_TABLES } from "../shared/utils/readModel/mapping";
+
+/** One (mostly empty) query per change field of every synced collection (SPENDLY-681). */
+const CHANGE_QUERIES = READ_MODEL_TABLES.reduce((n, t) => n + changeFieldsOf(t).length, 0);
 
 /**
  * SPENDLY-506 end to end against the Firestore emulator: the real Admin SDK
@@ -69,8 +73,11 @@ describe("read-model sync against the Firestore emulator (SPENDLY-506)", () => {
     expect(m.row("expenses", "alice", "e2")).toMatchObject({ amount: 250 });
     expect(m.row("accounts", "alice", "old")?.source_deleted).toBe(true);
     expect(m.row("accounts", "alice", "bank")).toMatchObject({ current_balance: 640 });
-    // The 600 categories were not re-read: an incremental run costs a few reads, not the collection.
-    expect(second.readsUsed).toBeLessThan(40);
+    // The 600 categories were not re-read: an incremental run costs the user
+    // listing, one (mostly empty) query per change field of each synced
+    // collection and the changed documents, not the collection. Scales with
+    // the tables (SPENDLY-590) and their change fields (SPENDLY-681).
+    expect(second.readsUsed).toBeLessThanOrEqual(1 + CHANGE_QUERIES + 10);
     expect(second.upserts).toBe(3);
   });
 
@@ -105,8 +112,8 @@ describe("read-model sync against the Firestore emulator (SPENDLY-506)", () => {
     const agree = await runVerify(counter, verifySink(), vOpts);
     expect(agree.status).toBe("succeeded");
     expect(agree.byCollection.find((c) => c.collection === "categories")).toMatchObject({ firestore: 600, model: 600 });
-    // 600 categories counted for 1 read, not 600.
-    expect(agree.readsUsed).toBeLessThan(30);
+    // 600 categories counted for 1 read, not 600: about one count() per synced collection.
+    expect(agree.readsUsed).toBeLessThanOrEqual(1 + READ_MODEL_TABLES.length + 5);
 
     m.tables.get("expenses")!.delete("alice/e2");
     const caught = await runVerify(counter, verifySink(), vOpts);
@@ -116,5 +123,28 @@ describe("read-model sync against the Firestore emulator (SPENDLY-506)", () => {
     await runSync(source, m.sink, { ...syncOpts, now: () => Date.now() });
     expect(m.row("expenses", "alice", "e2")).toMatchObject({ amount: 250 });
     expect((await runVerify(counter, verifySink(), vOpts)).status).toBe("succeeded");
+  });
+
+  it("SPENDLY-672 cross-user nights: real collection-group queries, only users/{uid}/… copied", async () => {
+    const source = firestoreReader(db);
+    const m = memorySink();
+    const opts = { dryRun: false, maxReadsPerRun: 10_000, maxReadsPerDay: 100_000 };
+    await runSync(source, m.sink, { ...opts, mode: "full", now: () => Date.now() });
+    const since = Date.now();
+    await new Promise((r) => setTimeout(r, 5));
+    const now = FieldValue.serverTimestamp();
+    await db.collection("users").doc("alice").collection("expenses").doc("x1").set({ amount: 77, date: "2026-11-04", createdAt: now });
+    // Same collection name elsewhere: a Ganesh pandal's expense, and a duress tree.
+    await db.collection("pandals").doc("p1").collection("expenses").doc("px").set({ amount: 5, createdAt: now });
+    await db.collection("users").doc("alice_duress").collection("expenses").doc("d2").set({ amount: 1, createdAt: now });
+
+    const run = await runSync(source, m.sink, { ...opts, mode: "incremental", crossUser: true, now: () => Date.now() });
+    expect(run.status).toBe("succeeded");
+    expect(m.row("expenses", "alice", "x1")).toMatchObject({ amount: 77, source_path: "users/alice/expenses/x1" });
+    expect([...(m.tables.get("expenses")?.keys() ?? [])].filter((k) => !k.startsWith("alice/"))).toEqual([]);
+    expect(m.checkpoints.get("*/expenses")?.highWaterMs).toBeGreaterThanOrEqual(since);
+    // No 600-category re-read: one query per change field per collection, not per user.
+    expect(run.readsUsed).toBeLessThanOrEqual(1 + CHANGE_QUERIES + 20);
+    await db.recursiveDelete(db.collection("pandals"));
   });
 });

@@ -3,6 +3,8 @@ import { collection, documentId, getDocs, query, where, onSnapshot, type Firesto
 import { getFirestoreDb } from "@/lib/firebase";
 import { logWarning } from "@/lib/errors";
 import { useAuth } from "@/providers/AuthProvider";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
 import { useExpenses } from "@/hooks/useExpenses";
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath, logDirectRead, logQuerySnapshot } from "@/lib/firestoreReadDebug";
@@ -59,6 +61,10 @@ export function useDashboardCashFlow(activeMonth: string, count: number = 6) {
   const splitOlder = configured === "supabase" && count > 2;
   const listenCount = splitOlder ? 2 : count;
   const [summaries, setSummaries] = useState<DashboardPeriodSummary[]>([]);
+  // SPENDLY-599: firestore (default) | shadow | supabase, per readModel.financialSummaries.
+  // The copy's rows are exact copies (592) and include this device's unsent
+  // writes (670), so a just-saved expense moves the tiles at once.
+  const summariesSource = useReadModelSource("financialSummaries");
   const [older, setOlder] = useState<{ key: string; months: CashFlowMonth[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<LoadFailure | null>(null);
@@ -84,6 +90,20 @@ export function useDashboardCashFlow(activeMonth: string, count: number = 6) {
       where(documentId(), ">=", `dashboard_${startMonth}`),
       where(documentId(), "<=", `dashboard_${activeMonth}`)
     );
+    const applySummaries = (docs: SourceDoc[]) => {
+      const results = docs
+        .filter((d) => d.id.startsWith("dashboard_"))
+        .map((d) => d.data as unknown as DashboardPeriodSummary);
+      results.sort((a, b) => b.period.localeCompare(a.period));
+      setSummaries(results);
+      setError(null);
+      setLoading(false);
+    };
+    if (summariesSource.mode === "supabase") {
+      const from = `dashboard_${startMonth}`;
+      const to = `dashboard_${activeMonth}`;
+      return summariesSource.subscribe(applySummaries, { where: (d) => d.id >= from && d.id <= to });
+    }
 
     const unsubscribe = onSnapshot(
       q,
@@ -92,17 +112,10 @@ export function useDashboardCashFlow(activeMonth: string, count: number = 6) {
           feature: "dashboard",
           queryShape: `dashboard ${startMonth}..${activeMonth}`,
         });
-        const results: DashboardPeriodSummary[] = [];
-        snapshot.forEach(doc => {
-          if (doc.id.startsWith("dashboard_")) {
-            results.push(doc.data() as DashboardPeriodSummary);
-          }
-        });
-
-        results.sort((a, b) => b.period.localeCompare(a.period));
-        setSummaries(results);
-        setError(null);
-        setLoading(false);
+        const docs = toSourceDocs(snapshot);
+        applySummaries(docs);
+        // A window of months: the copy's other summaries aren't "extra".
+        if (summariesSource.mode === "shadow") void summariesSource.shadow(docs, { windowed: true });
       },
       snapshotErrorHandler(
         "snapshot.dashboardCashFlow",
@@ -118,7 +131,7 @@ export function useDashboardCashFlow(activeMonth: string, count: number = 6) {
       forgetSnapshotPath(path);
       unsubscribe();
     };
-  }, [uid, activeMonth, listenCount]);
+  }, [uid, activeMonth, listenCount, summariesSource.mode]);
 
   // supabase: the chart's older months.
   const olderKey = `${uid}|${activeMonth}|${count}`;

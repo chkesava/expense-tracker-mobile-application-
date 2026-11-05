@@ -2,6 +2,7 @@ import { initializeApp, applicationDefault, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
 import { runRebuildCli } from "./lib/rebuildRunner";
+import { serverPushPorts } from "../netlify/functions/readmodel-push";
 
 /**
  * Rebuilds stored account balances (bank `currentBalance`, card
@@ -24,7 +25,8 @@ function loadCredential() {
 
 const db = getFirestore(initializeApp({ credential: loadCredential() }));
 
-runRebuildCli(db, process.argv.slice(2), { accounts: true, epf: false, dashboards: false })
+// SPENDLY-680: an --apply run also copies what it wrote to the read model.
+runRebuildCli(db, process.argv.slice(2), { accounts: true, epf: false, dashboards: false }, serverPushPorts(db, (line) => console.log(line)))
   .then(() => process.exit(0))
   .catch((err) => {
     console.error("Fatal error:", err);

@@ -40,6 +40,7 @@ export function EpfCurrentMonthCard({
   const currency = useDisplayCurrency();
   const { contributions, contributionsLoading } = useEpfContributions(establishment?.id, {
     enabled: Boolean(establishment),
+    readFrom: "copy",
   });
 
   // SPENDLY-544: ghost-aware; EPF ignored ghost mode almost everywhere.

@@ -23,7 +23,9 @@ describe("drill-down reads (PR #239 review)", () => {
   it("summaries come from the per-month store, never useDashboardCashFlow (whose cashFlow=supabase mode keeps only two months)", () => {
     const hook = read("hooks/useSpendingDrilldown.ts");
     expect(hook).not.toMatch(/import[^;]*useDashboardCashFlow/);
-    expect(hook).toMatch(/summaryMonthStore\.acquire/);
+    // SPENDLY-600: the store is the Firestore one or its copy-backed twin, chosen by the mode.
+    expect(hook).toMatch(/copySummaryMonthStore : summaryMonthStore/);
+    expect(hook).toMatch(/store\.acquire/);
     for (const screen of DRILLDOWN_SCREENS) expect(read(screen)).not.toMatch(/useDashboardCashFlow\(/);
   });
 

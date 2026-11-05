@@ -19,6 +19,7 @@ import { doc, serverTimestamp, setDoc } from "@/lib/firestore";
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite } from "@/lib/firestoreWrite";
+import { noteDirectWrites } from "@/lib/readModelWriteHooks";
 import { useAuth } from "@/providers/AuthProvider";
 import { useEpfSummary } from "@/hooks/useDomainSummaries";
 import { epfPortfolioSummary } from "@/shared/features/epf/utils/portfolio";
@@ -82,7 +83,7 @@ export function useEpfSummarySync(args: {
           { merge: true }
         ),
       { label: "EPF summary" }
-    ).catch((err) => {
+    ).then(() => noteDirectWrites(uid, [`users/${uid}/financialSummaries/epf`])).catch((err) => {
       if (pending.current === fields) pending.current = null;
       logError("epf.summarySync", err);
     });

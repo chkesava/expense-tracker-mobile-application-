@@ -53,3 +53,28 @@ export function effectiveReadModelMode(c: ReadModelConditions): ReadModelMode {
   if (c.duress || !c.online || !c.available || c.fellBack) return "firestore";
   return c.configured;
 }
+
+/**
+ * SPENDLY-670: whether the app also writes its saves to the read model
+ * (`system_settings/global.readModel.clientWrites`). Off unless exactly true,
+ * so the setting doubles as the kill switch.
+ */
+export function clientWritesEnabled(readModelSetting: unknown): boolean {
+  return !!readModelSetting && typeof readModelSetting === "object" && (readModelSetting as Record<string, unknown>).clientWrites === true;
+}
+
+/**
+ * SPENDLY-593: whether the app listens for read-model change pings
+ * (`system_settings/global.readModel.realtime`). Off unless exactly true.
+ */
+export function realtimeEnabled(readModelSetting: unknown): boolean {
+  return !!readModelSetting && typeof readModelSetting === "object" && (readModelSetting as Record<string, unknown>).realtime === true;
+}
+
+/**
+ * SPENDLY-594: whether the app keeps the on-device copy of its read-model rows
+ * (`system_settings/global.readModel.localCopy`). Off unless exactly true.
+ */
+export function localCopyEnabled(readModelSetting: unknown): boolean {
+  return !!readModelSetting && typeof readModelSetting === "object" && (readModelSetting as Record<string, unknown>).localCopy === true;
+}

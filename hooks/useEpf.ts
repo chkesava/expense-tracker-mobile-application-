@@ -29,9 +29,12 @@ import { LISTEN_WITH_SYNC_STATE, onlyMetadataChanged } from "@/lib/firestoreSync
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { noteDirectWrites, noteTransactionWrites } from "@/lib/readModelWriteHooks";
 import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
 import type { EpfProfileFormInput } from "@/shared/features/epf/schemas";
 import type { EpfEstablishment, EpfProfile } from "@/shared/features/epf/types";
 import {
@@ -74,8 +77,11 @@ export type EpfEstablishmentInput = Omit<
   "id" | "profileId" | "employmentStatus" | "createdAt" | "updatedAt" | "scheduleFrom"
 >;
 
-export function useEpf(options?: { enabled?: boolean }) {
+export function useEpf(options?: { enabled?: boolean; readFrom?: "copy" }) {
   const enabled = options?.enabled !== false;
+  // SPENDLY-598 (R4.3a): EPF screens write from what these hooks load, so
+  // the copy serves only callers that never write (`readFrom: "copy"`).
+  const establishmentsSource = useReadModelSource("epfEstablishments", { copy: options?.readFrom === "copy" });
   // Duress-aware uid, matching every other investment hook: a duress session
   // must show an empty EPF tree rather than the real UAN.
   const { user } = useAuth();
@@ -154,6 +160,15 @@ export function useEpf(options?: { enabled?: boolean }) {
     // composite index is needed and a document missing the order field is
     // never silently dropped from the result.
     const q = query(collection(db, "users", uid, EPF_ESTABLISHMENTS_COLLECTION));
+    const applyEstablishments = (docs: SourceDoc[]) => {
+      setEstablishments(sortEstablishments(docs.map((d) => normalizeEstablishment(d.id, d.data))));
+      setEstablishmentsError(null);
+      setEstablishmentsLoading(false);
+    };
+    if (establishmentsSource.mode === "supabase") {
+      setEstablishmentsFromCache(false);
+      return establishmentsSource.subscribe(applyEstablishments);
+    }
 
     let received = false;
     const unsubscribe = onSnapshot(
@@ -165,15 +180,9 @@ export function useEpf(options?: { enabled?: boolean }) {
         received = true;
         if (onlyMetadataChanged(snapshot, first)) return;
         logQuerySnapshot(path, snapshot);
-        setEstablishments(
-          sortEstablishments(
-            snapshot.docs.map((docSnap) =>
-              normalizeEstablishment(docSnap.id, docSnap.data() as Record<string, unknown>)
-            )
-          )
-        );
-        setEstablishmentsError(null);
-        setEstablishmentsLoading(false);
+        const docs = toSourceDocs(snapshot);
+        applyEstablishments(docs);
+        if (establishmentsSource.mode === "shadow") void establishmentsSource.shadow(docs);
       },
       snapshotErrorHandler(
         "snapshot.epfEstablishments",
@@ -189,7 +198,7 @@ export function useEpf(options?: { enabled?: boolean }) {
       forgetSnapshotPath(path);
       unsubscribe();
     };
-  }, [uid, enabled, establishmentsAttempt]);
+  }, [uid, enabled, establishmentsAttempt, establishmentsSource.mode]);
 
   const activeEstablishment = useMemo(
     () => findActiveEstablishment(establishments),
@@ -227,6 +236,7 @@ export function useEpf(options?: { enabled?: boolean }) {
             ),
           { label: "EPF profile" }
         );
+        noteDirectWrites(uid, [ref.path]);
         toast.success(writeSavedMessage(outcome, "EPF profile saved"));
         return true;
       } catch (err) {
@@ -278,6 +288,11 @@ export function useEpf(options?: { enabled?: boolean }) {
           { merge: true }
         );
       });
+      // Every lock write touches the profile and this establishment only.
+      noteTransactionWrites(uid, [
+        profileRef.path,
+        `users/${uid}/${EPF_ESTABLISHMENTS_COLLECTION}/${establishmentId}`,
+      ]);
     },
     [uid]
   );
@@ -456,6 +471,7 @@ export function useEpf(options?: { enabled?: boolean }) {
                 }),
           { label: "EPF establishment" }
         );
+        if (!claiming && !releasing) noteDirectWrites(uid, [ref.path]);
         toast.success(
           writeSavedMessage(outcome, archived ? "Establishment archived" : "Establishment restored")
         );
@@ -530,6 +546,7 @@ export function useEpf(options?: { enabled?: boolean }) {
               : deleteDoc(ref),
           { label: "EPF establishment" }
         );
+        if (!wasCurrent) noteDirectWrites(uid, [ref.path]);
         toast.success(writeSavedMessage(outcome, "Establishment deleted"));
         return true;
       } catch (err) {

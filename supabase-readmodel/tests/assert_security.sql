@@ -11,6 +11,14 @@ begin
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
+    'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
+    'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
+    'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
+    'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries',
     'sync_runs', 'sync_status', 'sync_checkpoints', 'sync_failures'
   ]) as t
   where not exists (select 1 from pg_tables where schemaname = 'public' and tablename = t);
@@ -51,7 +59,15 @@ begin
         or table_name not in (
           'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
           'account_transfers', 'account_entries', 'account_payments',
-          'credit_card_bills', 'categories', 'financial_goals', 'goal_events', 'sync_status',
+          'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
+    'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
+    'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
+    'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
+    'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'sync_status',
           'v_active_expenses', 'v_active_incomes', 'v_cash_flow_by_month'
         )
       ))
@@ -97,8 +113,8 @@ begin
     raise exception 'unexpected policies: %', bad;
   end if;
   select count(*) into n from pg_policies where schemaname = 'public';
-  if n <> 13 then  -- 10 Wave 1 + sync_status + SPENDLY-609 goals (2)
-    raise exception 'expected 13 owner-read policies, found %', n;
+  if n <> 54 then  -- 10 Wave 1 + sync_status + SPENDLY-609 goals (2) + SPENDLY-589 Wave 2 (5) + SPENDLY-590 Wave 3 (14) + SPENDLY-591 (21) + SPENDLY-592 (1)
+    raise exception 'expected 54 owner-read policies, found %', n;
   end if;
   if exists (
     select 1 from pg_policies
@@ -145,7 +161,15 @@ begin
   from unnest(array[
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
-    'credit_card_bills', 'categories', 'financial_goals', 'goal_events'
+    'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
+    'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
+    'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
+    'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
+    'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries'
   ]) as t
   where (
     select count(*) from information_schema.columns c
@@ -178,6 +202,117 @@ begin
   where table_schema = 'public' and data_type in ('real', 'double precision');
   if floats is not null then
     raise exception 'floating point columns found: %', floats;
+  end if;
+end
+$$;
+
+-- 8. SPENDLY-669: the app's only write path. rm_client_apply is security
+--    definer with a fixed search_path, callable by authenticated only; every
+--    synced table records who wrote each row.
+do $$
+declare
+  fn oid := 'public.rm_client_apply(text, jsonb, jsonb)'::regprocedure;
+  missing text;
+begin
+  if not (select prosecdef from pg_proc where oid = fn) then
+    raise exception 'rm_client_apply must be security definer';
+  end if;
+  if not exists (select 1 from pg_proc where oid = fn and 'search_path=""' = any (proconfig)) then
+    raise exception 'rm_client_apply must pin search_path to empty';
+  end if;
+  if has_function_privilege('anon', fn, 'execute') then
+    raise exception 'anon (directly or via PUBLIC) can execute rm_client_apply';
+  end if;
+  if not has_function_privilege('authenticated', fn, 'execute') then
+    raise exception 'authenticated cannot execute rm_client_apply';
+  end if;
+  if has_function_privilege('authenticated', 'public.readmodel_upsert(text, jsonb)'::regprocedure, 'execute')
+     or has_function_privilege('authenticated', 'public.readmodel_repair(text, jsonb)'::regprocedure, 'execute')
+     or has_function_privilege('authenticated', 'public.readmodel_tombstone(text, text, text[])'::regprocedure, 'execute') then
+    raise exception 'a server write function is executable by authenticated';
+  end if;
+  select string_agg(t, ', ') into missing
+  from unnest(array[
+    'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
+    'account_transfers', 'account_entries', 'account_payments',
+    'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
+    'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
+    'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
+    'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
+    'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries'
+  ]) as t
+  where (
+    select count(*) from information_schema.columns c
+    where c.table_schema = 'public' and c.table_name = t
+      and c.column_name in ('written_by', 'client_written_at')
+  ) <> 2;
+  if missing is not null then
+    raise exception 'tables missing written_by/client_written_at: %', missing;
+  end if;
+  -- SPENDLY-591: the users/{uid} copy is server-only; the app can never write it.
+  if public.readmodel_client_table_ok('user_settings') or not public.readmodel_sync_table_ok('user_settings') then
+    raise exception 'user_settings must be on the sync allowlist only';
+  end if;
+end
+$$;
+
+-- 9. SPENDLY-593: realtime. Every synced table pings its owner's private topic
+--    (insert and update statement triggers); the ping function and the
+--    catch-up function are security definer with a pinned search_path; only
+--    authenticated may catch up; only a topic's owner may join it.
+do $$
+declare
+  missing text;
+  fn regprocedure;
+begin
+  select string_agg(c.table_name, ', ' order by c.table_name) into missing
+  from information_schema.columns c
+  where c.table_schema = 'public' and c.column_name = 'written_by' and public.readmodel_sync_table_ok(c.table_name)
+    and (select count(*) from pg_trigger g
+         where g.tgrelid = format('public.%I', c.table_name)::regclass
+           and g.tgname in (c.table_name || '_rm_ping_ins', c.table_name || '_rm_ping_upd')) <> 2;
+  if missing is not null then
+    raise exception 'synced tables without both realtime ping triggers: %', missing;
+  end if;
+  foreach fn in array array['public.readmodel_ping()'::regprocedure, 'public.readmodel_changes_since(timestamptz, integer)'::regprocedure] loop
+    if not (select prosecdef from pg_proc where oid = fn) or not exists (select 1 from pg_proc where oid = fn and 'search_path=""' = any (proconfig)) then
+      raise exception '% must be security definer with an empty search_path', fn;
+    end if;
+  end loop;
+  if has_function_privilege('anon', 'public.readmodel_changes_since(timestamptz, integer)', 'execute')
+     or not has_function_privilege('authenticated', 'public.readmodel_changes_since(timestamptz, integer)', 'execute') then
+    raise exception 'readmodel_changes_since: authenticated only';
+  end if;
+  if not exists (select 1 from pg_policies where schemaname = 'realtime' and tablename = 'messages' and policyname = 'readmodel_user_topic_read') then
+    raise exception 'the private-topic policy on realtime.messages is missing';
+  end if;
+end
+$$;
+
+-- 10. SPENDLY-595: the Free-plan capacity reading is numbers only, for the
+--     health check (service role), never for clients.
+do $$
+declare
+  fn regprocedure := 'public.readmodel_capacity()'::regprocedure;
+  c jsonb;
+begin
+  if not (select prosecdef from pg_proc where oid = fn) or not exists (select 1 from pg_proc where oid = fn and 'search_path=""' = any (proconfig)) then
+    raise exception 'readmodel_capacity must be security definer with an empty search_path';
+  end if;
+  if has_function_privilege('anon', fn, 'execute') or has_function_privilege('authenticated', fn, 'execute')
+     or not has_function_privilege('service_role', fn, 'execute') then
+    raise exception 'readmodel_capacity: service_role only';
+  end if;
+  c := public.readmodel_capacity();
+  if (c->>'db_bytes')::bigint <= 0 or not (c ? 'realtime_messages_24h') or jsonb_typeof(c->'largest_tables') <> 'array' then
+    raise exception 'readmodel_capacity returned %', c;
+  end if;
+  if (select count(*) from jsonb_object_keys(c)) <> 3 then
+    raise exception 'readmodel_capacity returns exactly db_bytes, realtime_messages_24h, largest_tables: %', c;
   end if;
 end
 $$;

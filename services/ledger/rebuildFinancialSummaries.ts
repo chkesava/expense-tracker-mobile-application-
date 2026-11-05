@@ -10,6 +10,7 @@ import {
   accountSourcesFor,
   planAccountRebuild,
 } from "@/shared/utils/reconciliation";
+import { noteDirectWrites, trackedBatch } from "@/lib/readModelWriteHooks";
 
 export type RebuildVariance = {
   field: string;
@@ -85,9 +86,10 @@ export async function rebuildFinancialSummaries(
       : [];
 
   if (plan.needsWrite && mode === "apply") {
-    const batch = writeBatch(db);
+    const batch = trackedBatch(writeBatch(db));
     batch.update(accountRef, accountRebuildWrite(plan, { remove: deleteField, now: serverTimestamp }));
     await batch.commit();
+    noteDirectWrites(uid, batch.writtenPaths());
   }
 
   return {

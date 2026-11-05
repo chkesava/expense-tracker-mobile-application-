@@ -14,8 +14,11 @@ import {
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { noteDirectWrites } from "@/lib/readModelWriteHooks";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import type { Investment } from "@/shared/types/investment";
@@ -32,6 +35,8 @@ export function useInvestments(options?: { enabled?: boolean }) {
   const enabled = options?.enabled !== false;
   const { user } = useAuth();
   const uid = user?.uid;
+  // SPENDLY-673: firestore (default) | shadow | supabase, per readModel.investments.
+  const investmentsSource = useReadModelSource("investments");
 
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +51,15 @@ export function useInvestments(options?: { enabled?: boolean }) {
     }
 
     setLoading(true);
+    // SPENDLY-673: the same mapping for either source.
+    const apply = (docs: SourceDoc[]) => {
+      setInvestments(docs.map((d) => ({ id: d.id, ...(d.data as Omit<Investment, "id">) })));
+      setError(null);
+      setLoading(false);
+    };
+    if (investmentsSource.mode === "supabase") {
+      return investmentsSource.subscribe(apply, { orderBy: [{ field: "startDate", direction: "desc" }] });
+    }
     const q = query(
       collection(db, "users", uid, "investments"),
       orderBy("startDate", "desc")
@@ -54,13 +68,9 @@ export function useInvestments(options?: { enabled?: boolean }) {
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const list: Investment[] = snapshot.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...(docSnap.data() as Omit<Investment, "id">),
-        }));
-        setInvestments(list);
-        setError(null);
-        setLoading(false);
+        const docs = toSourceDocs(snapshot);
+        apply(docs);
+        if (investmentsSource.mode === "shadow") void investmentsSource.shadow(docs);
       },
       snapshotErrorHandler(
         "snapshot.investments",
@@ -73,7 +83,7 @@ export function useInvestments(options?: { enabled?: boolean }) {
     );
 
     return () => unsubscribe();
-  }, [uid, enabled, attempt]);
+  }, [uid, enabled, attempt, investmentsSource.mode]);
 
   const addInvestment = useCallback(
     async (params: Omit<Investment, "id">) => {
@@ -93,6 +103,7 @@ export function useInvestments(options?: { enabled?: boolean }) {
         const outcome = await commitWrite(() => setDoc(docRef, payload), {
           label: "investment",
         });
+        noteDirectWrites(uid, [docRef.path]);
         toast.success(
           writeSavedMessage(outcome, `Investment "${params.name}" added`)
         );
@@ -116,6 +127,7 @@ export function useInvestments(options?: { enabled?: boolean }) {
           () => updateDoc(doc(db, "users", uid, "investments", id), updates),
           { label: "investment" }
         );
+        noteDirectWrites(uid, [`users/${uid}/investments/${id}`]);
         toast.success(writeSavedMessage(outcome, "Investment updated"));
         return true;
       } catch (err: any) {
@@ -137,6 +149,7 @@ export function useInvestments(options?: { enabled?: boolean }) {
           () => deleteDoc(doc(db, "users", uid, "investments", id)),
           { label: "investment deletion" }
         );
+        noteDirectWrites(uid, [`users/${uid}/investments/${id}`]);
         toast.success(writeSavedMessage(outcome, "Investment deleted"));
         return true;
       } catch (err: any) {

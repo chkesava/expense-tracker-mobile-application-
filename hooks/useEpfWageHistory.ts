@@ -15,6 +15,7 @@ import { getFirestoreDb } from "@/lib/firebase";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { noteDirectWrites } from "@/lib/readModelWriteHooks";
 import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
@@ -115,6 +116,7 @@ export function useEpfWageHistory(establishmentId: string | undefined) {
             ),
           { label: "EPF wage change" }
         );
+        noteDirectWrites(uid, [ref.path]);
         toast.success(writeSavedMessage(outcome, "Wage change saved"));
         return true;
       } catch (err) {
@@ -137,6 +139,7 @@ export function useEpfWageHistory(establishmentId: string | undefined) {
       try {
         const ref = doc(db, "users", uid, EPF_WAGE_HISTORY_COLLECTION, id);
         const outcome = await commitWrite(() => deleteDoc(ref), { label: "EPF wage change" });
+        noteDirectWrites(uid, [ref.path]);
         toast.success(writeSavedMessage(outcome, "Wage change removed"));
         return true;
       } catch (err) {

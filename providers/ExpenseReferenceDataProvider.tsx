@@ -35,9 +35,14 @@ import {
   logQuerySnapshot,
 } from "@/lib/firestoreReadDebug";
 import { notifyReadModelSnapshot } from "@/lib/readModelPush";
+import { noteDirectWrites } from "@/lib/readModelWriteHooks";
 import { commitWrite } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
+import { getAppLocalCopy } from "@/lib/readModelLocal/appCopy";
+import { pendingClientWrites } from "@/lib/readModelClientWrites";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { postDueSubscriptionCharge } from "@/services/subscriptions/duePost";
@@ -99,6 +104,12 @@ const ExpenseReferenceDataContext = createContext<ExpenseReferenceData | undefin
  * one-shot spaces/categorizationRules collections. */
 const FOREGROUND_REFRESH_MIN_INTERVAL_MS = 5 * 60 * 1000;
 
+/** SPENDLY-599: goals with a write this device hasn't sent yet (the copy's "waiting to sync"). */
+function pendingGoalDocIds(): string[] {
+  const uid = getAppLocalCopy()?.status().uid;
+  return uid ? pendingClientWrites(uid).filter((e) => e.table === "financial_goals").map((e) => e.docId) : [];
+}
+
 export function ExpenseReferenceDataProvider({
   children,
 }: {
@@ -106,6 +117,8 @@ export function ExpenseReferenceDataProvider({
 }) {
   const { user } = useAuth();
   const uid = user?.uid;
+  // SPENDLY-673: firestore (default) | shadow | supabase, per readModel.categoryBudgets.
+  const budgetsSource = useReadModelSource("categoryBudgets");
   const db = getFirestoreDb();
   const { settings } = useSettings();
   const timezone = settings.timezone;
@@ -169,6 +182,16 @@ export function ExpenseReferenceDataProvider({
   const skippedAccountToastShown = useRef(false);
   const subscriptionsRef = useRef(subscriptions);
   subscriptionsRef.current = subscriptions;
+  // SPENDLY-598: firestore (default) | shadow | supabase, per readModel.subscriptions.
+  const subscriptionsSource = useReadModelSource("subscriptions");
+  // SPENDLY-599: firestore (default) | shadow | supabase, per readModel.financialGoals.
+  const goalsSource = useReadModelSource("financialGoals");
+  // SPENDLY-674: reference data, per readModel.<collection>.
+  const categoriesSource = useReadModelSource("categories");
+  const spacesSource = useReadModelSource("spaces");
+  const rulesSource = useReadModelSource("categorizationRules");
+  const subscriptionsModeRef = useRef(subscriptionsSource.mode);
+  subscriptionsModeRef.current = subscriptionsSource.mode;
 
   // SPENDLY-411: budgets/goals are only read from optional, user-configurable
   // dashboard widgets and per-screen planning hooks — unlike categories/
@@ -267,6 +290,18 @@ export function ExpenseReferenceDataProvider({
       return;
     }
     setCategoriesLoading(true);
+    if (categoriesSource.mode === "supabase") {
+      // SPENDLY-674: the copy and realtime replace the revision listener.
+      // Writers keep bumping the revision, so a fallback to Firestore stays correct.
+      return categoriesSource.subscribe(
+        (docs) => {
+          setCategories(docs.map((d) => ({ id: d.id, ...d.data } as Category)));
+          setCategoriesError(null);
+          setCategoriesLoading(false);
+        },
+        { limit: 500 }
+      );
+    }
     const path = `users/${uid}/categories`;
     const metaPath = `users/${uid}/meta/categories`;
     const categoriesQuery = query(collection(db, "users", uid, "categories"), limit(500));
@@ -291,6 +326,7 @@ export function ExpenseReferenceDataProvider({
       setCategories(loaded);
       setCategoriesError(null);
       setCategoriesLoading(false);
+      if (categoriesSource.mode === "shadow") void categoriesSource.shadow(loaded.map(({ id, ...data }) => ({ id: String(id), data })));
     };
 
     // This device's own edit: the cache already holds it, and the list was
@@ -354,7 +390,7 @@ export function ExpenseReferenceDataProvider({
       forgetSnapshotPath(metaPath);
       if (unsub) unsub();
     };
-  }, [uid, db, categoriesAttempt, setCategoriesError]);
+  }, [uid, db, categoriesAttempt, setCategoriesError, categoriesSource.mode]);
 
   useEffect(() => {
     if (!uid || !db) {
@@ -364,6 +400,22 @@ export function ExpenseReferenceDataProvider({
     }
     setSubscriptionsLoading(true);
     setSubscriptionsFromCache(true);
+    // SPENDLY-598: the same mapping for either source.
+    const applySubscriptions = (docs: SourceDoc[]) => {
+      setSubscriptions(docs.map((d) => ({ id: d.id, ...(d.data as Omit<Subscription, "id">) })));
+      setSubscriptionsError(null);
+      setSubscriptionsLoading(false);
+    };
+    if (subscriptionsSource.mode === "supabase") {
+      return subscriptionsSource.subscribe(
+        (docs) => {
+          // The copy has no cache/server state; auto-posting verifies on Firestore itself (R4.3a).
+          setSubscriptionsFromCache(false);
+          applySubscriptions(docs);
+        },
+        { orderBy: [{ field: "name", direction: "asc" }], limit: 200 }
+      );
+    }
     const path = `users/${uid}/subscriptions`;
     perfEvent("firestore_listener_start", { collection: "subscriptions" });
     let seenFirst = false;
@@ -389,13 +441,9 @@ export function ExpenseReferenceDataProvider({
           docCount: snap.docs.length,
           fromCache: snap.metadata.fromCache,
         });
-        const list = snap.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...(docSnap.data() as Omit<Subscription, "id">),
-        }));
-        setSubscriptions(list);
-        setSubscriptionsError(null);
-        setSubscriptionsLoading(false);
+        const docs = toSourceDocs(snap);
+        applySubscriptions(docs);
+        if (subscriptionsSource.mode === "shadow") void subscriptionsSource.shadow(docs);
       },
       snapshotErrorHandler(
         "snapshot.subscriptions",
@@ -410,7 +458,7 @@ export function ExpenseReferenceDataProvider({
       forgetSnapshotPath(path);
       unsub();
     };
-  }, [uid, db, subscriptionsAttempt, setSubscriptionsError]);
+  }, [uid, db, subscriptionsAttempt, setSubscriptionsError, subscriptionsSource.mode]);
 
   // SPENDLY-412: spaces are a small (observed <10 docs), slow-changing,
   // non-collaborative list — read-once per session/retry instead of a
@@ -424,6 +472,15 @@ export function ExpenseReferenceDataProvider({
       return;
     }
     setSpacesLoading(true);
+    const applySpaces = (docs: SourceDoc[]) => {
+      setSpaces(docs.map((d) => ({ id: d.id, ...(d.data as Omit<Space, "id">) })));
+      setSpacesError(null);
+      setSpacesLoading(false);
+    };
+    if (spacesSource.mode === "supabase") {
+      lastFetchedSpacesAtRef.current = Date.now();
+      return spacesSource.subscribe(applySpaces, { orderBy: [{ field: "name", direction: "asc" }], limit: 200 });
+    }
     const path = `users/${uid}/spaces`;
     let cancelled = false;
     const cancelIdle = scheduleIdleWork(() => {
@@ -435,14 +492,9 @@ export function ExpenseReferenceDataProvider({
             queryShape: "spaces",
           });
           lastFetchedSpacesAtRef.current = Date.now();
-          setSpaces(
-            snap.docs.map((docSnap) => ({
-              id: docSnap.id,
-              ...(docSnap.data() as Omit<Space, "id">),
-            }))
-          );
-          setSpacesError(null);
-          setSpacesLoading(false);
+          const docs = toSourceDocs(snap);
+          applySpaces(docs);
+          if (spacesSource.mode === "shadow") void spacesSource.shadow(docs);
         })
         .catch(
           snapshotErrorHandler(
@@ -461,7 +513,7 @@ export function ExpenseReferenceDataProvider({
       cancelIdle();
       forgetSnapshotPath(path);
     };
-  }, [uid, db, spacesAttempt, setSpacesError]);
+  }, [uid, db, spacesAttempt, setSpacesError, spacesSource.mode]);
 
   // SPENDLY-412: categorizationRules are a small (observed <30 docs),
   // slow-changing settings list, read only by foreground UI (ExpenseForm
@@ -477,6 +529,15 @@ export function ExpenseReferenceDataProvider({
       return;
     }
     setRulesLoading(true);
+    const applyRules = (docs: SourceDoc[]) => {
+      setRules(docs.map((d) => ({ id: d.id, ...d.data } as CategorizationRule)));
+      setRulesError(null);
+      setRulesLoading(false);
+    };
+    if (rulesSource.mode === "supabase") {
+      lastFetchedRulesAtRef.current = Date.now();
+      return rulesSource.subscribe(applyRules, { orderBy: [{ field: "createdAt", direction: "asc" }], limit: 500 });
+    }
     const path = `users/${uid}/categorizationRules`;
     let cancelled = false;
     const cancelIdle = scheduleIdleWork(() => {
@@ -494,11 +555,9 @@ export function ExpenseReferenceDataProvider({
             queryShape: "categorizationRules",
           });
           lastFetchedRulesAtRef.current = Date.now();
-          setRules(
-            snap.docs.map((d) => ({ id: d.id, ...d.data() } as CategorizationRule))
-          );
-          setRulesError(null);
-          setRulesLoading(false);
+          const docs = toSourceDocs(snap);
+          applyRules(docs);
+          if (rulesSource.mode === "shadow") void rulesSource.shadow(docs);
         })
         .catch(
           snapshotErrorHandler(
@@ -517,7 +576,7 @@ export function ExpenseReferenceDataProvider({
       cancelIdle();
       forgetSnapshotPath(path);
     };
-  }, [uid, db, rulesAttempt, setRulesError]);
+  }, [uid, db, rulesAttempt, setRulesError, rulesSource.mode]);
 
   // SPENDLY-412: bounded eventual-sync for the two one-shot collections —
   // on app foreground, refetch only if the last fetch is stale (5 min),
@@ -549,6 +608,15 @@ export function ExpenseReferenceDataProvider({
       return;
     }
     setBudgetsLoading(true);
+    // SPENDLY-673: the same mapping for either source.
+    const applyBudgets = (docs: SourceDoc[]) => {
+      setBudgets(docs.map((d) => ({ id: d.id, ...d.data } as CategoryBudget)));
+      setBudgetsError(null);
+      setBudgetsLoading(false);
+    };
+    if (budgetsSource.mode === "supabase") {
+      return budgetsSource.subscribe(applyBudgets, { orderBy: [{ field: "month", direction: "desc" }] });
+    }
     const path = `users/${uid}/categoryBudgets`;
     perfEvent("firestore_listener_start", { collection: "categoryBudgets" });
     const unsub = onSnapshot(
@@ -563,11 +631,9 @@ export function ExpenseReferenceDataProvider({
           docCount: snap.docs.length,
           fromCache: snap.metadata.fromCache,
         });
-        setBudgets(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() } as CategoryBudget))
-        );
-        setBudgetsError(null);
-        setBudgetsLoading(false);
+        const docs = toSourceDocs(snap);
+        applyBudgets(docs);
+        if (budgetsSource.mode === "shadow") void budgetsSource.shadow(docs);
       },
       snapshotErrorHandler(
         "snapshot.categoryBudgets",
@@ -582,7 +648,7 @@ export function ExpenseReferenceDataProvider({
       forgetSnapshotPath(path);
       unsub();
     };
-  }, [uid, db, budgetsAttempt, setBudgetsError, shouldListenBudgets]);
+  }, [uid, db, budgetsAttempt, setBudgetsError, shouldListenBudgets, budgetsSource.mode]);
 
   useEffect(() => {
     if (!shouldListenGoals) {
@@ -597,6 +663,24 @@ export function ExpenseReferenceDataProvider({
       return;
     }
     setGoalsLoading(true);
+    const applyGoals = (docs: SourceDoc[]) => {
+      setGoals(docs.map((d) => ({ id: d.id, ...d.data } as FinancialGoal)));
+      setGoalsError(null);
+      setGoalsLoading(false);
+    };
+    if (goalsSource.mode === "supabase") {
+      return goalsSource.subscribe(
+        (docs) => {
+          // SPENDLY-613's "waiting to sync", from the copy: this device's unsent goal writes.
+          const pending = pendingGoalDocIds();
+          setPendingGoalIds((prev) =>
+            prev.size === pending.length && pending.every((id) => prev.has(id)) ? prev : new Set(pending)
+          );
+          applyGoals(docs);
+        },
+        { orderBy: [{ field: "createdAt", direction: "asc" }] }
+      );
+    }
     const path = `users/${uid}/financialGoals`;
     perfEvent("firestore_listener_start", { collection: "financialGoals" });
     let seenFirst = false;
@@ -623,11 +707,9 @@ export function ExpenseReferenceDataProvider({
           docCount: snap.docs.length,
           fromCache: snap.metadata.fromCache,
         });
-        setGoals(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() } as FinancialGoal))
-        );
-        setGoalsError(null);
-        setGoalsLoading(false);
+        const docs = toSourceDocs(snap);
+        applyGoals(docs);
+        if (goalsSource.mode === "shadow") void goalsSource.shadow(docs);
       },
       snapshotErrorHandler(
         "snapshot.financialGoals",
@@ -642,18 +724,31 @@ export function ExpenseReferenceDataProvider({
       forgetSnapshotPath(path);
       unsub();
     };
-  }, [uid, db, goalsAttempt, setGoalsError, shouldListenGoals]);
+  }, [uid, db, goalsAttempt, setGoalsError, shouldListenGoals, goalsSource.mode]);
 
   const processDueSubscriptions = useCallback(async () => {
     const database = getFirestoreDb();
-    const list = subscriptionsRef.current;
-    if (!uid || !database || isProcessingDueRef.current || list.length === 0) {
+    const listOnScreen = subscriptionsRef.current;
+    if (!uid || !database || isProcessingDueRef.current || listOnScreen.length === 0) {
       return;
     }
 
     isProcessingDueRef.current = true;
     try {
       const now = parseLocalDate(todayDateKey(timezone));
+      let list = listOnScreen;
+      // SPENDLY-598 (R4.3a): posting writes charges from these subscriptions.
+      // When they come from the on-device copy: if nothing is due or completed
+      // on the copy, stop (no reads); otherwise re-read them from Firestore,
+      // server-confirmed, and plan on that.
+      if (subscriptionsModeRef.current === "supabase") {
+        const onCopy = planDueSubscriptionPosts(list, now);
+        const completes = list.some((sub) => sub.id && sub.source !== "sms" && evaluateSubscriptionDue(sub, now).isCompleted && !sub.isCompleted);
+        if (!onCopy.length && !completes) return;
+        const fresh = await getDocs(query(collection(database, "users", uid, "subscriptions"), orderBy("name", "asc"), limit(200)));
+        if (fresh.metadata.fromCache) return; // only server data may drive a post (SPENDLY-525)
+        list = fresh.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Subscription, "id">) }));
+      }
       const plan = planDueSubscriptionPosts(list, now);
       let skippedNoAccount = 0;
 
@@ -694,6 +789,7 @@ export function ExpenseReferenceDataProvider({
                 }),
               { label: "subscription" }
             );
+            noteDirectWrites(uid, [subRef.path]);
           } catch (err) {
             logError("subscriptions.processingDueSubscriptions", err);
           }

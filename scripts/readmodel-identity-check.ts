@@ -23,7 +23,15 @@ import { generateKeyPairSync, createSign } from "node:crypto";
 const TABLES = [
   "expenses", "incomes", "ledger_events", "accounts", "account_types",
   "account_transfers", "account_entries", "account_payments",
-  "credit_card_bills", "categories", "financial_goals", "goal_events", "sync_status",
+  "credit_card_bills", "categories", "financial_goals", "goal_events",
+  "borrowings", "borrowing_repayments", "receivables", "receivable_repayments", "subscriptions",
+  "investments", "holdings", "portfolio_transactions", "investment_cash_transactions", "portfolio_settings",
+  "epf_profile", "epf_establishments", "epf_contributions", "epf_contribution_events", "epf_transfers",
+  "epf_transfer_events", "epf_interest_entries", "epf_reconciliations", "epf_wage_history",
+  "category_budgets", "decisions", "calendar_reminders", "fee_reviews", "fee_signal_dismissals",
+  "merchant_overrides", "recurring_dismissals", "spaces", "categorization_rules", "trips",
+  "runway_settings", "runway_overrides", "what_if_scenarios", "goal_funding_plans", "sip_plans",
+  "sip_transactions", "virtual_positions", "net_worth_history", "watchlists", "watchlist_items", "user_settings", "financial_summaries", "sync_status",
 ];
 const PROJECT = "expenseapp-27f94";
 

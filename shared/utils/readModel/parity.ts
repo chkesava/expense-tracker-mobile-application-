@@ -6,7 +6,7 @@ import { timestampMillis, type ReadModelRow, type TableSpec } from "./mapping";
  * Returns the names of the columns that differ, never their values.
  */
 export function typedColumns(spec: TableSpec): string[] {
-  return [...spec.fields.map((f) => f.column), ...(spec.derivedMonth ? ["month"] : []), "mapping_status"];
+  return [...(spec.parent ? [spec.parent.column] : []), ...spec.fields.map((f) => f.column), ...(spec.derivedMonth ? ["month"] : []), "mapping_status"];
 }
 
 const blank = (v: unknown) => v === null || v === undefined;
@@ -16,6 +16,8 @@ function same(type: string, expected: unknown, actual: unknown): boolean {
   switch (type) {
     case "money":
       return Number(expected).toFixed(2) === Number(actual).toFixed(2);
+    case "decimal":
+      return Number(expected).toFixed(8) === Number(actual).toFixed(8);
     case "integer":
       return Number(expected) === Number(actual);
     case "date":

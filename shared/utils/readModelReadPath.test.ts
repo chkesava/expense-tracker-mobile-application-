@@ -112,3 +112,33 @@ describe("Phase 3 screens (SPENDLY-513)", () => {
       .toEqual({ state: "fallback", label: "History copy unavailable — showing live data" });
   });
 });
+
+describe("clientWritesEnabled (SPENDLY-670)", () => {
+  it("is on only when readModel.clientWrites is exactly true", async () => {
+    const { clientWritesEnabled } = await import("./readModelMode");
+    expect(clientWritesEnabled({ clientWrites: true })).toBe(true);
+    for (const v of [undefined, null, {}, { clientWrites: "true" }, { clientWrites: 1 }, { clientWrites: false }, "x"]) {
+      expect(clientWritesEnabled(v)).toBe(false);
+    }
+  });
+});
+
+describe("realtimeEnabled (SPENDLY-593)", () => {
+  it("is on only when readModel.realtime is exactly true", async () => {
+    const { realtimeEnabled } = await import("./readModelMode");
+    expect(realtimeEnabled({ realtime: true })).toBe(true);
+    for (const v of [undefined, null, {}, { realtime: "true" }, { realtime: 1 }, { realtime: false }, { clientWrites: true }, "x"]) {
+      expect(realtimeEnabled(v)).toBe(false);
+    }
+  });
+});
+
+describe("localCopyEnabled (SPENDLY-594)", () => {
+  it("is on only when readModel.localCopy is exactly true", async () => {
+    const { localCopyEnabled } = await import("./readModelMode");
+    expect(localCopyEnabled({ localCopy: true })).toBe(true);
+    for (const v of [undefined, null, {}, { localCopy: "true" }, { localCopy: 1 }, { realtime: true }, "x"]) {
+      expect(localCopyEnabled(v)).toBe(false);
+    }
+  });
+});

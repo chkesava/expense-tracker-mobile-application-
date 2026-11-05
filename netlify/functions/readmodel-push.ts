@@ -7,6 +7,8 @@ import { purgedUidsBatch } from "../../scripts/lib/readmodelPurged";
 import { runSync } from "../../scripts/lib/readmodelSyncCore";
 import { firestoreReader, supabaseSink } from "../../scripts/readmodel-sync";
 import { handleReadModelPush, type PushEvent, type PushPorts, type PushResult } from "./_readmodelPushCore";
+import type { ServerPushPorts } from "./_readmodelServerPush";
+import { firestorePathOf, SPEC_BY_COLLECTION } from "../../shared/utils/readModel/mapping";
 
 /**
  * SPENDLY-583 — Netlify wiring for the per-write push (rules and tests:
@@ -48,8 +50,9 @@ export function livePushPorts(input: {
       return data === true;
     },
     async readDocs(uid, refs) {
-      const snaps = await db.getAll(...refs.map((r) => db.doc(`users/${uid}/${r.collection}/${r.docId}`)));
-      return snaps.map((s) => (s.exists ? { id: s.id, data: s.data() ?? {}, updateTime: s.updateTime } : null));
+      const snaps = await db.getAll(...refs.map((r) => db.doc(firestorePathOf(SPEC_BY_COLLECTION.get(r.collection)!, uid, r.docId))));
+      // The ref's id, not the snapshot's: a nested row is keyed "{parentId}/{id}" (SPENDLY-591).
+      return snaps.map((s, i) => (s.exists ? { id: refs[i].docId, data: s.data() ?? {}, updateTime: s.updateTime } : null));
     },
     upsert: (table, rows) => sink.upsert(table, rows),
     tombstone: (table, uid, ids) => sink.tombstone(table, uid, ids),
@@ -99,6 +102,32 @@ function init(): { db: Firestore; client: SupabaseClient } {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   return { db, client };
+}
+
+/**
+ * SPENDLY-680: the ports a server-side writer (the EPF cron) uses to copy what
+ * it wrote, or null when the site has no read-model settings or pushes are
+ * turned off (READMODEL_PUSH_ENABLED=false); the nightly sync copies it then.
+ */
+export function serverPushPorts(firestore: Firestore, log?: (line: string) => void): ServerPushPorts | null {
+  if (env("READMODEL_PUSH_ENABLED") === "false" || !env("READMODEL_SUPABASE_URL") || !env("READMODEL_SUPABASE_SERVICE_ROLE_KEY")) {
+    return null;
+  }
+  client ??= createClient(env("READMODEL_SUPABASE_URL"), env("READMODEL_SUPABASE_SERVICE_ROLE_KEY"), {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return livePushPorts({
+    db: firestore,
+    client,
+    // A server writer names its own documents; there is no caller token.
+    verifyIdToken: async () => {
+      throw new Error("server push: no tokens");
+    },
+    enabled: true,
+    limit: 0,
+    maxReadsPerDay: Number(env("READMODEL_MAX_READS_PER_DAY") || 12000),
+    log,
+  });
 }
 
 const DISABLED: PushPorts = {

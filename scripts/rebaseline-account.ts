@@ -1,6 +1,9 @@
 import { initializeApp, applicationDefault, cert } from "firebase-admin/app";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 
+import { createServerPush } from "../netlify/functions/_readmodelServerPush";
+import { serverPushPorts } from "../netlify/functions/readmodel-push";
+
 import type { Account } from "../shared/types/expense";
 import { todayDateKey } from "../shared/utils/dates";
 import { roundMoney } from "../shared/utils/money";
@@ -145,12 +148,18 @@ async function main() {
     console.log("[DRY RUN] nothing written.");
     return;
   }
-  await db.doc(`users/${uid}/accounts/${accountId}`).update({
+  const ref = db.doc(`users/${uid}/accounts/${accountId}`);
+  await ref.update({
     openingBalance: plan.openingBalance,
     balanceAsOfDate: plan.asOf,
     ...accountRebuildWrite(plan.after, { remove: () => FieldValue.delete(), now: () => FieldValue.serverTimestamp() }),
   });
   console.log("Written.");
+  // SPENDLY-680: the read model gets the new balance now, not tonight.
+  const push = createServerPush(serverPushPorts(db, (line) => console.log(line)));
+  push.note(uid, [ref.path]);
+  const copied = await push.flush();
+  console.log(copied.skipped ? `Read model: ${copied.skipped}.` : `Read model: ${copied.pushed} copied, ${copied.failed} failed (the nightly sync repairs those).`);
 }
 
 if (require.main === module) {

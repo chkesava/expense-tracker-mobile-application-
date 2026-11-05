@@ -1,6 +1,9 @@
 import { doc, onSnapshot } from "@/lib/firestore";
 
+import { logWarning } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { getAppLocalCopy } from "@/lib/readModelLocal/appCopy";
+import { createCollectionSource } from "@/lib/readModelLocal/readSource";
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
 import { logDirectRead } from "@/lib/firestoreReadDebug";
 import type { DashboardPeriodSummary } from "@/shared/types/financialSummary";
@@ -149,8 +152,8 @@ export function createSummaryMonthStore(subscribe: SubscribeMonth, options: { gr
 
 export type SummaryMonthStore = ReturnType<typeof createSummaryMonthStore>;
 
-/** The app's store: one Firestore doc listener per month. */
-export const summaryMonthStore = createSummaryMonthStore((uid, month, onData, onError) => {
+/** One Firestore doc listener for a month. */
+const firestoreMonth: SubscribeMonth = (uid, month, onData, onError) => {
   const db = getFirestoreDb();
   if (!db) {
     onData(null);
@@ -165,4 +168,29 @@ export const summaryMonthStore = createSummaryMonthStore((uid, month, onData, on
     },
     snapshotErrorHandler("snapshot.monthSummary", onError, "Couldn't load spending.")
   );
+};
+
+/** The app's store: one Firestore doc listener per month. */
+export const summaryMonthStore = createSummaryMonthStore(firestoreMonth);
+
+/**
+ * SPENDLY-600: the same store over the on-device copy, used when
+ * `readModel.financialSummaries` is `supabase`, so no Firestore listener is
+ * mounted. If the copy fails, that month falls back to its Firestore listener.
+ */
+export const copySummaryMonthStore = createSummaryMonthStore((uid, month, onData, onError) => {
+  const source = createCollectionSource({ collection: "financialSummaries", copy: getAppLocalCopy, log: logWarning });
+  let fallback: (() => void) | null = null;
+  const off = source.subscribe(
+    (docs) => onData(docs.length > 0 ? (docs[0].data as unknown as DashboardPeriodSummary) : null),
+    (error) => {
+      logWarning("readModel.fallback.financialSummaries.month", error);
+      if (!fallback) fallback = firestoreMonth(uid, month, onData, onError);
+    },
+    { where: (d) => d.id === `dashboard_${month}` }
+  );
+  return () => {
+    off();
+    fallback?.();
+  };
 });

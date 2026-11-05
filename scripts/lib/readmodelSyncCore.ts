@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { isDuressUid } from "../../shared/utils/duress";
 import { typedColumns, typedDifferences } from "../../shared/utils/readModel/parity";
-import { mapDocumentWithReason, READ_MODEL_TABLES, type ReadModelRow, type SourceDoc, type TableSpec } from "../../shared/utils/readModel/mapping";
+import { changeFieldsOf, isExcludedDoc, mapDocumentWithReason, READ_MODEL_TABLES, type ChangeField, type ReadModelRow, type SourceDoc, type TableSpec } from "../../shared/utils/readModel/mapping";
 
 /**
  * SPENDLY-506 — the read-model sync, as a pure function of its ports
@@ -47,10 +47,24 @@ export const MASS_TOMBSTONE_MIN = 20;
 
 export type PageRequest =
   | { kind: "all"; limit: number; after?: unknown }
-  | { kind: "since"; field: "createdAt" | "updatedAt"; sinceMs: number; limit: number; after?: unknown };
-export type Page = { docs: SourceDoc[]; next?: unknown };
+  | { kind: "since"; field: string; fieldType?: ChangeField["type"]; sinceMs: number; limit: number; after?: unknown };
+/** `reads`: what the page cost, when not one per document (SPENDLY-591 nested pages). */
+export type Page = { docs: SourceDoc[]; next?: unknown; reads?: number };
+/** SPENDLY-681: `fieldType` "millis" compares a number field; absent or "timestamp" a Firestore Timestamp. */
+export type ChangedRequest = { field: string; fieldType?: ChangeField["type"]; sinceMs: number; limit: number; after?: unknown };
+export type ChangedPage = { docs: (SourceDoc & { uid: string })[]; next?: unknown; reads: number };
+
+/** The global high-water key for a cross-user (collection-group) pass. Firebase uids are never "*". */
+export const ALL_USERS = "*";
 
 export type SourcePort = {
+  /**
+   * SPENDLY-672: one collection's documents changed since `sinceMs`, across every
+   * user at once (a collection-group query). Only documents on a real
+   * `users/{uid}/…` path of this spec come back, each with its uid; `reads` is
+   * what the page cost (foreign same-named documents included).
+   */
+  readChangedAcrossUsers?(collection: string, request: ChangedRequest): Promise<ChangedPage>;
   /** Uids under `users/` (including ones with only subcollections). */
   listUserIds(): Promise<string[]>;
   readPage(uid: string, collection: string, request: PageRequest): Promise<Page>;
@@ -118,6 +132,12 @@ export type SyncOptions = {
   tables?: TableSpec[];
   /** What started the run, recorded in its notes (SPENDLY-583: "push"). Scheduled/manual runs leave it unset. */
   trigger?: string;
+  /**
+   * SPENDLY-672: on an incremental run, find changes with one collection-group
+   * query per collection instead of two queries per (user, collection). The
+   * always-full collections and the users/{uid} document still go per user.
+   */
+  crossUser?: boolean;
 };
 
 export const hashUid = (uid: string) => `u#${createHash("sha256").update(uid).digest("hex").slice(0, 10)}`;
@@ -197,8 +217,41 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
       }
     }
 
+    // SPENDLY-672: the cross-user changed-only pass, one collection at a time.
+    let perUserTables = tables;
+    if (options.crossUser && options.mode === "incremental" && source.readChangedAcrossUsers) {
+      const crossed = new Set<string>();
+      const live = new Set(uids);
+      for (const spec of tables) {
+        if (spec.root || ALWAYS_FULL.has(spec.collection)) continue;
+        const sinceMs = crossUserHighWater(spec, uids);
+        // Never copied in full for some user yet: that collection goes per user.
+        if (sinceMs === null) continue;
+        try {
+          await syncAcrossUsers(spec, live, uids, sinceMs);
+          crossed.add(spec.collection);
+        } catch (error) {
+          if (error instanceof BudgetExhausted) {
+            record.status = "partial";
+            log(`[BUDGET] cross-user pass stopped at ${spec.collection} after ${record.readsUsed} reads (budget ${budget})`);
+            break;
+          }
+          record.failures += 1;
+          record.status = "partial";
+          const message = error instanceof Error ? error.message : String(error);
+          log(`[FAIL] */${spec.collection}: ${message}`);
+          if (!options.dryRun) {
+            await sink.recordFailure({ uid: ALL_USERS, collection: spec.collection, docId: "*", errorClass: "pair_failed", message, runId });
+          }
+        }
+      }
+      record.notes.crossUserCollections = crossed.size;
+      perUserTables = tables.filter((spec) => !crossed.has(spec.collection));
+      if (record.status === "partial" && remaining() < 1) perUserTables = [];
+    }
+
     // Fairness: resume where the last stopped run of this mode stopped.
-    const pairs = uids.flatMap((uid) => tables.map((spec) => ({ uid, spec })));
+    const pairs = uids.flatMap((uid) => perUserTables.map((spec) => ({ uid, spec })));
     const resume = (await sink.lastRunNotes(options.mode))?.resumeFrom as { uid: string; collection: string } | undefined;
     const startAt = resume ? Math.max(0, pairs.findIndex((p) => p.uid === resume.uid && p.spec.collection === resume.collection)) : 0;
     const ordered = [...pairs.slice(startAt), ...pairs.slice(0, startAt)];
@@ -231,6 +284,72 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
   await sink.finishRun(runId, record);
   return record;
 
+  /**
+   * Where a cross-user pass starts: its own global checkpoint, or (the first
+   * time) the oldest per-user high-water mark. Null when some user's pair was
+   * never copied at all; that collection runs per user this time.
+   */
+  function crossUserHighWater(spec: TableSpec, uids: string[]): number | null {
+    const own = highWater.get(`${ALL_USERS}/${spec.collection}`);
+    if (own !== undefined && own !== null) return own - OVERLAP_MS;
+    let oldest = Number.POSITIVE_INFINITY;
+    for (const uid of uids) {
+      const hw = highWater.get(`${uid}/${spec.collection}`);
+      if (hw === undefined || hw === null) return null;
+      oldest = Math.min(oldest, hw);
+    }
+    return Number.isFinite(oldest) ? oldest - OVERLAP_MS : null;
+  }
+
+  async function syncAcrossUsers(spec: TableSpec, live: Set<string>, uids: string[], sinceMs: number) {
+    const seen = new Set<string>();
+    const maxUpdate: Record<string, number> = {};
+    // SPENDLY-681: the collection's change fields (createdAt/updatedAt, plus any *Ms or event time).
+    for (const { field, type: fieldType } of changeFieldsOf(spec)) {
+      let after: unknown;
+      for (;;) {
+        if (remaining() < 1) throw new BudgetExhausted();
+        const limit = Math.min(PAGE_SIZE, remaining());
+        const page = await source.readChangedAcrossUsers!(spec.collection, { field, fieldType, sinceMs, limit, after });
+        spend(page.reads);
+        const byUid: Record<string, ReadModelRow[]> = {};
+        for (const doc of page.docs) {
+          // Duress trees, erased accounts and unknown users are never copied.
+          if (!live.has(doc.uid) || isExcludedDoc(spec, doc.id)) continue;
+          const key = `${doc.uid}/${doc.id}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const { row, reason } = mapDocumentWithReason(spec, doc.uid, doc);
+          const openHere = open[`${doc.uid}/${spec.collection}`];
+          if (row.mapping_status === "unmapped") {
+            record.unmapped += 1;
+            if (!options.dryRun && !openHere?.has(doc.id)) {
+              await sink.recordFailure({ uid: doc.uid, collection: spec.collection, docId: doc.id, errorClass: "mapping", message: reason ?? "did not map", runId });
+            }
+          } else if (openHere?.has(doc.id) && !options.dryRun) {
+            await sink.resolveFailures(doc.uid, spec.collection, [doc.id]);
+          }
+          maxUpdate[doc.uid] = Math.max(maxUpdate[doc.uid] ?? 0, Date.parse(row.source_update_time));
+          (byUid[doc.uid] ??= []).push(row);
+        }
+        for (const [uid, rows] of Object.entries(byUid)) {
+          if (!options.dryRun) await countDivergences(uid, spec, rows);
+          record.upserts += options.dryRun ? rows.length : await sink.upsert(spec.table, rows);
+        }
+        if (page.next === undefined) break;
+        after = page.next;
+      }
+    }
+    if (options.dryRun) return;
+    // Complete: every user's copy of this collection is current to the run's start.
+    await sink.setCheckpoint(ALL_USERS, spec.collection, startedMs, runId);
+    const nowIso = new Date(options.now()).toISOString();
+    for (const uid of uids) {
+      const ms = maxUpdate[uid];
+      await sink.setStatus({ uid, collection: spec.collection, lastSyncedAt: nowIso, ...(ms ? { lastSourceUpdateTime: new Date(ms).toISOString() } : {}) });
+    }
+  }
+
   /** Reads every page of one query, mapping and upserting as it goes. */
   async function drain(
     uid: string,
@@ -247,9 +366,11 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
       if (remaining() < 1) throw new BudgetExhausted();
       const limit = Math.min(PAGE_SIZE, remaining());
       const page = await source.readPage(uid, spec.collection, { ...request, limit, after } as PageRequest);
-      spend(Math.max(1, page.docs.length));
+      spend(page.reads ?? Math.max(1, page.docs.length));
       const rows: ReadModelRow[] = [];
       for (const doc of page.docs) {
+        // Never copied (SPENDLY-592); read in passing, so the read still counts.
+        if (isExcludedDoc(spec, doc.id)) continue;
         if (seen.has(doc.id)) continue;
         seen.add(doc.id);
         const { row, reason } = mapDocumentWithReason(spec, uid, doc);
@@ -265,10 +386,41 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
         rows.push(row);
         collected?.push(row);
       }
+      if (rows.length && !options.dryRun) await countDivergences(uid, spec, rows);
       if (rows.length) record.upserts += options.dryRun ? rows.length : await sink.upsert(spec.table, rows);
       if (page.docs.length < limit || page.next === undefined) return;
       after = page.next;
     }
+  }
+
+  /**
+   * SPENDLY-672 — the sync as the safety net. Before Firestore's version
+   * replaces a page of rows (the server upsert always replaces a client row:
+   * Firestore wins), count the client-written rows that differ from it in a
+   * typed column. A divergence means the app's direct write disagreed with
+   * Firestore; the upsert below repairs it. Supabase reads only.
+   */
+  async function countDivergences(uid: string, spec: TableSpec, rows: ReadModelRow[]) {
+    const stored = await sink.fetchRows(spec.table, uid, rows.map((r) => r.doc_id), [...typedColumns(spec), "written_by"]);
+    const byId = new Map(stored.map((r) => [String(r.doc_id), r]));
+    let clientRows = 0;
+    let diverged = 0;
+    for (const row of rows) {
+      const actual = byId.get(row.doc_id);
+      if (actual?.written_by !== "client") continue;
+      clientRows += 1;
+      if (typedDifferences(spec, row, actual).length) diverged += 1;
+    }
+    if (clientRows) bump("clientRowsReplaced", spec.table, clientRows);
+    if (!diverged) return;
+    bump("divergences", spec.table, diverged);
+    log(`[DIVERGENCE] ${hashUid(uid)}/${spec.collection}: ${diverged} client-written row(s) differed from Firestore; Firestore's version replaces them`);
+  }
+
+  function bump(note: "divergences" | "clientRowsReplaced", table: string, n: number) {
+    const counts = (record.notes[note] as Record<string, number> | undefined) ?? {};
+    counts[table] = (counts[table] ?? 0) + n;
+    record.notes[note] = counts;
   }
 
   /**
@@ -343,8 +495,8 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
       }
     } else {
       const sinceMs = hw - OVERLAP_MS;
-      for (const field of ["createdAt", "updatedAt"] as const) {
-        await drain(uid, spec, { kind: "since", field, sinceMs, limit: PAGE_SIZE }, seen, maxUpdate, resolved);
+      for (const { field, type: fieldType } of changeFieldsOf(spec)) {
+        await drain(uid, spec, { kind: "since", field, fieldType, sinceMs, limit: PAGE_SIZE }, seen, maxUpdate, resolved);
       }
     }
 

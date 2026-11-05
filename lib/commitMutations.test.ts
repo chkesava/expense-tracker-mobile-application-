@@ -70,6 +70,12 @@ vi.mock("@/lib/firestoreWrite", () => ({
   isWriteQueueDurable: () => queueDurable,
 }));
 
+// SPENDLY-670: the client write hook, observed.
+const clientWrites: Array<{ uid: string; paths: string[] }> = [];
+vi.mock("@/lib/readModelClientWrites", () => ({
+  notifyClientWrites: (uid: string, paths: string[]) => void clientWrites.push({ uid, paths }),
+}));
+
 import {
   WRITE_OUTBOX_STORAGE_KEY,
   listWriteOutbox,
@@ -102,6 +108,21 @@ beforeEach(() => {
 afterEach(() => {
   setWriteOutboxPersistForTests(null);
   resetWriteOutboxForTests(null);
+});
+
+describe("commitMutations → read-model client writes (SPENDLY-670)", () => {
+  it("hands every path it wrote to the client write outbox", async () => {
+    clientWrites.length = 0;
+    await commitMutations(
+      "u1",
+      [
+        { op: "set", ref: { path: "users/u1/expenses/e1" }, data: { amount: 12 } },
+        { op: "delete", ref: { path: "users/u1/expenses/e2" } },
+      ],
+      { label: "expense" }
+    );
+    expect(clientWrites).toEqual([{ uid: "u1", paths: ["users/u1/expenses/e1", "users/u1/expenses/e2"] }]);
+  });
 });
 
 describe("commitMutations", () => {

@@ -28,9 +28,12 @@ import { getFirestoreDb } from "@/lib/firebase";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
+import { noteDirectWrites, trackedBatch } from "@/lib/readModelWriteHooks";
 import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
 import { epfCurrentMonth } from "@/shared/features/epf/utils/epfClock";
 import type {
   EpfBackfillRow,
@@ -77,9 +80,12 @@ import {
 
 export function useEpfContributions(
   establishmentId: string | undefined,
-  options?: { enabled?: boolean }
+  options?: { enabled?: boolean; readFrom?: "copy" }
 ) {
   const enabled = options?.enabled !== false && Boolean(establishmentId);
+  // SPENDLY-598 (R4.3a): EPF screens write from what these hooks load, so
+  // the copy serves only callers that never write (`readFrom: "copy"`).
+  const contributionsSource = useReadModelSource("epfContributions", { copy: options?.readFrom === "copy" });
   // Duress-aware uid, matching useEpf: a duress session must show no EPF data.
   const { user } = useAuth();
   const uid = user?.uid;
@@ -109,20 +115,25 @@ export function useEpfContributions(
       collection(db, "users", uid, EPF_CONTRIBUTIONS_COLLECTION),
       where("establishmentId", "==", establishmentId)
     );
+    const applyContributions = (docs: SourceDoc[]) => {
+      setContributions(sortContributionsByMonth(docs.map((d) => normalizeEpfContribution(d.id, d.data))));
+      setContributionsError(null);
+      setContributionsLoading(false);
+    };
+    if (contributionsSource.mode === "supabase") {
+      return contributionsSource.subscribe(applyContributions, {
+        where: (d) => d.data.establishmentId === establishmentId,
+      });
+    }
 
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
         logQuerySnapshot(path, snapshot);
-        setContributions(
-          sortContributionsByMonth(
-            snapshot.docs.map((docSnap) =>
-              normalizeEpfContribution(docSnap.id, docSnap.data() as Record<string, unknown>)
-            )
-          )
-        );
-        setContributionsError(null);
-        setContributionsLoading(false);
+        const docs = toSourceDocs(snapshot);
+        applyContributions(docs);
+        // One establishment's rows: the copy's other rows aren't "extra".
+        if (contributionsSource.mode === "shadow") void contributionsSource.shadow(docs, { windowed: true });
       },
       snapshotErrorHandler(
         "snapshot.epfContributions",
@@ -138,7 +149,7 @@ export function useEpfContributions(
       forgetSnapshotPath(path);
       unsubscribe();
     };
-  }, [uid, enabled, establishmentId, attempt]);
+  }, [uid, enabled, establishmentId, attempt, contributionsSource.mode]);
 
   const byMonth = useMemo(
     () => new Map(contributions.map((row) => [row.month, row])),
@@ -203,7 +214,7 @@ export function useEpfContributions(
         if (accepted.length === 0) continue;
 
         try {
-          const batch = writeBatch(db);
+          const batch = trackedBatch(writeBatch(db));
           for (const item of accepted) {
             const ref = doc(
               db,
@@ -262,6 +273,7 @@ export function useEpfContributions(
           const outcome = await commitWrite(() => batch.commit(), {
             label: "EPF contributions",
           });
+          noteDirectWrites(uid, batch.writtenPaths());
           for (const item of accepted) {
             results.push({ month: item.row.month, outcome });
           }
@@ -326,7 +338,7 @@ export function useEpfContributions(
       }
 
       try {
-        const batch = writeBatch(db);
+        const batch = trackedBatch(writeBatch(db));
         const ref = doc(
           db,
           "users",
@@ -362,6 +374,7 @@ export function useEpfContributions(
         const outcome = await commitWrite(() => batch.commit(), {
           label: "EPF contribution status",
         });
+        noteDirectWrites(uid, batch.writtenPaths());
         toast.success(writeSavedMessage(outcome, meta.message));
         return true;
       } catch (err) {
@@ -429,16 +442,17 @@ export function useEpfContributions(
 
       try {
         if (kind === "delete") {
-          const batch = writeBatch(db);
+          const batch = trackedBatch(writeBatch(db));
           batch.delete(ref);
           const outcome = await commitWrite(() => batch.commit(), {
             label: "EPF contribution",
           });
+          noteDirectWrites(uid, batch.writtenPaths());
           toast.success(writeSavedMessage(outcome, "Month removed"));
           return true;
         }
 
-        const batch = writeBatch(db);
+        const batch = trackedBatch(writeBatch(db));
         batch.set(
           ref,
           {
@@ -468,6 +482,7 @@ export function useEpfContributions(
         const outcome = await commitWrite(() => batch.commit(), {
           label: "EPF contribution archive",
         });
+        noteDirectWrites(uid, batch.writtenPaths());
         toast.success(writeSavedMessage(outcome, "Month removed"));
         return true;
       } catch (err) {
@@ -493,7 +508,7 @@ export function useEpfContributions(
 
     try {
       for (const group of chunk(drafts, EPF_BATCH_CHUNK_SIZE)) {
-        const batch = writeBatch(db);
+        const batch = trackedBatch(writeBatch(db));
         for (const row of group) {
           batch.delete(
             doc(
@@ -506,6 +521,7 @@ export function useEpfContributions(
           );
         }
         await commitWrite(() => batch.commit(), { label: "EPF drafts" });
+        noteDirectWrites(uid, batch.writtenPaths());
       }
       toast.success("Drafts discarded");
       return true;
@@ -536,7 +552,7 @@ export function useEpfContributions(
 
     try {
       for (const group of chunk(stale, EPF_BATCH_CHUNK_SIZE)) {
-        const batch = writeBatch(db);
+        const batch = trackedBatch(writeBatch(db));
         for (const row of group) {
           batch.set(
             doc(
@@ -551,6 +567,7 @@ export function useEpfContributions(
           );
         }
         await commitWrite(() => batch.commit(), { label: "EPF credit windows" });
+        noteDirectWrites(uid, batch.writtenPaths());
       }
       return stale.length;
     } catch (err) {
@@ -596,7 +613,7 @@ export function useEpfContributions(
 
     try {
       for (const group of chunk(work, EPF_BATCH_CHUNK_SIZE)) {
-        const batch = writeBatch(db);
+        const batch = trackedBatch(writeBatch(db));
         for (const item of group) {
           batch.set(
             doc(
@@ -625,6 +642,7 @@ export function useEpfContributions(
           });
         }
         await commitWrite(() => batch.commit(), { label: "EPF lifecycle repair" });
+        noteDirectWrites(uid, batch.writtenPaths());
       }
       return work.length;
     } catch (err) {

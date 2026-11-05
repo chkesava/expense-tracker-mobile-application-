@@ -12,6 +12,9 @@ import {
 } from "@/lib/firestore";
 import { logError, friendlyErrorMessage } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
+import { noteDirectWrites } from "@/lib/readModelWriteHooks";
 import { useAuth } from "@/providers/AuthProvider";
 import { toast } from "@/lib/toast";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
@@ -28,6 +31,10 @@ import {
 export function useSips(options?: { enabled?: boolean }) {
   const { user } = useAuth();
   const uid = user?.uid;
+  // SPENDLY-598: firestore (default) | shadow | supabase, per readModel.<collection>.
+  const plansSource = useReadModelSource("sipPlans");
+  const positionsSource = useReadModelSource("virtualPositions");
+  const sipTxSource = useReadModelSource("sipTransactions");
   const enabled = options?.enabled ?? true;
 
   const [plans, setPlans] = useState<SipPlan[]>([]);
@@ -55,14 +62,30 @@ export function useSips(options?: { enabled?: boolean }) {
 
     setLoading(true);
 
-    // Primary: plans + virtual positions for SIP UI first paint
-    const unsubPlans = onSnapshot(collection(db, `users/${uid}/sipPlans`), (snap) => {
-      setPlans(snap.docs.map((d) => ({ id: d.id, ...d.data() } as SipPlan)));
+    // SPENDLY-598: the same mapping for either source. SIP execution
+    // (executeDueSips) reads plans and positions from Firestore itself (R4.3a).
+    const applyPlans = (docs: SourceDoc[]) => {
+      setPlans(docs.map((d) => ({ id: d.id, ...d.data } as SipPlan)));
       setLoading(false);
+    };
+    const applyVP = (docs: SourceDoc[]) => setVirtualPositions(docs.map((d) => ({ id: d.id, ...d.data } as VirtualPosition)));
+    const applyTx = (docs: SourceDoc[]) => setTransactions(docs.map((d) => ({ id: d.id, ...d.data } as SipTransaction)));
+
+    // Primary: plans + virtual positions for SIP UI first paint
+    const unsubPlans = plansSource.mode === "supabase"
+      ? plansSource.subscribe(applyPlans)
+      : onSnapshot(collection(db, `users/${uid}/sipPlans`), (snap) => {
+      const docs = toSourceDocs(snap);
+      applyPlans(docs);
+      if (plansSource.mode === "shadow") void plansSource.shadow(docs);
     });
 
-    const unsubVP = onSnapshot(collection(db, `users/${uid}/virtualPositions`), (snap) => {
-      setVirtualPositions(snap.docs.map((d) => ({ id: d.id, ...d.data() } as VirtualPosition)));
+    const unsubVP = positionsSource.mode === "supabase"
+      ? positionsSource.subscribe(applyVP)
+      : onSnapshot(collection(db, `users/${uid}/virtualPositions`), (snap) => {
+      const docs = toSourceDocs(snap);
+      applyVP(docs);
+      if (positionsSource.mode === "shadow") void positionsSource.shadow(docs);
     });
 
     let unsubTx: (() => void) | undefined;
@@ -70,8 +93,12 @@ export function useSips(options?: { enabled?: boolean }) {
 
     const cancelIdle = scheduleIdleWork(
       () => {
-        unsubTx = onSnapshot(collection(db, `users/${uid}/sipTransactions`), (snap) => {
-          setTransactions(snap.docs.map((d) => ({ id: d.id, ...d.data() } as SipTransaction)));
+        unsubTx = sipTxSource.mode === "supabase"
+          ? sipTxSource.subscribe(applyTx)
+          : onSnapshot(collection(db, `users/${uid}/sipTransactions`), (snap) => {
+          const docs = toSourceDocs(snap);
+          applyTx(docs);
+          if (sipTxSource.mode === "shadow") void sipTxSource.shadow(docs);
         });
         unsubNotif = onSnapshot(collection(db, `users/${uid}/notifications`), (snap) => {
           setNotifications(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AppNotification)));
@@ -87,7 +114,7 @@ export function useSips(options?: { enabled?: boolean }) {
       unsubTx?.();
       unsubNotif?.();
     };
-  }, [uid, enabled]);
+  }, [uid, enabled, plansSource.mode, positionsSource.mode, sipTxSource.mode]);
 
   const createSipPlan = useCallback(
     async (
@@ -112,6 +139,7 @@ export function useSips(options?: { enabled?: boolean }) {
           updatedAt: serverTimestamp(),
         };
         await setDoc(newDocRef, newPlan);
+        noteDirectWrites(uid, [newDocRef.path]);
         toast.success("SIP Plan created successfully");
         return newDocRef.id;
       } catch (err: any) {
@@ -133,6 +161,7 @@ export function useSips(options?: { enabled?: boolean }) {
           status: newStatus,
           updatedAt: serverTimestamp(),
         });
+        noteDirectWrites(uid, [`users/${uid}/sipPlans/${id}`]);
       } catch (err) {
         logError("sips.toggleSipPlan", err);
         toast.error("Failed to toggle SIP Plan status");
@@ -147,6 +176,7 @@ export function useSips(options?: { enabled?: boolean }) {
       if (!uid || !db) return;
       try {
         await deleteDoc(doc(db, `users/${uid}/sipPlans`, id));
+        noteDirectWrites(uid, [`users/${uid}/sipPlans/${id}`]);
         toast.success("SIP Plan deleted");
       } catch (err) {
         logError("sips.deleteSipPlan", err);
@@ -165,6 +195,7 @@ export function useSips(options?: { enabled?: boolean }) {
           skipNextExecution: !currentVal,
           updatedAt: serverTimestamp(),
         });
+        noteDirectWrites(uid, [`users/${uid}/sipPlans/${id}`]);
       } catch (err) {
         logError("sips.skipNextExecution", err);
         toast.error("Failed to update execution setting");

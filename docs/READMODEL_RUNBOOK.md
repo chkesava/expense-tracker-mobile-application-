@@ -188,6 +188,166 @@ After this device saves synced documents, the app asks the Netlify function `rea
 | Health warns "N per-write push(es) failed today" | Netlify → Functions → `readmodel-push` → logs. Common causes: Supabase paused, a migration not applied (`20261028000000`), or Netlify env missing. The nightly run repairs the data either way |
 | Health shows pushes **rejected**, or "—" while people are saving | Netlify → Functions → `readmodel-push` → logs. Since SPENDLY-662 every rejection is counted and logged as `[PUSH] rejected: <reason>`: `token <firebase code>` (e.g. `auth/id-token-expired` is normal now and then; a constant `auth/insufficient-permission` or `auth/argument-error` means the site's `FIREBASE_SERVICE_ACCOUNT` can't verify app tokens), `no-token`, `not-allowed`, `bad-request`, `purged`, `rate-limited`. `[PUSH] record failed` means the counters can't be written (migration `20261028000000` or the service-role key) |
 
+**Server writers (680):** the EPF cron and the admin repair scripts (`rebuild-*`, `rebaseline-account`) copy what they wrote through the same core (`createServerPush`). The cron's summary reports `readModelPushed`/`readModelPushFailed`; failures are left to the nightly sync.
+
+## The nightly schedule and divergences (SPENDLY-672)
+
+**The schedule:** nightly at 20:30 UTC (02:00 IST). The repository variable `READMODEL_NIGHTLY_MODE` chooses what it does:
+- **unset or `full`** (the default): a full pass every night, then count parity and parity findings.
+- **`safety-net`:**
+  - Monday to Saturday: a changed-only pass. Changes are found by `createdAt`/`updatedAt` with collection-group queries, and the always-full account collections and `users/{uid}` run per user. It costs about 450 reads, against about 5,300 for a full pass.
+  - Sunday (IST): a full pass, then count parity and parity findings.
+  - Health then allows 7 days plus 2 hours between full passes, not 26 hours.
+
+**Switching to `safety-net` (in order):**
+1. The app dual-writes in production: a release with 670/671, then `system_settings/global.readModel.clientWrites = true`, and health shows app writes.
+2. Deploy the collection-group indexes:
+   - first diff the live indexes against the repo (`firebase firestore:indexes`), and dry-run;
+   - then run `firebase deploy --only firestore:indexes`;
+   - wait until every index is **Enabled** in the console. A collection-group query without its index fails, and its run records a `pair_failed` failure.
+3. Trigger the sync manually with `mode = nightly`, `dry_run = true`, and set `READMODEL_NIGHTLY_MODE=safety-net` for that test. Check the reads and that `crossUserCollections` is about 48.
+4. Set the repository variable `READMODEL_NIGHTLY_MODE = safety-net`. Watch the reads in `sync_runs.reads_used` for 7 days; the target is under 1K a night.
+
+**Back to full nightly:** clear the variable, or set it to `full`. Nothing else changes.
+
+**The indexes and the drift check:**
+- The daily "Live vs repo drift" job (`firestore-rules-deploy.yml`) fails while `firestore.indexes.json` has overrides that aren't live. So deploy the collection-group indexes **when the epic reaches main, or before it**.
+- Adding indexes is harmless before anything queries them; they only add a little index-write cost.
+- Deploy them with the manual "Deploy Firestore rules" workflow (`deploy_indexes`), dry run first. It refuses a deploy that would delete live indexes.
+
+**What a divergence is:** a row the app wrote directly (`written_by = 'client'`) that differed, in a typed column, from what the server maps from Firestore. The sync counts it in `sync_runs.notes.divergences` (per table), and Firestore's version replaces the row. Health warns when there are more than `READMODEL_DIVERGENCE_WARN` in 24 hours (default 0). Normal use is 0.
+
+**When a divergence warning appears:**
+1. Health names the tables. Look at that day's runs: `select started_at, notes->'divergences' from sync_runs where notes ? 'divergences' order by started_at desc`.
+2. Usual causes:
+   - the app's outbox mapped from a stale cache document;
+   - a writer changed a field after its commit without notifying;
+   - the app and server mappers differ, because a device runs an old build after a mapping change. That one clears as devices update.
+3. A steady divergence on one table means a bug: find the writer, fix it, and add a test.
+
+**When to run a manual full pass:**
+- after a mapping change;
+- after a known missed writer;
+- after a restore;
+- after any day health shows divergences or failures you can't explain.
+
+Run it from the workflow with `mode = full`, first with `dry_run = true` to see the reads.
+
+## Realtime (SPENDLY-593)
+
+**How it works:**
+- On every real change to a synced table, the database sends a **ping** to the owner's private Broadcast topic `user:<uid>`.
+  - It sends one per user per write statement. Over 100 rows, it sends one `resync` ping instead of a list.
+  - A ping carries the table, doc ids, the deleted flag and `synced_at`, never document data.
+  - Unchanged rows send nothing: the version guard skips them.
+- The app (`lib/readModelRealtime.ts`) listens on one private channel and refetches through PostgREST. After a reconnect, or every 30 seconds while the channel is down, it calls `readmodel_changes_since(p_since, p_limit)`.
+  - That function returns ids and times only, tombstones included, for the caller's own uid. RLS hides tombstones from plain reads, which is why it's a function.
+- Who may join a topic: `realtime.messages` policy `readmodel_user_topic_read`. Only `user:<own uid>` is allowed, through `readmodel_auth.uid()`, so duress and expired tokens get nothing.
+
+**Switch:** `system_settings/global.readModel.realtime = true`. It's off by default, and never on in duress, when signed out, or in Spendly Test. Turn it on **after** SPENDLY-594 ships; nothing consumes the stream before that.
+
+**Before turning it on (hosted project):**
+- In the Supabase dashboard, Realtime settings: check that private channels require authorization. The spike tested the policy with Firebase-shaped tokens; the hosted check of a real RS256 Firebase token for Realtime is still open (ADR §3).
+- Confirm one device's save pings another within 10 s (the 593 acceptance).
+
+**Message volume:**
+- Messages are stored for a few days in `realtime.messages`. To count them:
+
+  ```sql
+  select date_trunc('day', inserted_at) d, count(*) from realtime.messages where topic like 'user:%' group by 1 order by 1 desc;
+  ```
+
+- Billing counts each message delivered to each subscribed client. The free plan allows 2M messages a month and 200 concurrent connections.
+- Expected volume: about one ping per save, per open device, plus the nightly run's changed batches.
+
+**Turning it off:** set `readModel.realtime = false`. The copy (594) then catches up at every launch and whenever the app comes back to the foreground (601). While realtime is on but down, it polls the catch-up every 30 s.
+
+## The on-device copy (SPENDLY-594)
+
+**What it is:** each device keeps a copy of its user's read-model rows (`lib/readModelLocal/`): SQLite on Android and iOS (`spendly-readmodel.db`), IndexedDB on web.
+- It hydrates on first start (resumable), catches up on every start (`readmodel_changes_since`), and stays fresh from realtime pings.
+- Reads layer the device's unsent writes on top.
+- **Offline at launch** (601): a fully hydrated copy opens with the rows it has, and catches up when the network is back. A copy that never finished hydrating can't open offline, so the screens read Firestore.
+
+**Switch:** `system_settings/global.readModel.localCopy = true` (default off). It's never opened in duress, signed out or Spendly Test.
+
+**Safety:**
+- The store has one owner uid; opening it for another uid wipes it first.
+- Sign-out and account deletion delete it.
+- Money is shown exactly as PostgREST returned it (R4).
+
+**Cap:** 50,000 rows per table. A table past it keeps its newest rows by `synced_at`, is marked partial, and older history is paged from Supabase online.
+
+**Problems:**
+- *A device's copy looks wrong:* sign out and in (it wipes and rehydrates), or set `localCopy = false` (the screens read as before).
+- *A mapping change:* the changed table is dropped and rehydrated automatically on the next start.
+
+## Per-collection read switches (SPENDLY-673)
+
+**The switch:** `system_settings/global.readModel.<collection>` = `firestore` (default) | `shadow` | `supabase`.
+- It needs `readModel.localCopy` on.
+- `supabase` waits until the device's copy is hydrated.
+- Duress, Spendly Test and signed out are always `firestore`.
+
+**Wired:**
+- 673: `creditCardBills`, `borrowings`, `borrowingRepayments`, `receivables`, `receivableRepayments`, `categoryBudgets`, `investments`.
+- 596: `expenses`, `incomes`.
+- 597: the account ledger.
+- 598: portfolio, SIP, subscriptions, watchlists, the EPF passbook.
+- 599: `financialSummaries`, `netWorthHistory`, `financialGoals`.
+- 674: `categories`, `spaces`, `categorizationRules`, `calendarReminders`.
+
+The rest read Firestore on purpose; each story doc says why.
+
+**Setting it:**
+```
+npx tsx scripts/readmodel-set-mode.ts --collection=expenses --mode=shadow            (dry run)
+npx tsx scripts/readmodel-set-mode.ts --collection=expenses --mode=shadow --apply
+```
+
+**Shadow:** watch the logs for `readModel.shadow.<collection>`. These carry counts only (missing, extra, differing, and the differing columns), at most every 10 minutes per device, and only when there's a difference. None for the whole period means the copy matches.
+
+**Fallback:**
+- `readModel.fallback.<collection>` means a device's copy failed for that collection. It went back to Firestore for the rest of the session.
+- Repeated fallbacks mean: set the switch back to `firestore` and check the copy (runbook, "The on-device copy").
+
+## Plan v2 in one page (SPENDLY-601)
+
+For someone who wasn't there.
+
+**What runs where:**
+- **Firestore is the truth.** Every save goes there first.
+- **Supabase is a copy.** The app also writes its own saves to it (`rm_client_apply`, through an on-device outbox), and the server writers push theirs. The nightly sync repairs any difference, and Firestore wins.
+- **The app reads the copy** only for collections switched to `supabase`, through an on-device copy (SQLite or IndexedDB) kept fresh by realtime pings.
+
+**The switches** (`system_settings/global.readModel`; clients can only read it):
+
+| Switch | What it does | Command |
+|---|---|---|
+| `clientWrites` | The app's own writes to Supabase | `--switch=clientWrites --value=true\|false` |
+| `localCopy` | The on-device copy; **off sends every collection back to Firestore** | `--switch=localCopy --value=true\|false` |
+| `realtime` | Pings that keep the copy fresh | `--switch=realtime --value=true\|false` |
+| `<collection>` | firestore, shadow or supabase, per collection | `--collection=<name> --mode=<mode>` |
+| `<screen>` | The older per-screen history reads (511) | `--screen=<name> --mode=<mode>` |
+
+Every command is `npx tsx scripts/readmodel-set-mode.ts … --apply`. Without `--apply` it only shows the change. Devices pick it up live; no release is needed.
+
+**Emergency, anything looks wrong on screens:**
+1. Run `--switch=localCopy --value=false --apply`. Every device reads Firestore again, and the per-collection settings stay for later.
+2. Then investigate with health, the divergences and the shadow logs.
+
+**Signals and what to do:**
+
+| Signal | Meaning | Do |
+|---|---|---|
+| Health fails: unreachable or paused | Supabase is down, or the Free plan paused it | Restore the project in the dashboard. Screens already read Firestore, and outboxes hold the writes |
+| `divergences` in the nightly run | App writes disagreed with Firestore (repaired already) | If it keeps happening for a table, set that collection to `firestore` and look for the writer (`readModelWriteHooks.test.ts` lists them) |
+| `readModel.shadow.<collection>` | The copy differs from Firestore during the shadow period | Keep that collection out of `supabase` and find the cause before restarting its shadow period |
+| `readModel.fallback.<collection>` | A device's copy failed; it fell back for that session | Repeated: set the collection to `firestore` |
+| Capacity rows warn | The Free-plan limits (595) | See "The Free plan" |
+
+**Drills:** run the harness (`run_drills.sh`, D1–D11) after any change to the sync, the mapping, the migrations or the client-write RPC. The app-side drills run in CI (`lib/readModelLocal/outageDrills.test.ts`). The readiness review is `docs/SPENDLY-601-readiness-review.md`.
+
 ## Recovery drills (SPENDLY-520)
 
 Every procedure above has been exercised end to end on a local stack: the production scripts unchanged, the Firebase emulator, a local Postgres with the real migrations, and PostgREST (Supabase's API). The latest log is in `docs/SPENDLY-520-drill-log.md`. Re-run the drills after any change to the sync, the mapping or the migrations:
@@ -208,15 +368,39 @@ POSTGREST_BIN=<path to postgrest> bash supabase-readmodel/drills/run_drills.sh
 | D4 Kill switch | Every screen to `firestore` and back with `readmodel-set-mode.ts` | One remote document; other settings untouched; no release |
 | D5 Bad mapping | Deploy a broken mapper, detect it, roll back, repair | Alert on the bad run; parity and `v_data_quality` show it; rollback + full run repairs; the next run is clean |
 | D6 Account purge | `delete-account`'s purge call, then a full sync while Firestore still has the account | Every row erased; nothing brought back; no false alarms |
+| D8 Client-write outage (601) | The app saves while the read model is down | The outbox holds the writes and drains on recovery; each lands once; a replayed batch changes nothing |
+| D9 Client-write rejection (601) | `rm_client_apply` gets a corrupt row | Refused and not stored; dropped from the outbox; the nightly run restores Firestore's version |
+| D10 Dual-write divergence (601) | The app's row disagrees with Firestore | The full run replaces it with Firestore's and counts `divergences` |
+| D11 One-write rollback (601) | `--switch=localCopy --value=false` | Every collection reads Firestore; other settings kept; no release |
 | D7 Per-write push (SPENDLY-583) | The Netlify function's own wiring (`livePushPorts`): create, edit (with fake data in the request), hard delete, an erased account, a per-user push, a push during an outage | Each change is in the read model in about 0.2 s; request data is ignored; the erased account gets 403; the outage push fails without touching Firestore; the nightly run converges |
 
 **In production**, only with approval and never with Firestore writes: D4 (the switch) and the D1 dry run are safe. The rest are proven locally and are the procedures for a real incident.
+
+## The Free plan (SPENDLY-595)
+
+**Decision (the user, 2026-11-04):** the read model runs on Supabase's Free plan, permanently. No Pro.
+
+**Why it's safe:**
+- Firestore is written first and stays the source of truth, so the read model is a **rebuildable copy**: a full sync rebuilds it.
+- Every screen falls back to Firestore.
+- The app's outbox keeps unsent writes until Supabase answers again.
+
+| Free limit | How it's watched | If it's near |
+|---|---|---|
+| **Database 500 MB** (17 MB on 2026-11-04) | Hourly health: warns at 50%, fails at 80% (`readmodel_capacity`) | Look at the largest tables (health logs them); trim or stop syncing a heavy collection; at worst set its switch back to `firestore` |
+| **Realtime messages, 2M a month** | Hourly health: the last 24 h × 30, warns at 50%, fails at 80% | Pings are one per write statement, per user. If it grows, turn `readModel.realtime` off: the copy then refreshes on launch and on focus |
+| **Egress 5 GB a month** | Monthly: the Supabase dashboard (Usage) | The copy's hydrate is the big one (about 21 MB per 30K-transaction user, per device, once). Avoid forced rehydrates |
+| **Realtime connections, 200 at once** | Monthly: the dashboard | One per open app; far under the limit |
+| **Pause after a week of inactivity** | The nightly sync and the hourly health count as activity. Health fails with "unreachable or paused" | Restore the project in the dashboard. While it is paused, every screen reads Firestore and the outbox holds the app's writes |
+| **No backups** | Not needed: **rebuild instead of restore**, `mode=full` (drill D1) | After any data loss, run the full sync. Every row comes back from Firestore |
+
+**Monthly check (first Monday):** the dashboard's Usage page for egress, connections and database size. Compare with the health rows.
 
 ## Cost watch
 
 - **Expected cost:** ₹0 on the current plans (SPENDLY-519 §3): Firestore Spark, Supabase Free, Netlify Free, Actions free (public repo).
 - **Firestore reads:** the sync budgets are 1,500 per incremental run, 6,000 per full run and 12,000 per day. Monthly, `sync_runs.reads_used` per day plus the Firebase console's daily reads must stay well under the 50K/day Spark quota.
-- **Supabase Free:** 500 MB database (today ≈ 3 MB), 5 GB egress, pause after a week of inactivity (the sync's own runs count as activity). Upgrade to Pro ($25/month) only if usage passes half of a limit; backups are not needed for a rebuildable copy.
+- **Supabase Free, permanently** (the user's decision, 2026-11-04; see "The Free plan" below).
 - **Netlify credits:** `readmodel-claims` runs once per sign-in, not per read. Check the credit meter monthly; exhausting credits pauses every site.
 
 ## Decision record: keep the Firestore fallback paths

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { evaluateHealth, renderHealthSummary, type HealthInput, type HealthRun } from "./lib/readmodelHealth";
+import { evaluateHealth, renderHealthSummary, SAFETY_NET_FULL_GAP_HOURS, THRESHOLDS, type HealthInput, type HealthRun } from "./lib/readmodelHealth";
 
 const NOW = Date.UTC(2026, 9, 22, 12, 0);
 const ago = (h: number) => new Date(NOW - h * 3600 * 1000).toISOString();
@@ -136,6 +136,79 @@ describe("read-model sync health (SPENDLY-507)", () => {
   });
 });
 
+describe("the sync as the safety net (SPENDLY-672)", () => {
+  it("any divergence in 24 h warns (normal use is 0), naming tables only", () => {
+    const input = healthy();
+    input.runs[0] = run(1, "incremental", { notes: { divergences: { expenses: 2, accounts: 1 } } });
+    input.runs.push(run(30, "full", { notes: { divergences: { expenses: 9 } } }));
+    const report = evaluateHealth(input, NOW);
+    expect(report.ok).toBe(true);
+    expect(report.metrics.divergences24h).toBe(3);
+    expect(report.metrics.divergencesByTable).toEqual({ accounts: 1, expenses: 2 });
+    expect(report.warnings.join(" ")).toContain("3 app write(s) in 24 h disagreed with Firestore");
+    expect(evaluateHealth(healthy(), NOW).metrics.divergences24h).toBe(0);
+    expect(evaluateHealth(healthy(), NOW).warnings.join(" ")).not.toContain("disagreed");
+  });
+
+  it("the threshold is configurable", () => {
+    const input = healthy();
+    input.runs[0] = run(1, "incremental", { notes: { divergences: { expenses: 2 } } });
+    expect(evaluateHealth(input, NOW, { ...THRESHOLDS, maxDivergencesPerDay: 5 }).warnings.join(" ")).not.toContain("disagreed");
+  });
+
+  it("in safety-net mode a 3-day-old full run is fine; past a week it is a problem", () => {
+    const input = healthy();
+    input.runs = [run(1, "incremental"), run(72, "full")];
+    expect(evaluateHealth(input, NOW).ok).toBe(false);
+    expect(evaluateHealth(input, NOW, { ...THRESHOLDS, maxFullGapHours: SAFETY_NET_FULL_GAP_HOURS }).ok).toBe(true);
+    input.runs = [run(1, "incremental"), run(8 * 24, "full")];
+    expect(evaluateHealth(input, NOW, { ...THRESHOLDS, maxFullGapHours: SAFETY_NET_FULL_GAP_HOURS }).ok).toBe(false);
+  });
+
+  it("the summary shows app writes and divergences", () => {
+    const input = { ...healthy(), clientWrites24h: 42 };
+    input.runs[0] = run(1, "incremental", { notes: { divergences: { expenses: 1 } } });
+    const summary = renderHealthSummary(evaluateHealth(input, NOW), input.runs, null);
+    expect(summary).toContain("| App direct writes in 24 h (SPENDLY-670) | 42 rows");
+    expect(summary).toContain("| Divergences in 24 h (SPENDLY-672) | 1 (expenses ×1) |");
+  });
+});
+
+describe("the Free plan's limits (SPENDLY-595)", () => {
+  const MB = 1024 * 1024;
+  const withCapacity = (dbMb: number, messages24h: number | null) => ({
+    ...healthy(),
+    capacity: { dbBytes: dbMb * MB, realtimeMessages24h: messages24h, largestTables: [] },
+  });
+
+  it("is quiet well under the limits, and says so in the summary", () => {
+    const input = withCapacity(17, 120);
+    const report = evaluateHealth(input, NOW);
+    expect(report.ok).toBe(true);
+    expect(report.warnings.join(" ")).not.toMatch(/Free plan/);
+    const summary = renderHealthSummary(report, input.runs, null);
+    expect(summary).toContain("| Database size (Free plan: 500 MB) | 17 MB (3%) |");
+    expect(summary).toContain("| Realtime messages in 24 h (Free plan: 2M a month) | 120 |");
+  });
+
+  it("warns from half a limit and fails from 80%", () => {
+    expect(evaluateHealth(withCapacity(260, 0), NOW)).toMatchObject({ ok: true });
+    expect(evaluateHealth(withCapacity(260, 0), NOW).warnings.join(" ")).toContain("260 MB of the Free plan's 500 MB (52%)");
+    const full = evaluateHealth(withCapacity(410, 0), NOW);
+    expect(full.ok).toBe(false);
+    expect(full.problems.join(" ")).toContain("410 MB");
+    // 40K messages a day ≈ 1.2M a month = 60% of 2M: a warning; 60K a day = 90%: a problem.
+    expect(evaluateHealth(withCapacity(17, 40_000), NOW).warnings.join(" ")).toContain("about 60% of the Free plan's monthly allowance");
+    expect(evaluateHealth(withCapacity(17, 60_000), NOW).ok).toBe(false);
+  });
+
+  it("no capacity reading (before the migration, or an error): nothing is claimed", () => {
+    const report = evaluateHealth({ ...healthy(), capacity: null }, NOW);
+    expect(report.metrics.dbBytes).toBeNull();
+    expect(renderHealthSummary(report, [], null)).toContain("| Database size (Free plan: 500 MB) | — |");
+  });
+});
+
 describe("health loader (SPENDLY-507)", () => {
   /** A supabase-js-like query builder whose every query resolves to `result`. */
   const client = (result: { data: unknown[] | null; error: { message: string } | null }) => {
@@ -155,6 +228,7 @@ describe("health loader (SPENDLY-507)", () => {
   it("maps rows into the evaluator's input", async () => {
     const { loadHealthInput } = await import("./readmodel-health");
     const input = await loadHealthInput(client({ data: [], error: null }), NOW);
-    expect(input).toEqual({ reachable: true, runs: [], openFailures: [], status: [], push: null });
+    // clientWrites24h: the fake builder can't count, so it is null (not a crash).
+    expect(input).toEqual({ reachable: true, runs: [], openFailures: [], status: [], push: null, clientWrites24h: null, capacity: null });
   });
 });

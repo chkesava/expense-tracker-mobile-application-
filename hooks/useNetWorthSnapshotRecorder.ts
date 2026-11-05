@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useReadModelModes } from "@/hooks/useReadModelSource";
 import type { UnifiedNetWorthSummary } from "@/hooks/useUnifiedNetWorth";
 import { logError } from "@/lib/errors";
 import { useAuth } from "@/providers/AuthProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
 import { recordNetWorthSnapshot } from "@/services/netWorth/netWorthHistoryStore";
+import {
+  NET_WORTH_SNAPSHOT_COLLECTIONS,
+  confirmSnapshotOnFirestore,
+  snapshotReadsCopy,
+} from "@/services/netWorth/netWorthSnapshotVerify";
 import {
   hasPointOn,
   monthKeyOf,
@@ -45,6 +51,12 @@ export function useNetWorthSnapshotRecorder({
   const attemptedRef = useRef<string | null>(null);
   const [failedKey, setFailedKey] = useState<string | null>(null);
   const [retryTick, setRetryTick] = useState(0);
+  // SPENDLY-599 (R4.3a): where the history and the totals' inputs come from.
+  const modes = useReadModelModes(NET_WORTH_SNAPSHOT_COLLECTIONS);
+  const modesRef = useRef(modes);
+  modesRef.current = modes;
+  // Firestore couldn't confirm the copy yet: still "saving", tried again later.
+  const [deferredKey, setDeferredKey] = useState<string | null>(null);
 
   const recordedToday = hasPointOn(history.points, todayKey);
   const blockers = snapshotBlockers({
@@ -66,14 +78,26 @@ export function useNetWorthSnapshotRecorder({
   useEffect(() => {
     if (!ready || !uid || !attemptKey) return;
     if (attemptedRef.current === attemptKey) return;
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       attemptedRef.current = attemptKey;
+      let monthExists = monthDocExists;
+      // SPENDLY-599 (R4.3a): when the history or an input comes from the
+      // on-device copy, write only after Firestore confirms both.
+      if (snapshotReadsCopy(modesRef.current)) {
+        const verdict = await confirmSnapshotOnFirestore(uid, todayKey, modesRef.current, monthDocExists);
+        if (verdict.kind === "recorded") return;
+        if (verdict.kind === "unconfirmed") {
+          setDeferredKey(attemptKey);
+          return;
+        }
+        monthExists = verdict.monthDocExists;
+      }
       recordNetWorthSnapshot(uid, {
         todayKey,
         totalNetWorth: summary.totalNetWorth,
         totalAssets: summary.totalAssets,
         totalLiabilities: summary.totalLiabilities,
-        monthDocExists,
+        monthDocExists: monthExists,
       }).then(
         () => setFailedKey(null),
         (error) => {
@@ -87,16 +111,19 @@ export function useNetWorthSnapshotRecorder({
 
   // A failed write releases today's attempt after a pause, so the effect above
   // tries again rather than leaving the day unrecorded for the whole session.
+  // An unconfirmed copy (599) waits the same way.
   const failed = failedKey !== null && failedKey === attemptKey;
+  const deferred = deferredKey !== null && deferredKey === attemptKey;
   useEffect(() => {
-    if (!failed) return;
+    if (!failed && !deferred) return;
     const timer = setTimeout(() => {
       attemptedRef.current = null;
       setFailedKey(null);
+      setDeferredKey(null);
       setRetryTick((n) => n + 1);
     }, RETRY_MS);
     return () => clearTimeout(timer);
-  }, [failed]);
+  }, [failed, deferred]);
 
   const namesKey = JSON.stringify(summary.untrustedBalanceAccountNames);
   return useMemo(

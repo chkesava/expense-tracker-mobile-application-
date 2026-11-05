@@ -29,6 +29,25 @@ export type HealthInput = {
   openFailures: HealthFailure[];
   status: HealthStatus[];
   push?: HealthPush | null;
+  /** SPENDLY-672: rows the app wrote directly (written_by = 'client') in the last 24 h; null when not counted. */
+  clientWrites24h?: number | null;
+  /** SPENDLY-595: the Free plan's limits as SQL sees them (readmodel_capacity); null when not read. */
+  capacity?: HealthCapacity | null;
+};
+
+export type HealthCapacity = { dbBytes: number; realtimeMessages24h: number | null; largestTables: { table: string; bytes: number }[] };
+
+/**
+ * SPENDLY-595: the Supabase **Free plan** (the user's decision, 2026-11-04).
+ * Database size and realtime messages are checked hourly; egress and
+ * concurrent realtime connections only show in the dashboard (runbook, monthly).
+ */
+export const FREE_PLAN = {
+  dbBytes: 500 * 1024 * 1024,
+  realtimeMessagesPerMonth: 2_000_000,
+  /** Warn from this share of a limit; a problem (health fails) from FAIL_AT. */
+  WARN_AT: 0.5,
+  FAIL_AT: 0.8,
 };
 
 /**
@@ -53,7 +72,27 @@ export const THRESHOLDS = {
    */
   maxLagP95Hours: 26,
   dailyReadBudget: 12_000,
+  /**
+   * SPENDLY-672: divergences in 24 h above this warn. Normal use is 0: the
+   * app's direct writes should always agree with Firestore.
+   */
+  maxDivergencesPerDay: 0,
 };
+
+/** SPENDLY-672: in safety-net mode the full pass is weekly: a week plus two hours of slack. */
+export const SAFETY_NET_FULL_GAP_HOURS = 7 * 24 + 2;
+
+/** SPENDLY-672: divergences recorded by the last 24 h of sync runs, per table. */
+export function divergencesByTable(runs: HealthRun[], now: number): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const run of runs) {
+    if (hoursSince(run.startedAt, now) > 24) continue;
+    for (const [table, n] of Object.entries((run.notes?.divergences as Record<string, number> | undefined) ?? {})) {
+      out[table] = (out[table] ?? 0) + n;
+    }
+  }
+  return out;
+}
 
 export type HealthReport = {
   ok: boolean;
@@ -71,12 +110,21 @@ export type HealthReport = {
     statusRows: number;
     /** SPENDLY-510: consecutive clean days toward the 14-day gate. */
     parityStreakDays: number;
+    /** SPENDLY-672: client-written rows Firestore's version replaced because they differed, last 24 h. */
+    divergences24h: number;
+    divergencesByTable: Record<string, number>;
+    clientWrites24h: number | null;
+    /** SPENDLY-595: Free-plan capacity, as SQL sees it. */
+    dbBytes: number | null;
+    realtimeMessages24h: number | null;
   };
 };
 
 const HOUR = 3600 * 1000;
 const hoursSince = (iso: string, now: number) => (now - Date.parse(iso)) / HOUR;
 const round1 = (n: number | null) => (n === null ? null : Math.round(n * 10) / 10);
+const mb = (bytes: number) => `${Math.round((bytes / 1048576) * 10) / 10} MB`;
+const pct = (share: number) => `${Math.round(share * 100)}%`;
 
 function percentile(sorted: number[], p: number): number | null {
   if (!sorted.length) return null;
@@ -96,6 +144,7 @@ export function evaluateHealth(input: HealthInput, now: number, thresholds = THR
       metrics: {
         runs24h: 0, reads24h: 0, lastSyncAgeHours: null, lastFullAgeHours: null, openFailures: 0,
         lagP50Hours: null, lagP95Hours: null, lagMaxHours: null, statusRows: 0, parityStreakDays: 0,
+        divergences24h: 0, divergencesByTable: {}, clientWrites24h: null, dbBytes: null, realtimeMessages24h: null,
       },
     };
   }
@@ -124,6 +173,27 @@ export function evaluateHealth(input: HealthInput, now: number, thresholds = THR
         ? "No full sync run recorded: deletes and unstamped edits are not being caught."
         : `No full sync run for ${round1(lastFullAge)} h (limit ${thresholds.maxFullGapHours} h).`
     );
+  }
+  const diverged = divergencesByTable(input.runs, now);
+  const divergences24h = Object.values(diverged).reduce((a, b) => a + b, 0);
+  if (divergences24h > thresholds.maxDivergencesPerDay) {
+    warnings.push(
+      `${divergences24h} app write(s) in 24 h disagreed with Firestore and were replaced (${Object.entries(diverged).sort().map(([t, n]) => `${t} ×${n}`).join(", ")}). ` +
+        "A writer may be mapping differently from the server; see the read-model runbook, \"Divergences\"."
+    );
+  }
+  const capacity = input.capacity ?? null;
+  if (capacity) {
+    const dbShare = capacity.dbBytes / FREE_PLAN.dbBytes;
+    const dbText = `Read-model database is ${mb(capacity.dbBytes)} of the Free plan's ${mb(FREE_PLAN.dbBytes)} (${pct(dbShare)}).`;
+    if (dbShare >= FREE_PLAN.FAIL_AT) problems.push(`${dbText} See the runbook, "The Free plan".`);
+    else if (dbShare >= FREE_PLAN.WARN_AT) warnings.push(dbText);
+    if (capacity.realtimeMessages24h !== null) {
+      const monthShare = (capacity.realtimeMessages24h * 30) / FREE_PLAN.realtimeMessagesPerMonth;
+      const msgText = `Realtime sent ${capacity.realtimeMessages24h} messages in 24 h, about ${pct(monthShare)} of the Free plan's monthly allowance at this rate.`;
+      if (monthShare >= FREE_PLAN.FAIL_AT) problems.push(`${msgText} See the runbook, "The Free plan".`);
+      else if (monthShare >= FREE_PLAN.WARN_AT) warnings.push(msgText);
+    }
   }
   if (lastSync?.status === "failed") {
     problems.push(`The latest sync run failed${lastSync.notes?.error ? `: ${String(lastSync.notes.error)}` : ""}.`);
@@ -199,6 +269,11 @@ export function evaluateHealth(input: HealthInput, now: number, thresholds = THR
       lagMaxHours: round1(lags.length ? lags[lags.length - 1] : null),
       statusRows: lags.length,
       parityStreakDays: parityGate(input.runs, now).streak,
+      divergences24h,
+      divergencesByTable: diverged,
+      clientWrites24h: input.clientWrites24h ?? null,
+      dbBytes: capacity?.dbBytes ?? null,
+      realtimeMessages24h: capacity?.realtimeMessages24h ?? null,
     },
   };
 }
@@ -221,6 +296,10 @@ export function renderHealthSummary(report: HealthReport, recent: HealthRun[], p
     `| Parity gate (SPENDLY-510) | ${m.parityStreakDays} of ${GATE_DAYS} clean days |`,
     `| Copy age p50 / p95 / max | ${m.lagP50Hours ?? "—"} / ${m.lagP95Hours ?? "—"} / ${m.lagMaxHours ?? "—"} h (${m.statusRows} user-collections) |`,
     `| Per-write pushes today (SPENDLY-583) | ${push ? `${push.requests} requests · ${push.docs} docs · ${push.userSyncs} user syncs · ${push.rejected} rejected · ${push.failed} failed · ${push.reads} reads` : "—"} |`,
+    `| App direct writes in 24 h (SPENDLY-670) | ${m.clientWrites24h ?? "—"} rows (vs ${push ? push.docs : "—"} pushed docs today) |`,
+    `| Database size (Free plan: 500 MB) | ${m.dbBytes === null ? "—" : `${mb(m.dbBytes)} (${pct(m.dbBytes / FREE_PLAN.dbBytes)})`} |`,
+    `| Realtime messages in 24 h (Free plan: 2M a month) | ${m.realtimeMessages24h ?? "—"} |`,
+    `| Divergences in 24 h (SPENDLY-672) | ${m.divergences24h}${m.divergences24h ? ` (${Object.entries(m.divergencesByTable).sort().map(([t, n]) => `${t} ×${n}`).join(", ")})` : ""} |`,
     "",
     "| Started (UTC) | Mode | Status | Reads | Failures | Unmapped |",
     "|---|---|---|---|---|---|",

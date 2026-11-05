@@ -27,6 +27,13 @@ name: Read-model sync
 #   READMODEL_SUPABASE_URL               https://<ref>.supabase.co
 #   READMODEL_SYNC_ENABLED               "true" to enable the schedule
 #   READMODEL_MAX_READS_PER_DAY          optional, default 12000
+#   READMODEL_NIGHTLY_MODE               SPENDLY-672: unset/"full" (a full pass every
+#                                        night, the default) or "safety-net"
+#                                        (changed-only nights found with collection-
+#                                        group queries, a full pass on Sunday IST).
+#                                        Set "safety-net" only after every writer
+#                                        dual-writes in production AND the
+#                                        collection-group indexes are deployed.
 #
 # GitHub disables schedules after 60 days without repository activity, and
 # may start a scheduled run late; SPENDLY-507 alerts on a missing run.
@@ -38,11 +45,11 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "incremental, full, verify (count parity only), or report (14-day parity gate report)"
+        description: "incremental, full, nightly (as the schedule: READMODEL_NIGHTLY_MODE), verify (count parity only), or report (14-day parity gate report)"
         required: true
         default: incremental
         type: choice
-        options: [incremental, full, verify, report]
+        options: [incremental, full, nightly, verify, report]
       dry_run:
         description: "Read and map only; write nothing to Supabase (still records the run and its reads)"
         required: true
@@ -77,13 +84,17 @@ jobs:
         run: npm ci
 
       - name: Sync
+        id: sync
         if: github.event_name != 'workflow_dispatch' || (inputs.mode != 'verify' && inputs.mode != 'report')
         env:
           READMODEL_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.READMODEL_FIREBASE_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
           READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
           READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
           READMODEL_MAX_READS_PER_DAY: ${{ vars.READMODEL_MAX_READS_PER_DAY || '12000' }}
-          MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || (github.event.schedule == '30 20 * * *' && 'full' || 'incremental') }}
+          # SPENDLY-672: the scheduled run is "nightly"; READMODEL_NIGHTLY_MODE decides
+          # full (default) or safety-net (changed-only, full on Sunday IST).
+          MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'nightly' }}
+          READMODEL_NIGHTLY_MODE: ${{ vars.READMODEL_NIGHTLY_MODE }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
         run: |
           set -euo pipefail
@@ -100,7 +111,7 @@ jobs:
       # rows; ~1 read per 1,000 docs. A mismatch fails the job.
       - name: Verify count parity
         if: >-
-          github.event.schedule == '30 20 * * *' ||
+          (github.event_name == 'schedule' && steps.sync.outputs.mode == 'full') ||
           (github.event_name == 'workflow_dispatch' && (inputs.mode == 'verify' || (inputs.mode == 'full' && !inputs.dry_run)))
         env:
           READMODEL_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.READMODEL_FIREBASE_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
@@ -114,7 +125,7 @@ jobs:
       # `parity` run for the 14-day gate report. Supabase reads only.
       - name: Record parity findings
         if: >-
-          github.event.schedule == '30 20 * * *' ||
+          (github.event_name == 'schedule' && steps.sync.outputs.mode == 'full') ||
           (github.event_name == 'workflow_dispatch' && (inputs.mode == 'verify' || (inputs.mode == 'full' && !inputs.dry_run)))
         env:
           READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}

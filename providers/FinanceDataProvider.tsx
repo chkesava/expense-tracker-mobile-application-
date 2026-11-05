@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   limit,
   onSnapshot,
@@ -10,6 +11,7 @@ import {
   where,
   type QueryDocumentSnapshot,
   type QuerySnapshot,
+  getDocFromCache,
   waitForPendingWrites,
 } from "@/lib/firestore";
 import {
@@ -22,6 +24,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { AppState } from "react-native";
 
 import { commitMutations } from "@/lib/commitMutations";
 import { friendlyErrorMessage, logError, logWarning } from "@/lib/errors";
@@ -93,6 +96,16 @@ import {
   logQuerySnapshot,
 } from "@/lib/firestoreReadDebug";
 import { configureReadModelPush, notifyReadModelSnapshot } from "@/lib/readModelPush";
+import { connectReadModel } from "@/lib/readModelClient";
+import { CLIENT_OUTBOX_STORAGE_PREFIX, configureClientWrites, pendingClientWrites } from "@/lib/readModelClientWrites";
+import { configureReadModelRealtime, onReadModelChanges, type ChangesSinceRow } from "@/lib/readModelRealtime";
+import { getAppLocalCopy, platformStoreFactory, setAppLocalCopy, supabaseFetchers } from "@/lib/readModelLocal/appCopy";
+import { createLocalCopy } from "@/lib/readModelLocal/localCopy";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
+import { COPY_LEDGER_WINDOW, copyPendingCount as pendingFor, copySnapshot, loadOlderFromCopy as olderFromCopy } from "@/lib/readModelLocal/ledgerWindow";
+import type { LocalStoreFactory } from "@/lib/readModelLocal/store";
+import { clientWritesEnabled, localCopyEnabled, realtimeEnabled } from "@/shared/utils/readModelMode";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import { perfEvent } from "@/lib/perf";
@@ -266,6 +279,17 @@ const AccountsContext = createContext<AccountsContextType | undefined>(undefined
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
+/** SPENDLY-596: this device's unsent writes for a table (the copy's "waiting to sync"). */
+function copyPendingCount(table: string): number {
+  const uid = getAppLocalCopy()?.status().uid;
+  return uid ? pendingFor(pendingClientWrites(uid), table) : 0;
+}
+
+/** SPENDLY-596: the next older page from the copy (supabase mode). */
+function loadOlderFromCopy<T extends { id?: string }>(collectionName: "expenses" | "incomes", offsetRef: { current: number }) {
+  return olderFromCopy<T>(getAppLocalCopy(), collectionName, offsetRef);
+}
+
 export function FinanceDataProvider({ children }: { children: ReactNode }) {
   const { user, isDuress } = useAuth();
   const uid = user?.uid;
@@ -308,6 +332,183 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       log: (event, detail) => logWarning(event, detail),
     });
   }, []);
+  // SPENDLY-670: the app's own writes into the read model (plan v2): each
+  // synced document commitMutations writes goes to rm_client_apply from an
+  // on-device queue. Off unless system_settings/global.readModel.clientWrites
+  // is true; never in duress or signed out; a no-op loopback in Spendly Test.
+  const clientWritesRef = useRef<ReturnType<typeof configureClientWrites> | null>(null);
+  useEffect(() => {
+    const storage = async () => (await import("@react-native-async-storage/async-storage")).default;
+    clientWritesRef.current = configureClientWrites({
+      getUser: () => userRef.current,
+      canSend: () => {
+        const rm = readModelRef.current;
+        return (
+          clientWritesEnabled(rm.setting) &&
+          (isReadModelEnvConfigured() || rm.localTestMode) &&
+          !rm.duress &&
+          !!userRef.current
+        );
+      },
+      readCached: async (path) => {
+        const database = getFirestoreDb();
+        if (!database) return undefined;
+        try {
+          const snap = await getDocFromCache(doc(database, path));
+          if (!snap.exists()) return null;
+          return { id: snap.id, data: (snap.data({ serverTimestamps: "estimate" }) ?? {}) as Record<string, unknown> };
+        } catch {
+          return undefined; // not in the cache: the server push copies it
+        }
+      },
+      apply: async (u, batch) => {
+        if (readModelRef.current.localTestMode) return { error: null }; // loopback
+        const { client } = await connectReadModel(u);
+        if (!client) return { error: { message: "read model not connected" } };
+        const { error } = await client.rpc("rm_client_apply", {
+          p_table: batch.table,
+          p_rows: batch.rows,
+          p_deletes: batch.deletes,
+        });
+        return { error };
+      },
+      load: async (id) => {
+        const raw = await (await storage()).getItem(CLIENT_OUTBOX_STORAGE_PREFIX + id);
+        return raw ? JSON.parse(raw) : null;
+      },
+      save: async (id, queue) => {
+        await (await storage()).setItem(CLIENT_OUTBOX_STORAGE_PREFIX + id, JSON.stringify(queue));
+      },
+      remove: async (id) => {
+        await (await storage()).removeItem(CLIENT_OUTBOX_STORAGE_PREFIX + id);
+      },
+      now: () => Date.now(),
+      log: (event, detail) => logWarning(event, detail),
+    });
+  }, []);
+  // Resume a saved queue on sign-in; on sign-out the previous user's queue
+  // leaves the device. Back online: send at once.
+  const clientWritesUidRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const box = clientWritesRef.current;
+    const previous = clientWritesUidRef.current;
+    clientWritesUidRef.current = uid;
+    if (!box) return;
+    if (previous && previous !== uid) void box.forget(previous);
+    if (uid && !isDuress) void box.resume(uid);
+  }, [uid, isDuress]);
+  useEffect(() => {
+    if (isOnline) clientWritesRef.current?.kick();
+  }, [isOnline]);
+
+  // SPENDLY-593: other devices' changes, pinged by the read model on the
+  // user's private topic. Off unless system_settings/global.readModel.realtime
+  // is true; never in duress, signed out or Spendly Test. SPENDLY-594's
+  // on-device copy consumes the stream (onReadModelChanges).
+  const realtimeRef = useRef<ReturnType<typeof configureReadModelRealtime> | null>(null);
+  useEffect(() => {
+    const clientFor = async () => {
+      const u = userRef.current;
+      return u ? (await connectReadModel(u)).client : null;
+    };
+    realtimeRef.current = configureReadModelRealtime({
+      canListen: () => {
+        const rm = readModelRef.current;
+        return realtimeEnabled(rm.setting) && isReadModelEnvConfigured() && !rm.localTestMode && !rm.duress && !!userRef.current;
+      },
+      channel: async (id) => (await clientFor())?.channel(`user:${id}`, { config: { private: true } }) ?? null,
+      removeChannel: (channel) => {
+        void clientFor().then((c) => c?.removeChannel(channel as never));
+      },
+      changesSince: async (since, limit) => {
+        const c = await clientFor();
+        if (!c) return { data: null, error: "read model not connected" };
+        const { data, error } = await c.rpc("readmodel_changes_since", { p_since: since, p_limit: limit });
+        return { data: (data as ChangesSinceRow[] | null) ?? null, error };
+      },
+      setInterval: (fn, ms) => setInterval(fn, ms),
+      clearInterval: (handle) => clearInterval(handle as ReturnType<typeof setInterval>),
+      log: (event, detail) => logWarning(event, detail),
+    });
+    return () => realtimeRef.current?.stop();
+  }, []);
+  // SPENDLY-594: the on-device copy of the user's read-model rows (the offline
+  // source once screens read Supabase, SPENDLY-673). Off unless
+  // system_settings/global.readModel.localCopy is true; never opened in duress,
+  // signed out or Spendly Test. Realtime pings keep it fresh.
+  const localCopyRef = useRef<ReturnType<typeof createLocalCopy> | null>(null);
+  useEffect(() => {
+    let factory: Promise<LocalStoreFactory> | null = null;
+    const platformFactory = () => (factory ??= platformStoreFactory());
+    const copy = createLocalCopy({
+      factory: {
+        open: async (id) => (await platformFactory()).open(id),
+        destroy: async () => (await platformFactory()).destroy(),
+      },
+      canUse: () => {
+        const rm = readModelRef.current;
+        return localCopyEnabled(rm.setting) && isReadModelEnvConfigured() && !rm.localTestMode && !rm.duress && !!userRef.current;
+      },
+      ...supabaseFetchers(async () => {
+        const u = userRef.current;
+        return u ? (await connectReadModel(u)).client : null;
+      }),
+      pending: pendingClientWrites,
+      now: () => Date.now(),
+      log: (event, detail) => logWarning(event, detail),
+    });
+    localCopyRef.current = copy;
+    setAppLocalCopy(copy);
+    const off = onReadModelChanges((event) => void copy.applyEvent(event));
+    return () => {
+      off();
+      setAppLocalCopy(null);
+      void copy.stop();
+    };
+  }, []);
+
+  // One sequence per change, so nothing races: the previous user's copy leaves
+  // the device (sign-out or a switch; entering duress only stops it), then the
+  // copy opens, then realtime starts from the copy's last change seen (so a
+  // reconnect catches up instead of rehydrating).
+  const realtimeOn = realtimeEnabled(systemSettings.readModel);
+  const localCopyOn = localCopyEnabled(systemSettings.readModel);
+  const localCopyUidRef = useRef<string | undefined>(undefined);
+  const readModelSequence = useRef<Promise<void>>(Promise.resolve());
+  useEffect(() => {
+    const previous = localCopyUidRef.current;
+    localCopyUidRef.current = uid;
+    readModelSequence.current = readModelSequence.current.then(async () => {
+      const copy = localCopyRef.current;
+      const rt = realtimeRef.current;
+      try {
+        if (copy && previous && previous !== uid && !isDuress) await copy.wipe();
+        let since: string | null = null;
+        if (copy) {
+          if (uid && localCopyOn && !isDuress) since = (await copy.start(uid))?.lastSeen ?? null;
+          else await copy.stop();
+        }
+        if (!rt) return;
+        if (uid && realtimeOn && !isDuress) await rt.start(uid, since);
+        else rt.stop();
+      } catch (error) {
+        logWarning("readModel.localCopy.sequence", error);
+      }
+    });
+  }, [uid, realtimeOn, localCopyOn, isDuress]);
+  // SPENDLY-601: back in the foreground with realtime off or not live, the
+  // copy catches up from its last change seen (offline it keeps what it has).
+  useEffect(() => {
+    if (!uid || !localCopyOn || isDuress) return;
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      if (realtimeOn && realtimeRef.current?.status().state === "live") return;
+      readModelSequence.current = readModelSequence.current.then(() => localCopyRef.current?.refresh()).catch((error) =>
+        logWarning("readModel.localCopy.refresh", error)
+      ).then(() => undefined);
+    });
+    return () => sub.remove();
+  }, [uid, localCopyOn, realtimeOn, isDuress]);
   /** SPENDLY-512: where read-model history paging resumes (Firestore keeps its own cursor). */
   const supabaseExpenseCursorRef = useRef<SupabaseCursor>(null);
   const supabaseIncomeCursorRef = useRef<SupabaseCursor>(null);
@@ -331,6 +532,22 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   }, [paginatedExpenses]);
 
   const lastExpenseDocRef = useRef<QueryDocumentSnapshot | null>(null);
+  // SPENDLY-596: the Journal window's read switch (readModel.expenses / incomes).
+  const expensesSource = useReadModelSource("expenses");
+  const incomesSource = useReadModelSource("incomes");
+  const expensesModeRef = useRef(expensesSource.mode);
+  expensesModeRef.current = expensesSource.mode;
+  const incomesModeRef = useRef(incomesSource.mode);
+  incomesModeRef.current = incomesSource.mode;
+  // SPENDLY-597: accounts and the account ledger.
+  const accountsSource = useReadModelSource("accounts");
+  const accountTypesSource = useReadModelSource("accountTypes");
+  const paymentsSource = useReadModelSource("accountPayments");
+  const entriesSource = useReadModelSource("accountEntries");
+  const transfersSource = useReadModelSource("accountTransfers");
+  /** How many copy rows (newest first, deleted included) the window and older pages have used. */
+  const copyExpensesOffsetRef = useRef(LEDGER_STAGED_LIMIT);
+  const copyIncomesOffsetRef = useRef(LEDGER_STAGED_LIMIT);
   const [expensesLoading, setExpensesLoading] = useState(true);
   const [expensesComplete, setExpensesComplete] = useState(false);
   const [hasMoreExpenses, setHasMoreExpenses] = useState(false);
@@ -459,7 +676,17 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       if (repairedTodayBaselinesRef.current.has(account.id)) continue;
       repairedTodayBaselinesRef.current.add(account.id);
       const accountId = account.id;
-      void commitMutations(
+      // SPENDLY-597 (R4.3a): a write from what was read: when accounts come
+      // from the on-device copy, confirm on Firestore first (one read).
+      const confirmed =
+        accountsSource.mode === "supabase"
+          ? getDoc(doc(db, "users", uid, "accounts", accountId)).then((snap) =>
+              isAccidentalBalanceBaseline((snap.data() as Partial<Account> | undefined)?.balanceAsOfDate, today)
+            )
+          : Promise.resolve(true);
+      void confirmed.then((stillAccidental) => {
+        if (!stillAccidental) return;
+        return commitMutations(
         uid,
         [
           {
@@ -475,12 +702,13 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             logError("financeDataProvider.clearAccidentalBaseline", error);
           },
         }
-      ).catch((error) => {
+      );
+      }).catch((error) => {
         repairedTodayBaselinesRef.current.delete(accountId);
         logError("financeDataProvider.clearAccidentalBaseline", error);
       });
     }
-  }, [accounts, accountsLoading, db, uid]);
+  }, [accounts, accountsLoading, db, uid, accountsSource.mode]);
 
   // ─── Critical listeners (First paint) ────────────────────────────────────────
 
@@ -556,19 +784,21 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     // nothing could tell a 300-row page from the whole ledger. `fromFullQuery`
     // is the only difference — it marks the unlimited listener.
     const makeApplyExpensesSnap =
-      (fromFullQuery: boolean) => (snap: QuerySnapshot) => {
+      (fromFullQuery: boolean, fromCopy = false) => (snap: QuerySnapshot) => {
         if (!expensesHydratedRef.current) {
           perfEvent("firestore_first_snapshot", { collection: "expenses", docCount: snap.docs.length });
         }
-        logQuerySnapshot(expensePath, snap, {
-          feature: "finance",
-          queryShape: fromFullQuery ? "unlimited" : `limit=${LEDGER_STAGED_LIMIT}`,
-        });
-        notifyReadModelSnapshot(snap);
+        if (!fromCopy) {
+          logQuerySnapshot(expensePath, snap, {
+            feature: "finance",
+            queryShape: fromFullQuery ? "unlimited" : `limit=${LEDGER_STAGED_LIMIT}`,
+          });
+          notifyReadModelSnapshot(snap);
+        }
         const { items, pendingWrites } = foldLedgerSnapshot<Expense>(snap.docs, {
           activeOnly: true,
         });
-        if (shouldApplySnapshotDocs(snap, expensesHydratedRef.current)) {
+        if (fromCopy || shouldApplySnapshotDocs(snap, expensesHydratedRef.current)) {
           // If docs that were in the previous realtime snapshot were pushed out past the limit,
           // preserve them in paginatedExpenses so no docs disappear when new ones arrive
           if (realtimeExpensesRef.current.length > 0 && paginatedExpensesRef.current.length > 0) {
@@ -585,14 +815,14 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
 
           setRealtimeExpenses(items);
 
-          if (snap.docs.length > 0 && paginatedExpensesRef.current.length === 0) {
+          if (!fromCopy && snap.docs.length > 0 && paginatedExpensesRef.current.length === 0) {
             lastExpenseDocRef.current = snap.docs[snap.docs.length - 1];
           }
         }
-        pendingExpensesCountRef.current = pendingWrites;
+        pendingExpensesCountRef.current = fromCopy ? copyPendingCount("expenses") : pendingWrites;
         updatePendingSyncCount();
-        setIsFromCache(snap.metadata.fromCache);
-        noteServerSync(snap.metadata.fromCache);
+        setIsFromCache(fromCopy ? false : snap.metadata.fromCache);
+        if (!fromCopy) noteServerSync(snap.metadata.fromCache);
         expensesHydratedRef.current = true;
         setFinanceError(null);
         setExpensesLoading(false);
@@ -608,12 +838,16 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         }
       };
 
-    const applyExpensesSnap = makeApplyExpensesSnap(false);
+    const applyExpensesFirestore = makeApplyExpensesSnap(false);
+    const applyExpensesSnap = (snap: QuerySnapshot) => {
+      applyExpensesFirestore(snap);
+      if (expensesSource.mode === "shadow") void expensesSource.shadow(toSourceDocs(snap), { windowed: true });
+    };
 
     // SPENDLY-109: same factory shape as expenses above — `fromFullQuery`
     // marks the unlimited listener, which is the only difference.
     const makeApplyIncomesSnap =
-      (fromFullQuery: boolean) => (snap: QuerySnapshot) => {
+      (fromFullQuery: boolean, fromCopy = false) => (snap: QuerySnapshot) => {
         if (!incomesHydratedRef.current) {
           perfEvent("firestore_first_snapshot", {
             collection: "incomes",
@@ -621,15 +855,17 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
             fromCache: snap.metadata.fromCache,
           });
         }
-        logQuerySnapshot(incomePath, snap, {
-          feature: "finance",
-          queryShape: fromFullQuery ? "unlimited" : `limit=${LEDGER_STAGED_LIMIT}`,
-        });
-        notifyReadModelSnapshot(snap);
+        if (!fromCopy) {
+          logQuerySnapshot(incomePath, snap, {
+            feature: "finance",
+            queryShape: fromFullQuery ? "unlimited" : `limit=${LEDGER_STAGED_LIMIT}`,
+          });
+          notifyReadModelSnapshot(snap);
+        }
         const { items, pendingWrites } = foldLedgerSnapshot<Income>(snap.docs, {
           activeOnly: true,
         });
-        if (shouldApplySnapshotDocs(snap, incomesHydratedRef.current)) {
+        if (fromCopy || shouldApplySnapshotDocs(snap, incomesHydratedRef.current)) {
           // If docs that were in the previous realtime snapshot were pushed out past the limit,
           // preserve them in paginatedIncomes so no docs disappear when new ones arrive
           if (realtimeIncomesRef.current.length > 0 && paginatedIncomesRef.current.length > 0) {
@@ -646,13 +882,13 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
 
           setRealtimeIncomes(items);
 
-          if (snap.docs.length > 0 && paginatedIncomesRef.current.length === 0) {
+          if (!fromCopy && snap.docs.length > 0 && paginatedIncomesRef.current.length === 0) {
             lastIncomeDocRef.current = snap.docs[snap.docs.length - 1];
           }
         }
-        pendingIncomesCountRef.current = pendingWrites;
+        pendingIncomesCountRef.current = fromCopy ? copyPendingCount("incomes") : pendingWrites;
         updatePendingSyncCount();
-        noteServerSync(snap.metadata.fromCache);
+        if (!fromCopy) noteServerSync(snap.metadata.fromCache);
         incomesHydratedRef.current = true;
         setFinanceError(null);
         setIncomesLoading(false);
@@ -668,14 +904,23 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         }
       };
 
-    const applyIncomesSnap = makeApplyIncomesSnap(false);
+    const applyIncomesFirestore = makeApplyIncomesSnap(false);
+    const applyIncomesSnap = (snap: QuerySnapshot) => {
+      applyIncomesFirestore(snap);
+      if (incomesSource.mode === "shadow") void incomesSource.shadow(toSourceDocs(snap), { windowed: true });
+    };
+    // SPENDLY-596: the copy's rows go through the same fold, window and completeness rules.
+    copyExpensesOffsetRef.current = LEDGER_STAGED_LIMIT;
+    copyIncomesOffsetRef.current = LEDGER_STAGED_LIMIT;
 
     // SPENDLY-409: Bounded startup page is the permanent realtime listener.
     // The automatic idle upgrade to unbounded queries is removed to eliminate
     // the P0 read explosion (~20K+ unnecessary daily reads). Full history is
     // paginated on demand via cursor pagination (SPENDLY-410).
     perfEvent("firestore_listener_start", { collection: "expenses" });
-    const expensesUnsub = onSnapshot(
+    const expensesUnsub = expensesSource.mode === "supabase"
+      ? expensesSource.subscribe((docs) => makeApplyExpensesSnap(false, true)(copySnapshot(docs)), COPY_LEDGER_WINDOW)
+      : onSnapshot(
       query(expensesCol, orderBy("createdAt", "desc"), limit(LEDGER_STAGED_LIMIT)),
       FINANCE_SNAPSHOT_LISTEN_OPTIONS,
       applyExpensesSnap,
@@ -689,7 +934,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       )
     );
     perfEvent("firestore_listener_start", { collection: "incomes" });
-    const incomesUnsub = onSnapshot(
+    const incomesUnsub = incomesSource.mode === "supabase"
+      ? incomesSource.subscribe((docs) => makeApplyIncomesSnap(false, true)(copySnapshot(docs)), COPY_LEDGER_WINDOW)
+      : onSnapshot(
       query(incomesCol, orderBy("createdAt", "desc"), limit(LEDGER_STAGED_LIMIT)),
       FINANCE_SNAPSHOT_LISTEN_OPTIONS,
       applyIncomesSnap,
@@ -705,8 +952,27 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
 
     perfEvent("firestore_listener_start", { collection: "accounts" });
     perfEvent("firestore_listener_start", { collection: "accountTypes" });
+    // SPENDLY-597: the copy's rows, the same mapping; waiting-to-sync from the outbox.
+    const applyAccountsCopy = (docs: SourceDoc[]) => {
+      setAccounts(docs.map((d) => ({ id: d.id, ...(d.data as object) } as Account)));
+      pendingAccountsCountRef.current = copyPendingCount("accounts");
+      updatePendingSyncCount();
+      accountsHydratedRef.current = true;
+      setFinanceError(null);
+      setAccountsLoading(false);
+    };
+    const applyAccountTypesCopy = (docs: SourceDoc[]) => {
+      setAccountTypes(docs.map((d) => ({ id: d.id, ...(d.data as object) } as AccountType)));
+      pendingAccountTypesCountRef.current = copyPendingCount("account_types");
+      updatePendingSyncCount();
+      accountTypesHydratedRef.current = true;
+      setFinanceError(null);
+      setAccountTypesLoading(false);
+    };
     const unsubscribers = [
-      onSnapshot(
+      accountsSource.mode === "supabase"
+        ? accountsSource.subscribe(applyAccountsCopy)
+        : onSnapshot(
         query(collection(db, ...base, "accounts")),
         FINANCE_SNAPSHOT_LISTEN_OPTIONS,
         (snap) => {
@@ -722,6 +988,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
               snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as Account))
             );
           }
+          if (accountsSource.mode === "shadow") void accountsSource.shadow(toSourceDocs(snap));
           pendingAccountsCountRef.current = snap.docs.filter(
             (d) => d.metadata.hasPendingWrites
           ).length;
@@ -740,7 +1007,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
           "Couldn't load your accounts."
         )
       ),
-      onSnapshot(
+      accountTypesSource.mode === "supabase"
+        ? accountTypesSource.subscribe(applyAccountTypesCopy)
+        : onSnapshot(
         query(collection(db, ...base, "accountTypes")),
         FINANCE_SNAPSHOT_LISTEN_OPTIONS,
         (snap) => {
@@ -756,6 +1025,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
               snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as AccountType))
             );
           }
+          if (accountTypesSource.mode === "shadow") void accountTypesSource.shadow(toSourceDocs(snap));
           pendingAccountTypesCountRef.current = snap.docs.filter(
             (d) => d.metadata.hasPendingWrites
           ).length;
@@ -785,7 +1055,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       forgetSnapshotPath(accountTypePath);
       unsubscribers.forEach((unsub) => unsub());
     };
-  }, [uid, db, updatePendingSyncCount, financeAttempt, setFinanceError]);
+    // SPENDLY-596: expensesSource.mode, incomesSource.mode (the read switch, a session fallback included).
+  }, [uid, db, updatePendingSyncCount, financeAttempt, setFinanceError, expensesSource.mode, incomesSource.mode, accountsSource.mode, accountTypesSource.mode]);
 
   // ─── Deferred: Secondary ledger collections ─────────────────────────────────
 
@@ -805,13 +1076,23 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
         let transfersHydrated = false;
 
         secondaryUnsubs = [
-          onSnapshot(
+          paymentsSource.mode === "supabase"
+            ? paymentsSource.subscribe((docs) => {
+                const { items } = foldLedgerSnapshot<AccountPayment>(copySnapshot(docs).docs as never);
+                setPayments(sortLedgerByDateDesc(items));
+                pendingPaymentsCountRef.current = copyPendingCount("account_payments");
+                updatePendingSyncCount();
+                setFinanceError(null);
+                setPaymentsLoading(false);
+              })
+            : onSnapshot(
             query(collection(db, ...base, "accountPayments")),
             FINANCE_SNAPSHOT_LISTEN_OPTIONS,
             (snap) => {
               logQuerySnapshot(paymentPath, snap, { feature: "finance", queryShape: "accountPayments" });
               notifyReadModelSnapshot(snap);
               const { items, pendingWrites } = foldLedgerSnapshot<AccountPayment>(snap.docs);
+              if (paymentsSource.mode === "shadow") void paymentsSource.shadow(toSourceDocs(snap));
               if (shouldApplySnapshotDocs(snap, paymentsHydrated)) {
                 setPayments(sortLedgerByDateDesc(items));
               }
@@ -831,13 +1112,23 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
               "Couldn't load your payments."
             )
           ),
-          onSnapshot(
+          entriesSource.mode === "supabase"
+            ? entriesSource.subscribe((docs) => {
+                const { items } = foldLedgerSnapshot<AccountEntry>(copySnapshot(docs).docs as never);
+                setEntries(sortLedgerByDateDesc(items));
+                pendingEntriesCountRef.current = copyPendingCount("account_entries");
+                updatePendingSyncCount();
+                setFinanceError(null);
+                setEntriesLoading(false);
+              })
+            : onSnapshot(
             query(collection(db, ...base, "accountEntries")),
             FINANCE_SNAPSHOT_LISTEN_OPTIONS,
             (snap) => {
               logQuerySnapshot(entryPath, snap, { feature: "finance", queryShape: "accountEntries" });
               notifyReadModelSnapshot(snap);
               const { items, pendingWrites } = foldLedgerSnapshot<AccountEntry>(snap.docs);
+              if (entriesSource.mode === "shadow") void entriesSource.shadow(toSourceDocs(snap));
               if (shouldApplySnapshotDocs(snap, entriesHydrated)) {
                 setEntries(sortLedgerByDateDesc(items));
               }
@@ -857,13 +1148,23 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
               "Couldn't load your account entries."
             )
           ),
-          onSnapshot(
+          transfersSource.mode === "supabase"
+            ? transfersSource.subscribe((docs) => {
+                const { items } = foldLedgerSnapshot<AccountTransfer>(copySnapshot(docs).docs as never);
+                setTransfers(sortLedgerByDateDesc(items));
+                pendingTransfersCountRef.current = copyPendingCount("account_transfers");
+                updatePendingSyncCount();
+                setFinanceError(null);
+                setTransfersLoading(false);
+              })
+            : onSnapshot(
             query(collection(db, ...base, "accountTransfers")),
             FINANCE_SNAPSHOT_LISTEN_OPTIONS,
             (snap) => {
               logQuerySnapshot(transferPath, snap, { feature: "finance", queryShape: "accountTransfers" });
               notifyReadModelSnapshot(snap);
               const { items, pendingWrites } = foldLedgerSnapshot<AccountTransfer>(snap.docs);
+              if (transfersSource.mode === "shadow") void transfersSource.shadow(toSourceDocs(snap));
               if (shouldApplySnapshotDocs(snap, transfersHydrated)) {
                 setTransfers(sortLedgerByDateDesc(items));
               }
@@ -895,7 +1196,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       forgetSnapshotPath(transferPath);
       secondaryUnsubs.forEach((unsub) => unsub());
     };
-  }, [uid, db, updatePendingSyncCount, financeAttempt, setFinanceError]);
+    // SPENDLY-597: the read switch modes (a session fallback included).
+  }, [uid, db, updatePendingSyncCount, financeAttempt, setFinanceError, paymentsSource.mode, entriesSource.mode, transfersSource.mode]);
 
   // ─── Actions ─────────────────────────────────────────────────────────────────
 
@@ -1658,6 +1960,26 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const u = userRef.current;
     const database = getFirestoreDb();
     if (!u || !database || fetchingMoreExpensesRef.current || !hasMoreExpensesRef.current) return;
+    if (expensesModeRef.current === "supabase") {
+      fetchingMoreExpensesRef.current = true;
+      setIsFetchingMoreExpenses(true);
+      try {
+        const page = await loadOlderFromCopy<Expense>("expenses", copyExpensesOffsetRef);
+        if (!page) return;
+        setPaginatedExpenses((prev) => [...prev, ...unseenRows(prev, realtimeExpensesRef.current, page.items)]);
+        if (page.exhausted) {
+          setHasMoreExpenses(false);
+          setExpensesComplete(true);
+        }
+      } catch (err) {
+        logError("financeProvider.loadMoreExpenses.copy", err);
+        toast.error(friendlyErrorMessage(err, "Failed to load older expenses"));
+      } finally {
+        fetchingMoreExpensesRef.current = false;
+        setIsFetchingMoreExpenses(false);
+      }
+      return;
+    }
     const cursor = lastExpenseDocRef.current;
     if (!cursor) return;
 
@@ -1788,6 +2110,26 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     const u = userRef.current;
     const database = getFirestoreDb();
     if (!u || !database || fetchingMoreIncomesRef.current || !hasMoreIncomesRef.current) return;
+    if (incomesModeRef.current === "supabase") {
+      fetchingMoreIncomesRef.current = true;
+      setIsFetchingMoreIncomes(true);
+      try {
+        const page = await loadOlderFromCopy<Income>("incomes", copyIncomesOffsetRef);
+        if (!page) return;
+        setPaginatedIncomes((prev) => [...prev, ...unseenRows(prev, realtimeIncomesRef.current, page.items)]);
+        if (page.exhausted) {
+          setHasMoreIncomes(false);
+          setIncomesComplete(true);
+        }
+      } catch (err) {
+        logError("financeProvider.loadMoreIncomes.copy", err);
+        toast.error(friendlyErrorMessage(err, "Failed to load older income"));
+      } finally {
+        fetchingMoreIncomesRef.current = false;
+        setIsFetchingMoreIncomes(false);
+      }
+      return;
+    }
     const cursor = lastIncomeDocRef.current;
     if (!cursor) return;
 

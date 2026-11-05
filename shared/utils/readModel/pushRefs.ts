@@ -1,5 +1,5 @@
 import { isDuressUid } from "../duress";
-import { READ_MODEL_TABLES } from "./mapping";
+import { isExcludedDoc, READ_MODEL_TABLES, SPEC_BY_COLLECTION } from "./mapping";
 
 /**
  * SPENDLY-583 — the documents a client may ask the server to push to the read
@@ -35,13 +35,46 @@ export function isPushableDocId(docId: unknown): docId is string {
   );
 }
 
-/** `users/{uid}/{collection}/{docId}` for the signed-in uid and a synced collection, else null. */
+/**
+ * A ref's doc id for its collection: a plain id, or for a nested collection
+ * (SPENDLY-591) exactly "{parentId}/{id}" with both parts valid ids.
+ */
+export function isPushableRefDocId(collection: string, docId: unknown): docId is string {
+  const spec = SPEC_BY_COLLECTION.get(collection);
+  if (!spec) return false;
+  if (spec.root) return docId === spec.root.docId;
+  if (typeof docId === "string" && isExcludedDoc(spec, docId)) return false;
+  if (!spec.parent) return isPushableDocId(docId);
+  if (typeof docId !== "string") return false;
+  const parts = docId.split("/");
+  return parts.length === 2 && isPushableDocId(parts[0]) && isPushableDocId(parts[1]);
+}
+
+/**
+ * `users/{uid}/{collection}/{docId}` (or, nested, `users/{uid}/{parent}/{pid}/{child}/{id}`)
+ * for the signed-in uid and a synced collection, else null.
+ */
 export function pushRefFromPath(path: string, uid: string): PushRef | null {
   if (!uid || isDuressUid(uid)) return null;
   const parts = path.split("/");
-  if (parts.length !== 4 || parts[0] !== "users" || parts[1] !== uid) return null;
-  const [, , collection, docId] = parts;
-  if (!PUSHABLE_COLLECTIONS.has(collection) || !isPushableDocId(docId)) return null;
+  if (parts[0] !== "users" || parts[1] !== uid) return null;
+  let collection: string;
+  let docId: string;
+  if (parts.length === 2) {
+    // The users/{uid} document itself (SPENDLY-591 part C).
+    const root = READ_MODEL_TABLES.find((t) => t.root);
+    if (!root?.root) return null;
+    [collection, docId] = [root.collection, root.root.docId];
+  } else if (parts.length === 4) {
+    [collection, docId] = [parts[2], parts[3]];
+  } else if (parts.length === 6) {
+    [collection, docId] = [`${parts[2]}/${parts[4]}`, `${parts[3]}/${parts[5]}`];
+  } else {
+    return null;
+  }
+  if (!PUSHABLE_COLLECTIONS.has(collection) || !isPushableRefDocId(collection, docId)) return null;
+  // A root spec's key is a label, never a sub-collection name.
+  if (parts.length !== 2 && SPEC_BY_COLLECTION.get(collection)?.root) return null;
   return { collection, docId };
 }
 
@@ -67,7 +100,7 @@ export function parsePushRequest(body: unknown): ParsedPushRequest {
   const refs: PushRef[] = [];
   for (const raw of input.refs) {
     const r = (raw ?? {}) as { collection?: unknown; docId?: unknown };
-    if (typeof r.collection !== "string" || !PUSHABLE_COLLECTIONS.has(r.collection) || !isPushableDocId(r.docId)) {
+    if (typeof r.collection !== "string" || !PUSHABLE_COLLECTIONS.has(r.collection) || !isPushableRefDocId(r.collection, r.docId)) {
       return { ok: false, error: "Not a pushable document." };
     }
     const ref = { collection: r.collection, docId: r.docId };

@@ -26,7 +26,15 @@ begin
   foreach t in array array[
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
-    'credit_card_bills', 'categories', 'financial_goals', 'goal_events'
+    'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
+    'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
+    'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
+    'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
+    'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries'
   ] loop
     execute format(
       $sql$insert into public.%I (uid, doc_id, doc, source_path, source_update_time, source_deleted) values
@@ -63,7 +71,15 @@ begin
   foreach t in array array[
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
-    'credit_card_bills', 'categories', 'financial_goals', 'goal_events'
+    'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
+    'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
+    'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
+    'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
+    'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries'
   ] loop
     return query execute format('select %L::text, r.uid, r.doc_id from public.%I r', t, t);
   end loop;
@@ -83,8 +99,8 @@ begin
   if wrong is not null then
     raise exception 'user A saw rows that are not theirs or are tombstoned: %', wrong;
   end if;
-  if (select count(*) from rls_test.visible()) <> 24 then
-    raise exception 'user A should see 2 rows in each of 12 tables (Wave 1 + SPENDLY-609 goals), saw %', (select count(*) from rls_test.visible());
+  if (select count(*) from rls_test.visible()) <> 106 then
+    raise exception 'user A should see 2 rows in each of 53 tables (Wave 1 + SPENDLY-609 goals + Waves 2 and 3 + SPENDLY-591), saw %', (select count(*) from rls_test.visible());
   end if;
   if (select count(*) from public.sync_status) <> 1
      or exists (select 1 from public.sync_status s where s.uid <> 'user-a') then
@@ -98,7 +114,7 @@ do $$ begin perform set_config('request.jwt.claims', rls_test.claims('{"sub": "u
 do $$
 begin
   if exists (select 1 from rls_test.visible() v where v.uid <> 'user-b')
-     or (select count(*) from rls_test.visible()) <> 12 then
+     or (select count(*) from rls_test.visible()) <> 53 then
     raise exception 'user B isolation failed';
   end if;
 end
@@ -153,7 +169,15 @@ begin
   foreach t in array array[
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
-    'credit_card_bills', 'categories', 'financial_goals', 'goal_events', 'sync_status',
+    'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
+    'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
+    'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
+    'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
+    'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'sync_status',
     'sync_runs', 'sync_checkpoints', 'sync_failures'
   ] loop
     -- Column-free (or last-column) statements, so the probe fails on
@@ -245,6 +269,14 @@ begin
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
+    'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
+    'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
+    'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
+    'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
+    'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries',
     'sync_runs', 'sync_status', 'sync_checkpoints', 'sync_failures',
     'v_cash_flow_by_month'
   ] loop
