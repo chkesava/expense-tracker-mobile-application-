@@ -31,7 +31,7 @@ Last updated: 2026-11-05, with 19 of 21 stories merged (674 added).
 | 17 | SPENDLY-598 investments, EPF, loans, subs | ✅ merged (`d5df3467`) | No migration. Per collection: shadow 14 days (zero differences), then supabase: portfolio, SIP, subscriptions, watchlists (+items), EPF passbook (`epfContributions`, `epfEstablishments`, `epfInterestEntries`, display-only callers). EPF transfers/reconciliations/wage history/profile stay on Firestore |
 | 18 | SPENDLY-599 dashboard, net worth, budgets | ✅ merged (`61eaad6b`) | No migration. `financialSummaries`, `netWorthHistory`, `financialGoals` (§4 step 9): 14-day shadow, zero differences on every tile; goals last; offline expense drill |
 | 19 | SPENDLY-674 reference data | ✅ merged (`1be425b6`) | No migration. `categories`, `spaces`, `categorizationRules`, `calendarReminders` (§4 step 9): 7-day shadow; launch reads measured (588 meter); palette no-flash check on device. Settings doc, `merchantOverrides`, `recurringDismissals` stay on Firestore |
-| 20 | SPENDLY-600 listeners off + measure | ⏳ to do | *(added when merged)* |
+| 20 | SPENDLY-600 listeners off + measure | 🔄 built, awaiting merge | No migration. Every listener on a migrated collection is gated (test); measure each flip 7 days before/after (step 10) and record it in the tracker |
 | 21 | SPENDLY-601 drills + readiness review | ⏳ to do | *(added when merged)* |
 
 SPENDLY-662 (the push fix, P0) is already on `main` and Done.
@@ -155,7 +155,13 @@ Each screen has `system_settings/global.readModel.<screen>`: `firestore` → `sh
 ### Step 10: Measure (588, 600)
 
 - 588: the 7-day Firebase console read baseline after the release.
-- 600: turn listeners off per collection, and measure 7 days before and after.
+- 600: listeners are already off in `supabase` mode (`listenersOff.test.ts`). For each flip in step 9:
+  1. Baseline: 7 days of console reads per day, plus a 588-meter lab launch.
+  2. Flip, with the user's approval.
+  3. After: 7 days, and the same lab run.
+  4. Record both in the tracker's "Read savings" table.
+- Order, largest first: categories, the Journal window, the account ledger, tiles and summaries, portfolio and EPF, then the rest.
+- The nightly sync: `READMODEL_NIGHTLY_MODE=safety-net` (672) once the dual write is live.
 
 ---
 

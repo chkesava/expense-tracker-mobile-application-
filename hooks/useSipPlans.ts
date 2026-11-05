@@ -6,6 +6,8 @@ import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath } from "@/lib/firestoreReadDebug";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
 import type { SipPlan } from "@/shared/features/sip/types";
 
 /**
@@ -20,6 +22,8 @@ export function useSipPlans(options?: { enabled?: boolean }) {
   const [plans, setPlans] = useState<SipPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const { error, setError, retry, attempt } = useLoadFailure();
+  // SPENDLY-600: the calendar's plans follow readModel.sipPlans like useSips (598).
+  const plansSource = useReadModelSource("sipPlans");
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -30,12 +34,18 @@ export function useSipPlans(options?: { enabled?: boolean }) {
     }
     setLoading(true);
     const path = `users/${uid}/sipPlans`;
+    const applyPlans = (docs: SourceDoc[]) => {
+      setPlans(docs.map((d) => ({ id: d.id, ...d.data }) as SipPlan));
+      setError(null);
+      setLoading(false);
+    };
+    if (plansSource.mode === "supabase") return plansSource.subscribe(applyPlans);
     const unsubscribe = onSnapshot(
       collection(db, "users", uid, "sipPlans"),
       (snap) => {
-        setPlans(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as SipPlan));
-        setError(null);
-        setLoading(false);
+        const docs = toSourceDocs(snap);
+        applyPlans(docs);
+        if (plansSource.mode === "shadow") void plansSource.shadow(docs);
       },
       snapshotErrorHandler(
         "snapshot.sipPlans",
@@ -50,7 +60,7 @@ export function useSipPlans(options?: { enabled?: boolean }) {
       forgetSnapshotPath(path);
       unsubscribe();
     };
-  }, [uid, enabled, attempt]);
+  }, [uid, enabled, attempt, plansSource.mode]);
 
   return { plans, loading, error, retry };
 }
