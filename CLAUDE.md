@@ -32,6 +32,39 @@ Any feature that writes or reads user data, adds a collection or field, or delet
 - **Money values** shown from Supabase are copies of Firestore's stored totals or the existing TypeScript helpers over rows. SQL never computes a displayed number.
 - **New synced data** needs a migration, mapping, RLS, the `rm_client_apply` allowlist and the purge.
 
+### Every new feature is built for both Firebase and Supabase (mandatory)
+Any new feature, screen, collection, field, writer or job that stores or shows user data **must save to and read from both stores** the way the existing features do. Not doing so is a defect, not a follow-up. Plan it in the story's plan; don't add it afterwards.
+
+**Saving** (Firestore first, then Supabase):
+- **App writes** go through `commitMutations`. A direct writer uses `trackedBatch(...)` plus `noteDirectWrites(uid, batch.writtenPaths())`, or `noteDirectWrites(uid, [ref.path])` after a single `setDoc`/`updateDoc`/`deleteDoc`. A transaction calls `noteTransactionWrites`.
+- **Server writers** (Netlify functions, crons, admin scripts) use `trackServerBatch` and `createServerPush(serverPushPorts(db))` and flush after the commit (SPENDLY-680).
+- **Every write stamps** `createdAt`/`updatedAt` as Firestore Timestamps (R1.2). A collection that stamps `*Ms` numbers or event times also lists them in `EXTRA_CHANGE_FIELDS` (`mapping.ts`), with a collection-group index override (SPENDLY-681).
+
+**A new collection or field** gets, in the same story:
+- a `TableSpec` in `shared/utils/readModel/mapping.ts`;
+- an additive Supabase migration with RLS (owner-only SELECT);
+- the `rm_client_apply` allowlist;
+- the purge;
+- the cross-user indexes;
+- the sync and parity coverage.
+
+All of it is applied to production with a dry run and approval.
+
+**Reading:**
+- The screen reads through `useReadModelSource("<collection>")`. That means: `firestore` by default; `shadow` compares; `supabase` reads the on-device copy with **no Firestore listener mounted**; and the Firestore fallback stays.
+- A history or report read goes through the read path (`lib/readModel/`).
+
+**Writers that compute from what they read (R4.3a):** when the inputs come from the copy, verify on Firestore before writing (server data, or `copyAgreesWithFirestore`). Otherwise keep that instance on Firestore (`useReadModelSource(c, { copy: false })`).
+
+**Guards that must stay green and must cover the new code:**
+- `lib/readModelWriteHooks.test.ts` (each write site hooked);
+- `netlify/functions/readmodelServerPush.test.ts` (server writers push);
+- `lib/readModelLocal/providerSwitch.test.ts` and `listenersOff.test.ts` (read switch, no listener in supabase mode);
+- `shared/utils/readModel/mapping.test.ts` (change fields);
+- `scripts/readmodelCrossUserIndexes.test.ts` (indexes).
+
+Never weaken a guard to make a feature pass. If something truly can't be dual-written, state why in the story doc and in the guard's allowlist, and ask the user first.
+
 Operations: `docs/READMODEL_RUNBOOK.md`.
 
 ## Token/context efficiency

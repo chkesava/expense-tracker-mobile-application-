@@ -138,6 +138,14 @@ Everything else is **not** in the read model. Waves 2 and 3 were first closed as
 ## Checklist for a PR that touches data
 
 - [ ] Writes go to Firestore first (through `commitMutations` or the outbox hook) and stamp `createdAt`/`updatedAt`; Supabase only through `rm_client_apply` (R1)
+- [ ] **Every new feature saves to both stores:**
+  - each app write site is hooked (`noteDirectWrites`, `noteTransactionWrites` or a tracked batch);
+  - server writers push (`createServerPush`);
+  - `*Ms` or event-time stamps are listed in `EXTRA_CHANGE_FIELDS`, with an index override.
+- [ ] **Every new screen reads through the per-collection switch** (`useReadModelSource`, default `firestore`):
+  - no Firestore listener in `supabase` mode;
+  - a writer computing from copy data verifies on Firestore (R4.3a).
+- [ ] The guards cover the new code and are not weakened: write hooks, server push, provider switch, listeners off, change fields, indexes
 - [ ] New collection or field: synced or not, explicitly; migration + mapping + RLS + purge if synced (R2)
 - [ ] History/report reads go through the read path, default `firestore` unchanged, bounded fallback, shadow, badge, overlay, loopback (R3)
 - [ ] No current-state number moved to the read model; no new display aggregate in SQL without a golden test (R3.6, R4)
