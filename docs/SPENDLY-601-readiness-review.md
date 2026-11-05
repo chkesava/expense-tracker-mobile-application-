@@ -5,7 +5,7 @@
 | Epic | SPENDLY-586 (plan v2) |
 | Branch | `feature/SPENDLY-601-drills-readiness` |
 | Migration | none |
-| Sign-off | **The user**, after the harness drills below have run on their machine |
+| Sign-off | **Signed off by the user, 2026-11-05**, after the harness drills passed 11/11 |
 
 ## 1. The drills
 
@@ -74,6 +74,7 @@ Windows note: give `POSTGREST_BIN` as a Windows path (`C:/tools/postgrest/postgr
 
 **Open before the user signs off:**
 - ~~Run the harness, D1–D11~~: done 2026-11-05, 11/11 passed.
+- ~~The user's sign-off~~: signed off 2026-11-05.
 
 **After the merge (not blocking the sign-off):**
 - Device checks after the release: the palette at launch (674), goals' "waiting to sync" (599), and an expense saved offline moving the tiles (599).
