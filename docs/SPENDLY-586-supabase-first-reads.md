@@ -21,7 +21,7 @@
 | 3 | SPENDLY-597 accounts, cards, bills | `feature/SPENDLY-597-accounts-ledger` | **Merged into the epic**; no migration |
 | 3 | SPENDLY-598 investments, EPF, loans, subs | `feature/SPENDLY-598-investments-epf` | **Merged into the epic** (`d5df3467`); no migration |
 | 3 | SPENDLY-599 dashboard, net worth, budgets | `feature/SPENDLY-599-dashboard-networth-budgets` | **Merged into the epic** (`61eaad6b`); no migration; net worth via `composeNetWorth` (ADR D3) |
-| 3 | SPENDLY-674 reference data (N6) | `feature/SPENDLY-674-reference-data` | **Built**; awaiting merge; no migration |
+| 3 | SPENDLY-674 reference data (N6) | `feature/SPENDLY-674-reference-data` | **Merged into the epic** (`1be425b6`); no migration |
 | 4 | SPENDLY-600 listeners off + measure | — | To Do |
 | 4 | SPENDLY-601 drills and readiness | — | To Do |
 
