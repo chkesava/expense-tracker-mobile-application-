@@ -33,6 +33,9 @@ Last updated: 2026-11-05, with 20 of 21 stories merged (600 added).
 | 19 | SPENDLY-674 reference data | ✅ merged (`1be425b6`) | No migration. `categories`, `spaces`, `categorizationRules`, `calendarReminders` (§4 step 9): 7-day shadow; launch reads measured (588 meter); palette no-flash check on device. Settings doc, `merchantOverrides`, `recurringDismissals` stay on Firestore |
 | 20 | SPENDLY-600 listeners off + measure | ✅ merged (`58819b5d`) | No migration. Every listener on a migrated collection is gated (test); measure each flip 7 days before/after (step 10) and record it in the tracker |
 | 21 | SPENDLY-601 drills + readiness review | ⏳ to do | *(added when merged)* |
+| 22 | SPENDLY-679 spaces/trips dual-write gap + per-site guard | ⏳ to do (found 2026-11-05) | Spaces and trips saves skip Supabase; trip edits don't stamp `updatedAt` |
+| 23 | SPENDLY-680 server writers don't push (EPF cron, admin scripts, legacy-site crons) | ⏳ to do (found 2026-11-05) | Cron changes reach Supabase only nightly |
+| 24 | SPENDLY-681 safety-net blind spot for `*Ms`/`at`-stamped collections | ⏳ to do (found 2026-11-05) | **Must be done before** `READMODEL_NIGHTLY_MODE=safety-net` |
 
 SPENDLY-662 (the push fix, P0) is already on `main` and Done.
 
