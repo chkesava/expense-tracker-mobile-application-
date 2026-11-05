@@ -2,7 +2,8 @@ import { useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { useExpenses } from "@/hooks/useExpenses";
 import type { LoadFailure } from "@/lib/firestoreErrors";
-import { summaryMonthStore } from "@/lib/summaryMonthStore";
+import { useReadModelMode } from "@/hooks/useReadModelSource";
+import { copySummaryMonthStore, summaryMonthStore } from "@/lib/summaryMonthStore";
 import { useAuth } from "@/providers/AuthProvider";
 import type { DashboardPeriodSummary } from "@/shared/types/financialSummary";
 import { shiftMonthKey } from "@/shared/utils/dates";
@@ -25,20 +26,22 @@ export function useSpendingSummaries(month: string, count: number) {
   const uid = user?.uid ?? null;
   const months = useMemo(() => Array.from({ length: Math.max(1, count) }, (_, i) => shiftMonthKey(month, -i)), [month, count]);
   const monthsKey = months.join(",");
+  // SPENDLY-600: in supabase mode the months come from the copy, with no Firestore listener.
+  const store = useReadModelMode("financialSummaries") === "supabase" ? copySummaryMonthStore : summaryMonthStore;
 
   useEffect(() => {
     if (!uid) return;
-    return summaryMonthStore.acquire(uid, monthsKey.split(","));
-  }, [uid, monthsKey]);
+    return store.acquire(uid, monthsKey.split(","));
+  }, [uid, monthsKey, store]);
 
-  const version = useSyncExternalStore(summaryMonthStore.subscribe, summaryMonthStore.version, summaryMonthStore.version);
+  const version = useSyncExternalStore(store.subscribe, store.version, store.version);
 
   const { summaries, loading, error } = useMemo(() => {
     const list: DashboardPeriodSummary[] = [];
     let pending = false;
     let failure: LoadFailure | null = null;
     for (const m of monthsKey.split(",")) {
-      const entry = uid ? summaryMonthStore.get(uid, m) : undefined;
+      const entry = uid ? store.get(uid, m) : undefined;
       if (!entry || entry.status === "loading") pending = true;
       if (entry?.error && !failure) failure = entry.error;
       if (entry?.summary) list.push(entry.summary);
@@ -46,7 +49,7 @@ export function useSpendingSummaries(month: string, count: number) {
     list.sort((a, b) => b.period.localeCompare(a.period));
     return { summaries: list, loading: !!uid && pending, error: failure };
     // `version` changes whenever any month's data arrives.
-  }, [uid, monthsKey, version]);
+  }, [uid, monthsKey, version, store]);
 
   const current = useMemo(() => summaries.find((s) => s.period === month) ?? null, [summaries, month]);
   const previousMonth = shiftMonthKey(month, -1);
