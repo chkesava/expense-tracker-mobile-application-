@@ -24,7 +24,7 @@
 | 3 | SPENDLY-674 reference data (N6) | `feature/SPENDLY-674-reference-data` | **Merged into the epic** (`1be425b6`); no migration |
 | 5 | SPENDLY-679 spaces/trips dual write + per-site guard | `feature/SPENDLY-679-spaces-trips-dual-write` | **Merged into the epic** (`18f53918`); no migration |
 | 5 | SPENDLY-680 server writers push | `feature/SPENDLY-680-server-writers-push` | **Merged into the epic** (`8d49dace`); legacy crons: retire (user, 2026-11-05) |
-| 5 | SPENDLY-681 safety-net blind spot (`*Ms`/`at` stamps) | — | To Do; before `READMODEL_NIGHTLY_MODE=safety-net` |
+| 5 | SPENDLY-681 safety-net blind spot (`*Ms`/`at` stamps) | `feature/SPENDLY-681-safety-net-change-fields` | **Built** (option A); awaiting merge; +24 index overrides deploy with 672's |
 | 4 | SPENDLY-600 listeners off + measure | `feature/SPENDLY-600-listeners-off` | **Merged into the epic** (`58819b5d`); no migration; measuring happens after the epic reaches main |
 | 4 | SPENDLY-601 drills and readiness | `feature/SPENDLY-601-drills-readiness` | **Merged into the epic** (`0bc47961`); harness run + user sign-off pending |
 
@@ -81,3 +81,4 @@ One row per flip, filled in after the epic reaches main.
 - **2026-11-05 (dual-write audit → 679–681):** spaces/trips create+edit skipped Supabase (679, built: hooks + updatedAt + per-site guard, mutation-checked); server writers don't push (680); safety-net can't see `*Ms`/`at`-stamped collections (681).
 - **2026-11-05 (680):** server writers copy what they wrote: `copyDocsToReadModel` extracted from the push core; `createServerPush`/`trackServerBatch`; EPF cron, rebuild runner and rebaseline script wired; guard over netlify/functions + scripts (mutation-checked). Legacy kesavaexpensetracker crons are outside the repo: retire (recommended) or push, the user's call.
 - **2026-11-05:** 680 merged. The user: **retire the legacy kesavaexpensetracker SIP and credit-card-bill crons** and rebuild them in this repo (SPENDLY-682: server-side jobs with deterministic ids and the 680 push; the legacy SIP cron writes `virtualPortfolio`, not `virtualPositions`, and the bill cron makes random-id duplicates, 676).
+- **2026-11-05 (681, option A by the user):** per-collection change fields (`EXTRA_CHANGE_FIELDS`/`changeFieldsOf` in mapping.ts) for 16 collections stamped with `*Ms` numbers or event times; the sync queries each (millis compare as numbers); +24 collection-group overrides (122/200); guards tie the fields to the mapping; mutation-checked.

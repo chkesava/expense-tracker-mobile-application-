@@ -7,7 +7,10 @@ import { runSync } from "../scripts/lib/readmodelSyncCore";
 import { memorySink } from "../scripts/lib/readmodelSyncMemory";
 import { firestoreCounter } from "../scripts/readmodel-verify";
 import { runVerify, type VerifySink } from "../scripts/lib/readmodelVerifyCore";
-import { READ_MODEL_TABLES } from "../shared/utils/readModel/mapping";
+import { changeFieldsOf, READ_MODEL_TABLES } from "../shared/utils/readModel/mapping";
+
+/** One (mostly empty) query per change field of every synced collection (SPENDLY-681). */
+const CHANGE_QUERIES = READ_MODEL_TABLES.reduce((n, t) => n + changeFieldsOf(t).length, 0);
 
 /**
  * SPENDLY-506 end to end against the Firestore emulator: the real Admin SDK
@@ -71,10 +74,10 @@ describe("read-model sync against the Firestore emulator (SPENDLY-506)", () => {
     expect(m.row("accounts", "alice", "old")?.source_deleted).toBe(true);
     expect(m.row("accounts", "alice", "bank")).toMatchObject({ current_balance: 640 });
     // The 600 categories were not re-read: an incremental run costs the user
-    // listing, at most 2 (mostly empty) queries per synced collection and the
-    // changed documents, not the collection. Scales with the table count
-    // (SPENDLY-590 took it from 10 to 31 tables).
-    expect(second.readsUsed).toBeLessThanOrEqual(1 + 2 * READ_MODEL_TABLES.length + 10);
+    // listing, one (mostly empty) query per change field of each synced
+    // collection and the changed documents, not the collection. Scales with
+    // the tables (SPENDLY-590) and their change fields (SPENDLY-681).
+    expect(second.readsUsed).toBeLessThanOrEqual(1 + CHANGE_QUERIES + 10);
     expect(second.upserts).toBe(3);
   });
 
@@ -140,8 +143,8 @@ describe("read-model sync against the Firestore emulator (SPENDLY-506)", () => {
     expect(m.row("expenses", "alice", "x1")).toMatchObject({ amount: 77, source_path: "users/alice/expenses/x1" });
     expect([...(m.tables.get("expenses")?.keys() ?? [])].filter((k) => !k.startsWith("alice/"))).toEqual([]);
     expect(m.checkpoints.get("*/expenses")?.highWaterMs).toBeGreaterThanOrEqual(since);
-    // No 600-category re-read: one query pair per collection, not per user.
-    expect(run.readsUsed).toBeLessThanOrEqual(1 + 2 * READ_MODEL_TABLES.length + 20);
+    // No 600-category re-read: one query per change field per collection, not per user.
+    expect(run.readsUsed).toBeLessThanOrEqual(1 + CHANGE_QUERIES + 20);
     await db.recursiveDelete(db.collection("pandals"));
   });
 });

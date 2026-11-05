@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { READ_MODEL_TABLES } from "../shared/utils/readModel/mapping";
+import { changeFieldsOf, READ_MODEL_TABLES } from "../shared/utils/readModel/mapping";
 import { memorySink } from "./lib/readmodelSyncMemory";
 import { ALWAYS_FULL, MASS_TOMBSTONE_MIN, OVERLAP_MS, runSync, type Page, type PageRequest, type SourcePort } from "./lib/readmodelSyncCore";
 
@@ -80,6 +80,46 @@ function world() {
   });
 }
 
+describe("change fields beyond createdAt/updatedAt (SPENDLY-681)", () => {
+  const reminder = (id: string, stamp: Record<string, number>, updateMs: number): FakeDoc => ({
+    id,
+    data: { title: "Rent", category: "bills", recurrence: "monthly", startDate: "2026-10-01", ...stamp },
+    updateMs,
+  });
+
+  it("a changed-only night finds a document stamped only with a millisecond field", async () => {
+    const fs = world();
+    fs.users.alice.calendarReminders = [reminder("r1", { createdAtMs: T0 - 48 * H }, T0 - 48 * H)];
+    const fields: string[] = [];
+    const read = fs.source.readChangedAcrossUsers!.bind(fs.source);
+    fs.source.readChangedAcrossUsers = (collection, request) => {
+      if (collection === "calendarReminders") fields.push(`${request.field}:${request.fieldType ?? "timestamp"}`);
+      return read(collection, request);
+    };
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    // Edited after the full pass: only updatedAtMs moves (no createdAt/updatedAt Timestamp at all).
+    fs.users.alice.calendarReminders[0] = reminder("r1", { createdAtMs: T0 - 48 * H, updatedAtMs: T0 + H }, T0 + H);
+    fs.users.alice.calendarReminders.push(reminder("r2", { createdAtMs: T0 + H }, T0 + H));
+
+    const run = await runSync(fs.source, m.sink, opts("incremental", T0 + 2 * H, { crossUser: true }));
+    expect(run.status).toBe("succeeded");
+    expect(m.row("calendar_reminders", "alice", "r1")?.source_update_time).toBe(new Date(T0 + H).toISOString());
+    expect(m.row("calendar_reminders", "alice", "r2")).toBeTruthy();
+    expect(fields).toEqual(["createdAt:timestamp", "updatedAt:timestamp", "createdAtMs:millis", "updatedAtMs:millis"]);
+  });
+
+  it("the per-user incremental pass queries the same fields", async () => {
+    const fs = world();
+    const m = memorySink();
+    await runSync(fs.source, m.sink, opts("full", T0));
+    fs.users.alice.goalEvents = [{ id: "ev1", data: { goalId: "g1", kind: "contribution", amount: 10, createdAtMs: T0 + H }, updateMs: T0 + H }];
+    const run = await runSync(fs.source, m.sink, opts("incremental", T0 + 2 * H));
+    expect(run.status).toBe("succeeded");
+    expect(m.row("goal_events", "alice", "ev1")).toBeTruthy();
+  });
+});
+
 describe("the sync as the safety net (SPENDLY-672)", () => {
   it("counts a client row that disagrees with Firestore as a divergence, and Firestore's version replaces it", async () => {
     const fs = world();
@@ -100,7 +140,7 @@ describe("the sync as the safety net (SPENDLY-672)", () => {
     expect(m.row("expenses", "alice", "e2")).toMatchObject({ amount: 250, written_by: "server", client_written_at: null });
   });
 
-  it("cross-user nights: one query pair per collection, not per user; duress never copied; a global checkpoint", async () => {
+  it("cross-user nights: one query per change field per collection, not per user; duress never copied; a global checkpoint", async () => {
     const fs = world();
     const m = memorySink();
     await runSync(fs.source, m.sink, opts("full", T0));
@@ -115,13 +155,16 @@ describe("the sync as the safety net (SPENDLY-672)", () => {
     expect(m.row("expenses", "bob", "b2")).toMatchObject({ amount: 60 });
     expect(m.row("expenses", "alice_duress", "decoy2")).toBeUndefined();
     expect(m.checkpoints.get("*/expenses")?.highWaterMs).toBe(T0 + 2 * H);
-    // Every collection but the 4 always-full ones and the users/{uid} doc, with createdAt + updatedAt.
-    const crossed = READ_MODEL_TABLES.filter((t) => !t.root && !ALWAYS_FULL.has(t.collection)).length;
+    // Every collection but the 4 always-full ones and the users/{uid} doc, one
+    // query per change field (createdAt + updatedAt, plus *Ms/event times: SPENDLY-681).
+    const crossedSpecs = READ_MODEL_TABLES.filter((t) => !t.root && !ALWAYS_FULL.has(t.collection));
+    const crossed = crossedSpecs.length;
+    const queries = crossedSpecs.reduce((n, t) => n + changeFieldsOf(t).length, 0);
     expect(run.notes.crossUserCollections).toBe(crossed);
-    expect(fs.crossUserQueries()).toBe(2 * crossed);
+    expect(fs.crossUserQueries()).toBe(queries);
     // 2 users: the listing, the cross-user queries (+1 for the page holding both new docs),
     // and per user the always-full collections and the settings doc.
-    expect(fs.reads() - before).toBeLessThanOrEqual(1 + 2 * crossed + 2 + 2 * (ALWAYS_FULL.size + 1) + 5);
+    expect(fs.reads() - before).toBeLessThanOrEqual(1 + queries + 2 + 2 * (ALWAYS_FULL.size + 1) + 5);
   });
 
   it("cross-user: a client row that disagrees is a divergence too", async () => {
@@ -199,9 +242,10 @@ describe("read-model sync core (SPENDLY-506)", () => {
     const second = await runSync(fs.source, m.sink, opts("incremental", T0 + 3 * H));
     expect(second.upserts).toBe(0);
     expect(second.tombstones).toBe(0);
-    // 1 (users) + per user and synced collection at most 2 queries, each an
-    // empty page billed as 1 read (SPENDLY-590: the bound scales with the tables).
-    expect(second.readsUsed).toBeLessThanOrEqual(1 + 2 * 2 * READ_MODEL_TABLES.length);
+    // 1 (users) + per user and synced collection one query per change field,
+    // each an empty page billed as 1 read (SPENDLY-590/681: the bound scales).
+    const perUser = READ_MODEL_TABLES.reduce((n, t) => n + changeFieldsOf(t).length, 0);
+    expect(second.readsUsed).toBeLessThanOrEqual(1 + 2 * perUser);
   });
 
   it("never reads or writes a duress tree", async () => {
@@ -591,5 +635,15 @@ describe("readmodel-sync never writes Firestore", () => {
     const source = readFileSync(path.resolve(__dirname, "lib/readmodelSyncCore.ts"), "utf8").replace(/createHash\([^)]*\)\.update\(/g, "");
     expect(source).not.toMatch(FIRESTORE_WRITES);
     expect(source).not.toMatch(/firebase-admin|@supabase\/supabase-js/);
+  });
+});
+
+describe("change values in the Firestore reader (SPENDLY-681)", () => {
+  it("a millisecond field compares as a number, the rest as a Timestamp", async () => {
+    const { changeValue } = await import("./readmodel-sync");
+    expect(changeValue({ fieldType: "millis", sinceMs: 1234 })).toBe(1234);
+    const ts = changeValue({ fieldType: "timestamp", sinceMs: 1234 }) as { toMillis(): number };
+    expect(ts.toMillis()).toBe(1234);
+    expect((changeValue({ sinceMs: 5 }) as { toMillis(): number }).toMillis()).toBe(5);
   });
 });

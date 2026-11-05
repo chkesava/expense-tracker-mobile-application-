@@ -57,7 +57,7 @@ export function firestoreReader(db: Firestore): SourcePort {
       // too; the path filter keeps only users/{uid}/… of this spec.
       let query: Query = db
         .collectionGroup(spec.parent ? spec.parent.child : collection)
-        .where(request.field, ">", Timestamp.fromMillis(request.sinceMs))
+        .where(request.field, ">", changeValue(request))
         .orderBy(request.field);
       if (request.after) query = query.startAfter(request.after as DocumentSnapshot);
       const snap = await query.limit(request.limit).get();
@@ -98,11 +98,16 @@ export function firestoreReader(db: Firestore): SourcePort {
   };
 }
 
+/** SPENDLY-681: a millisecond-number change field compares as a number, the rest as a Timestamp. */
+export function changeValue(request: { fieldType?: "timestamp" | "millis"; sinceMs: number }): Timestamp | number {
+  return request.fieldType === "millis" ? request.sinceMs : Timestamp.fromMillis(request.sinceMs);
+}
+
 async function readCollectionPage(base: CollectionReference, request: PageRequest): Promise<Page> {
   let query: Query =
     request.kind === "all"
       ? base.orderBy(FieldPath.documentId())
-      : base.where(request.field, ">", Timestamp.fromMillis(request.sinceMs)).orderBy(request.field);
+      : base.where(request.field, ">", changeValue(request)).orderBy(request.field);
   if (request.after) query = query.startAfter(request.after as DocumentSnapshot);
   const snap = await query.limit(request.limit).get();
   return {

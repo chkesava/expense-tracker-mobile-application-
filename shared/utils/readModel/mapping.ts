@@ -54,6 +54,52 @@ export type TableSpec = {
 
 const f = (column: string, source: string, type: FieldType): FieldSpec => ({ column, source, type });
 
+/**
+ * SPENDLY-681 — how the changed-only sync finds a collection's new and
+ * changed documents. Every collection is queried on the Firestore Timestamps
+ * `createdAt` and `updatedAt` (R1.2). Collections whose writers stamp a
+ * millisecond number or an event time instead (or as well) add those fields
+ * here, so a change the app's own dual write missed is still found the next
+ * night, not only by the Sunday full pass.
+ *
+ * A field a collection doesn't carry costs one read per run (a query's
+ * minimum), so these lists may over-cover. Each field needs a
+ * collection-group single-field index (firestore.indexes.json).
+ */
+export type ChangeField = { field: string; type: "timestamp" | "millis" };
+
+export const DEFAULT_CHANGE_FIELDS: readonly ChangeField[] = [
+  { field: "createdAt", type: "timestamp" },
+  { field: "updatedAt", type: "timestamp" },
+];
+
+const ms = (field: string): ChangeField => ({ field, type: "millis" });
+const ts = (field: string): ChangeField => ({ field, type: "timestamp" });
+
+export const EXTRA_CHANGE_FIELDS: Readonly<Record<string, readonly ChangeField[]>> = {
+  financialGoals: [ms("createdAtMs"), ms("updatedAtMs")],
+  goalEvents: [ms("createdAtMs")],
+  goalFundingPlans: [ms("createdAtMs"), ms("updatedAtMs")],
+  decisions: [ms("createdAtMs"), ms("updatedAtMs")],
+  calendarReminders: [ms("createdAtMs"), ms("updatedAtMs")],
+  feeReviews: [ms("createdAtMs"), ms("updatedAtMs")],
+  feeSignalDismissals: [ms("atMs")],
+  merchantOverrides: [ms("createdAtMs"), ms("updatedAtMs")],
+  runwaySettings: [ms("updatedAtMs")],
+  runwayOverrides: [ms("updatedAtMs")],
+  whatIfScenarios: [ms("createdAtMs"), ms("updatedAtMs")],
+  netWorthHistory: [ms("createdAtMs"), ms("updatedAtMs")],
+  epfWageHistory: [ms("createdAtMs")],
+  epfContributionEvents: [ts("at")],
+  epfTransferEvents: [ts("at")],
+  recurringDismissals: [ts("dismissedAt")],
+};
+
+/** The fields the changed-only sync queries for this collection. */
+export function changeFieldsOf(spec: Pick<TableSpec, "collection">): readonly ChangeField[] {
+  return [...DEFAULT_CHANGE_FIELDS, ...(EXTRA_CHANGE_FIELDS[spec.collection] ?? [])];
+}
+
 export const READ_MODEL_TABLES: TableSpec[] = [
   {
     table: "expenses",
