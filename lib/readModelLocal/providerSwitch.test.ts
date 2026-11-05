@@ -27,14 +27,15 @@ const INTEGRATED = [
   // SPENDLY-598 part A: portfolio, SIP, subscriptions, watchlists.
   "holdings", "investmentCashTransactions", "portfolioSettings", "portfolioTransactions",
   "sipPlans", "sipTransactions", "subscriptions", "virtualPositions", "watchlists", "watchlists/items",
+  // SPENDLY-598 part B: EPF, for display-only callers only (readFrom: "copy").
+  "epfContributions", "epfEstablishments", "epfInterestEntries",
 ].sort();
 
 const NOT_YET: Record<string, string> = {
-  epfContributions: "the EPF summary sync writes from EPF sources; 598",
-  epfEstablishments: "the EPF summary sync writes from EPF sources; 598",
-  epfTransfers: "the EPF summary sync writes from EPF sources; 598",
-  epfInterestEntries: "the EPF summary sync writes from EPF sources; 598",
-  epfReconciliations: "the EPF summary sync writes from EPF sources; 598",
+  epfTransfers: "every caller writes from them (transfers, interest, catch-up); stays on Firestore (598)",
+  epfReconciliations: "interest recompute and the summary sync write from them; stays on Firestore (598)",
+  epfWageHistory: "the contribution catch-up writes from it; stays on Firestore (598)",
+  epfProfile: "the EPF dashboard writes from it; stays on Firestore (598)",
   financialSummaries: "the EPF summary sync compares against the stored summary; 599",
   categories: "loaded by revision (SPENDLY-660), not a plain listener; 674",
   financialGoals: "pending-write state per goal (SPENDLY-613); 599",
@@ -58,7 +59,7 @@ for (const dir of ["providers", "hooks", "app", "components"]) {
     // The hook itself (its doc comment shows an example use).
     if (file.endsWith("useReadModelSource.ts")) continue;
     const text = readFileSync(file, "utf8");
-    for (const m of text.matchAll(/const\s+(\w+)\s*=\s*useReadModelSource\(\s*"([^"]+)"\s*\)/g)) {
+    for (const m of text.matchAll(/const\s+(\w+)\s*=\s*useReadModelSource\(\s*"([^"]+)"\s*(?:,[^;]*)?\)/g)) {
       uses.push({ file: relative(ROOT, file).replace(/\\/g, "/"), variable: m[1], collection: m[2], text });
     }
   }
@@ -121,6 +122,30 @@ describe("provider read switches (SPENDLY-673)", () => {
     const text = readFileSync(join(ROOT, "hooks", "usePortfolio.ts"), "utf8");
     expect(text).toMatch(/holdingsSourceModeRef\.current === "supabase"/);
     expect(text).toMatch(/holdingsFingerprint\(/);
+  });
+
+  it("EPF hooks read the copy only for a caller that opts in (readFrom: \"copy\")", () => {
+    const epf = uses.filter((u) => u.collection.startsWith("epf"));
+    expect(epf.length).toBeGreaterThan(0);
+    for (const u of epf) expect(u.text).toContain(`useReadModelSource("${u.collection}", { copy: options?.readFrom === "copy" })`);
+  });
+
+  it("only display-only EPF callers opt in, and they take no writer from the hook", () => {
+    const optIns: string[] = [];
+    for (const dir of ["providers", "hooks", "app", "components"]) {
+      for (const file of sources(join(ROOT, dir))) {
+        const text = readFileSync(file, "utf8");
+        if (/useEpf\w*\([^;]*readFrom: "copy"/.test(text)) optIns.push(relative(ROOT, file).replace(/\\/g, "/"));
+      }
+    }
+    expect(optIns.sort()).toEqual([
+      "components/epf/EpfContributionHistory.tsx",
+      "components/epf/EpfCurrentMonthCard.tsx",
+      "hooks/useFinancialCalendar.ts",
+    ]);
+    // The EPF writers that compute from loaded rows (R4.3a).
+    const writers = /\b(saveContributions?|applyTransition|recordCredit|markMissed|markReversed|deleteContribution|discardDrafts|repairCreditWindows|repairLifecycleStates|recomputeInterest|recordReconciliation|saveProfile|addEstablishment|updateEstablishment|closeEstablishment|archiveEstablishment|restoreEstablishment|deleteEstablishment)\b/;
+    for (const file of optIns) expect(readFileSync(join(ROOT, file), "utf8")).not.toMatch(writers);
   });
 
   it("SIP execution reads its plans and positions from Firestore itself", () => {

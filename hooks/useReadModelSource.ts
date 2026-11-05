@@ -35,7 +35,7 @@ export function resetReadModelSourceFallbacksForTests() {
   fellBack.clear();
 }
 
-export function useReadModelSource(collection: string) {
+export function useReadModelSource(collection: string, options?: { copy?: boolean }) {
   const { settings } = useSystemSettings();
   const { user, isDuress } = useAuth();
   const [copyState, setCopyState] = useState(() => getAppLocalCopy()?.status().state ?? "off");
@@ -80,8 +80,13 @@ export function useReadModelSource(collection: string) {
     [source, collection]
   );
 
+  // SPENDLY-598 (R4.3a): `copy: false` is for an instance whose data drives a
+  // write: it may compare (shadow) but always reads Firestore.
+  const mode: CollectionMode =
+    options?.copy === false && decision.mode === "supabase" ? "firestore" : (decision.mode as CollectionMode);
+
   return {
-    mode: decision.mode as CollectionMode,
+    mode,
     configured: decision.configured,
     reason: decision.reason,
     subscribe,

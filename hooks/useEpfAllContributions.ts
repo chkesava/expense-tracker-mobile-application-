@@ -18,6 +18,8 @@ import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
 import type { EpfContribution } from "@/shared/features/epf/types";
 import { EPF_CONTRIBUTIONS_COLLECTION } from "@/shared/features/epf/types";
 import {
@@ -25,8 +27,11 @@ import {
   sortContributionsByMonth,
 } from "@/shared/features/epf/utils/contributions";
 
-export function useEpfAllContributions(options?: { enabled?: boolean }) {
+export function useEpfAllContributions(options?: { enabled?: boolean; readFrom?: "copy" }) {
   const enabled = options?.enabled !== false;
+  // SPENDLY-598 (R4.3a): EPF screens write from what these hooks load, so
+  // the copy serves only callers that never write (`readFrom: "copy"`).
+  const contributionsSource = useReadModelSource("epfContributions", { copy: options?.readFrom === "copy" });
   // Duress-aware uid, matching every other EPF hook.
   const { user } = useAuth();
   const uid = user?.uid;
@@ -47,6 +52,15 @@ export function useEpfAllContributions(options?: { enabled?: boolean }) {
 
     setLoading(true);
     const path = `users/${uid}/${EPF_CONTRIBUTIONS_COLLECTION}`;
+    const applyContributions = (docs: SourceDoc[]) => {
+      setContributions(sortContributionsByMonth(docs.map((d) => normalizeEpfContribution(d.id, d.data))));
+      setError(null);
+      setLoading(false);
+    };
+    if (contributionsSource.mode === "supabase") {
+      setFromCache(false);
+      return contributionsSource.subscribe(applyContributions);
+    }
 
     let received = false;
     const unsubscribe = onSnapshot(
@@ -58,15 +72,9 @@ export function useEpfAllContributions(options?: { enabled?: boolean }) {
         received = true;
         if (onlyMetadataChanged(snapshot, first)) return;
         logQuerySnapshot(path, snapshot);
-        setContributions(
-          sortContributionsByMonth(
-            snapshot.docs.map((docSnap) =>
-              normalizeEpfContribution(docSnap.id, docSnap.data() as Record<string, unknown>)
-            )
-          )
-        );
-        setError(null);
-        setLoading(false);
+        const docs = toSourceDocs(snapshot);
+        applyContributions(docs);
+        if (contributionsSource.mode === "shadow") void contributionsSource.shadow(docs);
       },
       snapshotErrorHandler(
         "snapshot.epfAllContributions",
@@ -82,7 +90,7 @@ export function useEpfAllContributions(options?: { enabled?: boolean }) {
       forgetSnapshotPath(path);
       unsubscribe();
     };
-  }, [uid, enabled, attempt]);
+  }, [uid, enabled, attempt, contributionsSource.mode]);
 
   return { contributions, loading, error, retry, fromCache };
 }

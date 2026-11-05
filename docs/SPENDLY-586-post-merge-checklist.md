@@ -28,7 +28,7 @@ Last updated: 2026-11-05, with 16 of 21 stories merged (595 added).
 | 14 | SPENDLY-595 Supabase plan: **Free** | ✅ merged | Migration `20261105000000` **applied 2026-11-05** (capacity reading); health shows database size and realtime messages against the Free limits (§4 step 2); monthly dashboard check of egress and connections |
 | 15 | SPENDLY-596 Journal on the read model | ✅ merged | `readModel.expenses` / `readModel.incomes`: shadow 7 days, then supabase (§4 step 9) |
 | 16 | SPENDLY-597 accounts, cards, bills | ✅ merged | `readModel.accounts` / `accountTypes` / `accountPayments` / `accountEntries` / `accountTransfers` (+ `creditCardBills`): shadow 14 days to the paisa (Free plan: health's capacity checks green), then supabase; the bill pass verifies on Firestore (a few reads per focus when it has work) |
-| 17 | SPENDLY-598 investments, EPF, loans, subs | ⏳ to do | *(added when merged: 14-day shadow)* |
+| 17 | SPENDLY-598 investments, EPF, loans, subs | 🔄 built, awaiting merge | No migration. Per collection: shadow 14 days (zero differences), then supabase: portfolio, SIP, subscriptions, watchlists (+items), EPF passbook (`epfContributions`, `epfEstablishments`, `epfInterestEntries`, display-only callers). EPF transfers/reconciliations/wage history/profile stay on Firestore |
 | 18 | SPENDLY-599 dashboard, net worth, budgets | ⏳ to do | *(added when merged: 14-day shadow)* |
 | 19 | SPENDLY-674 reference data | ⏳ to do | *(added when merged: 7-day shadow)* |
 | 20 | SPENDLY-600 listeners off + measure | ⏳ to do | *(added when merged)* |

@@ -31,6 +31,8 @@ import { noteDirectWrites, trackedBatch } from "@/lib/readModelWriteHooks";
 import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
 import { epfCurrentMonth } from "@/shared/features/epf/utils/epfClock";
 import type {
   EpfContribution,
@@ -59,8 +61,11 @@ import {
 import { financialYearOfMonth } from "@/shared/utils/financialYear";
 import { withoutUndefined } from "@/shared/utils/objects";
 
-export function useEpfInterest(options?: { enabled?: boolean }) {
+export function useEpfInterest(options?: { enabled?: boolean; readFrom?: "copy" }) {
   const enabled = options?.enabled !== false;
+  // SPENDLY-598 (R4.3a): EPF screens write from what these hooks load, so
+  // the copy serves only callers that never write (`readFrom: "copy"`).
+  const entriesSource = useReadModelSource("epfInterestEntries", { copy: options?.readFrom === "copy" });
   // Duress-aware uid, matching every other EPF hook.
   const { user } = useAuth();
   const uid = user?.uid;
@@ -99,7 +104,17 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
 
     let entriesReceived = false;
     let reconReceived = false;
-    const unsubEntries = onSnapshot(
+    const applyEntries = (docs: SourceDoc[]) => {
+      setInterestEntries(docs.map((d) => normalizeInterestEntry(d.id, d.data)));
+      setInterestError(null);
+      setInterestLoading(false);
+    };
+    const unsubEntries = entriesSource.mode === "supabase"
+      ? entriesSource.subscribe((docs) => {
+        setInterestFromCache(false);
+        applyEntries(docs);
+      })
+      : onSnapshot(
       collection(db, "users", uid, EPF_INTEREST_ENTRIES_COLLECTION),
       LISTEN_WITH_SYNC_STATE,
       (snapshot) => {
@@ -108,13 +123,9 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
         entriesReceived = true;
         if (onlyMetadataChanged(snapshot, first)) return;
         logQuerySnapshot(entryPath, snapshot);
-        setInterestEntries(
-          snapshot.docs.map((docSnap) =>
-            normalizeInterestEntry(docSnap.id, docSnap.data() as Record<string, unknown>)
-          )
-        );
-        setInterestError(null);
-        setInterestLoading(false);
+        const docs = toSourceDocs(snapshot);
+        applyEntries(docs);
+        if (entriesSource.mode === "shadow") void entriesSource.shadow(docs);
       },
       snapshotErrorHandler(
         "snapshot.epfInterestEntries",
@@ -162,7 +173,7 @@ export function useEpfInterest(options?: { enabled?: boolean }) {
       unsubEntries();
       unsubRecon();
     };
-  }, [uid, enabled, attempt]);
+  }, [uid, enabled, attempt, entriesSource.mode]);
 
   /**
    * Recompute and store the whole interest schedule for one establishment.
