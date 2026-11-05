@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { firestorePathOf, mapDocument, READ_MODEL_TABLES, SPEC_BY_COLLECTION, timestampMillis, toJsonDoc } from "./mapping";
+import { changeFieldsOf, EXTRA_CHANGE_FIELDS, firestorePathOf, mapDocument, READ_MODEL_TABLES, SPEC_BY_COLLECTION, timestampMillis, toJsonDoc } from "./mapping";
 
 const migrationsDir = path.resolve(__dirname, "../../../supabase-readmodel/supabase/migrations");
 const sql = readdirSync(migrationsDir)
@@ -309,5 +309,34 @@ describe("read-model mapping (SPENDLY-506)", () => {
     expect(toJsonDoc({ a: Number.POSITIVE_INFINITY, b: [1, { c: new Date(0) }], d: undefined })).toEqual({
       a: null, b: [1, { c: "1970-01-01T00:00:00.000Z" }], d: null,
     });
+  });
+});
+
+// SPENDLY-681: the changed-only sync must be able to find every collection's changes.
+
+describe("change fields for the changed-only sync (SPENDLY-681)", () => {
+  const STAMP = /^(createdAtMs|updatedAtMs|atMs|at|dismissedAt)$/;
+
+  it("every stamp a collection maps is one of its change fields", () => {
+    const missing: string[] = [];
+    for (const spec of READ_MODEL_TABLES) {
+      if (spec.root) continue;
+      const fields = new Set(changeFieldsOf(spec).map((c) => c.field));
+      for (const f of spec.fields) if (STAMP.test(f.source) && !fields.has(f.source)) missing.push(`${spec.collection}.${f.source}`);
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it("extra change fields name synced collections; *Ms fields compare as numbers, the rest as Timestamps", () => {
+    for (const [collection, fields] of Object.entries(EXTRA_CHANGE_FIELDS)) {
+      expect(SPEC_BY_COLLECTION.has(collection)).toBe(true);
+      for (const c of fields) expect(c.type).toBe(c.field.endsWith("Ms") ? "millis" : "timestamp");
+    }
+  });
+
+  it("every collection keeps createdAt and updatedAt", () => {
+    for (const spec of READ_MODEL_TABLES) {
+      expect(changeFieldsOf(spec).slice(0, 2).map((c) => c.field)).toEqual(["createdAt", "updatedAt"]);
+    }
   });
 });

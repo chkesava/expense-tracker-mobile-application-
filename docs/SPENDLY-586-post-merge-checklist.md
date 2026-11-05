@@ -35,7 +35,7 @@ Last updated: 2026-11-05, with 21 of 21 original stories merged (601 added; 679�
 | 21 | SPENDLY-601 drills + readiness review | ✅ merged (0bc47961) | No migration. Run the harness D1–D11 (`run_drills.sh`, needs PostgREST) and paste results into `docs/SPENDLY-601-readiness-review.md` §3; user sign-off; emergency rollback = `readmodel-set-mode.ts --switch=localCopy --value=false --apply` |
 | 22 | SPENDLY-679 spaces/trips dual-write gap + per-site guard | ✅ merged (`18f53918`) | Spaces and trips saves skip Supabase; trip edits don't stamp `updatedAt` |
 | 23 | SPENDLY-680 server writers don't push (EPF cron, admin scripts, legacy-site crons) | ✅ merged (`8d49dace`); legacy crons: retire (user, 2026-11-05); rebuilt in-repo by SPENDLY-682 | Cron changes reach Supabase only nightly |
-| 24 | SPENDLY-681 safety-net blind spot for `*Ms`/`at`-stamped collections | ⏳ to do (found 2026-11-05) | **Must be done before** `READMODEL_NIGHTLY_MODE=safety-net` |
+| 24 | SPENDLY-681 safety-net blind spot for `*Ms`/`at`-stamped collections | 🔄 built, awaiting merge (option A) | **Must be done before** `READMODEL_NIGHTLY_MODE=safety-net` |
 
 SPENDLY-662 (the push fix, P0) is already on `main` and Done.
 
@@ -46,7 +46,7 @@ SPENDLY-662 (the push fix, P0) is already on `main` and Done.
 | Area | Change | Live already? | Action after the merge |
 |---|---|---|---|
 | Supabase migrations | `20261030000000` (RPC) through `20261103000000` (summaries), 7 files | **Yes, applied to production** with approval as each story merged | Confirm with a dry run that nothing is pending |
-| `firestore.indexes.json` | +96 collection-group field overrides (672) | **No** | Deploy manually (§4 step 1) |
+| `firestore.indexes.json` | +96 collection-group field overrides (672), +24 for the `*Ms`/event-time change fields (681): 122 of Firestore's 200 | **No** | Deploy manually (§4 step 1) |
 | `netlify/functions/readmodel-push.ts` | Nested, root and excluded-doc refs (591/592) | **No** | **Netlify deploy** of the function (§4 step 3) |
 | `.github/workflows/readmodel-*.yml` | Nightly mode, health, schema | Take effect on merge | None: the default `full` keeps today's behaviour |
 | App code (outbox, write hooks, mappings) | 670/671/589–592 | **No** | **Expense release** (§4 step 4) |
@@ -61,7 +61,7 @@ SPENDLY-662 (the push fix, P0) is already on `main` and Done.
 - [ ] `main` is merged into the epic and conflicts are resolved; PR Checks and Read-model schema are green on the epic head.
 - [ ] `npm test`, `npm run test:rules` and `npx tsc --noEmit` pass locally.
 - [ ] `npx supabase db push --linked --workdir supabase-readmodel --dry-run` shows **nothing pending**, or only migrations already approved.
-- [ ] A read-only index diff: `firebase firestore:indexes --project expenseapp-27f94 > live.json`, then `node scripts/firestoreRulesCi.js diff-indexes --repo firestore.indexes.json --live live.json`. It must show only the 672 overrides as new, and nothing live missing.
+- [ ] A read-only index diff: `firebase firestore:indexes --project expenseapp-27f94 > live.json`, then `node scripts/firestoreRulesCi.js diff-indexes --repo firestore.indexes.json --live live.json`. It must show only the 672 and 681 overrides as new, and nothing live missing.
 - [ ] Open the epic PR to `main` and get the user's approval to merge.
 
 ---
@@ -70,7 +70,7 @@ SPENDLY-662 (the push fix, P0) is already on `main` and Done.
 
 Every production step below needs the user's approval when it happens. Dry runs come first.
 
-### Step 1: Deploy the collection-group indexes (672)
+### Step 1: Deploy the collection-group indexes (672, 681)
 
 - **How:** the "Deploy Firestore rules" workflow (`firestore-rules-deploy.yml`) with `deploy_indexes = true`, dry run first, then for real. It refuses a deploy that would delete live indexes.
 - **Wait:** until every index is **Enabled** in the Firebase console (Firestore → Indexes → Single field / Exemptions).

@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { READ_MODEL_TABLES } from "../shared/utils/readModel/mapping";
+import { changeFieldsOf, READ_MODEL_TABLES } from "../shared/utils/readModel/mapping";
 import { ALWAYS_FULL } from "./lib/readmodelSyncCore";
 
 /**
@@ -23,12 +23,16 @@ const DEFAULTS_PLUS_GROUP = [
   { order: "ASCENDING", queryScope: "COLLECTION_GROUP" },
 ];
 
-const groups = [
-  ...new Set(READ_MODEL_TABLES.filter((t) => !t.root && !ALWAYS_FULL.has(t.collection)).map((t) => (t.parent ? t.parent.child : t.collection))),
+const queried = READ_MODEL_TABLES.filter((t) => !t.root && !ALWAYS_FULL.has(t.collection));
+// SPENDLY-681: every change field of every collection (createdAt/updatedAt, plus *Ms or event times).
+const pairs = [
+  ...new Map(
+    queried.flatMap((t) => changeFieldsOf(t).map((c) => [t.parent ? t.parent.child : t.collection, c.field] as const)).map((p) => [p.join("."), p])
+  ).values(),
 ];
 
 describe("collection-group indexes for the cross-user sync (SPENDLY-672)", () => {
-  it.each(groups.flatMap((g) => ["createdAt", "updatedAt"].map((f) => [g, f] as const)))("%s.%s has the defaults plus a collection-group index", (group, field) => {
+  it.each(pairs)("%s.%s has the defaults plus a collection-group index", (group, field) => {
     const override = config.fieldOverrides.find((o) => o.collectionGroup === group && o.fieldPath === field);
     expect(override?.indexes).toEqual(DEFAULTS_PLUS_GROUP);
   });

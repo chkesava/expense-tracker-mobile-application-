@@ -36,7 +36,7 @@ These rules sit beside `CLAUDE.md` (Spendly safety invariants) and `docs/AGENT_W
   - Never send document data to the server; it reads Firestore itself.
 - **R1.2b** The nightly sync (SPENDLY-672) depends on the repository variable `READMODEL_NIGHTLY_MODE`.
   - **Unset or `full`:** today's behaviour, a full pass every night.
-  - **`safety-net`:** changed-only nights, with a full pass on Sunday (IST). Changes are found by `createdAt`/`updatedAt` with **one collection-group query per collection** across all users; only `users/{uid}/…` paths are copied. The always-full account collections and the `users/{uid}` document still run per user.
+  - **`safety-net`:** changed-only nights, with a full pass on Sunday (IST). Changes are found by each collection's **change fields**, one collection-group query per field across all users: `createdAt`/`updatedAt` for every collection, plus the `*Ms` numbers or event times some collections stamp (`EXTRA_CHANGE_FIELDS` in `mapping.ts`, SPENDLY-681; each needs a collection-group index override). A new collection that stamps anything else must add it there; only `users/{uid}/…` paths are copied. The always-full account collections and the `users/{uid}` document still run per user.
   - **Before any upsert,** the sync compares each client-written row (`written_by = 'client'`) with Firestore's version. A typed-column difference is a **divergence**: it is counted in the run's notes and reported by health. Firestore's version replaces the row.
   - **Prerequisites for `safety-net`:**
     - every writer dual-writes in production (670/671 released, `readModel.clientWrites` on);

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { isDuressUid } from "../../shared/utils/duress";
 import { typedColumns, typedDifferences } from "../../shared/utils/readModel/parity";
-import { isExcludedDoc, mapDocumentWithReason, READ_MODEL_TABLES, type ReadModelRow, type SourceDoc, type TableSpec } from "../../shared/utils/readModel/mapping";
+import { changeFieldsOf, isExcludedDoc, mapDocumentWithReason, READ_MODEL_TABLES, type ChangeField, type ReadModelRow, type SourceDoc, type TableSpec } from "../../shared/utils/readModel/mapping";
 
 /**
  * SPENDLY-506 — the read-model sync, as a pure function of its ports
@@ -47,10 +47,11 @@ export const MASS_TOMBSTONE_MIN = 20;
 
 export type PageRequest =
   | { kind: "all"; limit: number; after?: unknown }
-  | { kind: "since"; field: "createdAt" | "updatedAt"; sinceMs: number; limit: number; after?: unknown };
+  | { kind: "since"; field: string; fieldType?: ChangeField["type"]; sinceMs: number; limit: number; after?: unknown };
 /** `reads`: what the page cost, when not one per document (SPENDLY-591 nested pages). */
 export type Page = { docs: SourceDoc[]; next?: unknown; reads?: number };
-export type ChangedRequest = { field: "createdAt" | "updatedAt"; sinceMs: number; limit: number; after?: unknown };
+/** SPENDLY-681: `fieldType` "millis" compares a number field; absent or "timestamp" a Firestore Timestamp. */
+export type ChangedRequest = { field: string; fieldType?: ChangeField["type"]; sinceMs: number; limit: number; after?: unknown };
 export type ChangedPage = { docs: (SourceDoc & { uid: string })[]; next?: unknown; reads: number };
 
 /** The global high-water key for a cross-user (collection-group) pass. Firebase uids are never "*". */
@@ -303,12 +304,13 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
   async function syncAcrossUsers(spec: TableSpec, live: Set<string>, uids: string[], sinceMs: number) {
     const seen = new Set<string>();
     const maxUpdate: Record<string, number> = {};
-    for (const field of ["createdAt", "updatedAt"] as const) {
+    // SPENDLY-681: the collection's change fields (createdAt/updatedAt, plus any *Ms or event time).
+    for (const { field, type: fieldType } of changeFieldsOf(spec)) {
       let after: unknown;
       for (;;) {
         if (remaining() < 1) throw new BudgetExhausted();
         const limit = Math.min(PAGE_SIZE, remaining());
-        const page = await source.readChangedAcrossUsers!(spec.collection, { field, sinceMs, limit, after });
+        const page = await source.readChangedAcrossUsers!(spec.collection, { field, fieldType, sinceMs, limit, after });
         spend(page.reads);
         const byUid: Record<string, ReadModelRow[]> = {};
         for (const doc of page.docs) {
@@ -493,8 +495,8 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
       }
     } else {
       const sinceMs = hw - OVERLAP_MS;
-      for (const field of ["createdAt", "updatedAt"] as const) {
-        await drain(uid, spec, { kind: "since", field, sinceMs, limit: PAGE_SIZE }, seen, maxUpdate, resolved);
+      for (const { field, type: fieldType } of changeFieldsOf(spec)) {
+        await drain(uid, spec, { kind: "since", field, fieldType, sinceMs, limit: PAGE_SIZE }, seen, maxUpdate, resolved);
       }
     }
 
