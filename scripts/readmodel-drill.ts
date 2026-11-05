@@ -1,5 +1,6 @@
 /**
- * SPENDLY-520 — read-model recovery drills, end to end, on a LOCAL stack only:
+ * SPENDLY-520 — read-model recovery drills, end to end, on a LOCAL stack only
+ * (SPENDLY-601 adds D8–D11 for plan v2's dual write and one-write rollback):
  * the Firebase emulator as Firestore, a local Postgres with the real
  * migrations, and PostgREST (the API Supabase runs) in front of it. The
  * drills run the production scripts unchanged (readmodel-sync.ts,
@@ -32,6 +33,12 @@ import { READ_MODEL_SCREENS } from "../shared/utils/readModelMode";
 import { handleReadModelPush } from "../netlify/functions/_readmodelPushCore";
 import { livePushPorts } from "../netlify/functions/readmodel-push";
 import { runSync } from "./lib/readmodelSyncCore";
+import {
+  buildClientEntry, emptyQueue, enqueue, isRefusal, nextBatch, settle,
+  type ClientBatch, type ClientOutboxQueue, type ClientWriteEntry, type SendOutcome,
+} from "../shared/utils/readModel/clientOutbox";
+import { effectiveCollectionMode, READ_MODEL_COLLECTIONS } from "../shared/utils/readModel/collectionMode";
+import { localCopyEnabled } from "../shared/utils/readModelMode";
 import { firestoreReader, supabaseSink } from "./readmodel-sync";
 
 // ---------------------------------------------------------------- guards
@@ -438,6 +445,146 @@ async function main() {
       userSync.statusCode === 200 && !!afterUserSync && lastRun?.notes?.trigger === "push" &&
       outage.statusCode >= 500 &&
       nightly.status === 0 && report.converged);
+  }
+
+  // ---------------------------------------------------------------- SPENDLY-601: plan v2 (dual write)
+
+  // The app's own writes into the read model go through rm_client_apply as
+  // the signed-in user (SPENDLY-669/670). The drill mints that user's token
+  // with the drill secret, with the claims readmodel_auth.uid() accepts.
+  const userToken = (uid: string) =>
+    jwt({
+      iss: "https://securetoken.google.com/expenseapp-27f94",
+      aud: "expenseapp-27f94",
+      role: "authenticated",
+      sub: uid,
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+  const asUser = createClient(API_URL, userToken("drill-a"), { auth: { persistSession: false, autoRefreshToken: false } });
+  const sendBatch = async (batch: ClientBatch) => {
+    try {
+      const { error } = await asUser.rpc("rm_client_apply", { p_table: batch.table, p_rows: batch.rows, p_deletes: batch.deletes });
+      return error;
+    } catch (error) {
+      return { message: String(error) };
+    }
+  };
+  /** The app's outbox loop (lib/readModelClientWrites.ts flush): send batches until empty or a failure. */
+  const drain = async (queue: ClientOutboxQueue) => {
+    let q = queue;
+    for (;;) {
+      const batch = nextBatch(q);
+      if (!batch) return q;
+      const error = await sendBatch(batch);
+      const outcome: SendOutcome = !error ? "ok" : isRefusal(error as { code?: unknown }) ? "refused" : "retry";
+      q = settle(q, batch, outcome);
+      if (outcome === "retry") return q;
+    }
+  };
+  const entryFor = async (uid: string, id: string) => {
+    const snap = await db.doc(`users/${uid}/expenses/${id}`).get();
+    return buildClientEntry({
+      uid, collection: "expenses", docId: id,
+      doc: snap.exists ? { id, data: snap.data() ?? {} } : null,
+      at: new Date().toISOString(),
+    });
+  };
+  const modelRow = async (id: string) =>
+    (await client.from("expenses").select("doc_id, amount, written_by, client_written_at").eq("uid", "drill-a").eq("doc_id", id).maybeSingle()).data as
+      { amount: number; written_by: string; client_written_at: string | null } | null;
+
+  // D8 — the app keeps saving while the read model is down; its outbox drains once on recovery.
+  {
+    const d = "D8 client-write outage";
+    const ids = ["cw1", "cw2", "cw3"];
+    for (const [i, id] of ids.entries()) {
+      await db.doc(`users/drill-a/expenses/${id}`).set({ amount: 100 + i, date: "2026-11-05", month: "2026-11", category: "Food & Groceries", accountId: "bank", createdAt: Timestamp.now(), updatedAt: Timestamp.now() });
+    }
+    let queue = enqueue(emptyQueue("drill-a"), (await Promise.all(ids.map((id) => entryFor("drill-a", id)))).filter((e): e is ClientWriteEntry => !!e));
+    await stopPostgrest();
+    queue = await drain(queue);
+    const heldDuringOutage = queue.entries.length;
+    log(d, `3 expenses saved to Firestore with the read model down; the outbox kept ${heldDuringOutage} (attempts ${queue.entries.map((e) => e.attempts).join(",")})`);
+    await startPostgrest();
+    const firstBatch = nextBatch(queue);
+    queue = await drain(queue);
+    const landed = await Promise.all(ids.map(modelRow));
+    log(d, `read model back: outbox now ${queue.entries.length}; rows ${landed.map((r) => `${r?.amount}/${r?.written_by}`).join(", ")}`);
+    // A batch sent twice (a retry after a lost response) changes nothing.
+    const replayError = firstBatch ? await sendBatch(firstBatch) : null;
+    const afterReplay = await Promise.all(ids.map(modelRow));
+    const once = afterReplay.every((r, i) => r?.client_written_at === landed[i]?.client_written_at && Number(r?.amount) === 100 + i);
+    log(d, `the same batch replayed: ${replayError ? `error ${JSON.stringify(replayError)}` : "ok"}; rows unchanged: ${once}`);
+    result(d, "the outbox holds the app's writes while the read model is down and drains on recovery; each write lands once (a replay changes nothing)",
+      `held ${heldDuringOutage} during the outage; ${queue.entries.length} left after recovery; landed ${landed.filter((r) => r?.written_by === "client").length}/3 as client rows; replay unchanged: ${once}`,
+      heldDuringOutage === 3 && queue.entries.length === 0 && landed.every((r, i) => Number(r?.amount) === 100 + i && r?.written_by === "client") && once);
+  }
+
+  // D9 — rm_client_apply refuses a bad row: it isn't stored, the outbox drops it, and the nightly repair restores it.
+  {
+    const d = "D9 client-write rejection";
+    await db.doc("users/drill-a/expenses/cw-bad").set({ amount: 55, date: "2026-11-05", month: "2026-11", category: "Food & Groceries", accountId: "bank", createdAt: Timestamp.now(), updatedAt: Timestamp.now() });
+    const entry = (await entryFor("drill-a", "cw-bad"))!;
+    const bad: ClientWriteEntry = { ...entry, row: { ...entry.row!, amount: "fifty-five" as never } };
+    const before = await modelRow("cw-bad");
+    const error = await sendBatch(nextBatch(enqueue(emptyQueue("drill-a"), [bad]))!);
+    const refused = isRefusal(error as { code?: unknown });
+    const queue = await drain(enqueue(emptyQueue("drill-a"), [bad]));
+    const afterRefusal = await modelRow("cw-bad");
+    log(d, `a corrupt row (amount "fifty-five"): ${JSON.stringify(error)}; a refusal: ${refused}; outbox left ${queue.entries.length}; stored: ${!!afterRefusal}`);
+    const nightly = await runScript("readmodel-sync.ts", ["--mode=full"]);
+    const repaired = await modelRow("cw-bad");
+    const report = await check(db, client, new Set(["drill-b"]));
+    result(d, "the database refuses the bad row and stores nothing; the outbox drops it instead of retrying forever; the nightly full run copies Firestore's version",
+      `refused: ${refused}; stored after refusal: ${!!afterRefusal} (before: ${!!before}); outbox ${queue.entries.length}; nightly exit ${nightly.status} → amount ${repaired?.amount} (${repaired?.written_by}); ${summarizeConvergence(report)}`,
+      refused && !afterRefusal && queue.entries.length === 0 && nightly.status === 0 && Number(repaired?.amount) === 55 && report.converged);
+  }
+
+  // D10 — a dual-write divergence: the app's row disagrees with Firestore; the sync repairs it (Firestore wins) and counts it.
+  {
+    const d = "D10 dual-write divergence";
+    await db.doc("users/drill-a/expenses/cw-div").set({ amount: 100, date: "2026-11-05", month: "2026-11", category: "Food & Groceries", accountId: "bank", createdAt: Timestamp.now(), updatedAt: Timestamp.now() });
+    const entry = (await entryFor("drill-a", "cw-div"))!;
+    const wrong: ClientWriteEntry = { ...entry, row: { ...entry.row!, amount: 90 } };
+    const error = await sendBatch(nextBatch(enqueue(emptyQueue("drill-a"), [wrong]))!);
+    const diverged = await modelRow("cw-div");
+    log(d, `the app wrote amount 90 for an expense Firestore holds at 100: ${error ? JSON.stringify(error) : "ok"}; read model ${diverged?.amount}/${diverged?.written_by}`);
+    const run = await runScript("readmodel-sync.ts", ["--mode=full"]);
+    const repaired = await modelRow("cw-div");
+    const notes = (await client.from("sync_runs").select("notes").eq("mode", "full").order("id", { ascending: false }).limit(1).single()).data as
+      { notes: { divergences?: Record<string, number> } } | null;
+    const counted = notes?.notes?.divergences?.expenses ?? 0;
+    log(d, `nightly full run: exit ${run.status}; read model ${repaired?.amount}/${repaired?.written_by}; divergences counted ${JSON.stringify(notes?.notes?.divergences ?? {})}`);
+    result(d, "the full run replaces the client row with Firestore's version and counts the divergence (the health alert's input)",
+      `before ${diverged?.amount} (${diverged?.written_by}) → after ${repaired?.amount} (${repaired?.written_by}); divergences.expenses ${counted}`,
+      !error && Number(diverged?.amount) === 90 && diverged?.written_by === "client" && Number(repaired?.amount) === 100 && repaired?.written_by === "server" && counted >= 1);
+  }
+
+  // D11 — every collection back to Firestore with one write, no release.
+  {
+    const d = "D11 one-write rollback";
+    const flips = ["expenses", "accounts", "categories"];
+    for (const c of flips) await runScript("readmodel-set-mode.ts", [`--collection=${c}`, "--mode=supabase", "--apply"]);
+    await runScript("readmodel-set-mode.ts", ["--switch=localCopy", "--value=true", "--apply"]);
+    const decide = (setting: unknown) =>
+      READ_MODEL_COLLECTIONS.map((collection) =>
+        effectiveCollectionMode({
+          setting, collection, envConfigured: true, localTestMode: false, duress: false, signedIn: true,
+          localCopyOn: localCopyEnabled(setting), copyState: "ready", fellBack: false,
+        }).mode
+      );
+    const on = (await db.doc("system_settings/global").get()).data()?.readModel;
+    const onCount = decide(on).filter((m) => m === "supabase").length;
+    const off = await runScript("readmodel-set-mode.ts", ["--switch=localCopy", "--value=false", "--apply"]);
+    const settings = (await db.doc("system_settings/global").get()).data() ?? {};
+    const after = decide(settings.readModel);
+    const allFirestore = after.every((m) => m === "firestore");
+    const kept = flips.every((c) => (settings.readModel as Record<string, unknown>)?.[c] === "supabase") && settings.maintenanceMode === false && settings.defaultCurrency === "INR";
+    log(d, `${onCount} collections on supabase; one write (exit ${off.status}): every collection now ${[...new Set(after)].join("/")}; per-collection settings and other settings kept: ${kept}`);
+    for (const c of flips) await runScript("readmodel-set-mode.ts", [`--collection=${c}`, "--mode=firestore", "--apply"]);
+    result(d, "readmodel-set-mode --switch=localCopy --value=false sends every collection back to Firestore on every device in one write, with no release; nothing else changes",
+      `before: ${onCount} on supabase; after: all firestore ${allFirestore}; settings kept ${kept}`,
+      onCount === flips.length && off.status === 0 && allFirestore && kept);
   }
 
   await stopPostgrest();

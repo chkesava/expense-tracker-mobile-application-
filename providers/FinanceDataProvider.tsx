@@ -24,6 +24,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { AppState } from "react-native";
 
 import { commitMutations } from "@/lib/commitMutations";
 import { friendlyErrorMessage, logError, logWarning } from "@/lib/errors";
@@ -495,6 +496,19 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       }
     });
   }, [uid, realtimeOn, localCopyOn, isDuress]);
+  // SPENDLY-601: back in the foreground with realtime off or not live, the
+  // copy catches up from its last change seen (offline it keeps what it has).
+  useEffect(() => {
+    if (!uid || !localCopyOn || isDuress) return;
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      if (realtimeOn && realtimeRef.current?.status().state === "live") return;
+      readModelSequence.current = readModelSequence.current.then(() => localCopyRef.current?.refresh()).catch((error) =>
+        logWarning("readModel.localCopy.refresh", error)
+      ).then(() => undefined);
+    });
+    return () => sub.remove();
+  }, [uid, localCopyOn, realtimeOn, isDuress]);
   /** SPENDLY-512: where read-model history paging resumes (Firestore keeps its own cursor). */
   const supabaseExpenseCursorRef = useRef<SupabaseCursor>(null);
   const supabaseIncomeCursorRef = useRef<SupabaseCursor>(null);
