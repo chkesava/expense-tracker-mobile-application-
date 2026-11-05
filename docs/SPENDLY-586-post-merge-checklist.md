@@ -34,7 +34,7 @@ Last updated: 2026-11-05, with 21 of 21 original stories merged (601 added; 679�
 | 20 | SPENDLY-600 listeners off + measure | ✅ merged (`58819b5d`) | No migration. Every listener on a migrated collection is gated (test); measure each flip 7 days before/after (step 10) and record it in the tracker |
 | 21 | SPENDLY-601 drills + readiness review | ✅ merged (0bc47961) | No migration. Run the harness D1–D11 (`run_drills.sh`, needs PostgREST) and paste results into `docs/SPENDLY-601-readiness-review.md` §3; user sign-off; emergency rollback = `readmodel-set-mode.ts --switch=localCopy --value=false --apply` |
 | 22 | SPENDLY-679 spaces/trips dual-write gap + per-site guard | ✅ merged (`18f53918`) | Spaces and trips saves skip Supabase; trip edits don't stamp `updatedAt` |
-| 23 | SPENDLY-680 server writers don't push (EPF cron, admin scripts, legacy-site crons) | ⏳ to do (found 2026-11-05) | Cron changes reach Supabase only nightly |
+| 23 | SPENDLY-680 server writers don't push (EPF cron, admin scripts, legacy-site crons) | 🔄 built, awaiting merge (legacy crons: user decision) | Cron changes reach Supabase only nightly |
 | 24 | SPENDLY-681 safety-net blind spot for `*Ms`/`at`-stamped collections | ⏳ to do (found 2026-11-05) | **Must be done before** `READMODEL_NIGHTLY_MODE=safety-net` |
 
 SPENDLY-662 (the push fix, P0) is already on `main` and Done.

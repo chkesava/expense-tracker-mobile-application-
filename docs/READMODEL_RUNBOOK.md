@@ -188,6 +188,8 @@ After this device saves synced documents, the app asks the Netlify function `rea
 | Health warns "N per-write push(es) failed today" | Netlify → Functions → `readmodel-push` → logs. Common causes: Supabase paused, a migration not applied (`20261028000000`), or Netlify env missing. The nightly run repairs the data either way |
 | Health shows pushes **rejected**, or "—" while people are saving | Netlify → Functions → `readmodel-push` → logs. Since SPENDLY-662 every rejection is counted and logged as `[PUSH] rejected: <reason>`: `token <firebase code>` (e.g. `auth/id-token-expired` is normal now and then; a constant `auth/insufficient-permission` or `auth/argument-error` means the site's `FIREBASE_SERVICE_ACCOUNT` can't verify app tokens), `no-token`, `not-allowed`, `bad-request`, `purged`, `rate-limited`. `[PUSH] record failed` means the counters can't be written (migration `20261028000000` or the service-role key) |
 
+**Server writers (680):** the EPF cron and the admin repair scripts (`rebuild-*`, `rebaseline-account`) copy what they wrote through the same core (`createServerPush`). The cron's summary reports `readModelPushed`/`readModelPushFailed`; failures are left to the nightly sync.
+
 ## The nightly schedule and divergences (SPENDLY-672)
 
 **The schedule:** nightly at 20:30 UTC (02:00 IST). The repository variable `READMODEL_NIGHTLY_MODE` chooses what it does:

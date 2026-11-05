@@ -3,6 +3,9 @@ import { timingSafeEqual } from "node:crypto";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
+import { createServerPush, trackServerBatch } from "./_readmodelServerPush";
+import { serverPushPorts } from "./readmodel-push";
+
 import {
   EPF_CONTRIBUTION_EVENTS_COLLECTION,
   EPF_CONTRIBUTIONS_COLLECTION,
@@ -171,6 +174,9 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
 
   const pageStartedAt = Date.now();
   const db = getFirestore();
+  // SPENDLY-680: what this run writes is copied to the read model after each
+  // commit (best effort; the nightly sync copies anything missed).
+  const serverPush = createServerPush(serverPushPorts(db, (line) => console.log(line)));
   // IST, not UTC: EPF months are defined in India, and the client uses the same
   // helper so the two cannot disagree about which month it is (KAN-72).
   const throughMonth = epfCurrentMonth();
@@ -300,7 +306,7 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       // status. Neither field is user-editable anywhere in the app, so a merge
       // here cannot clobber a user edit the way the release pass could.
       for (const group of chunk(stale, EPF_CRON_REPAIR_CHUNK_SIZE)) {
-        const repairBatch = db.batch();
+        const repairBatch = trackServerBatch(db.batch());
         const repairs = group.map((row) => ({
           row,
           repair: creditWindowRepairFor(row),
@@ -319,6 +325,7 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
         }
         try {
           const results = await repairBatch.commit();
+          serverPush.note(uid, repairBatch.writtenPaths());
           repaired += group.length;
           // Mirror onto the in-memory copies so this run can act on the fix
           // rather than making it wait for next month — but only now the write
@@ -385,7 +392,7 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       // The trade-off is that one contested row fails its whole chunk; nothing
       // is written, nothing is corrupted, and the next run retries.
       for (const group of chunk(releases, EPF_CRON_RELEASE_CHUNK_SIZE)) {
-        const releaseBatch = db.batch();
+        const releaseBatch = trackServerBatch(db.batch());
         const applied: typeof group = [];
         try {
           // Built inside the try: `update`/`create` validate synchronously, and a
@@ -435,6 +442,7 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
           }
           if (applied.length === 0) continue;
           await releaseBatch.commit();
+          serverPush.note(uid, releaseBatch.writtenPaths());
           released += applied.length;
           // Mirror onto the in-memory copies so `planScheduledContributions`
           // below sees the months as present and does not regenerate them —
@@ -465,7 +473,7 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       for (const group of chunk(planned, EPF_CRON_MONTHS_PER_BATCH)) {
         try {
           // Built inside the try for the same reason as the release pass.
-          const batch = db.batch();
+          const batch = trackServerBatch(db.batch());
           for (const row of group) {
             const contributionId = contributionDocId(
               establishment.id,
@@ -512,6 +520,7 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
           }
 
           await batch.commit();
+          serverPush.note(uid, batch.writtenPaths());
           written += group.length;
         } catch (error) {
           // SPENDLY-20: a collision means someone else already wrote the month
@@ -535,6 +544,7 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
     }
 
     const nextCursor = page.size === limit ? lastPath : null;
+    const readModel = await serverPush.flush();
     // SPENDLY-20: 200 even when `failed > 0`. A 5xx would make the workflow
     // abandon every remaining page, so one broken establishment would cost
     // every later user their month. The workflow totals `failed` across pages
@@ -556,6 +566,9 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       maxEstablishmentMs,
       throughMonth,
       nextCursor,
+      // SPENDLY-680: copied to the read model now (the nightly sync covers the rest).
+      readModelPushed: readModel.pushed,
+      readModelPushFailed: readModel.failed,
     });
   } catch (error) {
     return json(500, { error: (error as Error).message });

@@ -8,6 +8,7 @@ import {
 } from "../../shared/utils/reconciliation";
 import { todayDateKey } from "../../shared/utils/dates";
 import { planDebtCacheRepair } from "../../shared/utils/debtCacheRepair";
+import { createServerPush, type ServerPushPorts } from "../../netlify/functions/_readmodelServerPush";
 
 /**
  * SPENDLY-499 — the one rebuild runner behind both CLIs
@@ -38,6 +39,8 @@ export type RebuildOptions = {
   excludeAccountIds?: string[];
   /** Allow writing an EPF total of zero over a non-zero one. */
   overrideZeros?: boolean;
+  /** SPENDLY-680: copy what an `--apply` run wrote to the read model (null: not configured). */
+  readModel?: ServerPushPorts | null;
   log?: (line: string) => void;
   today?: string;
 };
@@ -53,6 +56,12 @@ export class ChunkedBatch {
   private batch: WriteBatch;
   private ops = 0;
   committed = 0;
+  /** SPENDLY-680: every path written, for the read-model push after the run. */
+  private readonly paths = new Set<string>();
+
+  writtenPaths(): string[] {
+    return [...this.paths];
+  }
 
   constructor(private readonly db: Firestore) {
     this.batch = db.batch();
@@ -64,12 +73,14 @@ export class ChunkedBatch {
   }
 
   async set(ref: FirebaseFirestore.DocumentReference, data: object, options?: FirebaseFirestore.SetOptions) {
+    this.paths.add(ref.path);
     if (options) this.batch.set(ref, data, options);
     else this.batch.set(ref, data);
     await this.bump();
   }
 
   async update(ref: FirebaseFirestore.DocumentReference, ...args: unknown[]) {
+    this.paths.add(ref.path);
     (this.batch.update as (...a: unknown[]) => unknown)(ref, ...args);
     await this.bump();
   }
@@ -307,11 +318,23 @@ export async function rebuildUser(db: Firestore, uid: string, options: RebuildOp
   await batch.flush();
   report.opsCommitted = batch.committed;
   log(apply ? `  Committed ${batch.committed} operation(s).` : `  [DRY RUN] nothing written.`);
+  // SPENDLY-680: the read model gets the rebuilt documents now, not tonight.
+  if (apply && batch.committed > 0 && options.readModel !== undefined) {
+    const push = createServerPush(options.readModel);
+    push.note(uid, batch.writtenPaths());
+    const copied = await push.flush();
+    log(copied.skipped ? `  Read model: ${copied.skipped}.` : `  Read model: ${copied.pushed} copied, ${copied.failed} failed (the nightly sync repairs those).`);
+  }
   return report;
 }
 
 /** CLI entry shared by both scripts. */
-export async function runRebuildCli(db: Firestore, argv: string[], steps: RebuildOptions["steps"]) {
+export async function runRebuildCli(
+  db: Firestore,
+  argv: string[],
+  steps: RebuildOptions["steps"],
+  readModel: ServerPushPorts | null = null
+) {
   const mode: RebuildMode = argv.includes("--apply") ? "apply" : "dryRun";
   const value = (flag: string) => argv.find((a) => a.startsWith(`${flag}=`))?.split("=")[1] ?? null;
   const uid = value("--uid");
@@ -330,6 +353,7 @@ export async function runRebuildCli(db: Firestore, argv: string[], steps: Rebuil
     accountId: value("--accountId"),
     excludeAccountIds: (value("--excludeAccountId") ?? "").split(",").filter(Boolean),
     overrideZeros: argv.includes("--override-zeros"),
+    readModel,
   };
   const uids = uid ? [uid] : await listUserIds(db);
   for (const id of uids) await rebuildUser(db, id, options);
