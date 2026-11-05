@@ -7,6 +7,7 @@ import { purgedUidsBatch } from "../../scripts/lib/readmodelPurged";
 import { runSync } from "../../scripts/lib/readmodelSyncCore";
 import { firestoreReader, supabaseSink } from "../../scripts/readmodel-sync";
 import { handleReadModelPush, type PushEvent, type PushPorts, type PushResult } from "./_readmodelPushCore";
+import type { ServerPushPorts } from "./_readmodelServerPush";
 import { firestorePathOf, SPEC_BY_COLLECTION } from "../../shared/utils/readModel/mapping";
 
 /**
@@ -101,6 +102,32 @@ function init(): { db: Firestore; client: SupabaseClient } {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   return { db, client };
+}
+
+/**
+ * SPENDLY-680: the ports a server-side writer (the EPF cron) uses to copy what
+ * it wrote, or null when the site has no read-model settings or pushes are
+ * turned off (READMODEL_PUSH_ENABLED=false); the nightly sync copies it then.
+ */
+export function serverPushPorts(firestore: Firestore, log?: (line: string) => void): ServerPushPorts | null {
+  if (env("READMODEL_PUSH_ENABLED") === "false" || !env("READMODEL_SUPABASE_URL") || !env("READMODEL_SUPABASE_SERVICE_ROLE_KEY")) {
+    return null;
+  }
+  client ??= createClient(env("READMODEL_SUPABASE_URL"), env("READMODEL_SUPABASE_SERVICE_ROLE_KEY"), {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return livePushPorts({
+    db: firestore,
+    client,
+    // A server writer names its own documents; there is no caller token.
+    verifyIdToken: async () => {
+      throw new Error("server push: no tokens");
+    },
+    enabled: true,
+    limit: 0,
+    maxReadsPerDay: Number(env("READMODEL_MAX_READS_PER_DAY") || 12000),
+    log,
+  });
 }
 
 const DISABLED: PushPorts = {

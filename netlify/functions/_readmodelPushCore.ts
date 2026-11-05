@@ -123,27 +123,8 @@ export async function handleReadModelPush(event: PushEvent, ports: PushPorts): P
   }
 
   try {
-    const docs = await ports.readDocs(uid, request.refs);
+    const { pushed, tombstoned } = await copyDocsToReadModel(uid, request.refs, ports);
     stats.reads += request.refs.length;
-    const upserts = new Map<string, ReadModelRow[]>();
-    const tombstones = new Map<string, string[]>();
-    request.refs.forEach((ref, i) => {
-      const spec = SPEC_BY_COLLECTION.get(ref.collection)!;
-      const doc = docs[i];
-      if (doc) {
-        const list = upserts.get(spec.table) ?? [];
-        list.push(mapDocumentWithReason(spec, uid, doc).row);
-        upserts.set(spec.table, list);
-      } else {
-        const list = tombstones.get(spec.table) ?? [];
-        list.push(ref.docId);
-        tombstones.set(spec.table, list);
-      }
-    });
-    let pushed = 0;
-    let tombstoned = 0;
-    for (const [table, rows] of upserts) pushed += await ports.upsert(table, rows);
-    for (const [table, ids] of tombstones) tombstoned += await ports.tombstone(table, uid, ids);
     stats.docs += request.refs.length;
     return finish(json(200, { mode: "refs", pushed, tombstoned }));
   } catch (error) {
@@ -152,4 +133,38 @@ export async function handleReadModelPush(event: PushEvent, ports: PushPorts): P
     // No provider detail to the client; the nightly sync repairs it.
     return finish(json(502, { error: "Couldn't update the reporting copy now. It will catch up tonight." }));
   }
+}
+
+/**
+ * Reads these documents of `uid` from Firestore and copies them to the read
+ * model, mapped exactly as the sync maps them (version-guarded upserts; a
+ * missing document is tombstoned). The caller has already checked who `uid`
+ * is (a verified token, or a trusted server writer: SPENDLY-680).
+ */
+export async function copyDocsToReadModel(
+  uid: string,
+  refs: PushRef[],
+  ports: Pick<PushPorts, "readDocs" | "upsert" | "tombstone">
+): Promise<{ pushed: number; tombstoned: number }> {
+  const docs = await ports.readDocs(uid, refs);
+  const upserts = new Map<string, ReadModelRow[]>();
+  const tombstones = new Map<string, string[]>();
+  refs.forEach((ref, i) => {
+    const spec = SPEC_BY_COLLECTION.get(ref.collection)!;
+    const doc = docs[i];
+    if (doc) {
+      const list = upserts.get(spec.table) ?? [];
+      list.push(mapDocumentWithReason(spec, uid, doc).row);
+      upserts.set(spec.table, list);
+    } else {
+      const list = tombstones.get(spec.table) ?? [];
+      list.push(ref.docId);
+      tombstones.set(spec.table, list);
+    }
+  });
+  let pushed = 0;
+  let tombstoned = 0;
+  for (const [table, rows] of upserts) pushed += await ports.upsert(table, rows);
+  for (const [table, ids] of tombstones) tombstoned += await ports.tombstone(table, uid, ids);
+  return { pushed, tombstoned };
 }
