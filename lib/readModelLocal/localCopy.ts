@@ -242,7 +242,21 @@ export function createLocalCopy(deps: LocalCopyDeps) {
         // An interrupted hydrate resumes; anything unhydrated is (re)hydrated.
         const resuming = (await s.getMeta(HYDRATE_MARK)) !== null;
         const lastSeen = await s.getMeta(LAST_SEEN);
-        if (lastSeen && !resuming && (await catchUp(s, lastSeen, g)) === "rehydrate") {
+        let caughtUp: "ok" | "rehydrate" | "unreachable" = "ok";
+        if (lastSeen && !resuming) {
+          try {
+            caughtUp = await catchUp(s, lastSeen, g);
+          } catch (error) {
+            if (missing.length) throw error;
+            // SPENDLY-601 (airplane mode): a fully hydrated copy opens with the
+            // rows it has instead of failing every collection over to
+            // Firestore. Its last change seen stays where it was, so realtime's
+            // reconnect (or the next launch) catches up from there.
+            deps.log?.("readModel.localCopy.catchUpUnreachable", error);
+            caughtUp = "unreachable";
+          }
+        }
+        if (caughtUp === "rehydrate") {
           await hydrateAll(s, g, [...specs.keys()]);
         } else if (missing.length) {
           await hydrateAll(s, g, missing);
@@ -250,6 +264,25 @@ export function createLocalCopy(deps: LocalCopyDeps) {
         if (g === generation) setState("ready");
       });
       return { lastSeen: (await run((s) => s.getMeta(LAST_SEEN))) ?? null };
+    },
+
+    /**
+     * SPENDLY-601: catch up from the last change seen, now (the app came to
+     * the foreground with realtime off or down). Offline it changes nothing:
+     * the copy keeps serving what it has, and isn't marked failed.
+     */
+    refresh(): Promise<unknown> {
+      return run(async (s, g) => {
+        const lastSeen = await s.getMeta(LAST_SEEN);
+        if (!lastSeen || (await s.getMeta(HYDRATE_MARK)) !== null) return;
+        try {
+          if ((await catchUp(s, lastSeen, g)) === "rehydrate") await hydrateAll(s, g, [...specs.keys()]);
+        } catch (error) {
+          deps.log?.("readModel.localCopy.refreshUnreachable", error);
+          return;
+        }
+        if (g === generation) setState("ready");
+      });
     },
 
     /** A realtime event (onReadModelChanges). */

@@ -32,7 +32,7 @@ Last updated: 2026-11-05, with 20 of 21 stories merged (600 added).
 | 18 | SPENDLY-599 dashboard, net worth, budgets | ✅ merged (`61eaad6b`) | No migration. `financialSummaries`, `netWorthHistory`, `financialGoals` (§4 step 9): 14-day shadow, zero differences on every tile; goals last; offline expense drill |
 | 19 | SPENDLY-674 reference data | ✅ merged (`1be425b6`) | No migration. `categories`, `spaces`, `categorizationRules`, `calendarReminders` (§4 step 9): 7-day shadow; launch reads measured (588 meter); palette no-flash check on device. Settings doc, `merchantOverrides`, `recurringDismissals` stay on Firestore |
 | 20 | SPENDLY-600 listeners off + measure | ✅ merged (`58819b5d`) | No migration. Every listener on a migrated collection is gated (test); measure each flip 7 days before/after (step 10) and record it in the tracker |
-| 21 | SPENDLY-601 drills + readiness review | ⏳ to do | *(added when merged)* |
+| 21 | SPENDLY-601 drills + readiness review | 🔄 built, awaiting merge | No migration. Run the harness D1–D11 (`run_drills.sh`, needs PostgREST) and paste results into `docs/SPENDLY-601-readiness-review.md` §3; user sign-off; emergency rollback = `readmodel-set-mode.ts --switch=localCopy --value=false --apply` |
 
 SPENDLY-662 (the push fix, P0) is already on `main` and Done.
 
