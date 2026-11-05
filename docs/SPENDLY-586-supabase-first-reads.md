@@ -22,7 +22,7 @@
 | 3 | SPENDLY-598 investments, EPF, loans, subs | `feature/SPENDLY-598-investments-epf` | **Merged into the epic** (`d5df3467`); no migration |
 | 3 | SPENDLY-599 dashboard, net worth, budgets | `feature/SPENDLY-599-dashboard-networth-budgets` | **Merged into the epic** (`61eaad6b`); no migration; net worth via `composeNetWorth` (ADR D3) |
 | 3 | SPENDLY-674 reference data (N6) | `feature/SPENDLY-674-reference-data` | **Merged into the epic** (`1be425b6`); no migration |
-| 4 | SPENDLY-600 listeners off + measure | `feature/SPENDLY-600-listeners-off` | **Built**; awaiting merge; no migration; measuring happens after the epic reaches main |
+| 4 | SPENDLY-600 listeners off + measure | `feature/SPENDLY-600-listeners-off` | **Merged into the epic** (`58819b5d`); no migration; measuring happens after the epic reaches main |
 | 4 | SPENDLY-601 drills and readiness | — | To Do |
 
 ## Read savings (SPENDLY-600)

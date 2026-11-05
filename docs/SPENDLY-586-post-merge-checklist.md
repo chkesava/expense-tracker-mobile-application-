@@ -4,7 +4,7 @@
 
 Each story that merges into the epic adds its own steps here.
 
-Last updated: 2026-11-05, with 19 of 21 stories merged (674 added).
+Last updated: 2026-11-05, with 20 of 21 stories merged (600 added).
 
 ---
 
@@ -31,7 +31,7 @@ Last updated: 2026-11-05, with 19 of 21 stories merged (674 added).
 | 17 | SPENDLY-598 investments, EPF, loans, subs | ✅ merged (`d5df3467`) | No migration. Per collection: shadow 14 days (zero differences), then supabase: portfolio, SIP, subscriptions, watchlists (+items), EPF passbook (`epfContributions`, `epfEstablishments`, `epfInterestEntries`, display-only callers). EPF transfers/reconciliations/wage history/profile stay on Firestore |
 | 18 | SPENDLY-599 dashboard, net worth, budgets | ✅ merged (`61eaad6b`) | No migration. `financialSummaries`, `netWorthHistory`, `financialGoals` (§4 step 9): 14-day shadow, zero differences on every tile; goals last; offline expense drill |
 | 19 | SPENDLY-674 reference data | ✅ merged (`1be425b6`) | No migration. `categories`, `spaces`, `categorizationRules`, `calendarReminders` (§4 step 9): 7-day shadow; launch reads measured (588 meter); palette no-flash check on device. Settings doc, `merchantOverrides`, `recurringDismissals` stay on Firestore |
-| 20 | SPENDLY-600 listeners off + measure | 🔄 built, awaiting merge | No migration. Every listener on a migrated collection is gated (test); measure each flip 7 days before/after (step 10) and record it in the tracker |
+| 20 | SPENDLY-600 listeners off + measure | ✅ merged (`58819b5d`) | No migration. Every listener on a migrated collection is gated (test); measure each flip 7 days before/after (step 10) and record it in the tracker |
 | 21 | SPENDLY-601 drills + readiness review | ⏳ to do | *(added when merged)* |
 
 SPENDLY-662 (the push fix, P0) is already on `main` and Done.
