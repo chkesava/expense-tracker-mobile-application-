@@ -31,6 +31,8 @@ const INTEGRATED = [
   "epfContributions", "epfEstablishments", "epfInterestEntries",
   // SPENDLY-599: the dashboard tiles + EPF summary, net-worth history, goals.
   "financialGoals", "financialSummaries", "netWorthHistory",
+  // SPENDLY-674: reference data.
+  "calendarReminders", "categories", "categorizationRules", "spaces",
 ].sort();
 
 const NOT_YET: Record<string, string> = {
@@ -38,8 +40,9 @@ const NOT_YET: Record<string, string> = {
   epfReconciliations: "interest recompute and the summary sync write from them; stays on Firestore (598)",
   epfWageHistory: "the contribution catch-up writes from it; stays on Firestore (598)",
   epfProfile: "the EPF dashboard writes from it; stays on Firestore (598)",
-  categories: "loaded by revision (SPENDLY-660), not a plain listener; 674",
-  userSettings: "allowlisted fields only: never a source",
+  merchantOverrides: "one-off service reads on screen open; stays on Firestore (674)",
+  recurringDismissals: "the recurring sync writes from them; stays on Firestore (674)",
+  userSettings: "allowlisted fields only: never a source; the PIN/duress fields keep the users/{uid} listener on Firestore (674)",
 };
 
 function sources(dir: string): string[] {
@@ -176,6 +179,21 @@ describe("provider read switches (SPENDLY-673)", () => {
     const text = readFileSync(join(ROOT, "hooks", "useFinancialGoals.ts"), "utf8");
     expect(text).toMatch(/if \(goalsModeRef\.current === "supabase" && db\) \{\s*const snap = await getDocs\(query\(collection\(db, "users", uid, "financialGoals"\)/);
     expect(text).toMatch(/goalsRef\.current = snap\.docs\.map/);
+  });
+
+  // SPENDLY-674 (R4.3a).
+  it("category rename, delete and merge rewrite from Firestore when the copy serves categories or expenses", () => {
+    const text = readFileSync(join(ROOT, "hooks", "useCategories.ts"), "utf8");
+    expect(text).toMatch(/const expensesInMemory = expensesComplete && expensesMode !== "supabase";/);
+    expect(text).not.toMatch(/= expensesComplete\s*\?/);
+    expect(text).toMatch(/if \(categoriesMode !== "supabase" \|\| !uid\) return categories;/);
+    expect(count(text, "await categoriesForWrite(db)")).toBe(3);
+  });
+
+  it("in supabase mode categories come from the copy; the revision listener stays for firestore mode", () => {
+    const text = readFileSync(join(ROOT, "providers", "ExpenseReferenceDataProvider.tsx"), "utf8");
+    expect(text).toMatch(/if \(categoriesSource\.mode === "supabase"\) \{[\s\S]{0,200}return categoriesSource\.subscribe\(/);
+    expect(text).toContain('doc(db, "users", uid, "meta", "categories")');
   });
 
   it("SIP execution reads its plans and positions from Firestore itself", () => {

@@ -6,6 +6,8 @@ import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath } from "@/lib/firestoreReadDebug";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
 import { CALENDAR_REMINDERS_COLLECTION } from "@/services/calendar/reminderStore";
 import type { CalendarReminder } from "@/shared/types/calendarReminder";
 
@@ -17,6 +19,8 @@ export function useCalendarReminders(options?: { enabled?: boolean }) {
   const [reminders, setReminders] = useState<CalendarReminder[]>([]);
   const [loading, setLoading] = useState(true);
   const { error, setError, retry, attempt } = useLoadFailure();
+  // SPENDLY-674: firestore (default) | shadow | supabase, per readModel.calendarReminders.
+  const remindersSource = useReadModelSource("calendarReminders");
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -27,17 +31,23 @@ export function useCalendarReminders(options?: { enabled?: boolean }) {
     }
     setLoading(true);
     const path = `users/${uid}/${CALENDAR_REMINDERS_COLLECTION}`;
+    const applyReminders = (docs: SourceDoc[]) => {
+      setReminders(
+        docs.map((d) => {
+          const data = d.data as Omit<CalendarReminder, "id">;
+          return { ...data, id: d.id, completedDates: Array.isArray(data.completedDates) ? data.completedDates : [] };
+        })
+      );
+      setError(null);
+      setLoading(false);
+    };
+    if (remindersSource.mode === "supabase") return remindersSource.subscribe(applyReminders);
     const unsubscribe = onSnapshot(
       collection(db, "users", uid, CALENDAR_REMINDERS_COLLECTION),
       (snap) => {
-        setReminders(
-          snap.docs.map((d) => {
-            const data = d.data() as Omit<CalendarReminder, "id">;
-            return { ...data, id: d.id, completedDates: Array.isArray(data.completedDates) ? data.completedDates : [] };
-          })
-        );
-        setError(null);
-        setLoading(false);
+        const docs = toSourceDocs(snap);
+        applyReminders(docs);
+        if (remindersSource.mode === "shadow") void remindersSource.shadow(docs);
       },
       snapshotErrorHandler(
         "snapshot.calendarReminders",
@@ -52,7 +62,7 @@ export function useCalendarReminders(options?: { enabled?: boolean }) {
       forgetSnapshotPath(path);
       unsubscribe();
     };
-  }, [uid, enabled, attempt]);
+  }, [uid, enabled, attempt, remindersSource.mode]);
 
   return { uid, reminders, loading, error, retry };
 }

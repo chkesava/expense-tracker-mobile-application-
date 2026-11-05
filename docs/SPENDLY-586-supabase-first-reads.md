@@ -21,6 +21,7 @@
 | 3 | SPENDLY-597 accounts, cards, bills | `feature/SPENDLY-597-accounts-ledger` | **Merged into the epic**; no migration |
 | 3 | SPENDLY-598 investments, EPF, loans, subs | `feature/SPENDLY-598-investments-epf` | **Merged into the epic** (`d5df3467`); no migration |
 | 3 | SPENDLY-599 dashboard, net worth, budgets | `feature/SPENDLY-599-dashboard-networth-budgets` | **Merged into the epic** (`61eaad6b`); no migration; net worth via `composeNetWorth` (ADR D3) |
+| 3 | SPENDLY-674 reference data (N6) | `feature/SPENDLY-674-reference-data` | **Built**; awaiting merge; no migration |
 | 4 | SPENDLY-600 listeners off + measure | — | To Do |
 | 4 | SPENDLY-601 drills and readiness | — | To Do |
 
@@ -63,3 +64,4 @@
 - **2026-11-05:** 595 merged (`9be457d1`). **Migration `20261105000000` applied to production** after the checks; `readmodel_capacity()` reads 17 MB, 0 realtime messages in 24 h; not executable by anon or authenticated.
 - **2026-11-05 (598):** portfolio, SIP, subscriptions, watchlists (+ nested items) and the EPF passbook read through the switch. Writers that write from these reads verify on Firestore (portfolio snapshot, subscription auto-posting, watchlist setup; SIP execution already did). EPF: the copy serves only display-only callers (`readFrom: "copy"`: passbook, current-month card, calendar); every other EPF instance stays on Firestore (`useReadModelSource(c, { copy: false })`). Guard-tested.
 - **2026-11-05 (599):** tiles (`financialSummaries` dashboard_*, categoryTotals from the full doc), EPF summary (display opt-in; the sync stays on Firestore), `netWorthHistory`, `financialGoals` through the switch. The daily net-worth point confirms on Firestore (today's month doc + every copy-served input of the totals must match, `copyAgreesWithFirestore`); goal writes are built from Firestore's goals; goals' waiting-to-sync from the outbox. Guard-tested.
+- **2026-11-05 (674):** categories (copy + realtime replace the revision listener in supabase mode; revision kept for firestore), spaces, categorizationRules, calendarReminders through the switch. Category rename/delete/merge read categories from Firestore and never trust copy-served expenses as complete (R4.3a). The users/{uid} settings doc stays on Firestore (PIN/duress fields aren't copied; theme from Firestore's durable cache, no flash); merchantOverrides (one-off reads) and recurringDismissals (drive the recurring sync) stay on Firestore.

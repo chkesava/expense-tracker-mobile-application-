@@ -4,7 +4,9 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  limit,
   query,
+  type Firestore,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -19,6 +21,7 @@ import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { logDirectRead } from "@/lib/firestoreReadDebug";
 import { useExpenses } from "@/hooks/useExpenses";
+import { useReadModelMode } from "@/hooks/useReadModelSource";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useExpenseReferenceData } from "@/providers/ExpenseReferenceDataProvider";
@@ -61,6 +64,17 @@ export const useCategories = () => {
     budgetsLoading,
   } = useExpenseReferenceData();
   const { expenses, complete: expensesComplete } = useExpenses();
+  // SPENDLY-674 (R4.3a): these writers rewrite expenses and categories from
+  // the lists on screen. From the on-device copy, they read Firestore instead:
+  // the expenses through the existing query path, the categories once per write.
+  const categoriesMode = useReadModelMode("categories");
+  const expensesMode = useReadModelMode("expenses");
+  const expensesInMemory = expensesComplete && expensesMode !== "supabase";
+  const categoriesForWrite = async (db: Firestore): Promise<Category[]> => {
+    if (categoriesMode !== "supabase" || !uid) return categories;
+    const snap = await getDocs(query(collection(db, "users", uid, "categories"), limit(500)));
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as Category));
+  };
 
   const parentCategories = useMemo(
     () =>
@@ -239,7 +253,8 @@ export const useCategories = () => {
   ) => {
     const db = getFirestoreDb();
     if (!uid || !db || !newName.trim()) return;
-    const cat = categories.find((c) => c.id === id);
+    const all = await categoriesForWrite(db);
+    const cat = all.find((c) => c.id === id);
     if (!cat) return;
     const oldName = cat.name;
     const trimmed = newName.trim();
@@ -258,7 +273,7 @@ export const useCategories = () => {
         // whole history. On the staged page this rewrote 300 rows and left
         // every older expense on the old category name — silently, and with
         // no later pass to repair it.
-        const rows = expensesComplete
+        const rows = expensesInMemory
           ? expenses.map((expense) => ({
               id: expense.id,
               data: expense,
@@ -307,7 +322,7 @@ export const useCategories = () => {
           const data = row.data as RelabelSource;
           const ref = doc(db, "users", uid, "expenses", row.id);
           if (cat.kind === "subcategory") {
-            const parent = categories.find((c) => c.id === cat.parentId);
+            const parent = all.find((c) => c.id === cat.parentId);
             if (
               parent &&
               data.category === parent.name &&
@@ -387,7 +402,7 @@ export const useCategories = () => {
     const db = getFirestoreDb();
     if (!uid || !db) return;
     try {
-      const children = categories.filter((c) => c.parentId === id);
+      const children = (await categoriesForWrite(db)).filter((c) => c.parentId === id);
       const writes = children.map((c) =>
         deleteDoc(doc(db, "users", uid, "categories", c.id))
       );
@@ -410,8 +425,9 @@ export const useCategories = () => {
   const mergeCategories = async (sourceId: string, targetId: string) => {
     const db = getFirestoreDb();
     if (!uid || !db || sourceId === targetId) return;
-    const source = categories.find((c) => c.id === sourceId);
-    const target = categories.find((c) => c.id === targetId);
+    const current = await categoriesForWrite(db);
+    const source = current.find((c) => c.id === sourceId);
+    const target = current.find((c) => c.id === targetId);
     if (!source || !target) {
       toast.error("Invalid merge selection");
       return;
@@ -422,8 +438,8 @@ export const useCategories = () => {
     }
 
     try {
-      const sourceSubs = categories.filter((c) => c.parentId === sourceId);
-      const targetSubs = categories.filter((c) => c.parentId === targetId);
+      const sourceSubs = current.filter((c) => c.parentId === sourceId);
+      const targetSubs = current.filter((c) => c.parentId === targetId);
       const targetSubNames = new Set(
         targetSubs.map((s) => s.name.toLowerCase())
       );
@@ -458,7 +474,7 @@ export const useCategories = () => {
       }
 
       // SPENDLY-98: same completeness rule as the rename path above.
-      const expenseRows = expensesComplete
+      const expenseRows = expensesInMemory
         ? expenses.map((expense) => ({
             id: expense.id,
             data: expense,

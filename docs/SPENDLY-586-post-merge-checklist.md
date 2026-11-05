@@ -30,7 +30,7 @@ Last updated: 2026-11-05, with 18 of 21 stories merged (599 added).
 | 16 | SPENDLY-597 accounts, cards, bills | ✅ merged | `readModel.accounts` / `accountTypes` / `accountPayments` / `accountEntries` / `accountTransfers` (+ `creditCardBills`): shadow 14 days to the paisa (Free plan: health's capacity checks green), then supabase; the bill pass verifies on Firestore (a few reads per focus when it has work) |
 | 17 | SPENDLY-598 investments, EPF, loans, subs | ✅ merged (`d5df3467`) | No migration. Per collection: shadow 14 days (zero differences), then supabase: portfolio, SIP, subscriptions, watchlists (+items), EPF passbook (`epfContributions`, `epfEstablishments`, `epfInterestEntries`, display-only callers). EPF transfers/reconciliations/wage history/profile stay on Firestore |
 | 18 | SPENDLY-599 dashboard, net worth, budgets | ✅ merged (`61eaad6b`) | No migration. `financialSummaries`, `netWorthHistory`, `financialGoals` (§4 step 9): 14-day shadow, zero differences on every tile; goals last; offline expense drill |
-| 19 | SPENDLY-674 reference data | ⏳ to do | *(added when merged: 7-day shadow)* |
+| 19 | SPENDLY-674 reference data | 🔄 built, awaiting merge | No migration. `categories`, `spaces`, `categorizationRules`, `calendarReminders` (§4 step 9): 7-day shadow; launch reads measured (588 meter); palette no-flash check on device. Settings doc, `merchantOverrides`, `recurringDismissals` stay on Firestore |
 | 20 | SPENDLY-600 listeners off + measure | ⏳ to do | *(added when merged)* |
 | 21 | SPENDLY-601 drills + readiness review | ⏳ to do | *(added when merged)* |
 
@@ -148,7 +148,7 @@ It needs `readModel.localCopy = true` (step 9a). Wired by 673: `creditCardBills`
 
 **Rollback:** `firestore`.
 
-*(674 adds its collections here when it merges.)*
+Wired by 674: `categories` (the revision listener stays for firestore mode), `spaces`, `categorizationRules`, `calendarReminders` (7-day shadow). The `users/{uid}` settings document, `merchantOverrides` and `recurringDismissals` stay on Firestore.
 
 Each screen has `system_settings/global.readModel.<screen>`: `firestore` → `shadow` → `supabase`. Shadow lasts 7 days, or 14 where money is shown, and the user approves each flip. The project stays on the Free plan (595): before each flip, health's capacity checks are green.
 
