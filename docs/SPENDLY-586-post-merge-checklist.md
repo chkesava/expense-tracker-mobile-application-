@@ -4,7 +4,7 @@
 
 Each story that merges into the epic adds its own steps here.
 
-Last updated: 2026-11-05, with 17 of 21 stories merged (598 added).
+Last updated: 2026-11-05, with 18 of 21 stories merged (599 added).
 
 ---
 
@@ -29,7 +29,7 @@ Last updated: 2026-11-05, with 17 of 21 stories merged (598 added).
 | 15 | SPENDLY-596 Journal on the read model | ✅ merged | `readModel.expenses` / `readModel.incomes`: shadow 7 days, then supabase (§4 step 9) |
 | 16 | SPENDLY-597 accounts, cards, bills | ✅ merged | `readModel.accounts` / `accountTypes` / `accountPayments` / `accountEntries` / `accountTransfers` (+ `creditCardBills`): shadow 14 days to the paisa (Free plan: health's capacity checks green), then supabase; the bill pass verifies on Firestore (a few reads per focus when it has work) |
 | 17 | SPENDLY-598 investments, EPF, loans, subs | ✅ merged (`d5df3467`) | No migration. Per collection: shadow 14 days (zero differences), then supabase: portfolio, SIP, subscriptions, watchlists (+items), EPF passbook (`epfContributions`, `epfEstablishments`, `epfInterestEntries`, display-only callers). EPF transfers/reconciliations/wage history/profile stay on Firestore |
-| 18 | SPENDLY-599 dashboard, net worth, budgets | 🔄 built, awaiting merge | No migration. `financialSummaries`, `netWorthHistory`, `financialGoals` (§4 step 9): 14-day shadow, zero differences on every tile; goals last; offline expense drill |
+| 18 | SPENDLY-599 dashboard, net worth, budgets | ✅ merged (`61eaad6b`) | No migration. `financialSummaries`, `netWorthHistory`, `financialGoals` (§4 step 9): 14-day shadow, zero differences on every tile; goals last; offline expense drill |
 | 19 | SPENDLY-674 reference data | ⏳ to do | *(added when merged: 7-day shadow)* |
 | 20 | SPENDLY-600 listeners off + measure | ⏳ to do | *(added when merged)* |
 | 21 | SPENDLY-601 drills + readiness review | ⏳ to do | *(added when merged)* |
