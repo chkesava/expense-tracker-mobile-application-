@@ -17,7 +17,7 @@ It is **custodial money**: it belongs to the group, not the user.
 
 | Story | Scope | State |
 |---|---|---|
-| SPENDLY-683 (S1) | Accounting model (this doc), types, pure logic and write plans | Built on `feature/SPENDLY-683-group-funds-model`; awaiting merge approval |
+| SPENDLY-683 (S1) | Accounting model (this doc), types, pure logic and write plans | Merged to the epic branch (`60808c94`) |
 | SPENDLY-684 (S2) | Store, Firestore rules, `CREATE_ONLY_SEGMENTS`, how entries show on account screens, index | To do |
 | SPENDLY-685 (S3) | Supabase read model: mapping, migration, RLS, allowlist, purge, indexes, read switch, history read path | To do |
 | SPENDLY-686 (S4) | "Group funds held" liability in net worth and runway | To do |
