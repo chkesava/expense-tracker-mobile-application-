@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -14,6 +15,7 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   query,
   serverTimestamp,
@@ -39,6 +41,8 @@ import {
 } from "@/services/portfolio/investmentCash";
 import { resolveStockProfileId } from "@/shared/features/portfolio/utils/stockProfile";
 import { usePortfolioMutations } from "@/hooks/usePortfolioMutations";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import { todayDateKey } from "@/shared/utils/dates";
 import {
@@ -94,6 +98,15 @@ function usePortfolioState(options?: {
   const { depositCash, withdrawCash } = usePortfolioMutations();
 
   const [holdings, setHoldings] = useState<Holding[]>([]);
+  const holdingsRef = useRef<Holding[]>([]);
+  holdingsRef.current = holdings;
+  // SPENDLY-598: firestore (default) | shadow | supabase, per readModel.<collection>.
+  const settingsSource = useReadModelSource("portfolioSettings");
+  const holdingsSource = useReadModelSource("holdings");
+  const cashSource = useReadModelSource("investmentCashTransactions");
+  const transactionsSource = useReadModelSource("portfolioTransactions");
+  const holdingsSourceModeRef = useRef(holdingsSource.mode);
+  holdingsSourceModeRef.current = holdingsSource.mode;
   const [transactions, setTransactions] = useState<PortfolioTransaction[]>([]);
   const [orders, setOrders] = useState<PortfolioOrder[]>([]);
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
@@ -123,36 +136,49 @@ function usePortfolioState(options?: {
     setLoading(true);
     const settingsRef = doc(db, "users", uid, "portfolioSettings", SETTINGS_DOC_ID);
 
+    // SPENDLY-598: the same mapping for either source.
+    const applySettings = (docs: SourceDoc[]) => {
+      const d = docs.find((item) => item.id === SETTINGS_DOC_ID);
+      setSettings(d ? ({ id: d.id, ...d.data } as PortfolioSettings) : null);
+    };
+    const applyHoldings = (docs: SourceDoc[]) => {
+      setHoldings(docs.map((item) => ({ id: item.id, ...item.data } as Holding)).sort((a, b) => a.symbol.localeCompare(b.symbol)));
+      setLoading(false);
+    };
+    const applyCash = (docs: SourceDoc[]) =>
+      setCashEntries(docs.map((item) => ({ id: item.id, ...item.data } as InvestmentCashEntry)));
+    const applyTransactions = (docs: SourceDoc[]) =>
+      setTransactions(docs.map((item) => ({ id: item.id, ...item.data } as PortfolioTransaction)).sort((a, b) => b.date.localeCompare(a.date)));
+
     // Critical: settings + holdings for first paint
     const primaryUnsubs = [
-      onSnapshot(settingsRef, (snapshot) => {
-        setSettings(
-          snapshot.exists()
-            ? ({ id: snapshot.id, ...snapshot.data() } as PortfolioSettings)
-            : null
-        );
+      settingsSource.mode === "supabase"
+        ? settingsSource.subscribe(applySettings)
+        : onSnapshot(settingsRef, (snapshot) => {
+        const docs = snapshot.exists() ? [{ id: snapshot.id, data: (snapshot.data() ?? {}) as Record<string, unknown> }] : [];
+        applySettings(docs);
+        if (settingsSource.mode === "shadow") void settingsSource.shadow(docs);
       }),
-      onSnapshot(query(collection(db, "users", uid, "holdings")), (snapshot) => {
-        setHoldings(
-          snapshot.docs
-            .map((item) => ({ id: item.id, ...item.data() } as Holding))
-            .sort((a, b) => a.symbol.localeCompare(b.symbol))
-        );
-        setLoading(false);
+      holdingsSource.mode === "supabase"
+        ? holdingsSource.subscribe(applyHoldings)
+        : onSnapshot(query(collection(db, "users", uid, "holdings")), (snapshot) => {
+        const docs = toSourceDocs(snapshot);
+        applyHoldings(docs);
+        if (holdingsSource.mode === "shadow") void holdingsSource.shadow(docs);
       }, (error) => {
         logError("portfolio.loadHoldings", error);
         setLoading(false);
       }),
       // Primary, not secondary: useUnifiedNetWorth subscribes with
       // includeSecondary:false and still needs the cash balance.
-      onSnapshot(
+      cashSource.mode === "supabase"
+        ? cashSource.subscribe(applyCash)
+        : onSnapshot(
         query(collection(db, "users", uid, INVESTMENT_CASH_COLLECTION)),
         (snapshot) => {
-          setCashEntries(
-            snapshot.docs.map(
-              (item) => ({ id: item.id, ...item.data() } as InvestmentCashEntry)
-            )
-          );
+          const docs = toSourceDocs(snapshot);
+          applyCash(docs);
+          if (cashSource.mode === "shadow") void cashSource.shadow(docs);
         },
         (error) => {
           logError("portfolio.loadInvestmentCash", error);
@@ -166,12 +192,12 @@ function usePortfolioState(options?: {
       ? scheduleIdleWork(
       () => {
         secondaryUnsubs = [
-          onSnapshot(query(collection(db, "users", uid, "portfolioTransactions")), (snapshot) => {
-            setTransactions(
-              snapshot.docs
-                .map((item) => ({ id: item.id, ...item.data() } as PortfolioTransaction))
-                .sort((a, b) => b.date.localeCompare(a.date))
-            );
+          transactionsSource.mode === "supabase"
+            ? transactionsSource.subscribe(applyTransactions)
+            : onSnapshot(query(collection(db, "users", uid, "portfolioTransactions")), (snapshot) => {
+            const docs = toSourceDocs(snapshot);
+            applyTransactions(docs);
+            if (transactionsSource.mode === "shadow") void transactionsSource.shadow(docs);
           }),
           onSnapshot(query(collection(db, "users", uid, "portfolioOrders")), (snapshot) => {
             setOrders(
@@ -207,7 +233,7 @@ function usePortfolioState(options?: {
       primaryUnsubs.forEach((unsubscribe) => unsubscribe());
       secondaryUnsubs.forEach((unsubscribe) => unsubscribe());
     };
-  }, [db, uid, enabled, includeSecondary]);
+  }, [db, uid, enabled, includeSecondary, settingsSource.mode, holdingsSource.mode, cashSource.mode, transactionsSource.mode]);
 
   /**
    * The authoritative Investment Cash Balance: the captured baseline plus every
@@ -472,6 +498,15 @@ function usePortfolioState(options?: {
 
   const saveDailySnapshot = useCallback(async (snapshot: CreateSnapshotInput) => {
     if (!user || !db) return false;
+    // SPENDLY-598 (R4.3a): this writes the day's value from the holdings on
+    // screen. When they come from the on-device copy, write only if Firestore
+    // holds the same holdings; otherwise skip (it retries on a later render).
+    if (holdingsSourceModeRef.current === "supabase") {
+      const fresh = await getDocs(query(collection(db, "users", user.uid, "holdings")));
+      if (holdingsFingerprint(toSourceDocs(fresh).map((d) => ({ id: d.id, ...d.data } as Holding))) !== holdingsFingerprint(holdingsRef.current)) {
+        return false;
+      }
+    }
     const date = today;
     const ref = doc(db, "users", user.uid, "portfolioSnapshots", date);
     try {
@@ -589,4 +624,12 @@ export function usePortfolio(options?: {
     shareParent ? { enabled: false, includeSecondary: false } : options
   );
   return shareParent && ctx ? ctx : local;
+}
+
+/** SPENDLY-598: what the daily snapshot's value depends on, per holding. */
+function holdingsFingerprint(list: Holding[]): string {
+  return list
+    .map((h) => `${h.id}:${h.quantity}:${h.averageBuyPrice}`)
+    .sort()
+    .join("|");
 }

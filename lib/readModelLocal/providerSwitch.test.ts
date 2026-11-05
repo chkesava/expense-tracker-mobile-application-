@@ -24,13 +24,12 @@ const INTEGRATED = [
   // SPENDLY-596: the Journal's newest-300 window (FinanceDataProvider).
   "expenses", "incomes",
   "investments", "receivableRepayments", "receivables",
-];
+  // SPENDLY-598 part A: portfolio, SIP, subscriptions, watchlists.
+  "holdings", "investmentCashTransactions", "portfolioSettings", "portfolioTransactions",
+  "sipPlans", "sipTransactions", "subscriptions", "virtualPositions", "watchlists", "watchlists/items",
+].sort();
 
 const NOT_YET: Record<string, string> = {
-  subscriptions: "drives due-subscription auto-posting, which waits for server-confirmed data (SPENDLY-525); 598",
-  sipPlans: "drives SIP execution (executeSips writes from it); 598",
-  sipTransactions: "read by SIP execution; 598",
-  virtualPositions: "SIP execution updates positions from it; 598",
   epfContributions: "the EPF summary sync writes from EPF sources; 598",
   epfEstablishments: "the EPF summary sync writes from EPF sources; 598",
   epfTransfers: "the EPF summary sync writes from EPF sources; 598",
@@ -103,5 +102,30 @@ describe("provider read switches (SPENDLY-673)", () => {
   it("the account baseline repair confirms on Firestore when accounts come from the copy", () => {
     const text = readFileSync(join(ROOT, "providers", "FinanceDataProvider.tsx"), "utf8");
     expect(text).toMatch(/accountsSource\.mode === "supabase"\s*\?\s*getDoc\(doc\(db, "users", uid, "accounts", accountId\)\)/);
+  });
+
+  // SPENDLY-598 (R4.3a): more writers that write from what the screens read.
+  it("subscription auto-posting re-plans on server-confirmed Firestore data when the copy serves", () => {
+    const text = readFileSync(join(ROOT, "providers", "ExpenseReferenceDataProvider.tsx"), "utf8");
+    expect(text).toMatch(/subscriptionsModeRef\.current === "supabase"/);
+    expect(text).toMatch(/if \(fresh\.metadata\.fromCache\) return;/);
+  });
+
+  it("watchlist setup confirms on the server that there are no lists before writing", () => {
+    const text = readFileSync(join(ROOT, "hooks", "useWatchlists.ts"), "utf8");
+    expect(text).toMatch(/listsSourceModeRef\.current === "supabase"/);
+    expect(text).toMatch(/existing\.metadata\.fromCache/);
+  });
+
+  it("the daily portfolio snapshot checks holdings on Firestore when they come from the copy", () => {
+    const text = readFileSync(join(ROOT, "hooks", "usePortfolio.ts"), "utf8");
+    expect(text).toMatch(/holdingsSourceModeRef\.current === "supabase"/);
+    expect(text).toMatch(/holdingsFingerprint\(/);
+  });
+
+  it("SIP execution reads its plans and positions from Firestore itself", () => {
+    const text = readFileSync(join(ROOT, "services", "sip", "executeSips.ts"), "utf8");
+    expect(text).toMatch(/getDocs\(collection\(db, "users", owner, "sipPlans"\)\)/);
+    expect(text).toMatch(/getDocs\(collection\(db, "users", owner, "virtualPositions"\)\)/);
   });
 });

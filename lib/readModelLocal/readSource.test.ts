@@ -55,6 +55,14 @@ describe("read store over the on-device copy (SPENDLY-673)", () => {
     await expect(queryCopy(copy, "notSynced")).rejects.toThrow(/not synced/);
   });
 
+  it("a nested collection reads one parent's rows only (one watchlist's items)", async () => {
+    const items = SPEC_BY_COLLECTION.get("watchlists/items")!;
+    const item = (id: string) => mapDocument(items, "u1", { id, data: { symbol: id.split("/")[1] }, updateTime: 1 });
+    const copy = fakeCopy({ watchlist_items: [item("default/INFY"), item("wl_2/TCS"), item("default/HDFC")] });
+    const docs = await queryCopy(copy, "watchlists/items", { parentId: "default", orderBy: [{ field: "symbol" }] });
+    expect(docs.map((d) => d.id)).toEqual(["HDFC", "INFY"]);
+  });
+
   it("subscribe delivers now and again when the copy changes that table only", async () => {
     const copy = fakeCopy({ credit_card_bills: [billRow("b1", 300)] });
     const source = createCollectionSource({ collection: "creditCardBills", copy: () => copy });

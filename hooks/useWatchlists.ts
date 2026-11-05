@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { collection, onSnapshot } from "@/lib/firestore";
+import { collection, getDocs, limit, onSnapshot, query } from "@/lib/firestore";
 
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
@@ -7,6 +7,8 @@ import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath } from "@/lib/firestoreReadDebug";
 import { LISTEN_WITH_SYNC_STATE, onlyMetadataChanged } from "@/lib/firestoreSyncState";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
 import { useAuth } from "@/providers/AuthProvider";
 import {
   addToWatchlist,
@@ -60,6 +62,11 @@ export function useWatchlists(options?: { enabled?: boolean }) {
   const uid = user?.uid;
 
   const [lists, setLists] = useState<Watchlist[]>([]);
+  // SPENDLY-598: firestore (default) | shadow | supabase, per readModel.watchlists / "watchlists/items".
+  const listsSource = useReadModelSource("watchlists");
+  const itemsSource = useReadModelSource("watchlists/items");
+  const listsSourceModeRef = useRef(listsSource.mode);
+  listsSourceModeRef.current = listsSource.mode;
   const [listsFromCache, setListsFromCache] = useState(true);
   const [listsLoading, setListsLoading] = useState(true);
   const lists$ = useLoadFailure();
@@ -87,6 +94,17 @@ export function useWatchlists(options?: { enabled?: boolean }) {
     setListsLoading(true);
     const path = `users/${uid}/watchlists`;
     let received = false;
+    // SPENDLY-598: the same mapping for either source.
+    const applyLists = (docs: SourceDoc[]) => {
+      setLists(sortWatchlists(docs.map((d) => watchlistFromDoc(d.id, d.data)).filter((l): l is Watchlist => !!l)));
+      lists$.setError(null);
+      setListsLoading(false);
+    };
+    if (listsSource.mode === "supabase") {
+      // The copy has no cache/server distinction; setup verifies on Firestore itself.
+      setListsFromCache(false);
+      return listsSource.subscribe(applyLists);
+    }
     const unsubscribe = onSnapshot(
       collection(db, "users", uid, "watchlists"),
       LISTEN_WITH_SYNC_STATE,
@@ -95,9 +113,9 @@ export function useWatchlists(options?: { enabled?: boolean }) {
         const first = !received;
         received = true;
         if (onlyMetadataChanged(snap, first)) return;
-        setLists(sortWatchlists(snap.docs.map((d) => watchlistFromDoc(d.id, d.data())).filter((l): l is Watchlist => !!l)));
-        lists$.setError(null);
-        setListsLoading(false);
+        const docs = toSourceDocs(snap);
+        applyLists(docs);
+        if (listsSource.mode === "shadow") void listsSource.shadow(docs);
       },
       snapshotErrorHandler(
         "snapshot.watchlists",
@@ -112,7 +130,7 @@ export function useWatchlists(options?: { enabled?: boolean }) {
       forgetSnapshotPath(path);
       unsubscribe();
     };
-  }, [uid, enabled, lists$.attempt]);
+  }, [uid, enabled, lists$.attempt, listsSource.mode]);
 
   // Items of the open list only.
   useEffect(() => {
@@ -125,12 +143,18 @@ export function useWatchlists(options?: { enabled?: boolean }) {
     setEntries([]);
     setEntriesLoading(true);
     const path = `users/${uid}/watchlists/${openListId}/items`;
+    const applyItems = (docs: SourceDoc[]) => {
+      setEntries(sortEntries(docs.map((d) => watchlistEntryFromDoc(d.id, d.data)).filter((e): e is WatchlistEntry => !!e)));
+      items$.setError(null);
+      setEntriesLoading(false);
+    };
+    if (itemsSource.mode === "supabase") return itemsSource.subscribe(applyItems, { parentId: openListId });
     const unsubscribe = onSnapshot(
       collection(db, "users", uid, "watchlists", openListId, "items"),
       (snap) => {
-        setEntries(sortEntries(snap.docs.map((d) => watchlistEntryFromDoc(d.id, d.data())).filter((e): e is WatchlistEntry => !!e)));
-        items$.setError(null);
-        setEntriesLoading(false);
+        const docs = toSourceDocs(snap);
+        applyItems(docs);
+        if (itemsSource.mode === "shadow") void itemsSource.shadow(docs, { parentId: openListId });
       },
       snapshotErrorHandler(
         "snapshot.watchlistItems",
@@ -145,7 +169,7 @@ export function useWatchlists(options?: { enabled?: boolean }) {
       forgetSnapshotPath(path);
       unsubscribe();
     };
-  }, [uid, enabled, openListId, items$.attempt]);
+  }, [uid, enabled, openListId, items$.attempt, itemsSource.mode]);
 
   // First-time setup: default list + the old watchlist copied in.
   useEffect(() => {
@@ -153,6 +177,23 @@ export function useWatchlists(options?: { enabled?: boolean }) {
     if (!shouldInitializeWatchlists({ fromCache: listsFromCache, lists, tried: setupTried.current })) return;
     setupTried.current = true;
     void (async () => {
+      // SPENDLY-598 (R4.3a): setup overwrites the default list. When lists come
+      // from the on-device copy, confirm on Firestore (the server) that there
+      // really are none before writing.
+      const db = getFirestoreDb();
+      if (listsSourceModeRef.current === "supabase" && db) {
+        try {
+          const existing = await getDocs(query(collection(db, "users", uid, "watchlists"), limit(1)));
+          // Only the server can say "none": a cache answer retries later.
+          if (!existing.empty || existing.metadata.fromCache) {
+            if (existing.metadata.fromCache) setupTried.current = false;
+            return;
+          }
+        } catch {
+          setupTried.current = false; // offline: try again later
+          return;
+        }
+      }
       const result = await attempt(
         "watchlists.initialize",
         async () => initializeWatchlists(uid, await readLegacyWatchlist(uid)),

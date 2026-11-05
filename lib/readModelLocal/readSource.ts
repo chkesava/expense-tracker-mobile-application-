@@ -39,13 +39,17 @@ export type QueryOptions = {
   orderBy?: { field: string; direction?: "asc" | "desc"; by?: (doc: SourceDoc) => string | number | null | undefined }[];
   offset?: number;
   limit?: number;
+  /** A nested collection's parent (SPENDLY-598: one watchlist's items): only rows under it. */
+  parentId?: string;
 };
 
 /** The read store: a collection's documents from the copy, filtered, ordered and limited on the device. */
 export async function queryCopy(copy: CopyLike, collection: string, options: QueryOptions = {}): Promise<SourceDoc[]> {
   const spec = SPEC_BY_COLLECTION.get(collection);
   if (!spec) throw new Error(`read store: ${collection} is not synced`);
-  let docs = (await copy.read(spec.table)).map(rowToDoc);
+  let rows = await copy.read(spec.table);
+  if (options.parentId !== undefined) rows = rows.filter((r) => String(r.doc_id).startsWith(`${options.parentId}/`));
+  let docs = rows.map(rowToDoc);
   if (options.where) docs = docs.filter(options.where);
   for (const { field, direction, by } of [...(options.orderBy ?? [])].reverse()) {
     const sign = direction === "desc" ? -1 : 1;
@@ -106,16 +110,16 @@ export function createCollectionSource(deps: {
     },
 
     /** `shadow` mode: compare what Firestore just served with the copy; log differences (counts only). */
-    async shadow(firestore: SourceDoc[], shadowOptions: { windowed?: boolean } = {}): Promise<ShadowResult | null> {
+    async shadow(firestore: SourceDoc[], shadowOptions: { windowed?: boolean; parentId?: string } = {}): Promise<ShadowResult | null> {
       const copy = deps.copy();
       const uid = copy?.status().uid;
       if (!copy || !spec || !uid || copy.status().state !== "ready") return null;
       try {
-        const rows = await copy.read(spec.table);
-        const parent = spec.parent;
-        const result = shadowCompare(spec, uid, firestore, rows, (d) =>
-          parent ? `${String(d.data[parent.column] ?? d.data.listId ?? "")}/${d.id}` : d.id
-        );
+        let rows = await copy.read(spec.table);
+        const parentId = shadowOptions.parentId;
+        if (parentId !== undefined) rows = rows.filter((r) => String(r.doc_id).startsWith(`${parentId}/`));
+        // A nested row is keyed "{parentId}/{id}" in the copy.
+        const result = shadowCompare(spec, uid, firestore, rows, (d) => (spec.parent && parentId !== undefined ? `${parentId}/${d.id}` : d.id));
         // A windowed listener (the newest N) can't see older rows: they aren't "extra".
         if (shadowOptions.windowed) result.extra = 0;
         lastShadow = result;
