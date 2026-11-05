@@ -24,7 +24,7 @@
 | 3 | SPENDLY-674 reference data (N6) | `feature/SPENDLY-674-reference-data` | **Merged into the epic** (`1be425b6`); no migration |
 | 5 | SPENDLY-679 spaces/trips dual write + per-site guard | `feature/SPENDLY-679-spaces-trips-dual-write` | **Merged into the epic** (`18f53918`); no migration |
 | 5 | SPENDLY-680 server writers push | `feature/SPENDLY-680-server-writers-push` | **Merged into the epic** (`8d49dace`); legacy crons: retire (user, 2026-11-05) |
-| 5 | SPENDLY-681 safety-net blind spot (`*Ms`/`at` stamps) | `feature/SPENDLY-681-safety-net-change-fields` | **Built** (option A); awaiting merge; +24 index overrides deploy with 672's |
+| 5 | SPENDLY-681 safety-net blind spot (`*Ms`/`at` stamps) | `feature/SPENDLY-681-safety-net-change-fields` | **Merged into the epic** (`4124a2be`, option A); +24 index overrides deploy with 672's |
 | 4 | SPENDLY-600 listeners off + measure | `feature/SPENDLY-600-listeners-off` | **Merged into the epic** (`58819b5d`); no migration; measuring happens after the epic reaches main |
 | 4 | SPENDLY-601 drills and readiness | `feature/SPENDLY-601-drills-readiness` | **Merged into the epic** (`0bc47961`); harness run + user sign-off pending |
 
