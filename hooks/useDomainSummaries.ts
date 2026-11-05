@@ -5,8 +5,13 @@ import { useAuth } from "@/providers/AuthProvider";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import type { EpfSummary } from "@/shared/types/financialSummary";
 import { forgetSnapshotPath } from "@/lib/firestoreReadDebug";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
 
-export function useEpfSummary() {
+export function useEpfSummary(options?: { readFrom?: "copy" }) {
+  // SPENDLY-599 (R4.3a): the EPF summary sync compares with this and writes,
+  // so the copy serves only callers that never write (`readFrom: "copy"`).
+  const summarySource = useReadModelSource("financialSummaries", { copy: options?.readFrom === "copy" });
   const { user } = useAuth();
   const uid = user?.uid;
   const [summary, setSummary] = useState<EpfSummary | null>(null);
@@ -21,16 +26,22 @@ export function useEpfSummary() {
     }
     const path = `users/${uid}/financialSummaries/epf`;
     setLoading(true);
-    
+    const applySummary = (docs: SourceDoc[]) => {
+      const epf = docs.find((d) => d.id === "epf");
+      setSummary(epf ? (epf.data as unknown as EpfSummary) : null);
+      setLoading(false);
+    };
+    if (summarySource.mode === "supabase") {
+      return summarySource.subscribe(applySummary, { where: (d) => d.id === "epf" });
+    }
+
     const unsubscribe = onSnapshot(
       doc(db, "users", uid, "financialSummaries", "epf"),
       (snap) => {
-        if (snap.exists()) {
-          setSummary(snap.data() as EpfSummary);
-        } else {
-          setSummary(null);
-        }
-        setLoading(false);
+        const docs = snap.exists() ? [{ id: snap.id, data: (snap.data() ?? {}) as Record<string, unknown> }] : [];
+        applySummary(docs);
+        // One document: the copy's other summaries aren't "extra".
+        if (summarySource.mode === "shadow") void summarySource.shadow(docs, { windowed: true });
       },
       snapshotErrorHandler("snapshot.epfSummary", (err) => {
         setError(err as unknown as Error);
@@ -41,7 +52,7 @@ export function useEpfSummary() {
       forgetSnapshotPath(path);
       unsubscribe();
     };
-  }, [uid]);
+  }, [uid, summarySource.mode]);
 
   return { summary, loading, error };
 }

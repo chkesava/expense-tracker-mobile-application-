@@ -101,3 +101,36 @@ export function useReadModelSource(collection: string, options?: { copy?: boolea
 export function useReadModelMode(collection: string): CollectionMode {
   return useReadModelSource(collection).mode;
 }
+
+/**
+ * SPENDLY-599: the effective modes of several collections at once, for a
+ * writer computed over many inputs (the net-worth snapshot, R4.3a).
+ */
+export function useReadModelModes(collections: readonly string[]): Record<string, CollectionMode> {
+  const { settings } = useSystemSettings();
+  const { user, isDuress } = useAuth();
+  const [copyState, setCopyState] = useState(() => getAppLocalCopy()?.status().state ?? "off");
+
+  useEffect(() => {
+    const copy = getAppLocalCopy();
+    if (!copy) return;
+    setCopyState(copy.status().state);
+    return copy.onState(setCopyState);
+  }, []);
+
+  const modes: Record<string, CollectionMode> = {};
+  for (const collection of collections) {
+    modes[collection] = effectiveCollectionMode({
+      setting: settings.readModel,
+      collection,
+      envConfigured: isReadModelEnvConfigured(),
+      localTestMode: isLocalTestMode(),
+      duress: isDuress,
+      signedIn: !!user,
+      localCopyOn: localCopyEnabled(settings.readModel),
+      copyState,
+      fellBack: fellBack.has(collection),
+    }).mode as CollectionMode;
+  }
+  return modes;
+}

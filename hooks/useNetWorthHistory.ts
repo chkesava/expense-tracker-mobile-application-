@@ -6,6 +6,8 @@ import { getFirestoreDb } from "@/lib/firebase";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath } from "@/lib/firestoreReadDebug";
 import { useAuth } from "@/providers/AuthProvider";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
 import {
   NET_WORTH_HISTORY_COLLECTION,
   flattenNetWorthHistory,
@@ -27,6 +29,9 @@ export function useNetWorthHistory(todayKey: string) {
   const [docs, setDocs] = useState<{ id: string; data: Partial<NetWorthHistoryDoc> }[]>([]);
   const [loading, setLoading] = useState(true);
   const { error, setError, retry, attempt } = useLoadFailure();
+  // SPENDLY-599: firestore (default) | shadow | supabase, per readModel.netWorthHistory.
+  // The recorder confirms on Firestore before writing (netWorthSnapshotVerify).
+  const historySource = useReadModelSource("netWorthHistory");
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -37,12 +42,21 @@ export function useNetWorthHistory(todayKey: string) {
     }
     setLoading(true);
     const path = `users/${uid}/${NET_WORTH_HISTORY_COLLECTION}`;
+    const applyHistory = (list: SourceDoc[]) => {
+      setDocs(list.map((d) => ({ id: d.id, data: d.data as Partial<NetWorthHistoryDoc> })));
+      setError(null);
+      setLoading(false);
+    };
+    if (historySource.mode === "supabase") {
+      return historySource.subscribe(applyHistory, { where: (d) => String(d.data.month ?? "") >= startMonth });
+    }
     const unsubscribe = onSnapshot(
       query(collection(db, "users", uid, NET_WORTH_HISTORY_COLLECTION), where("month", ">=", startMonth)),
       (snap) => {
-        setDocs(snap.docs.map((d) => ({ id: d.id, data: d.data() as Partial<NetWorthHistoryDoc> })));
-        setError(null);
-        setLoading(false);
+        const list = toSourceDocs(snap);
+        applyHistory(list);
+        // The last 12 months: older months in the copy aren't "extra".
+        if (historySource.mode === "shadow") void historySource.shadow(list, { windowed: true });
       },
       snapshotErrorHandler(
         "snapshot.netWorthHistory",
@@ -57,7 +71,7 @@ export function useNetWorthHistory(todayKey: string) {
       forgetSnapshotPath(path);
       unsubscribe();
     };
-  }, [uid, startMonth, attempt]);
+  }, [uid, startMonth, attempt, historySource.mode]);
 
   const points = useMemo<NetWorthPoint[]>(() => flattenNetWorthHistory(docs), [docs]);
   const monthIds = useMemo(() => new Set(docs.map((d) => d.id)), [docs]);

@@ -29,7 +29,7 @@ Last updated: 2026-11-05, with 17 of 21 stories merged (598 added).
 | 15 | SPENDLY-596 Journal on the read model | ✅ merged | `readModel.expenses` / `readModel.incomes`: shadow 7 days, then supabase (§4 step 9) |
 | 16 | SPENDLY-597 accounts, cards, bills | ✅ merged | `readModel.accounts` / `accountTypes` / `accountPayments` / `accountEntries` / `accountTransfers` (+ `creditCardBills`): shadow 14 days to the paisa (Free plan: health's capacity checks green), then supabase; the bill pass verifies on Firestore (a few reads per focus when it has work) |
 | 17 | SPENDLY-598 investments, EPF, loans, subs | ✅ merged (`d5df3467`) | No migration. Per collection: shadow 14 days (zero differences), then supabase: portfolio, SIP, subscriptions, watchlists (+items), EPF passbook (`epfContributions`, `epfEstablishments`, `epfInterestEntries`, display-only callers). EPF transfers/reconciliations/wage history/profile stay on Firestore |
-| 18 | SPENDLY-599 dashboard, net worth, budgets | ⏳ to do | *(added when merged: 14-day shadow)* |
+| 18 | SPENDLY-599 dashboard, net worth, budgets | 🔄 built, awaiting merge | No migration. `financialSummaries`, `netWorthHistory`, `financialGoals` (§4 step 9): 14-day shadow, zero differences on every tile; goals last; offline expense drill |
 | 19 | SPENDLY-674 reference data | ⏳ to do | *(added when merged: 7-day shadow)* |
 | 20 | SPENDLY-600 listeners off + measure | ⏳ to do | *(added when merged)* |
 | 21 | SPENDLY-601 drills + readiness review | ⏳ to do | *(added when merged)* |
@@ -144,11 +144,11 @@ Each wired collection has `system_settings/global.readModel.<collection>`:
 - first set it to `shadow`, and watch `readModel.shadow.<collection>` (none means equal);
 - after the shadow period (7 days, 14 where money is shown) and the user's approval, set it to `supabase`.
 
-It needs `readModel.localCopy = true` (step 9a). Wired by 673: `creditCardBills`, `borrowings`, `borrowingRepayments`, `receivables`, `receivableRepayments`, `categoryBudgets`, `investments`. Wired by 596: `expenses`, `incomes` (the Journal's live window; 7-day shadow). Wired by 597: `accounts`, `accountTypes`, `accountPayments`, `accountEntries`, `accountTransfers` (14-day shadow, to the paisa).
+It needs `readModel.localCopy = true` (step 9a). Wired by 673: `creditCardBills`, `borrowings`, `borrowingRepayments`, `receivables`, `receivableRepayments`, `categoryBudgets`, `investments`. Wired by 596: `expenses`, `incomes` (the Journal's live window; 7-day shadow). Wired by 597: `accounts`, `accountTypes`, `accountPayments`, `accountEntries`, `accountTransfers` (14-day shadow, to the paisa). Wired by 598: `holdings`, `investmentCashTransactions`, `portfolioSettings`, `portfolioTransactions`, `sipPlans`, `virtualPositions`, `sipTransactions`, `subscriptions`, `watchlists`, `watchlists/items`, and for display-only EPF callers `epfContributions`, `epfEstablishments`, `epfInterestEntries` (14-day shadow). Wired by 599: `financialSummaries` (tiles + EPF summary), `netWorthHistory`, `financialGoals` (14-day shadow; goals last).
 
 **Rollback:** `firestore`.
 
-*(596–599 and 674 add their collections here when they merge.)*
+*(674 adds its collections here when it merges.)*
 
 Each screen has `system_settings/global.readModel.<screen>`: `firestore` → `shadow` → `supabase`. Shadow lasts 7 days, or 14 where money is shown, and the user approves each flip. The project stays on the Free plan (595): before each flip, health's capacity checks are green.
 

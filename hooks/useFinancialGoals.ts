@@ -6,6 +6,9 @@ import { goalSyncIssues } from "@/lib/goalSyncIssues";
 import { perfEvent } from "@/lib/perf";
 import { toast } from "@/lib/toast";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { useReadModelMode } from "@/hooks/useReadModelSource";
+import { collection, getDocs, orderBy, query } from "@/lib/firestore";
+import { getFirestoreDb } from "@/lib/firebase";
 import { useAuth } from "@/providers/AuthProvider";
 import { useExpenseReferenceData } from "@/providers/ExpenseReferenceDataProvider";
 import { commitGoalWrite, loadGoalCorrections, newGoalEventId, newGoalId } from "@/services/goals/goalStore";
@@ -86,6 +89,13 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
   const goalsRef = useRef(sharedGoals);
   goalsRef.current = sharedGoals;
   const fresh = useCallback((goal: FinancialGoal) => goalsRef.current.find((g) => g.id === goal.id) ?? goal, []);
+  // SPENDLY-599 (R4.3a): a write is built from the goals. When they come from
+  // the on-device copy, build it from Firestore's goals instead (its local
+  // view, pending writes included, as the listener showed before); the rules
+  // still refuse a change built on a stale goal (SPENDLY-613).
+  const goalsMode = useReadModelMode("financialGoals");
+  const goalsModeRef = useRef(goalsMode);
+  goalsModeRef.current = goalsMode;
 
   useEffect(() => {
     if (!enabled) return;
@@ -98,6 +108,11 @@ export const useFinancialGoals = (options?: { enabled?: boolean }) => {
       const eventId = spec.eventId ?? newGoalEventId(uid);
       let result: GoalWriteResult;
       try {
+        const db = getFirestoreDb();
+        if (goalsModeRef.current === "supabase" && db) {
+          const snap = await getDocs(query(collection(db, "users", uid, "financialGoals"), orderBy("createdAt", "asc")));
+          goalsRef.current = snap.docs.map((d) => ({ id: d.id, ...d.data() } as FinancialGoal));
+        }
         result = await spec.build({ uid, nowMs: Date.now(), eventId });
       } catch (err) {
         logError(`financialGoals.${spec.scope}`, err);

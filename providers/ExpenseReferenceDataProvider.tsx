@@ -41,6 +41,8 @@ import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useReadModelSource } from "@/hooks/useReadModelSource";
 import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
+import { getAppLocalCopy } from "@/lib/readModelLocal/appCopy";
+import { pendingClientWrites } from "@/lib/readModelClientWrites";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { postDueSubscriptionCharge } from "@/services/subscriptions/duePost";
@@ -101,6 +103,12 @@ const ExpenseReferenceDataContext = createContext<ExpenseReferenceData | undefin
 /** SPENDLY-412: minimum gap between foreground-triggered refetches of the
  * one-shot spaces/categorizationRules collections. */
 const FOREGROUND_REFRESH_MIN_INTERVAL_MS = 5 * 60 * 1000;
+
+/** SPENDLY-599: goals with a write this device hasn't sent yet (the copy's "waiting to sync"). */
+function pendingGoalDocIds(): string[] {
+  const uid = getAppLocalCopy()?.status().uid;
+  return uid ? pendingClientWrites(uid).filter((e) => e.table === "financial_goals").map((e) => e.docId) : [];
+}
 
 export function ExpenseReferenceDataProvider({
   children,
@@ -176,6 +184,8 @@ export function ExpenseReferenceDataProvider({
   subscriptionsRef.current = subscriptions;
   // SPENDLY-598: firestore (default) | shadow | supabase, per readModel.subscriptions.
   const subscriptionsSource = useReadModelSource("subscriptions");
+  // SPENDLY-599: firestore (default) | shadow | supabase, per readModel.financialGoals.
+  const goalsSource = useReadModelSource("financialGoals");
   const subscriptionsModeRef = useRef(subscriptionsSource.mode);
   subscriptionsModeRef.current = subscriptionsSource.mode;
 
@@ -625,6 +635,24 @@ export function ExpenseReferenceDataProvider({
       return;
     }
     setGoalsLoading(true);
+    const applyGoals = (docs: SourceDoc[]) => {
+      setGoals(docs.map((d) => ({ id: d.id, ...d.data } as FinancialGoal)));
+      setGoalsError(null);
+      setGoalsLoading(false);
+    };
+    if (goalsSource.mode === "supabase") {
+      return goalsSource.subscribe(
+        (docs) => {
+          // SPENDLY-613's "waiting to sync", from the copy: this device's unsent goal writes.
+          const pending = pendingGoalDocIds();
+          setPendingGoalIds((prev) =>
+            prev.size === pending.length && pending.every((id) => prev.has(id)) ? prev : new Set(pending)
+          );
+          applyGoals(docs);
+        },
+        { orderBy: [{ field: "createdAt", direction: "asc" }] }
+      );
+    }
     const path = `users/${uid}/financialGoals`;
     perfEvent("firestore_listener_start", { collection: "financialGoals" });
     let seenFirst = false;
@@ -651,11 +679,9 @@ export function ExpenseReferenceDataProvider({
           docCount: snap.docs.length,
           fromCache: snap.metadata.fromCache,
         });
-        setGoals(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() } as FinancialGoal))
-        );
-        setGoalsError(null);
-        setGoalsLoading(false);
+        const docs = toSourceDocs(snap);
+        applyGoals(docs);
+        if (goalsSource.mode === "shadow") void goalsSource.shadow(docs);
       },
       snapshotErrorHandler(
         "snapshot.financialGoals",
@@ -670,7 +696,7 @@ export function ExpenseReferenceDataProvider({
       forgetSnapshotPath(path);
       unsub();
     };
-  }, [uid, db, goalsAttempt, setGoalsError, shouldListenGoals]);
+  }, [uid, db, goalsAttempt, setGoalsError, shouldListenGoals, goalsSource.mode]);
 
   const processDueSubscriptions = useCallback(async () => {
     const database = getFirestoreDb();

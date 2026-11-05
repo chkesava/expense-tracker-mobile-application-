@@ -29,6 +29,8 @@ const INTEGRATED = [
   "sipPlans", "sipTransactions", "subscriptions", "virtualPositions", "watchlists", "watchlists/items",
   // SPENDLY-598 part B: EPF, for display-only callers only (readFrom: "copy").
   "epfContributions", "epfEstablishments", "epfInterestEntries",
+  // SPENDLY-599: the dashboard tiles + EPF summary, net-worth history, goals.
+  "financialGoals", "financialSummaries", "netWorthHistory",
 ].sort();
 
 const NOT_YET: Record<string, string> = {
@@ -36,9 +38,7 @@ const NOT_YET: Record<string, string> = {
   epfReconciliations: "interest recompute and the summary sync write from them; stays on Firestore (598)",
   epfWageHistory: "the contribution catch-up writes from it; stays on Firestore (598)",
   epfProfile: "the EPF dashboard writes from it; stays on Firestore (598)",
-  financialSummaries: "the EPF summary sync compares against the stored summary; 599",
   categories: "loaded by revision (SPENDLY-660), not a plain listener; 674",
-  financialGoals: "pending-write state per goal (SPENDLY-613); 599",
   userSettings: "allowlisted fields only: never a source",
 };
 
@@ -135,17 +135,47 @@ describe("provider read switches (SPENDLY-673)", () => {
     for (const dir of ["providers", "hooks", "app", "components"]) {
       for (const file of sources(join(ROOT, dir))) {
         const text = readFileSync(file, "utf8");
-        if (/useEpf\w*\([^;]*readFrom: "copy"/.test(text)) optIns.push(relative(ROOT, file).replace(/\\/g, "/"));
+        // A call (`= useEpf…({ readFrom: "copy" })`), not a definition or a comment.
+        if (/=\s*useEpf\w*\([^;]*readFrom: "copy"/.test(text)) optIns.push(relative(ROOT, file).replace(/\\/g, "/"));
       }
     }
     expect(optIns.sort()).toEqual([
       "components/epf/EpfContributionHistory.tsx",
       "components/epf/EpfCurrentMonthCard.tsx",
+      "hooks/useEpfNetWorth.ts",
       "hooks/useFinancialCalendar.ts",
     ]);
     // The EPF writers that compute from loaded rows (R4.3a).
     const writers = /\b(saveContributions?|applyTransition|recordCredit|markMissed|markReversed|deleteContribution|discardDrafts|repairCreditWindows|repairLifecycleStates|recomputeInterest|recordReconciliation|saveProfile|addEstablishment|updateEstablishment|closeEstablishment|archiveEstablishment|restoreEstablishment|deleteEstablishment)\b/;
     for (const file of optIns) expect(readFileSync(join(ROOT, file), "utf8")).not.toMatch(writers);
+  });
+
+  // SPENDLY-599 (R4.3a).
+  it("the EPF summary sync compares with the stored summary on Firestore; only display opts into the copy", () => {
+    const summaries = readFileSync(join(ROOT, "hooks", "useDomainSummaries.ts"), "utf8");
+    expect(summaries).toContain('useReadModelSource("financialSummaries", { copy: options?.readFrom === "copy" })');
+    const sync = readFileSync(join(ROOT, "hooks", "useEpfSummarySync.ts"), "utf8");
+    expect(sync).toMatch(/useEpfSummary\(\)/);
+  });
+
+  it("the net-worth point confirms its history and inputs on Firestore when any comes from the copy", () => {
+    const recorder = readFileSync(join(ROOT, "hooks", "useNetWorthSnapshotRecorder.ts"), "utf8");
+    expect(recorder).toMatch(/if \(snapshotReadsCopy\(modesRef\.current\)\) \{\s*const verdict = await confirmSnapshotOnFirestore\(/);
+    expect(recorder).toMatch(/useReadModelModes\(NET_WORTH_SNAPSHOT_COLLECTIONS\)/);
+    const verify = readFileSync(join(ROOT, "services", "netWorth", "netWorthSnapshotVerify.ts"), "utf8");
+    // Every source of composeNetWorth's totals (the ledger only raises a non-blocking flag).
+    for (const c of ["accounts", "accountTypes", "investments", "holdings", "investmentCashTransactions", "borrowings", "borrowingRepayments", "receivables", "receivableRepayments"]) {
+      expect(verify).toContain(`{ collection: "${c}" }`);
+    }
+    expect(verify).toContain('{ collection: "financialSummaries", docId: "epf" }');
+    expect(verify).toMatch(/if \(one\.metadata\.fromCache\) return null;/);
+    expect(verify).toMatch(/all\.metadata\.fromCache \? null/);
+  });
+
+  it("goal writes are built from Firestore's goals when the copy serves them", () => {
+    const text = readFileSync(join(ROOT, "hooks", "useFinancialGoals.ts"), "utf8");
+    expect(text).toMatch(/if \(goalsModeRef\.current === "supabase" && db\) \{\s*const snap = await getDocs\(query\(collection\(db, "users", uid, "financialGoals"\)/);
+    expect(text).toMatch(/goalsRef\.current = snap\.docs\.map/);
   });
 
   it("SIP execution reads its plans and positions from Firestore itself", () => {
