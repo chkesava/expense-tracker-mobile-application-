@@ -61,6 +61,7 @@ A key-only query on the read model's copied documents (counts, no values) showed
 
 - `npx vitest run`: 541 files, 7,710 tests pass.
 - tsc passes for the app, the scripts and shared code.
+- `npm run test:rules` passes (622). The emulator sync test's read bounds now scale with the change fields: the first CI run failed at 128 vs 117 and 131 vs 127, the expected empty-query reads of the 24 new fields.
 
 ## After the epic reaches main
 
