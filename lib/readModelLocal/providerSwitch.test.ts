@@ -24,18 +24,18 @@ const INTEGRATED = [
   // SPENDLY-596: the Journal's newest-300 window (FinanceDataProvider).
   "expenses", "incomes",
   "investments", "receivableRepayments", "receivables",
-];
+  // SPENDLY-598 part A: portfolio, SIP, subscriptions, watchlists.
+  "holdings", "investmentCashTransactions", "portfolioSettings", "portfolioTransactions",
+  "sipPlans", "sipTransactions", "subscriptions", "virtualPositions", "watchlists", "watchlists/items",
+  // SPENDLY-598 part B: EPF, for display-only callers only (readFrom: "copy").
+  "epfContributions", "epfEstablishments", "epfInterestEntries",
+].sort();
 
 const NOT_YET: Record<string, string> = {
-  subscriptions: "drives due-subscription auto-posting, which waits for server-confirmed data (SPENDLY-525); 598",
-  sipPlans: "drives SIP execution (executeSips writes from it); 598",
-  sipTransactions: "read by SIP execution; 598",
-  virtualPositions: "SIP execution updates positions from it; 598",
-  epfContributions: "the EPF summary sync writes from EPF sources; 598",
-  epfEstablishments: "the EPF summary sync writes from EPF sources; 598",
-  epfTransfers: "the EPF summary sync writes from EPF sources; 598",
-  epfInterestEntries: "the EPF summary sync writes from EPF sources; 598",
-  epfReconciliations: "the EPF summary sync writes from EPF sources; 598",
+  epfTransfers: "every caller writes from them (transfers, interest, catch-up); stays on Firestore (598)",
+  epfReconciliations: "interest recompute and the summary sync write from them; stays on Firestore (598)",
+  epfWageHistory: "the contribution catch-up writes from it; stays on Firestore (598)",
+  epfProfile: "the EPF dashboard writes from it; stays on Firestore (598)",
   financialSummaries: "the EPF summary sync compares against the stored summary; 599",
   categories: "loaded by revision (SPENDLY-660), not a plain listener; 674",
   financialGoals: "pending-write state per goal (SPENDLY-613); 599",
@@ -59,7 +59,7 @@ for (const dir of ["providers", "hooks", "app", "components"]) {
     // The hook itself (its doc comment shows an example use).
     if (file.endsWith("useReadModelSource.ts")) continue;
     const text = readFileSync(file, "utf8");
-    for (const m of text.matchAll(/const\s+(\w+)\s*=\s*useReadModelSource\(\s*"([^"]+)"\s*\)/g)) {
+    for (const m of text.matchAll(/const\s+(\w+)\s*=\s*useReadModelSource\(\s*"([^"]+)"\s*(?:,[^;]*)?\)/g)) {
       uses.push({ file: relative(ROOT, file).replace(/\\/g, "/"), variable: m[1], collection: m[2], text });
     }
   }
@@ -103,5 +103,54 @@ describe("provider read switches (SPENDLY-673)", () => {
   it("the account baseline repair confirms on Firestore when accounts come from the copy", () => {
     const text = readFileSync(join(ROOT, "providers", "FinanceDataProvider.tsx"), "utf8");
     expect(text).toMatch(/accountsSource\.mode === "supabase"\s*\?\s*getDoc\(doc\(db, "users", uid, "accounts", accountId\)\)/);
+  });
+
+  // SPENDLY-598 (R4.3a): more writers that write from what the screens read.
+  it("subscription auto-posting re-plans on server-confirmed Firestore data when the copy serves", () => {
+    const text = readFileSync(join(ROOT, "providers", "ExpenseReferenceDataProvider.tsx"), "utf8");
+    expect(text).toMatch(/subscriptionsModeRef\.current === "supabase"/);
+    expect(text).toMatch(/if \(fresh\.metadata\.fromCache\) return;/);
+  });
+
+  it("watchlist setup confirms on the server that there are no lists before writing", () => {
+    const text = readFileSync(join(ROOT, "hooks", "useWatchlists.ts"), "utf8");
+    expect(text).toMatch(/listsSourceModeRef\.current === "supabase"/);
+    expect(text).toMatch(/existing\.metadata\.fromCache/);
+  });
+
+  it("the daily portfolio snapshot checks holdings on Firestore when they come from the copy", () => {
+    const text = readFileSync(join(ROOT, "hooks", "usePortfolio.ts"), "utf8");
+    expect(text).toMatch(/holdingsSourceModeRef\.current === "supabase"/);
+    expect(text).toMatch(/holdingsFingerprint\(/);
+  });
+
+  it("EPF hooks read the copy only for a caller that opts in (readFrom: \"copy\")", () => {
+    const epf = uses.filter((u) => u.collection.startsWith("epf"));
+    expect(epf.length).toBeGreaterThan(0);
+    for (const u of epf) expect(u.text).toContain(`useReadModelSource("${u.collection}", { copy: options?.readFrom === "copy" })`);
+  });
+
+  it("only display-only EPF callers opt in, and they take no writer from the hook", () => {
+    const optIns: string[] = [];
+    for (const dir of ["providers", "hooks", "app", "components"]) {
+      for (const file of sources(join(ROOT, dir))) {
+        const text = readFileSync(file, "utf8");
+        if (/useEpf\w*\([^;]*readFrom: "copy"/.test(text)) optIns.push(relative(ROOT, file).replace(/\\/g, "/"));
+      }
+    }
+    expect(optIns.sort()).toEqual([
+      "components/epf/EpfContributionHistory.tsx",
+      "components/epf/EpfCurrentMonthCard.tsx",
+      "hooks/useFinancialCalendar.ts",
+    ]);
+    // The EPF writers that compute from loaded rows (R4.3a).
+    const writers = /\b(saveContributions?|applyTransition|recordCredit|markMissed|markReversed|deleteContribution|discardDrafts|repairCreditWindows|repairLifecycleStates|recomputeInterest|recordReconciliation|saveProfile|addEstablishment|updateEstablishment|closeEstablishment|archiveEstablishment|restoreEstablishment|deleteEstablishment)\b/;
+    for (const file of optIns) expect(readFileSync(join(ROOT, file), "utf8")).not.toMatch(writers);
+  });
+
+  it("SIP execution reads its plans and positions from Firestore itself", () => {
+    const text = readFileSync(join(ROOT, "services", "sip", "executeSips.ts"), "utf8");
+    expect(text).toMatch(/getDocs\(collection\(db, "users", owner, "sipPlans"\)\)/);
+    expect(text).toMatch(/getDocs\(collection\(db, "users", owner, "virtualPositions"\)\)/);
   });
 });

@@ -32,6 +32,8 @@ import { noteDirectWrites, trackedBatch } from "@/lib/readModelWriteHooks";
 import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
 import { epfCurrentMonth } from "@/shared/features/epf/utils/epfClock";
 import type {
   EpfBackfillRow,
@@ -78,9 +80,12 @@ import {
 
 export function useEpfContributions(
   establishmentId: string | undefined,
-  options?: { enabled?: boolean }
+  options?: { enabled?: boolean; readFrom?: "copy" }
 ) {
   const enabled = options?.enabled !== false && Boolean(establishmentId);
+  // SPENDLY-598 (R4.3a): EPF screens write from what these hooks load, so
+  // the copy serves only callers that never write (`readFrom: "copy"`).
+  const contributionsSource = useReadModelSource("epfContributions", { copy: options?.readFrom === "copy" });
   // Duress-aware uid, matching useEpf: a duress session must show no EPF data.
   const { user } = useAuth();
   const uid = user?.uid;
@@ -110,20 +115,25 @@ export function useEpfContributions(
       collection(db, "users", uid, EPF_CONTRIBUTIONS_COLLECTION),
       where("establishmentId", "==", establishmentId)
     );
+    const applyContributions = (docs: SourceDoc[]) => {
+      setContributions(sortContributionsByMonth(docs.map((d) => normalizeEpfContribution(d.id, d.data))));
+      setContributionsError(null);
+      setContributionsLoading(false);
+    };
+    if (contributionsSource.mode === "supabase") {
+      return contributionsSource.subscribe(applyContributions, {
+        where: (d) => d.data.establishmentId === establishmentId,
+      });
+    }
 
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
         logQuerySnapshot(path, snapshot);
-        setContributions(
-          sortContributionsByMonth(
-            snapshot.docs.map((docSnap) =>
-              normalizeEpfContribution(docSnap.id, docSnap.data() as Record<string, unknown>)
-            )
-          )
-        );
-        setContributionsError(null);
-        setContributionsLoading(false);
+        const docs = toSourceDocs(snapshot);
+        applyContributions(docs);
+        // One establishment's rows: the copy's other rows aren't "extra".
+        if (contributionsSource.mode === "shadow") void contributionsSource.shadow(docs, { windowed: true });
       },
       snapshotErrorHandler(
         "snapshot.epfContributions",
@@ -139,7 +149,7 @@ export function useEpfContributions(
       forgetSnapshotPath(path);
       unsubscribe();
     };
-  }, [uid, enabled, establishmentId, attempt]);
+  }, [uid, enabled, establishmentId, attempt, contributionsSource.mode]);
 
   const byMonth = useMemo(
     () => new Map(contributions.map((row) => [row.month, row])),

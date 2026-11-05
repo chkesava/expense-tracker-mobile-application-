@@ -19,7 +19,7 @@
 | 2 | SPENDLY-595 Supabase plan: **Free** | `feature/SPENDLY-595-free-plan` | **Merged into the epic** (`9be457d1`); migration `20261105000000` applied |
 | 3 | SPENDLY-596 live Journal | `feature/SPENDLY-596-journal-live` | **Merged into the epic**; no migration |
 | 3 | SPENDLY-597 accounts, cards, bills | `feature/SPENDLY-597-accounts-ledger` | **Merged into the epic**; no migration |
-| 3 | SPENDLY-598 investments, EPF, loans, subs | — | To Do; behind the 600 checkpoint (ADR D7) |
+| 3 | SPENDLY-598 investments, EPF, loans, subs | `feature/SPENDLY-598-investments-epf` | **Built**; awaiting merge; no migration |
 | 3 | SPENDLY-599 dashboard, net worth, budgets | — | To Do; behind the 600 checkpoint; net worth via `composeNetWorth`, not a copy (ADR D3) |
 | 4 | SPENDLY-600 listeners off + measure | — | To Do |
 | 4 | SPENDLY-601 drills and readiness | — | To Do |
@@ -61,3 +61,4 @@
 - **2026-11-04:** 597 merged into the epic. The user: **no Supabase Pro; the epic runs on the Free plan.** 595 is re-scoped to Free-plan guardrails.
 - **2026-11-04 (595, re-scoped):** the Free plan, permanently (the user). `readmodel_capacity()` (migration `20261105000000`, service role only) feeds hourly health: database size vs 500 MB and realtime messages vs 2M/month (warn 50%, fail 80%); rebuild-from-Firestore instead of backups; pause handling and monthly dashboard check in the runbook; ADR D4, plan, 597 and the checklist no longer require Pro.
 - **2026-11-05:** 595 merged (`9be457d1`). **Migration `20261105000000` applied to production** after the checks; `readmodel_capacity()` reads 17 MB, 0 realtime messages in 24 h; not executable by anon or authenticated.
+- **2026-11-05 (598):** portfolio, SIP, subscriptions, watchlists (+ nested items) and the EPF passbook read through the switch. Writers that write from these reads verify on Firestore (portfolio snapshot, subscription auto-posting, watchlist setup; SIP execution already did). EPF: the copy serves only display-only callers (`readFrom: "copy"`: passbook, current-month card, calendar); every other EPF instance stays on Firestore (`useReadModelSource(c, { copy: false })`). Guard-tested.

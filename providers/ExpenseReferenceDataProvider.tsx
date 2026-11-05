@@ -174,6 +174,10 @@ export function ExpenseReferenceDataProvider({
   const skippedAccountToastShown = useRef(false);
   const subscriptionsRef = useRef(subscriptions);
   subscriptionsRef.current = subscriptions;
+  // SPENDLY-598: firestore (default) | shadow | supabase, per readModel.subscriptions.
+  const subscriptionsSource = useReadModelSource("subscriptions");
+  const subscriptionsModeRef = useRef(subscriptionsSource.mode);
+  subscriptionsModeRef.current = subscriptionsSource.mode;
 
   // SPENDLY-411: budgets/goals are only read from optional, user-configurable
   // dashboard widgets and per-screen planning hooks — unlike categories/
@@ -369,6 +373,22 @@ export function ExpenseReferenceDataProvider({
     }
     setSubscriptionsLoading(true);
     setSubscriptionsFromCache(true);
+    // SPENDLY-598: the same mapping for either source.
+    const applySubscriptions = (docs: SourceDoc[]) => {
+      setSubscriptions(docs.map((d) => ({ id: d.id, ...(d.data as Omit<Subscription, "id">) })));
+      setSubscriptionsError(null);
+      setSubscriptionsLoading(false);
+    };
+    if (subscriptionsSource.mode === "supabase") {
+      return subscriptionsSource.subscribe(
+        (docs) => {
+          // The copy has no cache/server state; auto-posting verifies on Firestore itself (R4.3a).
+          setSubscriptionsFromCache(false);
+          applySubscriptions(docs);
+        },
+        { orderBy: [{ field: "name", direction: "asc" }], limit: 200 }
+      );
+    }
     const path = `users/${uid}/subscriptions`;
     perfEvent("firestore_listener_start", { collection: "subscriptions" });
     let seenFirst = false;
@@ -394,13 +414,9 @@ export function ExpenseReferenceDataProvider({
           docCount: snap.docs.length,
           fromCache: snap.metadata.fromCache,
         });
-        const list = snap.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...(docSnap.data() as Omit<Subscription, "id">),
-        }));
-        setSubscriptions(list);
-        setSubscriptionsError(null);
-        setSubscriptionsLoading(false);
+        const docs = toSourceDocs(snap);
+        applySubscriptions(docs);
+        if (subscriptionsSource.mode === "shadow") void subscriptionsSource.shadow(docs);
       },
       snapshotErrorHandler(
         "snapshot.subscriptions",
@@ -415,7 +431,7 @@ export function ExpenseReferenceDataProvider({
       forgetSnapshotPath(path);
       unsub();
     };
-  }, [uid, db, subscriptionsAttempt, setSubscriptionsError]);
+  }, [uid, db, subscriptionsAttempt, setSubscriptionsError, subscriptionsSource.mode]);
 
   // SPENDLY-412: spaces are a small (observed <10 docs), slow-changing,
   // non-collaborative list — read-once per session/retry instead of a
@@ -658,14 +674,27 @@ export function ExpenseReferenceDataProvider({
 
   const processDueSubscriptions = useCallback(async () => {
     const database = getFirestoreDb();
-    const list = subscriptionsRef.current;
-    if (!uid || !database || isProcessingDueRef.current || list.length === 0) {
+    const listOnScreen = subscriptionsRef.current;
+    if (!uid || !database || isProcessingDueRef.current || listOnScreen.length === 0) {
       return;
     }
 
     isProcessingDueRef.current = true;
     try {
       const now = parseLocalDate(todayDateKey(timezone));
+      let list = listOnScreen;
+      // SPENDLY-598 (R4.3a): posting writes charges from these subscriptions.
+      // When they come from the on-device copy: if nothing is due or completed
+      // on the copy, stop (no reads); otherwise re-read them from Firestore,
+      // server-confirmed, and plan on that.
+      if (subscriptionsModeRef.current === "supabase") {
+        const onCopy = planDueSubscriptionPosts(list, now);
+        const completes = list.some((sub) => sub.id && sub.source !== "sms" && evaluateSubscriptionDue(sub, now).isCompleted && !sub.isCompleted);
+        if (!onCopy.length && !completes) return;
+        const fresh = await getDocs(query(collection(database, "users", uid, "subscriptions"), orderBy("name", "asc"), limit(200)));
+        if (fresh.metadata.fromCache) return; // only server data may drive a post (SPENDLY-525)
+        list = fresh.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Subscription, "id">) }));
+      }
       const plan = planDueSubscriptionPosts(list, now);
       let skippedNoAccount = 0;
 

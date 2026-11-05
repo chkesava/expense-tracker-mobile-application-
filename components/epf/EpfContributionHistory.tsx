@@ -46,8 +46,8 @@ export function EpfContributionHistory({
     contributionsLoading,
     contributionsError,
     retryContributions,
-  } = useEpfContributions(establishment.id);
-  const { interestEntries } = useEpfInterest();
+  } = useEpfContributions(establishment.id, { readFrom: "copy" });
+  const { interestEntries } = useEpfInterest({ readFrom: "copy" });
 
   // SPENDLY-544: ghost-aware; EPF ignored ghost mode almost everywhere.
   const money = useGhostMoney(currency);
