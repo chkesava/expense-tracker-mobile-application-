@@ -77,6 +77,8 @@ export function useSpaces(options?: { enabled?: boolean }) {
             }),
           { label: "space" }
         );
+        // SPENDLY-679: the read model too (plan v2 dual write).
+        noteDirectWrites(uid, [ref.path]);
         retrySpaces();
         toast.success(writeSavedMessage(outcome, `Space "${input.name}" created`));
         return ref.id;
@@ -95,14 +97,16 @@ export function useSpaces(options?: { enabled?: boolean }) {
       if (!uid || !db || !id) return false;
 
       try {
+        const ref = doc(db, "users", uid, "spaces", id);
         const outcome = await commitWrite(
           () =>
-            updateDoc(doc(db, "users", uid, "spaces", id), {
+            updateDoc(ref, {
               ...updates,
               updatedAt: serverTimestamp(),
             }),
           { label: "space" }
         );
+        noteDirectWrites(uid, [ref.path]);
         retrySpaces();
         toast.success(writeSavedMessage(outcome, "Space updated"));
         return true;

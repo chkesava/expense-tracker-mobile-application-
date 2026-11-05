@@ -86,9 +86,12 @@ export function useTrips(options?: { enabled?: boolean }) {
             spentAmount: 0,
             status: "active",
             createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
           }),
         { label: "trip" }
       );
+      // SPENDLY-679: the read model too (plan v2 dual write).
+      noteDirectWrites(uid, [docRef.path]);
       toast.success(writeSavedMessage(outcome, "Trip created!"));
       return docRef.id;
     } catch (err) {
@@ -106,10 +109,13 @@ export function useTrips(options?: { enabled?: boolean }) {
     if (!uid || !db || !id) return false;
 
     try {
+      const ref = doc(db, "users", uid, "trips", id);
+      // SPENDLY-679: stamp updatedAt (R1.2) so the changed-only sync sees it.
       const outcome = await commitWrite(
-        () => updateDoc(doc(db, "users", uid, "trips", id), updates),
+        () => updateDoc(ref, { ...updates, updatedAt: serverTimestamp() }),
         { label: "trip" }
       );
+      noteDirectWrites(uid, [ref.path]);
       toast.success(writeSavedMessage(outcome, "Trip updated"));
       return true;
     } catch (err) {
@@ -192,6 +198,7 @@ export function useTrips(options?: { enabled?: boolean }) {
       });
       batch.update(doc(db, "users", uid, "trips", tripId), {
         spentAmount: increment(expenseAmount),
+        updatedAt: serverTimestamp(),
       });
 
       await commitWrite(() => batch.commit(), { label: "trip link" });
@@ -225,6 +232,7 @@ export function useTrips(options?: { enabled?: boolean }) {
       });
       batch.update(doc(db, "users", uid, "trips", tripId), {
         spentAmount: increment(-expenseAmount),
+        updatedAt: serverTimestamp(),
       });
 
       await commitWrite(() => batch.commit(), { label: "trip unlink" });

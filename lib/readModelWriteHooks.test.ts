@@ -154,6 +154,48 @@ describe("every direct writer of a synced collection calls a read-model hook", (
     }
   });
 
+  // SPENDLY-679: a file-level check let a writer slip through when another
+  // function in the same file had a hook (spaces and trips create/edit). A
+  // direct SDK write (setDoc, updateDoc, deleteDoc, addDoc) to a synced
+  // collection must have its own hook close by, in the same function. Batch
+  // and transaction writes are covered by their trackedBatch/writtenPaths()
+  // or noteTransactionWrites, which the file-level check above already finds.
+  const DIRECT = "\\b(?:setDoc|updateDoc|deleteDoc|addDoc)\\(\\s*";
+  const SITE_WINDOW = 25;
+
+  function directSites(text: string): number[] {
+    const at = [...text.matchAll(new RegExp(DIRECT + SYNCED_REF, "g"))].map((m) => m.index ?? 0);
+    const vars = [...text.matchAll(new RegExp(`(?:const|let)\\s+(\\w+)\\s*=\\s*${SYNCED_REF}`, "g"))].map((m) => m[1]);
+    for (const v of vars) at.push(...[...text.matchAll(new RegExp(`${DIRECT}${v}\\b`, "g"))].map((m) => m.index ?? 0));
+    return [...new Set(at)].map((i) => text.slice(0, i).split("\n").length - 1);
+  }
+
+  it("each direct write to a synced collection has its own hook (SPENDLY-679)", () => {
+    const missing: string[] = [];
+    let sites = 0;
+    for (const file of FILES) {
+      const rel = relative(ROOT, file).replace(/\\/g, "/");
+      if (SKIP.test(rel) || ALLOWED[rel]) continue;
+      const lines = readFileSync(file, "utf8").split("\n");
+      for (const line of directSites(lines.join("\n"))) {
+        sites += 1;
+        const near = lines.slice(Math.max(0, line - SITE_WINDOW), line + SITE_WINDOW).join("\n");
+        if (!HOOK.test(near)) missing.push(`${rel}:${line + 1}`);
+      }
+    }
+    expect(missing, `direct writes with no read-model hook nearby: ${missing.join(", ")}`).toEqual([]);
+    expect(sites).toBeGreaterThan(10); // the scan isn't vacuous
+  });
+
+  it("spaces and trips create and edit tell the read model and stamp updatedAt (SPENDLY-679)", () => {
+    const spaces = readFileSync(join(ROOT, "hooks", "useSpaces.ts"), "utf8");
+    expect(spaces.match(/noteDirectWrites\(uid, \[ref\.path\]\)/g)).toHaveLength(2);
+    const trips = readFileSync(join(ROOT, "hooks", "useTrips.ts"), "utf8");
+    expect(trips).toMatch(/noteDirectWrites\(uid, \[docRef\.path\]\)/);
+    expect(trips).toMatch(/updateDoc\(ref, \{ \.\.\.updates, updatedAt: serverTimestamp\(\) \}\)/);
+    expect(trips.match(/spentAmount: increment\(-?expenseAmount\),\s*updatedAt: serverTimestamp\(\)/g)).toHaveLength(2);
+  });
+
   // SPENDLY-591 part C: users/{uid} itself is copied (allowlisted fields only).
   // A writer of it must tell the read model, unless it writes only fields the
   // copy leaves out.
