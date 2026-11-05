@@ -186,6 +186,10 @@ export function ExpenseReferenceDataProvider({
   const subscriptionsSource = useReadModelSource("subscriptions");
   // SPENDLY-599: firestore (default) | shadow | supabase, per readModel.financialGoals.
   const goalsSource = useReadModelSource("financialGoals");
+  // SPENDLY-674: reference data, per readModel.<collection>.
+  const categoriesSource = useReadModelSource("categories");
+  const spacesSource = useReadModelSource("spaces");
+  const rulesSource = useReadModelSource("categorizationRules");
   const subscriptionsModeRef = useRef(subscriptionsSource.mode);
   subscriptionsModeRef.current = subscriptionsSource.mode;
 
@@ -286,6 +290,18 @@ export function ExpenseReferenceDataProvider({
       return;
     }
     setCategoriesLoading(true);
+    if (categoriesSource.mode === "supabase") {
+      // SPENDLY-674: the copy and realtime replace the revision listener.
+      // Writers keep bumping the revision, so a fallback to Firestore stays correct.
+      return categoriesSource.subscribe(
+        (docs) => {
+          setCategories(docs.map((d) => ({ id: d.id, ...d.data } as Category)));
+          setCategoriesError(null);
+          setCategoriesLoading(false);
+        },
+        { limit: 500 }
+      );
+    }
     const path = `users/${uid}/categories`;
     const metaPath = `users/${uid}/meta/categories`;
     const categoriesQuery = query(collection(db, "users", uid, "categories"), limit(500));
@@ -310,6 +326,7 @@ export function ExpenseReferenceDataProvider({
       setCategories(loaded);
       setCategoriesError(null);
       setCategoriesLoading(false);
+      if (categoriesSource.mode === "shadow") void categoriesSource.shadow(loaded.map(({ id, ...data }) => ({ id: String(id), data })));
     };
 
     // This device's own edit: the cache already holds it, and the list was
@@ -373,7 +390,7 @@ export function ExpenseReferenceDataProvider({
       forgetSnapshotPath(metaPath);
       if (unsub) unsub();
     };
-  }, [uid, db, categoriesAttempt, setCategoriesError]);
+  }, [uid, db, categoriesAttempt, setCategoriesError, categoriesSource.mode]);
 
   useEffect(() => {
     if (!uid || !db) {
@@ -455,6 +472,15 @@ export function ExpenseReferenceDataProvider({
       return;
     }
     setSpacesLoading(true);
+    const applySpaces = (docs: SourceDoc[]) => {
+      setSpaces(docs.map((d) => ({ id: d.id, ...(d.data as Omit<Space, "id">) })));
+      setSpacesError(null);
+      setSpacesLoading(false);
+    };
+    if (spacesSource.mode === "supabase") {
+      lastFetchedSpacesAtRef.current = Date.now();
+      return spacesSource.subscribe(applySpaces, { orderBy: [{ field: "name", direction: "asc" }], limit: 200 });
+    }
     const path = `users/${uid}/spaces`;
     let cancelled = false;
     const cancelIdle = scheduleIdleWork(() => {
@@ -466,14 +492,9 @@ export function ExpenseReferenceDataProvider({
             queryShape: "spaces",
           });
           lastFetchedSpacesAtRef.current = Date.now();
-          setSpaces(
-            snap.docs.map((docSnap) => ({
-              id: docSnap.id,
-              ...(docSnap.data() as Omit<Space, "id">),
-            }))
-          );
-          setSpacesError(null);
-          setSpacesLoading(false);
+          const docs = toSourceDocs(snap);
+          applySpaces(docs);
+          if (spacesSource.mode === "shadow") void spacesSource.shadow(docs);
         })
         .catch(
           snapshotErrorHandler(
@@ -492,7 +513,7 @@ export function ExpenseReferenceDataProvider({
       cancelIdle();
       forgetSnapshotPath(path);
     };
-  }, [uid, db, spacesAttempt, setSpacesError]);
+  }, [uid, db, spacesAttempt, setSpacesError, spacesSource.mode]);
 
   // SPENDLY-412: categorizationRules are a small (observed <30 docs),
   // slow-changing settings list, read only by foreground UI (ExpenseForm
@@ -508,6 +529,15 @@ export function ExpenseReferenceDataProvider({
       return;
     }
     setRulesLoading(true);
+    const applyRules = (docs: SourceDoc[]) => {
+      setRules(docs.map((d) => ({ id: d.id, ...d.data } as CategorizationRule)));
+      setRulesError(null);
+      setRulesLoading(false);
+    };
+    if (rulesSource.mode === "supabase") {
+      lastFetchedRulesAtRef.current = Date.now();
+      return rulesSource.subscribe(applyRules, { orderBy: [{ field: "createdAt", direction: "asc" }], limit: 500 });
+    }
     const path = `users/${uid}/categorizationRules`;
     let cancelled = false;
     const cancelIdle = scheduleIdleWork(() => {
@@ -525,11 +555,9 @@ export function ExpenseReferenceDataProvider({
             queryShape: "categorizationRules",
           });
           lastFetchedRulesAtRef.current = Date.now();
-          setRules(
-            snap.docs.map((d) => ({ id: d.id, ...d.data() } as CategorizationRule))
-          );
-          setRulesError(null);
-          setRulesLoading(false);
+          const docs = toSourceDocs(snap);
+          applyRules(docs);
+          if (rulesSource.mode === "shadow") void rulesSource.shadow(docs);
         })
         .catch(
           snapshotErrorHandler(
@@ -548,7 +576,7 @@ export function ExpenseReferenceDataProvider({
       cancelIdle();
       forgetSnapshotPath(path);
     };
-  }, [uid, db, rulesAttempt, setRulesError]);
+  }, [uid, db, rulesAttempt, setRulesError, rulesSource.mode]);
 
   // SPENDLY-412: bounded eventual-sync for the two one-shot collections —
   // on app foreground, refetch only if the last fetch is stale (5 min),
