@@ -37,7 +37,8 @@ import {
 } from "@/shared/features/epf/utils/portfolio";
 
 export function useEpfNetWorth() {
-  const { summary, loading, error } = useEpfSummary();
+  // Display and the net-worth point, which confirms on Firestore itself (599).
+  const { summary, loading, error } = useEpfSummary({ readFrom: "copy" });
 
   if (!summary) {
     return {
