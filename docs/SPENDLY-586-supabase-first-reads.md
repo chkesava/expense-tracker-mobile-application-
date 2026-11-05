@@ -19,7 +19,7 @@
 | 2 | SPENDLY-595 Supabase plan: **Free** | `feature/SPENDLY-595-free-plan` | **Merged into the epic** (`9be457d1`); migration `20261105000000` applied |
 | 3 | SPENDLY-596 live Journal | `feature/SPENDLY-596-journal-live` | **Merged into the epic**; no migration |
 | 3 | SPENDLY-597 accounts, cards, bills | `feature/SPENDLY-597-accounts-ledger` | **Merged into the epic**; no migration |
-| 3 | SPENDLY-598 investments, EPF, loans, subs | `feature/SPENDLY-598-investments-epf` | **Built**; awaiting merge; no migration |
+| 3 | SPENDLY-598 investments, EPF, loans, subs | `feature/SPENDLY-598-investments-epf` | **Merged into the epic** (`d5df3467`); no migration |
 | 3 | SPENDLY-599 dashboard, net worth, budgets | — | To Do; behind the 600 checkpoint; net worth via `composeNetWorth`, not a copy (ADR D3) |
 | 4 | SPENDLY-600 listeners off + measure | — | To Do |
 | 4 | SPENDLY-601 drills and readiness | — | To Do |
