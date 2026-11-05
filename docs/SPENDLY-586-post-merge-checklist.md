@@ -4,7 +4,7 @@
 
 Each story that merges into the epic adds its own steps here.
 
-Last updated: 2026-11-05: every story merged (21 original + 679, 680, 681). Before main: the harness run (D1–D11) and the user's sign-off.
+Last updated: 2026-11-05: every story merged (21 original + 679, 680, 681). Harness D1–D11: 11/11 passed (2026-11-05, `docs/SPENDLY-601-drill-log.md`). Before main: the user's sign-off.
 
 ---
 

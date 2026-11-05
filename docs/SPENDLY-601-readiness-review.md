@@ -40,14 +40,14 @@ The harness from SPENDLY-520 runs the production scripts unchanged against:
 | D7 per-write push *(520/583)* | Covers the push outage (server writers) | The push fails during the outage without touching Firestore, and the nightly run converges |
 | D5 bad mapping *(520)* | Covers a bad mapping **on a money table**: `expenses.amount` read from the wrong field | It alerts and shows in `v_data_quality`. Rolling back repairs every row |
 
-**Not run here yet.** The harness needs a PostgREST binary, and downloading one wasn't permitted in this session. To run all of D1–D11 and produce the timestamped log:
+**Run on 2026-11-05 by the user: 11 of 11 passed** (section 3; full timestamped log in `docs/SPENDLY-601-drill-log.md`). To run it again:
 
 ```
 initdb -D <dir> -U postgres -A trust && pg_ctl -D <dir> -o "-p 55432" start
 POSTGREST_BIN=<path to postgrest.exe> bash supabase-readmodel/drills/run_drills.sh
 ```
 
-Save the log over `docs/SPENDLY-520-drill-log.md` (or next to it) and paste the results table into section 3 below.
+Windows note: give `POSTGREST_BIN` as a Windows path (`C:/tools/postgrest/postgrest.exe`); Node can't run a Git Bash path (`/c/...`), and fails with `spawn UNKNOWN`.
 
 ## 2. Readiness against the plan v2 invariants (`docs/SPENDLY-586-plan.md` §1)
 
@@ -73,9 +73,25 @@ Save the log over `docs/SPENDLY-520-drill-log.md` (or next to it) and paste the 
 - Without realtime, the copy never caught up within a session, although the runbook said it did (R6). The runbook now describes the actual behaviour.
 
 **Open before the user signs off:**
-- Run the harness, D1–D11.
+- ~~Run the harness, D1–D11~~: done 2026-11-05, 11/11 passed.
+
+**After the merge (not blocking the sign-off):**
 - Device checks after the release: the palette at launch (674), goals' "waiting to sync" (599), and an expense saved offline moving the tiles (599).
 
 ## 3. Harness results
 
-*(Paste the table from `run_drills.sh` here after the run.)*
+Run 2026-11-05 12:58 UTC on the user's laptop (PostgREST 16.5, Postgres 18, the Firebase emulator), branch at `18991e69`. **11 of 11 passed.** Full log: `docs/SPENDLY-601-drill-log.md`.
+
+| Drill | Expected | Observed | Result |
+|---|---|---|---|
+| D1 rebuild | zero divergence after a rebuild from nothing | converged: 80 rows match, 0 issues; sync 12030 ms, 147 reads; verify exit 0 | PASS |
+| D2 sync outage | the 3-hourly run catches up adds, edits, soft deletes and (always-full) transfer deletes; the nightly full run tombstones the hard-deleted expense; then zero divergence | incremental left: extra expenses/c3; after the full run: converged: 79 rows match, 0 issues | PASS |
+| D3 Supabase outage | the sync fails loudly during the outage and converges on the next run; the app side is proven by lib/readModel/outageDrill.test.ts | outage run exit 1; next run exit 0; converged: 80 rows match, 0 issues | PASS |
+| D4 kill switch | all screens flip to firestore and back by changing one remote document; other settings untouched | off: true; back to shadow: true; other settings kept: true | PASS |
+| D5 bad mapping | the bad deploy alerts at once (its own run is partial, parity failures, non-zero exit) and shows in v_data_quality; rolling back and running the full sync repairs every row; the run after that is clean | bad run: partial, 17 parity failures; 18 rows wrong, detected; rollback run exit 1 → converged: 81 rows match, 0 issues; next run exit 0 | PASS |
+| D6 account purge | every drill-b row is erased; a later full sync (Firestore still holding drill-b) does not bring it back; drill-a untouched | purge {"rows":158}; resync exit 0; converged: 39 rows match, 0 issues; drill-a intact: true | PASS |
+| D7 per-write push | a saved expense, its edit and its hard delete reach the read model in one push each; fake data in a request is ignored; an erased account is refused; a per-user push copies an unnamed change; a push during an outage fails without affecting Firestore and the nightly run converges | create 200→77, edit 200→78, delete 200→tombstoned true, erased 403, user sync 200 (push), outage 599, nightly 0: converged: 40 rows match, 0 issues | PASS |
+| D8 client-write outage | the outbox holds the app's writes while the read model is down and drains on recovery; each write lands once (a replay changes nothing) | held 3 during the outage; 0 left after recovery; landed 3/3 as client rows; replay unchanged: true | PASS |
+| D9 client-write rejection | the database refuses the bad row and stores nothing; the outbox drops it instead of retrying forever; the nightly full run copies Firestore's version | refused: true; stored after refusal: false (before: false); outbox 0; nightly exit 0 → amount 55 (server); converged: 44 rows match, 0 issues | PASS |
+| D10 dual-write divergence | the full run replaces the client row with Firestore's version and counts the divergence (the health alert's input) | before 90 (client) → after 100 (server); divergences.expenses 1 | PASS |
+| D11 one-write rollback | readmodel-set-mode --switch=localCopy --value=false sends every collection back to Firestore on every device in one write, with no release; nothing else changes | before: 3 on supabase; after: all firestore true; settings kept true | PASS |
