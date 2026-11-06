@@ -20,6 +20,22 @@
 /** The product sub-apps. The landing app is published at the site root. */
 const PRODUCT_BASE_PATHS = ['/expense', '/nutrition', '/ganesh'];
 
+/**
+ * Functions the app calls at `/api/<name>` on the page's own origin
+ * (services/marketDataService.ts). Every other function is only reachable at
+ * `/.netlify/functions/<name>`. Netlify's `_redirects` lists the same names;
+ * scripts/webHosting.test.ts keeps the two in step.
+ */
+const API_FUNCTIONS = [
+  'stock',
+  'mutual-funds',
+  'crypto',
+  'stock-history',
+  'market-overview',
+  'screener-universe',
+  'stock-quotes',
+];
+
 /** Content-hashed output folders, cached for a year. */
 const IMMUTABLE_DIRS = ['_expo', 'assets'];
 const IMMUTABLE_CACHE = 'Cache-Control: public, max-age=31536000, immutable';
@@ -163,6 +179,7 @@ function spaIndexFor(pathname) {
 
 module.exports = {
   PRODUCT_BASE_PATHS,
+  API_FUNCTIONS,
   CSP,
   SECURITY_HEADERS,
   netlifyRedirects,

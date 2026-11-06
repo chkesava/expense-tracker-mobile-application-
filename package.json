@@ -99,6 +99,7 @@
     "build:web:landing": "node scripts/build-web.js --target=landing",
     "build:web:all": "node scripts/build-web.js --target=all",
     "build:cloudflare-pages": "node scripts/build-cloudflare-pages.js",
+    "build:cloudflare-worker": "node scripts/build-cloudflare-worker.js",
     "build:netlify-fns": "node scripts/bundle-netlify-fns.js",
     "build:ganesh-summary-fn": "npm run build:netlify-fns",
     "test": "vitest run",

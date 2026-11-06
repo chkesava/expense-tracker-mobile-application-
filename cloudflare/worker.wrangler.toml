@@ -1,0 +1,10 @@
+# Bundling only (SPENDLY-703): scripts/build-cloudflare-worker.js runs
+# `wrangler deploy --dry-run --outdir` with this file to produce the Pages
+# `_worker.js`. Nothing is ever deployed as a standalone Worker from here.
+name = "spendly-web-backup-bundle"
+main = "worker.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+[alias]
+"@" = ".."
