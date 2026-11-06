@@ -14,7 +14,7 @@
 | [224](https://kesavach.atlassian.net/browse/SPENDLY-224) | Device registration | 223 | Merged to epic (deploys pending) ([doc](SPENDLY-224-device-registration.md)) |
 | [226](https://kesavach.atlassian.net/browse/SPENDLY-226) | Preferences + one delivery window | — | Merged to epic ([doc](SPENDLY-226-push-preferences.md)) |
 | [227](https://kesavach.atlassian.net/browse/SPENDLY-227) | Push sender (transport) | 224, 226 | Merged to epic ([doc](SPENDLY-227-push-sender.md)) |
-| [692](https://kesavach.atlassian.net/browse/SPENDLY-692) | Reminder engine (send-time re-check, ledger) | 227 | In Progress: built, awaiting review and merge ([doc](SPENDLY-692-reminder-engine.md)) |
+| [692](https://kesavach.atlassian.net/browse/SPENDLY-692) | Reminder engine (send-time re-check, ledger) | 227 | Merged to epic ([doc](SPENDLY-692-reminder-engine.md)) |
 | [230](https://kesavach.atlassian.net/browse/SPENDLY-230) | Tap routing + unified inbox | — | To Do |
 | [231](https://kesavach.atlassian.net/browse/SPENDLY-231) | Credit card bill reminders via push | 692 | To Do |
 | [693](https://kesavach.atlassian.net/browse/SPENDLY-693) | Local → push handover (no duplicates or stale reminders) | 692, 231 | To Do |
@@ -40,6 +40,8 @@
 - Open decisions D1, D4 to D9 are listed in the plan, §6.
 
 ## Pending deploys
+
+**Every step to make push work, in order:** [SPENDLY-222-go-live-checklist.md](SPENDLY-222-go-live-checklist.md). The list below is the per-story record.
 
 All are production changes and need approval.
 - **From 224:**
