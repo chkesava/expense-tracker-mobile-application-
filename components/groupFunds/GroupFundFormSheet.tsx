@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Plus } from "lucide-react-native";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react-native";
 
 import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
 import { Modal } from "@/components/common/Modal";
@@ -9,11 +9,15 @@ import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { Input } from "@/components/ui/Input";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatMonthLabel } from "@/shared/utils/dateDisplay";
+import { shiftMonthKey, todayDateKey } from "@/shared/utils/dates";
 import { toast } from "@/lib/toast";
 import type { GroupFund, GroupFundCadence, GroupFundMember, GroupFundPurpose } from "@/shared/types/groupFund";
 import { groupFundIssueMessage } from "@/shared/utils/groupFundMessages";
 import {
   cleanGroupFundText,
+  fundStartPeriod,
   parseGroupFundAmount,
   validateFundName,
   validateMembers,
@@ -23,7 +27,16 @@ import type { GroupFundConfigInput } from "@/shared/utils/groupFundWrites";
 import { useTheme } from "@/theme/ThemeProvider";
 
 type PurposeDraft = { id: string; name: string; cadence: GroupFundCadence; expected: string; archived: boolean; saved: boolean };
-type MemberDraft = { id: string; name: string; archived: boolean; saved: boolean };
+type MemberDraft = {
+  id: string;
+  name: string;
+  archived: boolean;
+  saved: boolean;
+  /** SPENDLY-688: first month owed; undefined = from the fund's start. */
+  joinedPeriod?: string;
+  /** SPENDLY-688: first month no longer owed. */
+  leftPeriod?: string;
+};
 
 export type GroupFundFormSheetProps = {
   visible: boolean;
@@ -47,7 +60,16 @@ const purposeDrafts = (fund?: GroupFund | null): PurposeDraft[] =>
     : [];
 
 const memberDrafts = (fund?: GroupFund | null): MemberDraft[] =>
-  fund ? fund.members.map((m) => ({ id: m.id, name: m.name, archived: Boolean(m.archived), saved: true })) : [];
+  fund
+    ? fund.members.map((m) => ({
+        id: m.id,
+        name: m.name,
+        archived: Boolean(m.archived),
+        saved: true,
+        joinedPeriod: m.joinedPeriod,
+        leftPeriod: m.leftPeriod,
+      }))
+    : [];
 
 /**
  * Create or edit a Group Fund (SPENDLY-687): its name, the purposes money is
@@ -57,8 +79,11 @@ const memberDrafts = (fund?: GroupFund | null): MemberDraft[] =>
  */
 export function GroupFundFormSheet({ visible, fund, newKey, onClose, onSubmit }: GroupFundFormSheetProps) {
   const { theme } = useTheme();
+  const { settings } = useSettings();
   const currency = useDisplayCurrency();
   const editing = Boolean(fund);
+  const currentPeriod = todayDateKey().slice(0, 7);
+  const [startPeriod, setStartPeriod] = useState(currentPeriod);
   const [name, setName] = useState("");
   const [notes, setNotes] = useState("");
   const [purposes, setPurposes] = useState<PurposeDraft[]>([]);
@@ -69,6 +94,7 @@ export function GroupFundFormSheet({ visible, fund, newKey, onClose, onSubmit }:
     if (!visible) return;
     setName(fund?.name ?? "");
     setNotes(fund?.notes ?? "");
+    setStartPeriod((fund && fundStartPeriod(fund)) || currentPeriod);
     const drafts = purposeDrafts(fund);
     setPurposes(drafts.length > 0 ? drafts : [{ id: newKey(), name: "", cadence: "monthly", expected: "", archived: false, saved: false }]);
     setMembers(memberDrafts(fund));
@@ -103,7 +129,14 @@ export function GroupFundFormSheet({ visible, fund, newKey, onClose, onSubmit }:
     }
     const builtMembers: GroupFundMember[] = members
       .filter((m) => m.saved || cleanGroupFundText(m.name))
-      .map((m) => ({ id: m.id, name: m.name, ...(m.archived ? { archived: true } : {}) }));
+      .map((m) => ({
+        id: m.id,
+        name: m.name,
+        ...(m.archived ? { archived: true } : {}),
+        // Joined at the fund's start is the same as no join month.
+        ...(m.joinedPeriod && m.joinedPeriod > startPeriod ? { joinedPeriod: m.joinedPeriod } : {}),
+        ...(m.leftPeriod ? { leftPeriod: m.leftPeriod } : {}),
+      }));
     const issues = [...validateFundName(name), ...validatePurposes(builtPurposes), ...validateMembers(builtMembers)];
     if (issues.length > 0) {
       toast.error(groupFundIssueMessage(issues));
@@ -111,12 +144,46 @@ export function GroupFundFormSheet({ visible, fund, newKey, onClose, onSubmit }:
     }
     setBusy(true);
     try {
-      const ok = await onSubmit({ name, notes, purposes: builtPurposes, members: builtMembers });
+      const ok = await onSubmit({ name, notes, startPeriod, purposes: builtPurposes, members: builtMembers });
       if (ok) onClose();
     } finally {
       setBusy(false);
     }
   };
+
+  const monthStepper = (
+    title: string,
+    value: string,
+    onChange: (next: string) => void,
+    min: string | undefined,
+    max: string,
+    a11y: string
+  ) => (
+    <View style={styles.monthRow}>
+      <Text style={[styles.label, { color: theme.colors.foreground }]}>{title}</Text>
+      <Button
+        variant="ghost"
+        size="icon"
+        onPress={() => onChange(shiftMonthKey(value, -1))}
+        disabled={Boolean(min) && value <= min!}
+        accessibilityLabel={`${a11y}: previous month`}
+      >
+        <ChevronLeft size={16} color={theme.colors.foreground} />
+      </Button>
+      <Text style={[styles.monthText, { color: theme.colors.foreground }]}>
+        {formatMonthLabel(value, settings.dateFormat, { long: true })}
+      </Text>
+      <Button
+        variant="ghost"
+        size="icon"
+        onPress={() => onChange(shiftMonthKey(value, 1))}
+        disabled={value >= max}
+        accessibilityLabel={`${a11y}: next month`}
+      >
+        <ChevronRight size={16} color={theme.colors.foreground} />
+      </Button>
+    </View>
+  );
 
   return (
     <Modal
@@ -134,6 +201,11 @@ export function GroupFundFormSheet({ visible, fund, newKey, onClose, onSubmit }:
         <View style={styles.group}>
           <Text style={label}>Name *</Text>
           <Input value={name} onChangeText={setName} placeholder="e.g. Dokra" accessibilityLabel="Fund name" />
+        </View>
+
+        <View style={styles.group}>
+          {monthStepper("Collection starts", startPeriod, setStartPeriod, undefined, currentPeriod, "Collection starts")}
+          <Text style={helper}>Months before this are never shown as pending. Go back to track earlier months.</Text>
         </View>
 
         <View style={styles.group}>
@@ -191,7 +263,7 @@ export function GroupFundFormSheet({ visible, fund, newKey, onClose, onSubmit }:
           <Text style={helper}>The people who pay in. Add more any time.</Text>
           {members.map((m) => (
             <View key={m.id} style={[styles.memberRow, { opacity: m.archived ? 0.6 : 1 }]}>
-              <View style={styles.flex}>
+              <View style={[styles.flex, { gap: 4 }]}>
                 <Input
                   value={m.name}
                   onChangeText={(v) => updateMember(m.id, { name: v })}
@@ -199,12 +271,26 @@ export function GroupFundFormSheet({ visible, fund, newKey, onClose, onSubmit }:
                   accessibilityLabel="Member name"
                   editable={!m.archived}
                 />
+                {monthStepper(
+                  "Owes from",
+                  m.joinedPeriod && m.joinedPeriod > startPeriod ? m.joinedPeriod : startPeriod,
+                  (next) => updateMember(m.id, { joinedPeriod: next <= startPeriod ? undefined : next }),
+                  startPeriod,
+                  m.leftPeriod ? shiftMonthKey(m.leftPeriod, -1) : currentPeriod,
+                  `${m.name || "member"} owes from`
+                )}
+                {m.archived && m.leftPeriod ? (
+                  <Text style={helper}>{`Owed until ${formatMonthLabel(shiftMonthKey(m.leftPeriod, -1), settings.dateFormat, { long: true })}`}</Text>
+                ) : null}
               </View>
               {m.saved ? (
                 <Chip
                   label={m.archived ? "Archived" : "Archive"}
                   selected={m.archived}
-                  onPress={() => updateMember(m.id, { archived: !m.archived })}
+                  // Archiving: they owe through this month. Restoring: they owe again.
+                  onPress={() =>
+                    updateMember(m.id, m.archived ? { archived: false, leftPeriod: undefined } : { archived: true, leftPeriod: m.leftPeriod ?? shiftMonthKey(currentPeriod, 1) })
+                  }
                   accessibilityLabel={m.archived ? `Restore ${m.name}` : `Archive ${m.name}`}
                 />
               ) : (
@@ -215,7 +301,12 @@ export function GroupFundFormSheet({ visible, fund, newKey, onClose, onSubmit }:
           <Button
             variant="outline"
             size="sm"
-            onPress={() => setMembers((list) => [...list, { id: newKey(), name: "", archived: false, saved: false }])}
+            onPress={() =>
+              setMembers((list) => [
+                ...list,
+                { id: newKey(), name: "", archived: false, saved: false, joinedPeriod: editing ? currentPeriod : undefined },
+              ])
+            }
           >
             <Plus size={14} color={theme.colors.foreground} />
             <Text style={{ color: theme.colors.foreground, fontWeight: "600" }}>Add member</Text>
@@ -238,6 +329,8 @@ const styles = StyleSheet.create({
   helper: { fontSize: 11 },
   row: { gap: 8, padding: 10, borderWidth: 1, borderRadius: 12, borderCurve: "continuous" },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  memberRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  memberRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  monthRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  monthText: { fontSize: 13, fontWeight: "600", minWidth: 110, textAlign: "center" },
   flex: { flex: 1 },
 });

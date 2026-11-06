@@ -19,12 +19,14 @@ import { goalEventsPageFrom, supabaseGoalEventsPage, type GoalEventsPage, type G
 import {
   groupFundEventsPageFrom,
   supabaseGroupFundEventsPage,
+  supabaseGroupFundMonthEvents,
   type GroupFundEventsPage,
   type GroupFundEventsQuery,
 } from "./groupFundSources";
 import { supabaseJournalPage, type SupabaseCursor, type SupabasePage } from "./journalHistorySource";
 import { journalMonthRange, supabaseJournalMonth, type JournalCollection } from "./journalMonthSource";
 import { fromReadModelDoc } from "./readModelDoc";
+import type { GroupFundEvent } from "@/shared/types/groupFund";
 
 /**
  * SPENDLY-512 — what a read-model screen reads, behind one interface.
@@ -73,6 +75,8 @@ export type ReadModelBackend = {
   goalEventsPage(options: GoalEventsQuery): Promise<GoalEventsPage>;
   /** SPENDLY-685: one Group Fund's events, newest first, keyset paged. */
   groupFundEventsPage(options: GroupFundEventsQuery): Promise<GroupFundEventsPage>;
+  /** SPENDLY-688: one Group Fund's events for one month. */
+  groupFundMonthEvents(fundId: string, period: string): Promise<GroupFundEvent[]>;
   /** The stalest `last_synced_at` (ms) of these collections, or null if any was never synced. */
   lastSyncedAt(collections: string[]): Promise<number | null>;
 };
@@ -109,6 +113,7 @@ export function supabaseBackend(client: SupabaseClient): ReadModelBackend {
     byIds: (c, ids) => supabaseByIds(client, c, ids),
     goalEventsPage: (options) => supabaseGoalEventsPage(client, options),
     groupFundEventsPage: (options) => supabaseGroupFundEventsPage(client, options),
+    groupFundMonthEvents: (fundId, period) => supabaseGroupFundMonthEvents(client, fundId, period),
     async lastSyncedAt(collections) {
       const { data, error } = await client.from("sync_status").select("collection, last_synced_at").in("collection", collections);
       if (error) throw new Error(error.message);
@@ -218,6 +223,11 @@ export function loopbackBackend(db: Firestore, uid: string, knobs: LoopbackKnobs
         page.map((r) => ({ doc_id: r.doc_id, created_at: r.created_at as string, doc: r.doc as Record<string, unknown> })),
         options.pageSize
       );
+    },
+    async groupFundMonthEvents(fundId, period) {
+      return (await rows("groupFundEvents"))
+        .filter((r) => r.fund_id === fundId && r.period === period)
+        .map((r) => toApp<GroupFundEvent>(r));
     },
     async lastSyncedAt() {
       if (knobs.fail) throw new Error("loopback read model: simulated outage (readModel.loopbackFail)");

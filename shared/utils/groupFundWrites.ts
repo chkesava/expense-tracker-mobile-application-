@@ -226,6 +226,8 @@ function checkMoneyInput(
 export type GroupFundConfigInput = {
   name: string;
   notes?: string;
+  /** SPENDLY-688: first month of collection (YYYY-MM). */
+  startPeriod?: string;
   purposes: GroupFundPurpose[];
   members: GroupFundMember[];
 };
@@ -245,7 +247,13 @@ function cleanPurposes(purposes: readonly GroupFundPurpose[]): GroupFundPurpose[
 
 function cleanMembers(members: readonly GroupFundMember[]): GroupFundMember[] {
   return members.map((m) =>
-    stripUndefined({ id: m.id, name: cleanGroupFundText(m.name), archived: m.archived ? true : undefined })
+    stripUndefined({
+      id: m.id,
+      name: cleanGroupFundText(m.name),
+      archived: m.archived ? true : undefined,
+      joinedPeriod: m.joinedPeriod || undefined,
+      leftPeriod: m.leftPeriod || undefined,
+    })
   );
 }
 
@@ -253,6 +261,7 @@ function validateConfig(input: GroupFundConfigInput): GroupFundIssue[] {
   return [
     ...validateFundName(input.name),
     ...validateOptionalText(input.notes, GROUP_FUND_LIMITS.notesMax, "notes_too_long"),
+    ...validatePeriod(input.startPeriod),
     ...validatePurposes(input.purposes),
     ...validateMembers(input.members),
   ];
@@ -269,6 +278,7 @@ export function buildCreateGroupFund(
   const fields = stripUndefined({
     name: cleanGroupFundText(input.name),
     notes: optionalText(input.notes),
+    startPeriod: input.startPeriod || undefined,
     status: "active" as GroupFundStatus,
     purposes: cleanPurposes(input.purposes),
     members: cleanMembers(input.members),
@@ -309,6 +319,7 @@ export function buildEditGroupFund(
   const next: GroupFundConfigInput = {
     name: patch.name ?? fund.name,
     notes: patch.notes ?? fund.notes,
+    startPeriod: patch.startPeriod ?? fund.startPeriod,
     purposes: patch.purposes ?? fund.purposes,
     members: patch.members ?? fund.members,
   };
@@ -328,6 +339,9 @@ export function buildEditGroupFund(
   }
   if (patch.notes !== undefined && cleanGroupFundText(patch.notes) !== (fund.notes ?? "")) {
     fields.notes = cleanGroupFundText(patch.notes);
+  }
+  if (patch.startPeriod !== undefined && patch.startPeriod !== (fund.startPeriod ?? "")) {
+    fields.startPeriod = patch.startPeriod;
   }
   if (patch.purposes) {
     const cleaned = cleanPurposes(patch.purposes);

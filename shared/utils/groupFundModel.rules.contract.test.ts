@@ -62,8 +62,8 @@ function allOps() {
   });
   if (!contribution.ok) throw new Error(contribution.issues.join(","));
   const results = [
-    buildCreateGroupFund(ctx(), "f", { name: "Dokra", notes: "n", purposes: fund.purposes, members: fund.members }),
-    buildEditGroupFund(ctx(), fund, { name: "Dokra 2", notes: "x", status: "archived" }),
+    buildCreateGroupFund(ctx(), "f", { name: "Dokra", notes: "n", startPeriod: "2026-09", purposes: fund.purposes, members: fund.members }),
+    buildEditGroupFund(ctx(), fund, { name: "Dokra 2", notes: "x", status: "archived", startPeriod: "2026-08" }),
     contribution,
     buildPayout(ctx("p"), fund, {
       purposeId: "a",

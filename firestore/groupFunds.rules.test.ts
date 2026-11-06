@@ -188,6 +188,35 @@ describe("groupFunds create / edit / delete", () => {
     await assertFails(commit(ownerDb(), p));
   });
 
+  it("SPENDLY-688: stores a start month and member join/leave months, and edits them", async () => {
+    await commit(
+      ownerDb(),
+      plan(
+        buildCreateGroupFund(ctx("unused"), "f1", {
+          name: "Dokra",
+          startPeriod: "2026-09",
+          purposes: [{ id: "appu", name: "Appu", cadence: "monthly", expectedPerMember: 6000 }],
+          members: [{ id: "m1", name: "Ravi", joinedPeriod: "2026-10" }],
+        })
+      )
+    );
+    const fund = await readFund();
+    expect(fund.startPeriod).toBe("2026-09");
+    const members = [{ ...fund.members[0], archived: true, leftPeriod: "2026-12" }];
+    await assertSucceeds(commit(ownerDb(), plan(buildEditGroupFund(ctx("e1"), fund, { startPeriod: "2026-08", members }))));
+    const edited = await readFund();
+    expect(edited.startPeriod).toBe("2026-08");
+    expect(edited.members[0]).toMatchObject({ joinedPeriod: "2026-10", leftPeriod: "2026-12", archived: true });
+  });
+
+  it("rejects a start month that isn't YYYY-MM", async () => {
+    const p = plan(
+      buildCreateGroupFund(ctx("x"), "f1", { name: "Dokra", purposes: [{ id: "appu", name: "Appu", cadence: "monthly" }], members: [] })
+    );
+    p.fields.startPeriod = "Sept";
+    await assertFails(commit(ownerDb(), p));
+  });
+
   it("accepts a config edit at the next version and rejects a stale one", async () => {
     await createFund();
     const fund = await readFund();

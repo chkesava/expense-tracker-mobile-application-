@@ -57,3 +57,26 @@ export async function supabaseGroupFundEventsPage(
 export function groupFundCursorBelow(createdAtMs: number): GroupFundEventsCursor {
   return { createdAt: new Date(createdAtMs + 1).toISOString(), docId: "" };
 }
+
+/** SPENDLY-688: the most events one fund can have in one month that a month view reads. */
+export const GROUP_FUND_MONTH_LIMIT = 500;
+
+/** SPENDLY-688: one fund's events for one month (`period`), from the read model. Rows only. */
+export async function supabaseGroupFundMonthEvents(
+  client: SupabaseClient,
+  fundId: string,
+  period: string
+): Promise<GroupFundEvent[]> {
+  const { data, error } = await client
+    .from("group_fund_events")
+    .select("doc_id, doc")
+    .eq("source_deleted", false)
+    .eq("fund_id", fundId)
+    .eq("period", period)
+    .order("doc_id")
+    .limit(GROUP_FUND_MONTH_LIMIT);
+  if (error) throw new Error(`read model group_fund_events: ${error.message}`);
+  return ((data ?? []) as { doc_id: string; doc: Record<string, unknown> }[]).map((r) =>
+    fromReadModelDoc<GroupFundEvent>(r.doc_id, r.doc)
+  );
+}
