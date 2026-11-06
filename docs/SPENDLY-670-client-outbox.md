@@ -62,7 +62,7 @@ Also required:
 1. Merge into the epic. This ships in an Expense release. **Nothing changes until the setting is turned on.**
 2. Turn on `system_settings/global.readModel.clientWrites = true` (Firebase console; **user**).
 3. Check:
-   - a save appears in Supabase with `written_by = 'client'` within about 2 s, then `server` after the push;
+   - **web app, DevTools → Network:** a `rm_client_apply` request returns 200 within about 2 s of a save. The row is `written_by = 'client'` only until the push replaces it, usually in about 20 s, so a count of client rows is no proof (SPENDLY-689 adds a database counter);
    - `spendlyClientOutbox.stats()` in a dev build;
    - `push_daily` keeps counting.
 4. Direct writers outside `commitMutations` (bills, receivables, theme, categories…) come in SPENDLY-671.

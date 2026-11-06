@@ -4,6 +4,7 @@ vi.mock("firebase-admin/app", () => ({ initializeApp: vi.fn(), applicationDefaul
 vi.mock("firebase-admin/firestore", () => ({ getFirestore: vi.fn() }));
 
 import { parseSetModeArgs, setModeField, setModePatch } from "./readmodel-set-mode";
+import { READ_MODEL_COLLECTIONS, SWITCHED_COLLECTIONS } from "../shared/utils/readModel/collectionMode";
 
 describe("readmodel-set-mode (SPENDLY-511)", () => {
   it("is a dry run unless --apply", () => {
@@ -45,5 +46,22 @@ describe("readmodel-set-mode (SPENDLY-511)", () => {
     expect(setModeField(args)).toBe("localCopy");
     expect(() => parseSetModeArgs(["--switch=everything", "--value=false"])).toThrow(/--switch/);
     expect(() => parseSetModeArgs(["--switch=realtime", "--value=off"])).toThrow(/--value/);
+  });
+
+  // SPENDLY-690: every switched collection in one merge write.
+  it("sets every switched collection at once, and nothing else", () => {
+    const args = parseSetModeArgs(["--all-collections", "--mode=shadow", "--apply"]);
+    expect(args).toEqual({ allCollections: true, mode: "shadow", apply: true });
+    const patch = setModePatch(args) as { readModel: Record<string, unknown> };
+    expect(Object.keys(patch)).toEqual(["readModel"]);
+    expect(Object.keys(patch.readModel).sort()).toEqual([...SWITCHED_COLLECTIONS].sort());
+    expect(new Set(Object.values(patch.readModel))).toEqual(new Set(["shadow"]));
+    expect(patch.readModel).not.toHaveProperty("localCopy");
+    expect(() => parseSetModeArgs(["--all-collections", "--mode=postgres"])).toThrow(/--mode/);
+    expect(parseSetModeArgs(["--all-collections", "--mode=supabase"]).apply).toBe(false); // dry run by default
+  });
+
+  it("only names synced collections", () => {
+    for (const c of SWITCHED_COLLECTIONS) expect(READ_MODEL_COLLECTIONS).toContain(c);
   });
 });

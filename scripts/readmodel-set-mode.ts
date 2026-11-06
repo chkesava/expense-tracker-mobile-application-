@@ -25,6 +25,9 @@
  *   npx tsx scripts/readmodel-set-mode.ts --collection=expenses --mode=shadow --apply
  *   npx tsx scripts/readmodel-set-mode.ts --switch=localCopy --value=false --apply
  *
+ * SPENDLY-690: every collection the app reads through the switch, at once:
+ *   npx tsx scripts/readmodel-set-mode.ts --all-collections --mode=shadow --apply
+ *
  * `--switch=localCopy --value=false` is the one-write rollback: every
  * collection reads Firestore again on every device (no release), and the
  * per-collection settings stay as they were for when it's turned back on.
@@ -32,7 +35,7 @@
 import { applicationDefault, cert, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
-import { COLLECTION_MODES, READ_MODEL_COLLECTIONS, type CollectionMode } from "../shared/utils/readModel/collectionMode";
+import { COLLECTION_MODES, READ_MODEL_COLLECTIONS, SWITCHED_COLLECTIONS, type CollectionMode } from "../shared/utils/readModel/collectionMode";
 import { READ_MODEL_MODES, READ_MODEL_SCREENS, type ReadModelMode, type ReadModelScreen } from "../shared/utils/readModelMode";
 
 export type ScreenModeArgs = {
@@ -47,11 +50,18 @@ export type CollectionModeArgs = { collection: string; mode: CollectionMode; app
 /** SPENDLY-601: the app-wide switches. */
 export const READ_MODEL_SWITCHES = ["localCopy", "realtime", "clientWrites"] as const;
 export type SwitchArgs = { switchName: (typeof READ_MODEL_SWITCHES)[number]; value: boolean; apply: boolean };
-export type SetModeArgs = ScreenModeArgs | CollectionModeArgs | SwitchArgs;
+/** SPENDLY-690: every collection in SWITCHED_COLLECTIONS. */
+export type AllCollectionsArgs = { allCollections: true; mode: CollectionMode; apply: boolean };
+export type SetModeArgs = ScreenModeArgs | CollectionModeArgs | SwitchArgs | AllCollectionsArgs;
 
 export function parseSetModeArgs(argv: string[], emulator = false): SetModeArgs {
   const value = (flag: string) => argv.find((a) => a.startsWith(`--${flag}=`))?.split("=")[1];
   const apply = argv.includes("--apply");
+  if (argv.includes("--all-collections")) {
+    const m = value("mode");
+    if (!(COLLECTION_MODES as readonly string[]).includes(m ?? "")) throw new Error(`--mode must be one of: ${COLLECTION_MODES.join(", ")}`);
+    return { allCollections: true, mode: m as CollectionMode, apply };
+  }
   const switchName = value("switch");
   if (switchName !== undefined) {
     if (!(READ_MODEL_SWITCHES as readonly string[]).includes(switchName)) {
@@ -94,6 +104,7 @@ export function parseSetModeArgs(argv: string[], emulator = false): SetModeArgs 
 
 /** The field this write changes, e.g. `journal`, `expenses` or `localCopy`. */
 export function setModeField(args: SetModeArgs): string {
+  if ("allCollections" in args) return `${SWITCHED_COLLECTIONS.length} collections`;
   if ("switchName" in args) return args.switchName;
   if ("collection" in args) return args.collection;
   return args.screen;
@@ -101,6 +112,7 @@ export function setModeField(args: SetModeArgs): string {
 
 /** The merge write: only `readModel.<screen|collection|switch>` changes. */
 export function setModePatch(args: SetModeArgs | Pick<ScreenModeArgs, "screen" | "mode" | "loopbackFail" | "loopbackLagMinutes">) {
+  if ("allCollections" in args) return { readModel: Object.fromEntries(SWITCHED_COLLECTIONS.map((c) => [c, args.mode])) };
   if ("switchName" in args) return { readModel: { [args.switchName]: args.value } };
   if ("collection" in args) return { readModel: { [args.collection]: args.mode } };
   return {
@@ -117,6 +129,7 @@ async function main() {
   const args = parseSetModeArgs(process.argv.slice(2), emulator);
   const field = setModeField(args);
   const next = "switchName" in args ? String(args.value) : args.mode;
+  const keys = "allCollections" in args ? [...SWITCHED_COLLECTIONS] : [field];
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
   const db = getFirestore(
     emulator
@@ -126,7 +139,10 @@ async function main() {
   console.log(emulator ? "Target: Firebase emulator (Spendly Test)" : "Target: PRODUCTION");
   const ref = db.doc("system_settings/global");
   const current = ((await ref.get()).data()?.readModel ?? {}) as Record<string, unknown>;
-  console.log(`readModel.${field}: ${String(current[field] ?? "(unset)")} → ${next}`);
+  for (const key of keys) console.log(`readModel.${key}: ${String(current[key] ?? "(unset)")} → ${next}`);
+  if (next === "supabase" && current.localCopy !== true) {
+    console.log("Note: readModel.localCopy is not true, so devices keep reading Firestore until it is.");
+  }
   if (!args.apply) {
     console.log("[DRY RUN] nothing written. Re-run with --apply.");
     return;
