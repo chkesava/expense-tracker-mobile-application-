@@ -172,10 +172,13 @@ function moneyPlan(
     amountDelta: entry.direction === "credit" ? entry.amount : -entry.amount,
     date: entry.date,
   }));
+  // Rules check that the linked event's purpose stays ≥ 0, so link the event
+  // that takes money out of a purpose when there is one (a transfer's source).
+  const linked = events.find((e) => groupFundEventEffect(e).heldDelta < 0) ?? events[events.length - 1];
   return {
     fundId: fund.id,
     mode: "update",
-    fields: { lastEventId: events[events.length - 1].id },
+    fields: { lastEventId: linked.id },
     increments,
     version: { kind: "increment" },
     events,

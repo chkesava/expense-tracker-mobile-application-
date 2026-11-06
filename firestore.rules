@@ -33,6 +33,7 @@ service cloud.firestore {
     //   epfInterestEntries, epfReconciliations, epfTransferEvents,
     //   decisionEvents, decisions, epfTransfers, expenses, feeReviews,
     //   feeSignalDismissals, financialGoals, focus, goalEvents, goalNames,
+    //   groupFundEvents, groupFunds,
     //   holdings, incomes, investments, meta, portfolioOrders,
     //   portfolioSettings, portfolioSnapshots, portfolioTransactions,
     //   receivableRepayments, receivables, calendarReminders, goalFundingPlans, runwayOverrides, runwaySettings, spaces,
@@ -730,6 +731,177 @@ service cloud.firestore {
           && (d.type != 'reversal' || eventId == d.correctionOf + '__rev');
       }
 
+      // ---------------------------------------------------------------------
+      // SPENDLY-684 Group Funds (epic SPENDLY-678): money held for others.
+      // Design: docs/SPENDLY-678-group-funds.md. Mirrors
+      // shared/utils/groupFundWrites.ts; contract-tested by
+      // shared/utils/groupFundModel.rules.contract.test.ts.
+      //
+      //   groupFunds/{id}       the pool and its stored running totals
+      //   groupFundEvents/{id}  append-only history (id = idempotency key)
+      //   accountEntries/{id}   source group_fund_* — the real account leg
+      //
+      // Every money write moves the fund's version by exactly one and links a
+      // NEW event that explains the change to `totals.held`. An event can only
+      // be created in a batch that moves its fund, and a group-fund account
+      // entry only alongside the event that lists it. Totals use increment(),
+      // so these checks run on the value after the write and two devices'
+      // contributions both apply; held money can never go below zero.
+      // ---------------------------------------------------------------------
+      function groupFundPath(fundId) {
+        return /databases/$(database)/documents/users/$(uid)/groupFunds/$(fundId);
+      }
+
+      function groupFundEventPath(eventId) {
+        return /databases/$(database)/documents/users/$(uid)/groupFundEvents/$(eventId);
+      }
+
+      function groupFundEventKinds() {
+        return ['opening', 'contribution', 'payout', 'transfer_out', 'transfer_in',
+                'account_move', 'reversal'];
+      }
+
+      function groupFundEntrySources() {
+        return ['group_fund_contribution', 'group_fund_payout', 'group_fund_move',
+                'group_fund_reversal'];
+      }
+
+      function groupFundTotalsOk(t) {
+        let keys = ['opening', 'contributions', 'payouts', 'transfersIn', 'transfersOut', 'held'];
+        return t is map
+          && t.keys().hasOnly(keys)
+          && t.keys().hasAll(keys)
+          && boundedNumber(t.opening)
+          && boundedNumber(t.contributions)
+          && boundedNumber(t.payouts)
+          && boundedNumber(t.transfersIn)
+          && boundedNumber(t.transfersOut)
+          && boundedNumber(t.held)
+          && t.held > -0.005
+          && goalMoneyClose(t.held,
+               t.opening + t.contributions + t.transfersIn - t.payouts - t.transfersOut);
+      }
+
+      function groupFundShape(d) {
+        return d.keys().hasOnly([
+            'name', 'notes', 'status', 'purposes', 'members', 'totals', 'byPurpose',
+            'heldByAccount', 'schemaVersion', 'version', 'lastEventId', 'createdAtMs',
+            'createdAt', 'updatedAt'])
+          && d.keys().hasAll(['name', 'status', 'purposes', 'members', 'totals',
+            'byPurpose', 'heldByAccount', 'schemaVersion', 'version'])
+          && d.name is string && d.name.size() >= 1 && d.name.size() <= 60
+          && optionalText(d, 'notes', 500)
+          && d.status in ['active', 'archived']
+          && d.purposes is list && d.purposes.size() >= 1 && d.purposes.size() <= 20
+          && d.members is list && d.members.size() <= 200
+          && groupFundTotalsOk(d.totals)
+          && d.byPurpose is map && d.byPurpose.size() <= 20
+          && d.heldByAccount is map && d.heldByAccount.size() <= 100
+          && d.schemaVersion == 1
+          && d.version is int && d.version >= 1
+          && optionalText(d, 'lastEventId', 160)
+          && optionalNumber(d, 'createdAtMs');
+      }
+
+      function groupFundCreate() {
+        let d = request.resource.data;
+        return groupFundShape(d)
+          && d.version == 1
+          && d.status == 'active'
+          && !d.keys().hasAny(['lastEventId'])
+          && d.totals.opening == 0 && d.totals.contributions == 0
+          && d.totals.payouts == 0 && d.totals.transfersIn == 0
+          && d.totals.transfersOut == 0 && d.totals.held == 0
+          && d.byPurpose.size() == 0
+          && d.heldByAccount.size() == 0;
+      }
+
+      // What an event does to the fund's held total (groupFundEventEffect).
+      function groupFundHeldDelta(ev) {
+        let kind = ev.kind == 'reversal' ? ev.get('reversedKind', '') : ev.kind;
+        let sign = ev.kind == 'reversal' ? -1 : 1;
+        return kind in ['opening', 'contribution'] ? sign * ev.amount
+          : (kind == 'payout' ? -sign * ev.amount : 0);
+      }
+
+      function groupFundMoneyUpdate(fundId, d, r, changed) {
+        let ev = getAfter(groupFundEventPath(d.lastEventId)).data;
+        return changed.hasOnly(['totals', 'byPurpose', 'heldByAccount', 'version',
+                                'lastEventId', 'updatedAt'])
+          && r.get('status', 'active') == 'active'
+          && !exists(groupFundEventPath(d.lastEventId))
+          && existsAfter(groupFundEventPath(d.lastEventId))
+          && ev.fundId == fundId
+          && goalMoneyClose(d.totals.held - r.totals.held, groupFundHeldDelta(ev))
+          // The writer links the event that takes money out of a purpose, so
+          // that purpose is the one checked (groupFundWrites.moneyPlan).
+          && d.byPurpose.get(ev.purposeId, {}).get('held', 0) > -0.005;
+      }
+
+      function groupFundUpdate(fundId) {
+        let d = request.resource.data;
+        let r = resource.data;
+        let changed = d.diff(r).affectedKeys();
+        return groupFundShape(d)
+          && d.schemaVersion == r.schemaVersion
+          && d.get('createdAtMs', null) == r.get('createdAtMs', null)
+          && d.version == r.version + 1
+          && (changed.hasOnly(['name', 'notes', 'status', 'purposes', 'members',
+                               'version', 'updatedAt'])
+              || groupFundMoneyUpdate(fundId, d, r, changed));
+      }
+
+      function groupFundEventWellFormed(eventId) {
+        let d = request.resource.data;
+        return d.keys().hasOnly([
+            'fundId', 'kind', 'amount', 'purposeId', 'date', 'period', 'memberId',
+            'accountId', 'toAccountId', 'accountEntryIds', 'recipient', 'reference',
+            'note', 'transferPairId', 'reversalOf', 'reversedKind', 'actorUid',
+            'createdAtMs', 'createdAt', 'updatedAt'])
+          && d.keys().hasAll(['fundId', 'kind', 'amount', 'purposeId', 'date',
+            'actorUid', 'createdAtMs'])
+          && d.fundId is string && d.fundId.size() >= 1 && d.fundId.size() <= 64
+          && d.kind in groupFundEventKinds()
+          && boundedNonNeg(d.amount) && d.amount > 0
+          && d.purposeId is string && d.purposeId.size() >= 1 && d.purposeId.size() <= 64
+          && d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && optionalYm(d, 'period')
+          && optionalText(d, 'memberId', 64)
+          && optionalText(d, 'accountId', 128)
+          && optionalText(d, 'toAccountId', 128)
+          && optionalText(d, 'recipient', 80)
+          && optionalText(d, 'reference', 80)
+          && optionalText(d, 'note', 500)
+          && optionalText(d, 'transferPairId', 160)
+          && (!d.keys().hasAny(['accountEntryIds'])
+              || (d.accountEntryIds is list && d.accountEntryIds.size() <= 2))
+          && ((d.kind == 'reversal') == d.keys().hasAny(['reversalOf']))
+          // One reversal per event, ever: the id is derived and events are create-only.
+          && (d.kind != 'reversal'
+              || (d.reversalOf is string
+                  && eventId == 'rev_' + d.reversalOf
+                  && d.get('reversedKind', '') in ['opening', 'contribution', 'payout',
+                       'transfer_out', 'transfer_in', 'account_move']))
+          && (d.actorUid == request.auth.uid || d.actorUid == request.auth.uid + '_duress')
+          && d.createdAtMs is number
+          // Only inside a batch that moves its fund.
+          && exists(groupFundPath(d.fundId))
+          && getAfter(groupFundPath(d.fundId)).data.version
+               == get(groupFundPath(d.fundId)).data.version + 1;
+      }
+
+      // A group-fund account entry is created only with the new event that lists it.
+      function groupFundEntryLinked(entryId) {
+        let d = request.resource.data;
+        let evPath = groupFundEventPath(d.get('linkedGroupFundEventId', '-'));
+        return d.get('linkedGroupFundId', null) is string
+          && d.get('linkedGroupFundEventId', null) is string
+          && !exists(evPath)
+          && existsAfter(evPath)
+          && getAfter(evPath).data.fundId == d.linkedGroupFundId
+          && entryId in getAfter(evPath).data.get('accountEntryIds', []);
+      }
+
       function investmentWellFormed() {
         let d = request.resource.data;
         return optionalBoundedNonNeg(d, 'principal')
@@ -827,8 +999,17 @@ service cloud.firestore {
         allow update, delete: if false;
       }
       match /accountEntries/{id} {
-        allow read, delete: if isOwner(uid);
-        allow create, update: if isOwner(uid) && personalMoneyWellFormed();
+        allow read: if isOwner(uid);
+        // SPENDLY-684: a group-fund leg is undone by a reversal, never edited
+        // or deleted, so the fund and the account can't drift apart.
+        allow delete: if isOwner(uid)
+          && !(resource.data.get('source', '') in groupFundEntrySources());
+        allow create: if isOwner(uid) && personalMoneyWellFormed()
+          && (!(request.resource.data.get('source', '') in groupFundEntrySources())
+              || groupFundEntryLinked(id));
+        allow update: if isOwner(uid) && personalMoneyWellFormed()
+          && !(resource.data.get('source', '') in groupFundEntrySources())
+          && !(request.resource.data.get('source', '') in groupFundEntrySources());
       }
       match /accountPayments/{id} {
         allow read, delete: if isOwner(uid);
@@ -1016,6 +1197,18 @@ service cloud.firestore {
         allow update: if isOwner(uid)
           && ((resource.data.get('schemaVersion', 0) != 2 && legacyGoalWellFormed())
               || goalV2Update(id));
+      }
+      match /groupFunds/{id} {
+        allow read: if isOwner(uid);
+        // Deletable only before any money was recorded; afterwards, archive.
+        allow delete: if isOwner(uid) && !resource.data.keys().hasAny(['lastEventId']);
+        allow create: if isOwner(uid) && groupFundCreate();
+        allow update: if isOwner(uid) && groupFundUpdate(id);
+      }
+      match /groupFundEvents/{eventId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && groupFundEventWellFormed(eventId);
+        allow update, delete: if false;
       }
       match /goalEvents/{eventId} {
         allow read: if isOwner(uid);

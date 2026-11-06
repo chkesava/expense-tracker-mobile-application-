@@ -148,9 +148,9 @@ describe("commitMutations", () => {
     expect(await listWriteOutbox("u1")).toEqual([]);
   });
 
-  it("checks the ack before replaying a batch that creates goal events or name locks (SPENDLY-608)", async () => {
+  it("checks the ack before replaying a batch that creates goal or group-fund events, or name locks (SPENDLY-608/684)", async () => {
     commitOutcome = "queued";
-    for (const path of ["users/u1/goalEvents/ev1", "users/u1/goalNames/n_car"]) {
+    for (const path of ["users/u1/goalEvents/ev1", "users/u1/goalNames/n_car", "users/u1/groupFundEvents/ev1"]) {
       resetWriteOutboxForTests({
         getItem: async (key: string) => disk.get(key) ?? null,
         setItem: async (key: string, value: string) => {

@@ -389,6 +389,11 @@ export interface AccountActivity {
    */
   isCashback?: boolean;
   isManualEntry?: boolean;
+  /**
+   * SPENDLY-684: an entry posted by Group Funds (money held for others).
+   * Pass-through, never income, an expense or a manual adjustment.
+   */
+  isGroupFund?: boolean;
   isTransfer?: boolean;
   /** Money received from a lender. A liability, never income. */
   isBorrowing?: boolean;
