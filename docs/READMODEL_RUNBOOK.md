@@ -332,6 +332,12 @@ For someone who wasn't there.
 
 Every command is `npx tsx scripts/readmodel-set-mode.ts … --apply`. Without `--apply` it only shows the change. Devices pick it up live; no release is needed.
 
+**Without a local service account (SPENDLY-690):** GitHub → Actions → **Read-model switches**.
+- `target = all-collections` sets every collection the app reads through the switch (`SWITCHED_COLLECTIONS`, 34) to `mode` in one write.
+- `target = collection` sets one collection; `target = switch` sets `localCopy`, `realtime` or `clientWrites`.
+- `dry_run` (the default) only prints each key's current → new value.
+- Rollback: the same workflow with `mode = firestore`, or `switch localCopy = false`.
+
 **Emergency, anything looks wrong on screens:**
 1. Run `--switch=localCopy --value=false --apply`. Every device reads Firestore again, and the per-collection settings stay for later.
 2. Then investigate with health, the divergences and the shadow logs.
