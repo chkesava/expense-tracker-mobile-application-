@@ -14,8 +14,8 @@
  *                                        optional: copy pruned device deletes to the read model
  *                                        now (SPENDLY-680); without them the nightly sync does
  *
- * Sources: credit card bills (231), calendar reminders (694), dues (695).
- * Goals (696) add theirs to buildSources.
+ * Sources: credit card bills (231), calendar reminders (694), dues (695),
+ * savings goals (696).
  */
 
 import { applicationDefault, cert, initializeApp } from "firebase-admin/app";
@@ -28,6 +28,7 @@ import type { ReminderSource } from "../shared/utils/push/reminderEngine";
 import { createBillSource } from "../shared/utils/push/sources/billSource";
 import { createCalendarReminderSource } from "../shared/utils/push/sources/calendarReminderSource";
 import { createDuesSource } from "../shared/utils/push/sources/duesSource";
+import { createGoalSource } from "../shared/utils/push/sources/goalSource";
 import { runPushReminders } from "./lib/pushRunCore";
 
 export function buildSources(db: AdminFirestoreLike): ReminderSource[] {
@@ -35,6 +36,7 @@ export function buildSources(db: AdminFirestoreLike): ReminderSource[] {
     createBillSource(db) as ReminderSource,
     createCalendarReminderSource(db) as ReminderSource,
     createDuesSource(db) as ReminderSource,
+    createGoalSource(db) as ReminderSource,
   ];
 }
 
