@@ -16,8 +16,8 @@ site, and the app's default URLs don't change.
 | Key | Story | State |
 |---|---|---|
 | SPENDLY-701 | S1 Test on Cloudflare, compatibility matrix | Merged into epic ([matrix](SPENDLY-621-compatibility.md)) |
-| SPENDLY-702 | S2 Static site and routing for Cloudflare Pages | Built on `feature/SPENDLY-702-cloudflare-routing`, awaiting review ([doc](SPENDLY-702-cloudflare-routing.md)) |
-| SPENDLY-703 | S3 Worker, request adapter, the functions that run on Cloudflare | To do |
+| SPENDLY-702 | S2 Static site and routing for Cloudflare Pages | Merged into epic (34d469a7) ([doc](SPENDLY-702-cloudflare-routing.md)) |
+| SPENDLY-703 | S3 Worker, request adapter, the functions that run on Cloudflare | Built on `feature/SPENDLY-703-cloudflare-worker`, awaiting review ([doc](SPENDLY-703-cloudflare-worker.md)) |
 | SPENDLY-704 | S4 The 6 firebase-admin functions | Won't do (D5) |
 | SPENDLY-705 | S5 Manual-only backup workflow and smoke tests | To do |
 | SPENDLY-706 | S6 Runbook, secrets checklist, operator setup, first end-to-end run | To do |

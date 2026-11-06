@@ -1,0 +1,11 @@
+# Cloudflare Pages backup of the Spendly web app (SPENDLY-621). Netlify stays
+# the primary host and never reads this file.
+#
+# `wrangler pages deploy` / `wrangler pages dev` are run from this folder.
+# The Worker is pre-bundled into ../dist-cloudflare/_worker.js by
+# scripts/build-cloudflare-worker.js, so deploy with --no-bundle.
+name = "spendly-web-backup"
+pages_build_output_dir = "../dist-cloudflare"
+compatibility_date = "2026-10-01"
+# The handlers read process.env and use node:crypto / node:http (firebase-admin/auth).
+compatibility_flags = ["nodejs_compat"]
