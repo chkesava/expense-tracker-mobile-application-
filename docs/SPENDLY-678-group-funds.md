@@ -21,7 +21,7 @@ It is **custodial money**: it belongs to the group, not the user.
 | SPENDLY-684 (S2) | Store, Firestore rules, `CREATE_ONLY_SEGMENTS`, how entries show on account screens, index | Merged to the epic branch (`f949d596`); rules + index deploy pending |
 | SPENDLY-685 (S3) | Supabase read model: mapping, migration, RLS, allowlist, purge, indexes, read switch, history read path | Merged to the epic branch (`2185769d`); Supabase migration pending |
 | SPENDLY-686 (S4) | "Group funds held" liability in net worth and runway | Merged to the epic branch (`5724cf2a`) |
-| SPENDLY-687 (S5) | Money hub section, screens and sheets | To do |
+| SPENDLY-687 (S5) | Money hub section, screens and sheets | Built on `feature/SPENDLY-687-group-funds-ui`; awaiting UI review and merge approval |
 | SPENDLY-688 (S6) | Member pending amounts, reconciliation view, QA suite, read instrumentation | To do |
 
 ## Accounting model
@@ -127,6 +127,10 @@ Group money lives in the user's real accounts, so the real balance must move. It
   - The funds load with the accounts on the dashboard.
   - Runway subtracts the held money as one locked, negative line, except money sitting in accounts runway doesn't count.
   - The dashboard card "Held for others" has no route until S5.
+- **S5:**
+  - The section lives in the Money hub, in a new "Held for others" group, with one detail route, `/group-funds/[id]`.
+  - Undo is a tap on a history entry, with a confirmation. It adds a correction and keeps the original.
+  - One event sheet serves every money mode.
 
 ## Deploys pending
 - **S2 (SPENDLY-684):** `firestore.rules` and the `groupFundEvents (fundId, createdAtMs desc)` index. Both are production changes and need approval. Diff the indexes against live first.

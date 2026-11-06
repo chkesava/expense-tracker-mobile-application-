@@ -111,8 +111,7 @@ export function dashboardAccountCards(
       value: netWorth.groupFundLiabilities,
       owed: true,
       caption: "Group funds",
-      // SPENDLY-687 adds the Group Funds screen.
-      route: null,
+      route: "/ledger?tab=groupFunds",
     },
     {
       key: "overdraft",

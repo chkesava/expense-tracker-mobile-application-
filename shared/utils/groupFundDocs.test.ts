@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { GroupFundEvent } from "../types/groupFund";
-import { groupFundEventFromDoc, groupFundFromDoc, sortGroupFundEvents, sortGroupFunds } from "./groupFundDocs";
+import {
+  groupFundAccountOptions,
+  groupFundEventFromDoc,
+  groupFundFromDoc,
+  sortGroupFundEvents,
+  sortGroupFunds,
+} from "./groupFundDocs";
 
 describe("groupFundFromDoc", () => {
   it("reads a fund, defaulting missing totals to zero", () => {
@@ -53,5 +59,20 @@ describe("ordering", () => {
   it("orders events newest first, ties by id descending", () => {
     const e = (id: string, createdAtMs: number) => ({ id, createdAtMs }) as GroupFundEvent;
     expect(sortGroupFundEvents([e("a", 1), e("b", 2), e("c", 2)]).map((x) => x.id)).toEqual(["c", "b", "a"]);
+  });
+});
+
+describe("groupFundAccountOptions", () => {
+  it("offers bank and cash accounts, never a credit card", () => {
+    const types = new Map([["b", "Savings Bank"], ["c", "Credit Card"], ["k", "Cash"]]);
+    const accounts = [
+      { id: "hdfc", name: "HDFC", typeId: "b" },
+      { id: "card", name: "Amex", typeId: "c" },
+      { id: "cash", name: "Cash", typeId: "k" },
+    ];
+    expect(groupFundAccountOptions(accounts, types)).toEqual([
+      { id: "cash", name: "Cash" },
+      { id: "hdfc", name: "HDFC" },
+    ]);
   });
 });
