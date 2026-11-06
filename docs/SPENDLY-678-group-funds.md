@@ -20,7 +20,7 @@ It is **custodial money**: it belongs to the group, not the user.
 | SPENDLY-683 (S1) | Accounting model (this doc), types, pure logic and write plans | Merged to the epic branch (`60808c94`) |
 | SPENDLY-684 (S2) | Store, Firestore rules, `CREATE_ONLY_SEGMENTS`, how entries show on account screens, index | Merged to the epic branch (`f949d596`); rules + index deploy pending |
 | SPENDLY-685 (S3) | Supabase read model: mapping, migration, RLS, allowlist, purge, indexes, read switch, history read path | Merged to the epic branch (`2185769d`); Supabase migration pending |
-| SPENDLY-686 (S4) | "Group funds held" liability in net worth and runway | Built on `feature/SPENDLY-686-group-funds-net-worth`; awaiting merge approval |
+| SPENDLY-686 (S4) | "Group funds held" liability in net worth and runway | Merged to the epic branch (`5724cf2a`) |
 | SPENDLY-687 (S5) | Money hub section, screens and sheets | To do |
 | SPENDLY-688 (S6) | Member pending amounts, reconciliation view, QA suite, read instrumentation | To do |
 
