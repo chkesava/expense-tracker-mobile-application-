@@ -15,7 +15,7 @@ site, and the app's default URLs don't change.
 
 | Key | Story | State |
 |---|---|---|
-| SPENDLY-701 | S1 Test on Cloudflare, compatibility matrix | To do |
+| SPENDLY-701 | S1 Test on Cloudflare, compatibility matrix | Built on `feature/SPENDLY-701-cloudflare-compat`, awaiting review ([matrix](SPENDLY-621-compatibility.md)) |
 | SPENDLY-702 | S2 Static site and routing for Cloudflare Pages | To do |
 | SPENDLY-703 | S3 Worker, request adapter, market functions, nutrition-ai | To do |
 | SPENDLY-704 | S4 The 6 firebase-admin functions | To do |
@@ -72,6 +72,20 @@ It also writes `_redirects` (16 rules) and `_headers` (immutable caching for
   - The sign-in check may go over the 10 ms CPU limit.
 - **ganesh-draw is not idempotent per request,** so a client must never retry it
   on another provider.
+
+## Findings from S1 (SPENDLY-701)
+- **Run unchanged on Workers:** the 7 market functions, nutrition-ai and
+  readmodel-claims.
+- **Firestore Admin can't run on Workers** (protobufjs code generation is
+  forbidden). ganesh-summary, ganesh-draw, epf-cron, delete-account and
+  readmodel-push need a Firestore REST port (S4). Firebase Auth admin works as-is.
+- **Free plan:**
+  - screener-universe is far over the 10 ms CPU limit (not covered);
+  - market-overview is at risk;
+  - readmodel-push `mode:"user"` is over 50 calls (not covered; the nightly sync
+    catches up).
+- **Routing:** Netlify's `_redirects` don't work on Pages as-is. A small Worker
+  fallback (variant C) matches Netlify.
 
 ## Design
 - **One Worker.** `cloudflare/worker.ts` is bundled to `_worker.js` (Pages
