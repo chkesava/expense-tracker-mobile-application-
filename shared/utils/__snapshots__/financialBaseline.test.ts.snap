@@ -116,6 +116,11 @@ exports[`financial baseline (SPENDLY-503) > matches the checked-in reference sna
       "inactive": 1,
       "total": 8,
     },
+    "groupFunds": {
+      "active": 0,
+      "inactive": 0,
+      "total": 0,
+    },
     "holdings": {
       "active": 1,
       "inactive": 0,

@@ -20,7 +20,7 @@ It is **custodial money**: it belongs to the group, not the user.
 | SPENDLY-683 (S1) | Accounting model (this doc), types, pure logic and write plans | Merged to the epic branch (`60808c94`) |
 | SPENDLY-684 (S2) | Store, Firestore rules, `CREATE_ONLY_SEGMENTS`, how entries show on account screens, index | Merged to the epic branch (`f949d596`); rules + index deploy pending |
 | SPENDLY-685 (S3) | Supabase read model: mapping, migration, RLS, allowlist, purge, indexes, read switch, history read path | Merged to the epic branch (`2185769d`); Supabase migration pending |
-| SPENDLY-686 (S4) | "Group funds held" liability in net worth and runway | To do |
+| SPENDLY-686 (S4) | "Group funds held" liability in net worth and runway | Built on `feature/SPENDLY-686-group-funds-net-worth`; awaiting merge approval |
 | SPENDLY-687 (S5) | Money hub section, screens and sheets | To do |
 | SPENDLY-688 (S6) | Member pending amounts, reconciliation view, QA suite, read instrumentation | To do |
 
@@ -122,6 +122,11 @@ Group money lives in the user's real accounts, so the real balance must move. It
   - The fund's totals stay in Supabase `doc` with no typed money column. SQL never filters or sums them, and the mapper copies only top-level fields.
   - The fund list reads through the `groupFunds` collection switch. History pages read through a separate `groupFundHistory` screen switch, so each can be flipped on its own.
   - Writers never build from the list hook: they load the fund from Firestore (R4.3a).
+- **S4:**
+  - If the funds can't be loaded, net worth is flagged as unknown and that day's history point is blocked, rather than counting the held money as 0.
+  - The funds load with the accounts on the dashboard.
+  - Runway subtracts the held money as one locked, negative line, except money sitting in accounts runway doesn't count.
+  - The dashboard card "Held for others" has no route until S5.
 
 ## Deploys pending
 - **S2 (SPENDLY-684):** `firestore.rules` and the `groupFundEvents (fundId, createdAtMs desc)` index. Both are production changes and need approval. Diff the indexes against live first.

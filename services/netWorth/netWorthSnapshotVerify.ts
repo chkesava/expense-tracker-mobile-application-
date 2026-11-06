@@ -28,6 +28,8 @@ export const NET_WORTH_INPUTS: readonly CopyCheck[] = [
   { collection: "receivables" },
   { collection: "receivableRepayments" },
   { collection: "financialSummaries", docId: "epf" },
+  // SPENDLY-686: money held for others (Group Funds) is a liability.
+  { collection: "groupFunds" },
 ];
 
 /** Every collection whose mode the recorder needs. */

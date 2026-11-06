@@ -65,6 +65,7 @@ export function useNetWorthSnapshotRecorder({
     loading: summary.loading,
     secondaryLoading: summary.secondaryLoading,
     untrustedBalanceAccounts: summary.untrustedBalanceAccounts,
+    groupFundsHeldUnknown: summary.groupFundsHeldUnknown,
     totalNetWorth: summary.totalNetWorth,
     totalAssets: summary.totalAssets,
     totalLiabilities: summary.totalLiabilities,

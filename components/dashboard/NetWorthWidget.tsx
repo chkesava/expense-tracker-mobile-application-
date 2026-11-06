@@ -13,6 +13,7 @@ import {
   PiggyBank,
   Scale,
   Wallet,
+  Users,
 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -275,6 +276,7 @@ const CARD_ICONS: Record<DashboardAccountCardKey, IconType> = {
   epf: Briefcase,
   lent: HandCoins,
   loans: Wallet,
+  groupFunds: Users,
   overdraft: Landmark,
 };
 
