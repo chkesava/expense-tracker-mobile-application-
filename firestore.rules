@@ -1691,6 +1691,15 @@ service cloud.firestore {
     // Clients cannot write any doc here: `global` is a project-wide kill switch
     // (maintenance, signup gate, banner, feature flags). Onboarding currency
     // lives on `users/{uid}`. Product docs are written by the Admin SDK in CI.
+    // SPENDLY-227: the push sender's kill switch and send log. Server only (the
+    // Admin SDK bypasses rules); no client may read or write them.
+    match /pushConfig/{docId} {
+      allow read, write: if false;
+    }
+    match /pushSendLogs/{logId} {
+      allow read, write: if false;
+    }
+
     match /system_settings/{docId} {
       // Must live INSIDE the match: `docId` is bound by the match, so a
       // top-level function referencing it compiles with "Invalid variable

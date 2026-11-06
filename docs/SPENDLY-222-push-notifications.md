@@ -12,8 +12,8 @@
 | [691](https://kesavach.atlassian.net/browse/SPENDLY-691) | Clear local reminders on sign-out / account switch | — | Merged to epic 9de24cb0 ([doc](SPENDLY-691-signout-clear-reminders.md)) |
 | [223](https://kesavach.atlassian.net/browse/SPENDLY-223) | Push credentials (Expense app) | — | Merged to epic (owner FCM key upload pending) ([doc](SPENDLY-223-push-credentials.md)) |
 | [224](https://kesavach.atlassian.net/browse/SPENDLY-224) | Device registration | 223 | Merged to epic (deploys pending) ([doc](SPENDLY-224-device-registration.md)) |
-| [226](https://kesavach.atlassian.net/browse/SPENDLY-226) | Preferences + one delivery window | — | In Progress: built, awaiting UI review and merge ([doc](SPENDLY-226-push-preferences.md)) |
-| [227](https://kesavach.atlassian.net/browse/SPENDLY-227) | Push sender (transport) | 224, 226 | To Do |
+| [226](https://kesavach.atlassian.net/browse/SPENDLY-226) | Preferences + one delivery window | — | Merged to epic ([doc](SPENDLY-226-push-preferences.md)) |
+| [227](https://kesavach.atlassian.net/browse/SPENDLY-227) | Push sender (transport) | 224, 226 | In Progress: built, awaiting review and merge ([doc](SPENDLY-227-push-sender.md)) |
 | [692](https://kesavach.atlassian.net/browse/SPENDLY-692) | Reminder engine (send-time re-check, ledger) | 227 | To Do |
 | [230](https://kesavach.atlassian.net/browse/SPENDLY-230) | Tap routing + unified inbox | — | To Do |
 | [231](https://kesavach.atlassian.net/browse/SPENDLY-231) | Credit card bill reminders via push | 692 | To Do |
@@ -45,4 +45,7 @@ All are production changes and need approval.
   - `firestore.indexes.json` (`devices` collection-group overrides; diff against live first);
   - Supabase migration `20261107000000_readmodel_devices.sql`.
   - Rules must be live before any build containing 224 ships.
+- **From 227:**
+  - `firestore.rules` (`pushConfig` and `pushSendLogs` denied to clients);
+  - `firestore.indexes.json` (the `devices.token` collection-group index and the `pushSendLogs.expireAt` TTL).
 - **Merge note:** Group Funds (SPENDLY-678) migration `20261106000000` restates the same SQL lists. Whichever epic reaches main second must restate them with both sets of tables.
