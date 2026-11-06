@@ -9,8 +9,8 @@
 
 | Story | Title | Blocked by | State |
 |---|---|---|---|
-| [691](https://kesavach.atlassian.net/browse/SPENDLY-691) | Clear local reminders on sign-out / account switch | — | In Progress: built on `feature/SPENDLY-691-signout-clear-reminders`, awaiting review and merge ([doc](SPENDLY-691-signout-clear-reminders.md)) |
-| [223](https://kesavach.atlassian.net/browse/SPENDLY-223) | Push credentials (Expense app) | — | To Do |
+| [691](https://kesavach.atlassian.net/browse/SPENDLY-691) | Clear local reminders on sign-out / account switch | — | Merged to epic 9de24cb0 ([doc](SPENDLY-691-signout-clear-reminders.md)) |
+| [223](https://kesavach.atlassian.net/browse/SPENDLY-223) | Push credentials (Expense app) | — | In Progress: transport decided, guard test built; FCM key upload is an owner action ([doc](SPENDLY-223-push-credentials.md)) |
 | [224](https://kesavach.atlassian.net/browse/SPENDLY-224) | Device registration | 223 | To Do |
 | [226](https://kesavach.atlassian.net/browse/SPENDLY-226) | Preferences + one delivery window | — | To Do |
 | [227](https://kesavach.atlassian.net/browse/SPENDLY-227) | Push sender (transport) | 224, 226 | To Do |
