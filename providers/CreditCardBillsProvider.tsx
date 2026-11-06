@@ -239,6 +239,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
 
   const globalPrefs = settings.creditCardBillReminders;
   const timezone = settings.timezone;
+  const showAmounts = settings.pushNotifications.showAmounts;
 
   useEffect(() => {
     autoGenerateToastShown.current = false;
@@ -363,6 +364,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       accountsById,
       globalPrefs,
       timezone,
+      showAmounts,
       onLog: async (entry) => {
         // Only persist schedule failures / skips occasionally would be noisy;
         // log explicit skipped/failed reasons only.
@@ -371,7 +373,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         }
       },
     });
-  }, [accounts, bills, globalPrefs, timezone, writeReminderLog]);
+  }, [accounts, bills, globalPrefs, timezone, showAmounts, writeReminderLog]);
 
   const scheduleReconcile = useCallback(() => {
     if (reconcileTimer.current) clearTimeout(reconcileTimer.current);

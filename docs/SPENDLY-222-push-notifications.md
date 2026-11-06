@@ -16,7 +16,7 @@
 | [227](https://kesavach.atlassian.net/browse/SPENDLY-227) | Push sender (transport) | 224, 226 | Merged to epic ([doc](SPENDLY-227-push-sender.md)) |
 | [692](https://kesavach.atlassian.net/browse/SPENDLY-692) | Reminder engine (send-time re-check, ledger) | 227 | Merged to epic ([doc](SPENDLY-692-reminder-engine.md)) |
 | [230](https://kesavach.atlassian.net/browse/SPENDLY-230) | Tap routing + unified inbox | — | To Do |
-| [231](https://kesavach.atlassian.net/browse/SPENDLY-231) | Credit card bill reminders via push | 692 | To Do |
+| [231](https://kesavach.atlassian.net/browse/SPENDLY-231) | Credit card bill reminders via push | 692 | In Progress: built, awaiting review and merge ([doc](SPENDLY-231-bill-push.md)) |
 | [693](https://kesavach.atlassian.net/browse/SPENDLY-693) | Local → push handover (no duplicates or stale reminders) | 692, 231 | To Do |
 | [694](https://kesavach.atlassian.net/browse/SPENDLY-694) | Financial calendar reminders via push | 692 | To Do |
 | [695](https://kesavach.atlassian.net/browse/SPENDLY-695) | Dues via push (borrowings, receivables, subscriptions, EMIs) | 692 | To Do |
