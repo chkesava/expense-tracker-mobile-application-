@@ -37,6 +37,11 @@ export type SystemSettings = {
    * Missing or unknown values mean `firestore` (shared/utils/readModelMode.ts).
    */
   readModel?: Record<string, unknown>;
+  /**
+   * SPENDLY-693: the server sends reminders as push. Set at switch-on, turned
+   * off with the kill switch; while off, phones schedule their own reminders.
+   */
+  pushRemindersLive?: boolean;
 };
 
 const DEFAULT_SETTINGS: SystemSettings = {

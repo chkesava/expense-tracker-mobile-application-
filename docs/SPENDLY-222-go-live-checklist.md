@@ -37,12 +37,13 @@ Everything that has to **run or be done outside the code** before Spendly push n
 | C1 | **Your device registers** | 224 | Install the B5 build on your phone, sign in and allow notifications. Your `users/{uid}/devices/{installId}` document appears in Firestore, and a `devices` row appears in Supabase. | ☐ |
 | C2 | **Test push to your own token only** | 223, 224 | Copy the token from your device document and send one push from https://expo.dev/notifications. Dev and prod share Firebase, so **never send to anyone else's token**. | ☐ |
 | C3 | **Dry run of the job** | 692 | Actions → *Push reminders* → Run workflow, `dry_run = true`. Check the summary: `reads` and `readsToday` are well under the budget, and `engine.due` and `sent` look right. The log should show "[DRY RUN] would send …" lines only. | ☐ |
-| C4 | **Turn it on** | 692 | Set `pushConfig/global.sendsDisabled = false`, then set the repository variable `PUSH_REMINDERS_ENABLED = true`. The schedule then runs every 15 minutes. | ☐ |
+| C4 | **Turn it on** | 692, 693 | In this order:<br>1. Set `pushConfig/global.sendsDisabled = false`.<br>2. Set the repository variable `PUSH_REMINDERS_ENABLED = true` (the job then runs every 15 minutes).<br>3. **Once a scheduled run has succeeded**, set `system_settings/global.pushRemindersLive = true`. Registered phones then stop their own bill, calendar and goal reminders, because the server now sends them (693). Phones without push keep their local reminders. | ☐ |
 | C5 | **Watch the first day** | 692, 227 | Check Actions run summaries for `reads` (the allowance is 6,000/day by default; tune `PUSH_MAX_READS_PER_DAY` and `PUSH_MAX_READS_PER_RUN`) and `stoppedForBudget`. In Firestore, `pushSendLogs` shows `errors` and `pruned`. Use the Firebase usage dashboard for total daily reads (the 50K Spark cap). | ☐ |
 
 **Emergency stop**, any time:
 1. Set `pushConfig/global.sendsDisabled = true`. This works immediately, no deploy needed.
-2. Optionally also set `PUSH_REMINDERS_ENABLED = false`.
+2. **Also set `system_settings/global.pushRemindersLive = false`.** Phones then go back to scheduling their own reminders the next time they open Spendly. Without this, registered phones would get no reminders while sends are stopped.
+3. Optionally also set `PUSH_REMINDERS_ENABLED = false`.
 
 ## D. Added by later stories (fill in as they merge)
 
@@ -53,7 +54,8 @@ Everything that has to **run or be done outside the code** before Spendly push n
 | 694 Calendar reminders | **Indexes, with B1/B2:** `calendarReminders.recurrence` field override (collection group) and the composite collection-group index `calendarReminders (recurrence ASC, startDate ASC)`. The source is already in `buildSources`. **Check after C4:** a reminder marked done gets no push, and a reminder with a time arrives at that time. |
 | 695 Dues | **Indexes, with B1/B2:** field overrides (collection group) `borrowings.dueDate`, `receivables.dueDate` and `subscriptions.isActive`. The source is already in `buildSources`. Dues only notify users who turned on "Loans, money owed and recurring payments" (off by default). **Check after C4:** a settled loan or an already-posted subscription gets no push. |
 | 696 Savings goals | **Indexes, with B1/B2:** field overrides (collection group) `financialGoals.reminders.frequency` and `financialGoals.reminders.inactivityEnabled`. The source is already in `buildSources`, which completes the four reminder sources (bills, calendar, dues, goals). Goal pushes follow the Save Goals rollout flag. **Check after C4:** a goal marked reached or paused gets no nudge. |
-| 693, 229, 697, 698, 225, 233 | *(pending)* |
+| 693 Local to push handover | **No deploy.** The new flag `system_settings/global.pushRemindersLive` is set in step C4 (after a good run) and cleared in the emergency stop. **Check after C4:** on a registered phone, the scheduled local `ccbill:`/`cal:`/`goal:` notifications are gone and the pushes arrive. On a phone without push (or with permission off), local reminders still fire. |
+| 229, 697, 698, 225, 233 | *(pending)* |
 
 ## E. After everything is live
 

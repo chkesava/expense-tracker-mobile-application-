@@ -95,6 +95,21 @@ export async function cancelBillReminders(billId: string): Promise<void> {
   }
 }
 
+/** SPENDLY-693: every local bill reminder (push delivers them instead). */
+export async function cancelAllBillReminders(): Promise<void> {
+  try {
+    const Notifications = await loadNotifications();
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    await Promise.all(
+      scheduled
+        .filter((n) => String(n.identifier || "").startsWith("ccbill:"))
+        .map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier))
+    );
+  } catch {
+    // soft-fail
+  }
+}
+
 export function dateTriggerFromDateKey(
   dateKey: string,
   quietStart: string,

@@ -40,6 +40,7 @@ import { billPassHasWork, billPassReadsCopy, loadAuthoritativeBillInputs, toCred
 import { toSourceDocs } from "@/lib/readModelLocal/readSource";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useExpenses } from "@/hooks/useExpenses";
+import { usePushReminderMode } from "@/hooks/usePushReminderMode";
 import { useSettings } from "@/providers/SettingsProvider";
 import { perfEvent } from "@/lib/perf";
 import {
@@ -74,6 +75,7 @@ import {
 import { createAutoCreditCardBill } from "@/services/creditCardBills/autoBill";
 import { todayDateKey } from "@/shared/utils/dates";
 import {
+  cancelAllBillReminders,
   cancelBillReminders,
   reconcileBillReminders,
 } from "@/services/creditCardBills/billReminderScheduler";
@@ -240,6 +242,8 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   const globalPrefs = settings.creditCardBillReminders;
   const timezone = settings.timezone;
   const showAmounts = settings.pushNotifications.showAmounts;
+  // SPENDLY-693: when the server delivers reminders as push, this phone doesn't.
+  const { mode: reminderMode, loading: reminderModeLoading } = usePushReminderMode();
 
   useEffect(() => {
     autoGenerateToastShown.current = false;
@@ -358,6 +362,12 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshReminderSchedules = useCallback(async () => {
+    // Never cancel on a guess: wait until the mode is known.
+    if (reminderModeLoading) return;
+    if (reminderMode === "push") {
+      await cancelAllBillReminders();
+      return;
+    }
     const accountsById = new Map(accounts.map((a) => [a.id, a]));
     await reconcileBillReminders({
       bills,
@@ -373,7 +383,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         }
       },
     });
-  }, [accounts, bills, globalPrefs, timezone, showAmounts, writeReminderLog]);
+  }, [accounts, bills, globalPrefs, timezone, showAmounts, writeReminderLog, reminderMode, reminderModeLoading]);
 
   const scheduleReconcile = useCallback(() => {
     if (reconcileTimer.current) clearTimeout(reconcileTimer.current);

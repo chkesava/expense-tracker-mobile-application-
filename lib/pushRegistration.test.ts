@@ -46,7 +46,7 @@ vi.mock("@/lib/firestore", () => ({
 vi.mock("@/lib/firestoreWrite", () => ({ commitWrite: async (run: () => Promise<unknown>) => (await run(), "acked") }));
 vi.mock("@/lib/readModelWriteHooks", () => ({ noteDirectWrites: m.noteDirectWrites }));
 
-import { getInstallId, registerPushDevice, unregisterPushDevice } from "./pushRegistration";
+import { getInstallId, isRegisteredForUser, onPushRegistrationChange, registerPushDevice, unregisterPushDevice } from "./pushRegistration";
 
 beforeEach(() => {
   m.store.clear();
@@ -166,5 +166,27 @@ describe("unregisterPushDevice", () => {
     await registerPushDevice("u1", { duress: false });
     m.deleteDoc.mockRejectedValue(new Error("offline"));
     await expect(unregisterPushDevice("u1")).resolves.toBeUndefined();
+  });
+});
+
+describe("registration state (SPENDLY-693)", () => {
+  it("isRegisteredForUser follows the last registration, and listeners hear every change", async () => {
+    const heard: number[] = [];
+    const off = onPushRegistrationChange(() => heard.push(1));
+
+    expect(await isRegisteredForUser("u1")).toBe(false);
+    await registerPushDevice("u1", { duress: false });
+    expect(await isRegisteredForUser("u1")).toBe(true);
+    expect(await isRegisteredForUser("u2")).toBe(false);
+    expect(heard.length).toBe(1);
+
+    await unregisterPushDevice("u1");
+    expect(await isRegisteredForUser("u1")).toBe(false);
+    expect(heard.length).toBe(2);
+
+    off();
+    await registerPushDevice("u1", { duress: false });
+    expect(heard.length).toBe(2);
+    expect(await isRegisteredForUser(null)).toBe(false);
   });
 });
