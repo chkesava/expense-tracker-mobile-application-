@@ -9,7 +9,7 @@
 
 | Story | Title | Blocked by | State |
 |---|---|---|---|
-| [691](https://kesavach.atlassian.net/browse/SPENDLY-691) | Clear local reminders on sign-out / account switch | — | To Do |
+| [691](https://kesavach.atlassian.net/browse/SPENDLY-691) | Clear local reminders on sign-out / account switch | — | In Progress: built on `feature/SPENDLY-691-signout-clear-reminders`, awaiting review and merge ([doc](SPENDLY-691-signout-clear-reminders.md)) |
 | [223](https://kesavach.atlassian.net/browse/SPENDLY-223) | Push credentials (Expense app) | — | To Do |
 | [224](https://kesavach.atlassian.net/browse/SPENDLY-224) | Device registration | 223 | To Do |
 | [226](https://kesavach.atlassian.net/browse/SPENDLY-226) | Preferences + one delivery window | — | To Do |
