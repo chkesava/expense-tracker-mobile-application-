@@ -176,7 +176,11 @@ export function createFirestorePushPorts(db: AdminFirestoreLike, opts: Firestore
     },
 
     async finishLog(key, entry: SendLog) {
-      await db.doc(`${PUSH_SEND_LOGS}/${key}`).set({ ...entry, status: "done", finishedAt: now() }, { merge: true });
+      // `receiptsPending` lets the next runs find logs with receipts to read
+      // through a single-field equality query (SPENDLY-692).
+      await db
+        .doc(`${PUSH_SEND_LOGS}/${key}`)
+        .set({ ...entry, status: "done", finishedAt: now(), receiptsPending: entry.pendingReceipts.length > 0 }, { merge: true });
     },
 
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
