@@ -17,6 +17,7 @@ export const RUNWAY_KIND_LABELS: Record<RunwayResourceKind, string> = {
   epf: "EPF",
   receivable: "Owed to you",
   borrowing: "Loan",
+  group_funds_held: "Held for others",
 };
 
 export const RUNWAY_LIQUIDITY_LABELS: Record<RunwayLiquidity, string> = {

@@ -9,6 +9,7 @@ import { useBorrowings } from "@/hooks/useBorrowings";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useEpfNetWorth } from "@/hooks/useEpfNetWorth";
 import { useExpenses } from "@/hooks/useExpenses";
+import { useGroupFunds } from "@/hooks/useGroupFunds";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useInvestments } from "@/hooks/useInvestments";
 import { useMarketQuotes } from "@/hooks/useMarketQuotes";
@@ -17,6 +18,7 @@ import { useReceivables } from "@/hooks/useReceivables";
 import { useRunwayOverrides } from "@/hooks/useRunwayOverrides";
 import { useSettings } from "@/providers/SettingsProvider";
 import { todayDateKey } from "@/shared/utils/dates";
+import { summarizeGroupFundsHeld } from "@/shared/utils/groupFundMath";
 import { buildRunwaySources } from "@/shared/utils/runwaySources";
 
 /**
@@ -41,6 +43,12 @@ export function useRunwaySources() {
   const { holdings, cashBalance: investmentCashBalance, loading: portfolioLoading } = usePortfolio({ includeSecondary: false });
   const { epfValue, epfUnreconciledCount, loading: epfLoading } = useEpfNetWorth();
   const { uid, overrides, loading: overridesLoading, error, retry } = useRunwayOverrides();
+  // SPENDLY-686: money held for others is taken out of spendable money.
+  const { funds: groupFunds, loading: groupFundsLoading, error: groupFundsError } = useGroupFunds();
+  const groupFundsHeld = useMemo(
+    () => (groupFundsError ? null : summarizeGroupFundsHeld(groupFunds)),
+    [groupFunds, groupFundsError]
+  );
 
   const symbolRequests = useMemo(() => holdings.map((h) => ({ symbol: h.yahooSymbol, instrumentType: h.instrumentType })), [holdings]);
   const { quotes, isLoading: quotesLoading } = useMarketQuotes(symbolRequests);
@@ -70,6 +78,8 @@ export function useRunwaySources() {
         investmentCashBalance,
         epfValue,
         epfUnreconciledCount,
+        groupFundHeld: groupFundsHeld ? groupFundsHeld.held : null,
+        groupFundHeldByAccount: groupFundsHeld?.heldByAccount,
         today,
         displayCurrency: settings.currency,
         overrides,
@@ -95,6 +105,7 @@ export function useRunwaySources() {
       investmentCashBalance,
       epfValue,
       epfUnreconciledCount,
+      groupFundsHeld,
       today,
       settings.currency,
       overrides,
@@ -116,6 +127,7 @@ export function useRunwaySources() {
     quotesLoading ||
     billsLoading ||
     epfLoading ||
+    groupFundsLoading ||
     overridesLoading;
 
   return { uid, sources, loading, error, retry };

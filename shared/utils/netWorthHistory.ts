@@ -113,6 +113,7 @@ export type NetWorthSnapshotBlocker =
   | "loading"
   | "valuationsLoading"
   | "untrustedBalances"
+  | "groupFundsUnknown"
   | "invalidValues";
 
 export type SnapshotReadiness = {
@@ -122,6 +123,8 @@ export type SnapshotReadiness = {
   secondaryLoading?: boolean;
   /** SPENDLY-620: accounts whose stored balance is missing or awaiting reconciliation. */
   untrustedBalanceAccounts: number;
+  /** SPENDLY-686: the Group Funds amount couldn't be loaded (net worth may be overstated). */
+  groupFundsHeldUnknown?: boolean;
   totalNetWorth: number;
   totalAssets: number;
   totalLiabilities: number;
@@ -150,6 +153,7 @@ export function snapshotBlockers(input: SnapshotReadiness): NetWorthSnapshotBloc
   if (input.loading) blockers.push("loading");
   if (input.secondaryLoading) blockers.push("valuationsLoading");
   if (input.untrustedBalanceAccounts > 0) blockers.push("untrustedBalances");
+  if (input.groupFundsHeldUnknown) blockers.push("groupFundsUnknown");
   if (
     !boundedFinite(input.totalNetWorth) ||
     !boundedFinite(input.totalAssets) ||
@@ -201,6 +205,7 @@ const BLOCKER_TEXT: Record<NetWorthSnapshotBlocker, string> = {
   loading: "your accounts are still loading",
   valuationsLoading: "investment prices are still loading",
   untrustedBalances: "an account balance needs a rebuild",
+  groupFundsUnknown: "your group funds couldn't be loaded",
   invalidValues: "a total couldn't be valued",
 };
 

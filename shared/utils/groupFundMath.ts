@@ -146,6 +146,26 @@ export function totalGroupFundsHeld(funds: readonly Pick<GroupFund, "totals">[])
   return roundMoney(funds.reduce((sum, f) => sum + (f.totals?.held ?? 0), 0));
 }
 
+export type GroupFundsHeldSummary = {
+  /** Money held for others across every fund (stored totals, never re-added from events). */
+  held: number;
+  /** The same money by the real account it sits in. Opening money with no account is not here. */
+  heldByAccount: Record<string, number>;
+};
+
+/** SPENDLY-686: the net worth and runway input, from the funds' stored totals. */
+export function summarizeGroupFundsHeld(
+  funds: readonly Pick<GroupFund, "totals" | "heldByAccount">[]
+): GroupFundsHeldSummary {
+  const heldByAccount: Record<string, number> = {};
+  for (const fund of funds) {
+    for (const [accountId, amount] of Object.entries(fund.heldByAccount ?? {})) {
+      heldByAccount[accountId] = roundMoney((heldByAccount[accountId] ?? 0) + amount);
+    }
+  }
+  return { held: totalGroupFundsHeld(funds), heldByAccount };
+}
+
 // ---------------------------------------------------------------------------
 // Member expected / received / pending (AC9)
 // ---------------------------------------------------------------------------
