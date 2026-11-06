@@ -23,6 +23,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const Jimp = require('jimp-compact');
+const { netlifyHeaders, netlifyRedirects } = require('./lib/webHosting');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const PRODUCTS_DIR = path.join(ROOT_DIR, 'products');
@@ -160,76 +161,11 @@ async function writePwaIcons(outDir, target, product) {
   }
 }
 
+// The rules live in scripts/lib/webHosting.js, shared with the Cloudflare Pages
+// backup build (SPENDLY-702). The Netlify text written here is unchanged.
 function writeRedirectsAndHeaders() {
-  // Catch-all is intentional: this host now serves the full multi-product
-  // app (/expense, /nutrition, /ganesh, landing). Narrow share-only
-  // redirects in netlify.toml are historical and not what is deployed.
-  const redirects = [
-    '/expense           /expense/index.html     200',
-    '/expense/*         /expense/index.html     200',
-    '/nutrition         /nutrition/index.html   200',
-    '/nutrition/*       /nutrition/index.html   200',
-    '/ganesh            /ganesh/index.html      200',
-    '/ganesh/*          /ganesh/index.html      200',
-    // The old share-link pages this site used to serve exclusively. The
-    // "landing" build (published at the site root) still registers these two
-    // routes unconditionally (app/_layout.tsx), so they keep working here —
-    // listed explicitly rather than relying on the catch-all below.
-    '/split/*           /index.html             200',
-    '/payment/*         /index.html             200',
-    // SPENDLY-522: market quote functions, served by this site (they used to
-    // live on the legacy kesavaexpensetracker site). Same origin, so the CSP
-    // connect-src stays 'self'. Must stay above the catch-all, which
-    // otherwise answers /api/* with HTML.
-    '/api/stock         /.netlify/functions/stock         200',
-    '/api/mutual-funds  /.netlify/functions/mutual-funds  200',
-    '/api/crypto        /.netlify/functions/crypto        200',
-    // SPENDLY-558: stock chart history (cached on Netlify's durable CDN).
-    '/api/stock-history /.netlify/functions/stock-history 200',
-    // SPENDLY-642: Markets tab overview (cached on Netlify's durable CDN).
-    '/api/market-overview /.netlify/functions/market-overview 200',
-    // SPENDLY-647: stock screener universe (cached on Netlify's durable CDN).
-    '/api/screener-universe /.netlify/functions/screener-universe 200',
-    // SPENDLY-656: batched watchlist quotes (cached on Netlify's durable CDN).
-    '/api/stock-quotes /.netlify/functions/stock-quotes 200',
-    '/*                 /index.html             200',
-    '',
-  ].join('\n');
-  fs.writeFileSync(path.join(OUT_ROOT, '_redirects'), redirects);
-
-  const csp = [
-    "default-src 'self'",
-    "base-uri 'self'",
-    "object-src 'none'",
-    "frame-ancestors 'none'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://accounts.google.com https://www.gstatic.com https://www.google.com",
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https:",
-    "font-src 'self' data:",
-    "connect-src 'self' https://*.googleapis.com https://*.gstatic.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com https://*.google.com https://*.supabase.co wss://*.supabase.co",
-    "frame-src https://accounts.google.com https://*.firebaseapp.com https://*.google.com",
-    "form-action 'self' https://accounts.google.com",
-  ].join('; ');
-
-  const headers = [
-    '/_expo/*',
-    '  Cache-Control: public, max-age=31536000, immutable',
-    '/assets/*',
-    '  Cache-Control: public, max-age=31536000, immutable',
-    '/*/_expo/*',
-    '  Cache-Control: public, max-age=31536000, immutable',
-    '/*/assets/*',
-    '  Cache-Control: public, max-age=31536000, immutable',
-    '/*',
-    '  X-Frame-Options: DENY',
-    '  Referrer-Policy: strict-origin-when-cross-origin',
-    '  X-Content-Type-Options: nosniff',
-    '  Strict-Transport-Security: max-age=31536000; includeSubDomains',
-    '  X-Robots-Tag: noindex, nofollow',
-    `  Content-Security-Policy: ${csp}`,
-    '',
-  ].join('\n');
-  fs.writeFileSync(path.join(OUT_ROOT, '_headers'), headers);
+  fs.writeFileSync(path.join(OUT_ROOT, '_redirects'), netlifyRedirects());
+  fs.writeFileSync(path.join(OUT_ROOT, '_headers'), netlifyHeaders());
 }
 
 async function buildTarget(target) {
