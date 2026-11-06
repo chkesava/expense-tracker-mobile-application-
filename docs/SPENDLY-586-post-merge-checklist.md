@@ -4,7 +4,17 @@
 
 Each story that merges into the epic adds its own steps here.
 
-Last updated: 2026-11-05: every story merged (21 original + 679, 680, 681). Harness D1–D11: 11/11 passed (2026-11-05, `docs/SPENDLY-601-drill-log.md`). Signed off by the user 2026-11-05; PR #259 ready to merge.
+Last updated: 2026-11-06. **On main** (PR #259, `b76e16a1`, 2026-11-05); the epic and its 24 stories are Done. Harness D1–D11: 11/11 passed (`docs/SPENDLY-601-drill-log.md`); signed off by the user.
+
+**Progress after the merge (2026-11-06):**
+
+| Step | State |
+|---|---|
+| 1. Index deploy | ✅ 2026-11-05: dry run, then deploy (the "Deploy Firestore rules" runs with `deploy_indexes`) |
+| 3. Web deploy | ✅ 2026-11-05 |
+| 4. Expense release | ✅ v5.2.0 (build 134). The first attempt failed only because version 5.0.1 was below 5.1.1 |
+| 5. Backfill | ✅ The nightly full run of 2026-11-06 (sync run 47): 5,340 reads, 254 upserts, 0 failures. ⏳ A manual `mode = verify` is still due: the nightly verify stopped at its 1,000-read budget |
+| 6. `clientWrites` | ✅ On (user, 2026-11-06). The push copies saves in about 20 s. The direct write still needs confirming with the step 6 check below (SPENDLY-689) |
 
 ---
 
@@ -45,7 +55,7 @@ SPENDLY-662 (the push fix, P0) is already on `main` and Done.
 
 | Area | Change | Live already? | Action after the merge |
 |---|---|---|---|
-| Supabase migrations | `20261030000000` (RPC) through `20261103000000` (summaries), 7 files | **Yes, applied to production** with approval as each story merged | Confirm with a dry run that nothing is pending |
+| Supabase migrations | `20261030000000` (RPC) through `20261105000000` (capacity), 9 files | **Yes, applied to production** with approval as each story merged | Confirm with a dry run that nothing is pending |
 | `firestore.indexes.json` | +96 collection-group field overrides (672), +24 for the `*Ms`/event-time change fields (681): 122 of Firestore's 200 | **No** | Deploy manually (§4 step 1) |
 | `netlify/functions/readmodel-push.ts` | Nested, root and excluded-doc refs (591/592) | **No** | **Netlify deploy** of the function (§4 step 3) |
 | `.github/workflows/readmodel-*.yml` | Nightly mode, health, schema | Take effect on merge | None: the default `full` keeps today's behaviour |
@@ -108,10 +118,15 @@ Every production step below needs the user's approval when it happens. Dry runs 
 ### Step 6: Turn on the app's direct writes (670)
 
 - **How:** in the Firebase console, `system_settings/global` → `readModel` → set `clientWrites = true`.
-- **Check within a day:**
-  - rows with `written_by = 'client'` appear: `select count(*) from expenses where written_by = 'client'`;
-  - the health summary shows "App direct writes in 24 h" above 0;
-  - "Divergences in 24 h" stays at 0.
+- **Check:**
+  - **The direct write (until SPENDLY-689 ships):**
+    1. On the **web app**, open DevTools (F12) → **Network**, and filter on `rm_client_apply`.
+    2. Save something.
+    3. A `rm_client_apply` request with status **200** within about 2 s means the direct write works.
+    4. No request means the app isn't sending: check the build's read-model settings, and reload. A 4xx or 5xx response means a problem; look at its Response tab.
+  - **Do not use** `count(*) where written_by = 'client'`, or health's "App direct writes in 24 h", as proof. The server push replaces each client row with Firestore's version (`written_by = 'server'`) within seconds, so both read about 0 even when everything works. SPENDLY-689 adds a database counter for this.
+  - **The push:** `push_daily` counts requests and docs, with 0 rejected and 0 failed. The saved row is in Supabase within about 30 s.
+  - **Divergences in 24 h** stays at 0.
 - **Rollback:** set `clientWrites = false`. The push and the nightly sync carry on as before.
 
 ### Step 7: Parity gates start
