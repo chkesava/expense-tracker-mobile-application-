@@ -12,6 +12,7 @@
 import { useEffect } from "react";
 import { AppState, Platform } from "react-native";
 
+import { ensurePushChannels } from "@/lib/pushChannels";
 import { registerPushDevice } from "@/lib/pushRegistration";
 import { useAuth } from "@/providers/AuthProvider";
 
@@ -26,9 +27,12 @@ export function usePushRegistration() {
 
     const run = () => {
       if (cancelled || running) return;
-      running = registerPushDevice(uid, { duress: isDuress }).finally(() => {
-        running = null;
-      });
+      // SPENDLY-226: the channels pushes are delivered into (Android only).
+      running = ensurePushChannels()
+        .then(() => registerPushDevice(uid, { duress: isDuress }))
+        .finally(() => {
+          running = null;
+        });
     };
 
     run();

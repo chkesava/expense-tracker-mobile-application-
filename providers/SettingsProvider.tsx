@@ -18,6 +18,7 @@ import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { commitWrite } from "@/lib/firestoreWrite";
 import { noteDirectWrites } from "@/lib/readModelWriteHooks";
+import type { DeliveryWindow } from "@/shared/utils/pushPreferences";
 import { haptic } from "@/lib/haptics";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
@@ -73,6 +74,10 @@ type SettingsContextType = {
     val: Partial<UserSettings["creditCardBillReminders"]>
   ) => void;
   setCalendarNotifications: (val: Partial<UserSettings["calendarNotifications"]>) => void;
+  /** SPENDLY-226: push event categories and the lock-screen amount choice. */
+  setPushNotifications: (val: Partial<Omit<UserSettings["pushNotifications"], "deliveryWindow">>) => void;
+  /** SPENDLY-226: the one delivery window, kept in step with the older bill and calendar quiet hours. */
+  setDeliveryWindow: (window: DeliveryWindow) => void;
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -244,6 +249,26 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       },
       setCalendarNotifications: (val) => {
         void updateSettings({ calendarNotifications: { ...settings.calendarNotifications, ...val } });
+      },
+      setPushNotifications: (val) => {
+        void updateSettings({ pushNotifications: { ...settings.pushNotifications, ...val } });
+      },
+      setDeliveryWindow: (window) => {
+        // One save: the local bill and calendar schedulers still read their own
+        // quiet hours, so they follow the same window.
+        void updateSettings({
+          pushNotifications: { ...settings.pushNotifications, deliveryWindow: window },
+          creditCardBillReminders: {
+            ...settings.creditCardBillReminders,
+            quietHoursStart: window.start,
+            quietHoursEnd: window.end,
+          },
+          calendarNotifications: {
+            ...settings.calendarNotifications,
+            quietHoursStart: window.start,
+            quietHoursEnd: window.end,
+          },
+        });
       },
     }),
     [settings, loading, hydrated, updateSettings]
