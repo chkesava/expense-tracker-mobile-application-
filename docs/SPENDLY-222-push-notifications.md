@@ -19,7 +19,7 @@
 | [231](https://kesavach.atlassian.net/browse/SPENDLY-231) | Credit card bill reminders via push | 692 | Merged to epic ([doc](SPENDLY-231-bill-push.md)) |
 | [693](https://kesavach.atlassian.net/browse/SPENDLY-693) | Local → push handover (no duplicates or stale reminders) | 692, 231 | To Do |
 | [694](https://kesavach.atlassian.net/browse/SPENDLY-694) | Financial calendar reminders via push | 692 | Merged to epic ([doc](SPENDLY-694-calendar-push.md)) |
-| [695](https://kesavach.atlassian.net/browse/SPENDLY-695) | Dues via push (borrowings, receivables, subscriptions, EMIs) | 692 | To Do |
+| [695](https://kesavach.atlassian.net/browse/SPENDLY-695) | Dues via push (borrowings, receivables, subscriptions, EMIs) | 692 | In Progress: built, awaiting review and merge ([doc](SPENDLY-695-dues-push.md)) |
 | [696](https://kesavach.atlassian.net/browse/SPENDLY-696) | Save goal reminders via push | 692 | To Do |
 | [229](https://kesavach.atlassian.net/browse/SPENDLY-229) | SIP + EPF events | 227 | To Do |
 | [697](https://kesavach.atlassian.net/browse/SPENDLY-697) | Shared splits and vaults activity | 227 | To Do |
