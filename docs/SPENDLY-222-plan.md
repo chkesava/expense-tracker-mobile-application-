@@ -28,7 +28,7 @@
 | Price alerts | `users/{uid}/alerts` is stored but never evaluated. SPENDLY-625 owns evaluation. |
 | Inbox | App-bar bell → `app/(app)/inbox.tsx`. It is computed (`RemindersInboxProvider`), and "seen" is stored per device. It does **not** show the `notifications` rows. |
 | Tap routing | `hooks/useNotificationTapRouting.ts`. Allow-list: `credit_card_bill`, `calendar`, `goal`. |
-| Server runtime | The Cloud Functions codebase `ganesh` is deployed. Netlify credits are low. |
+| Server runtime | **Correction (2026-11-06):** the project is on the Spark plan, so Cloud Functions can't run. The `ganesh` codebase in `functions/` was never deployed. Firestore reads are capped at 50K/day across dev and prod. Netlify credits are low. |
 
 **Bugs found while planning. Push fixes them, or a story here owns them:**
 1. **Payment on another device.** Reminders are scheduled locally on each device. A bill paid on phone A keeps reminding on phone B until B opens the app.
@@ -162,7 +162,7 @@
 |---|---|---|
 | D1 | Transport | Expo Push Service |
 | D2 | Read-model exemption for `devices` and `pushDeliveries` | Exempt: server-only, and tokens are sensitive. Record it in the guard allowlists. |
-| D3 | Where the engine and triggers run | Cloud Functions: a new `spendly` codebase, with scheduled and Firestore triggers. Not Netlify, because credits are low. |
+| D3 | Where the engine and triggers run | **Decided 2026-11-06: GitHub Actions cron** (public repo, so minutes are free), running scripts with the existing service-account secret, like the read-model sync. There are no Firestore triggers, so event stories (229, 697) poll for changes each run. Runs are read-budgeted. |
 | D4 | iOS | Android first, unless an Apple developer account and APNs key exist. |
 | D5 | Ganesh story 228 | Move it out of the epic, and keep it for a later Ganesh epic. |
 | D6 | The missing audit doc | Drop that acceptance criterion from 233. |
@@ -174,7 +174,7 @@
 
 - Firestore rules for `devices`, `pushDeliveries` and prefs, plus rules tests.
 - A TTL policy and indexes (collection-group queries on open bills and due items). Diff against live first.
-- A new Cloud Functions codebase, with Cloud Scheduler.
+- A GitHub Actions workflow (`push-reminders.yml`) and its repository variables and secrets.
 - Supabase migration(s) for inbox rows and prefs.
 - Expo push credentials in EAS (by the user).
 - A signed Expense Android build. Back up the signing config before prebuild.
