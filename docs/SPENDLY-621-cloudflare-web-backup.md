@@ -15,10 +15,10 @@ site, and the app's default URLs don't change.
 
 | Key | Story | State |
 |---|---|---|
-| SPENDLY-701 | S1 Test on Cloudflare, compatibility matrix | To do |
+| SPENDLY-701 | S1 Test on Cloudflare, compatibility matrix | Merged into epic ([matrix](SPENDLY-621-compatibility.md)) |
 | SPENDLY-702 | S2 Static site and routing for Cloudflare Pages | To do |
-| SPENDLY-703 | S3 Worker, request adapter, market functions, nutrition-ai | To do |
-| SPENDLY-704 | S4 The 6 firebase-admin functions | To do |
+| SPENDLY-703 | S3 Worker, request adapter, the functions that run on Cloudflare | To do |
+| SPENDLY-704 | S4 The 6 firebase-admin functions | Won't do (D5) |
 | SPENDLY-705 | S5 Manual-only backup workflow and smoke tests | To do |
 | SPENDLY-706 | S6 Runbook, secrets checklist, operator setup, first end-to-end run | To do |
 
@@ -35,6 +35,17 @@ Follow-up, not in this epic: SPENDLY-707 native app failover.
 - **D4:** 621 is an epic (its type was changed from Feature), built story by
   story with approval before each merge and before each next story
   (owner, 2026-11-06).
+- **D5 (replaces D1):** the backup implements **only the functions that run on
+  Cloudflare as they are**; nothing is rewritten for it (owner, 2026-11-06, after
+  SPENDLY-701).
+  - **Covered:** stock, mutual-funds, crypto, stock-history, stock-quotes,
+    market-overview, nutrition-ai, readmodel-claims.
+  - **Not on the backup:** ganesh-summary, ganesh-draw, epf-cron, delete-account,
+    readmodel-push (Firestore Admin can't run on Workers), and screener-universe
+    (over the Free CPU limit).
+  - Their paths answer a clear JSON **503 "not available on the backup"**, never the
+    SPA's HTML. The app's existing error states handle that.
+  - Netlify keeps serving all 14 unchanged. SPENDLY-704 is won't-do.
 
 ## What Netlify does today (main 363e4e6a)
 
@@ -72,6 +83,20 @@ It also writes `_redirects` (16 rules) and `_headers` (immutable caching for
   - The sign-in check may go over the 10 ms CPU limit.
 - **ganesh-draw is not idempotent per request,** so a client must never retry it
   on another provider.
+
+## Findings from S1 (SPENDLY-701)
+- **Run unchanged on Workers:** the 7 market functions, nutrition-ai and
+  readmodel-claims.
+- **Firestore Admin can't run on Workers** (protobufjs code generation is
+  forbidden). ganesh-summary, ganesh-draw, epf-cron, delete-account and
+  readmodel-push need a Firestore REST port (S4). Firebase Auth admin works as-is.
+- **Free plan:**
+  - screener-universe is far over the 10 ms CPU limit (not covered);
+  - market-overview is at risk;
+  - readmodel-push `mode:"user"` is over 50 calls (not covered; the nightly sync
+    catches up).
+- **Routing:** Netlify's `_redirects` don't work on Pages as-is. A small Worker
+  fallback (variant C) matches Netlify.
 
 ## Design
 - **One Worker.** `cloudflare/worker.ts` is bundled to `_worker.js` (Pages
