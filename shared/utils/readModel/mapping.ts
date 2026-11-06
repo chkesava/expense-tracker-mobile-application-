@@ -842,7 +842,7 @@ export const READ_MODEL_TABLES: TableSpec[] = [
         "theme", "themeMode", "expensePalette", "accentColor", "navigationStyle",
         "defaultCategory", "defaultView", "compactListMode", "hapticFeedback", "enableInvestments",
         "monthlyBudget", "monthly_budget", "exportYear",
-        "dashboardWidgets", "dashboardOrder", "onboarding", "creditCardBillReminders", "calendarNotifications",
+        "dashboardWidgets", "dashboardOrder", "onboarding", "creditCardBillReminders", "calendarNotifications", "pushNotifications",
       ],
     },
     fields: [

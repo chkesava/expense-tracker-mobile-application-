@@ -14,13 +14,6 @@ import { haptic } from "@/lib/haptics";
 const DAY_OPTIONS = [7, 3, 1] as const;
 const OVERDUE_OPTIONS = [1, 2, 3] as const;
 
-/**
- * Quiet hours were honoured by the scheduler and shown to the user as prose,
- * with no way to change them. These are the editable bounds.
- */
-const QUIET_START_OPTIONS = ["06:00", "07:00", "08:00", "09:00", "10:00"] as const;
-const QUIET_END_OPTIONS = ["18:00", "20:00", "21:00", "22:00", "23:00"] as const;
-
 export function CreditCardBillReminderSettings() {
   const { theme } = useTheme();
   const { settings, setCreditCardBillReminders } = useSettings();
@@ -69,7 +62,7 @@ export function CreditCardBillReminderSettings() {
 
         <Text style={{ color: theme.colors.mutedForeground, fontSize: theme.typography.sm }}>
           Reminders fire on the calendar day chosen in your timezone (
-          {settings.timezone}), at the start of your quiet-hours window.
+          {settings.timezone}), at the start of your notification window (Notifications, above).
         </Text>
 
         {permHint ? (
@@ -137,71 +130,8 @@ export function CreditCardBillReminderSettings() {
           })}
         </View>
 
-        <Text style={{ color: theme.colors.foreground, fontWeight: "600" }}>
-          Quiet hours
-        </Text>
-        <Text
-          style={{
-            color: theme.colors.mutedForeground,
-            fontSize: theme.typography.sm,
-          }}
-        >
-          Reminders are held until the start of this window and never fire after
-          it ends.
-        </Text>
-        <View style={styles.row}>
-          {QUIET_START_OPTIONS.map((time) => (
-            <TimePill
-              key={`start-${time}`}
-              label={`From ${time}`}
-              selected={prefs.quietHoursStart === time}
-              disabled={!prefs.enabled}
-              onPress={() => {
-                void haptic.selection();
-                setCreditCardBillReminders({ quietHoursStart: time });
-              }}
-            />
-          ))}
-        </View>
-        <View style={styles.row}>
-          {QUIET_END_OPTIONS.map((time) => (
-            <TimePill
-              key={`end-${time}`}
-              label={`Until ${time}`}
-              selected={prefs.quietHoursEnd === time}
-              disabled={!prefs.enabled}
-              onPress={() => {
-                void haptic.selection();
-                setCreditCardBillReminders({ quietHoursEnd: time });
-              }}
-            />
-          ))}
-        </View>
       </View>
     </Card>
-  );
-}
-
-function TimePill({
-  label,
-  selected,
-  disabled,
-  onPress,
-}: {
-  label: string;
-  selected: boolean;
-  disabled?: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Chip
-      label={label}
-      selected={selected}
-      // SPENDLY-551: the outline chip, like every other Settings choice.
-      appearance="outline"
-      onPress={onPress}
-      disabled={disabled}
-    />
   );
 }
 
