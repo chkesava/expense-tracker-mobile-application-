@@ -5,10 +5,12 @@ import { GROUP_FUND_EVENT_KINDS, GROUP_FUND_LIMITS, GROUP_FUND_STATUSES } from "
 import { emptyGroupFundTotals } from "./groupFundModel";
 import {
   buildAccountMove,
+  buildBackfillContribution,
   buildContribution,
   buildCreateGroupFund,
   buildEditGroupFund,
   buildOpening,
+  buildPastPayout,
   buildPayout,
   buildPurposeTransfer,
   buildReversal,
@@ -77,6 +79,9 @@ function allOps() {
     buildOpening(ctx("o"), fund, { purposeId: "a", amount: 10, date: "2026-11-05", accountId: "acc", note: "n" }),
     buildPurposeTransfer(ctx("t"), fund, { fromPurposeId: "a", toPurposeId: "b", amount: 10, date: "2026-11-05", note: "n" }),
     buildAccountMove(ctx("mv"), fund, { purposeId: "a", fromAccountId: "acc", toAccountId: "acc2", amount: 10, date: "2026-11-05" }),
+    buildBackfillContribution(ctx("bf"), fund, { purposeId: "a", memberId: "m", period: "2026-08", amount: 10, alreadyInBalance: true, accountId: "acc", note: "n" }),
+    buildBackfillContribution(ctx("bf2"), fund, { purposeId: "a", memberId: "m", period: "2026-07", amount: 10, alreadyInBalance: false, accountId: "acc", date: "2026-11-06" }),
+    buildPastPayout(ctx("pp"), fund, { purposeId: "a", amount: 10, date: "2026-08-30", accountId: "acc", recipient: "r", reference: "x", note: "n" }),
     buildReversal(ctx("x"), fund, {
       target: contribution.plan.events[0],
       knownEvents: contribution.plan.events,

@@ -9,6 +9,7 @@ import { LoadingState } from "@/components/common/LoadingState";
 import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
 import { MetaLabel, Section } from "@/components/dashboard/primitives";
 import { GroupFundAccountsSection } from "@/components/groupFunds/GroupFundAccountsSection";
+import { GroupFundBackfillSheet } from "@/components/groupFunds/GroupFundBackfillSheet";
 import { GroupFundEventSheet, type GroupFundEventMode, type GroupFundEventValues } from "@/components/groupFunds/GroupFundEventSheet";
 import { GroupFundMonthSection } from "@/components/groupFunds/GroupFundMonthSection";
 import { GroupFundFormSheet } from "@/components/groupFunds/GroupFundFormSheet";
@@ -51,6 +52,7 @@ export default function GroupFundScreen() {
   const [sheet, setSheet] = useState<GroupFundEventMode | null>(null);
   const [sheetInitial, setSheetInitial] = useState<{ memberId?: string; purposeId?: string; period?: string; amount?: number } | undefined>();
   const [editing, setEditing] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
   const currentPeriod = todayDateKey().slice(0, 7);
   const [period, setPeriod] = useState(currentPeriod);
 
@@ -130,6 +132,16 @@ export default function GroupFundScreen() {
           reference: v.reference || undefined,
           note,
         });
+      case "pastPayout":
+        return actions.recordPastPayout(fund.id, eventId, {
+          purposeId: v.purposeId,
+          amount: v.amount,
+          date: v.date,
+          accountId: v.accountId || undefined,
+          recipient: v.recipient || undefined,
+          reference: v.reference || undefined,
+          note,
+        });
       case "opening":
         return actions.recordOpening(fund.id, eventId, {
           purposeId: v.purposeId,
@@ -160,6 +172,8 @@ export default function GroupFundScreen() {
 
   const openMore = () =>
     appDialog.actionMenu(fund.name, [
+      { text: "Record past months", onPress: () => setBackfilling(true), disabled: archived },
+      { text: "Past payout", onPress: () => openSheet("pastPayout"), disabled: archived },
       { text: "Opening balance", onPress: () => openSheet("opening"), disabled: archived },
       { text: "Move between purposes", onPress: () => openSheet("transfer"), disabled: archived },
       { text: "Move between accounts", onPress: () => openSheet("move"), disabled: archived },
@@ -353,6 +367,14 @@ export default function GroupFundScreen() {
           onSubmit={submitEvent(sheet)}
         />
       ) : null}
+      <GroupFundBackfillSheet
+        visible={backfilling}
+        fund={fund}
+        accounts={accountOptions}
+        currency={currency}
+        onClose={() => setBackfilling(false)}
+        onSubmit={(rows, monthLabel) => actions.recordBackfill(fund.id, rows, monthLabel)}
+      />
       <GroupFundFormSheet
         visible={editing}
         fund={fund}
