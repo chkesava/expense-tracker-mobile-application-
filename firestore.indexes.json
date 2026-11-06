@@ -29,6 +29,20 @@
       ]
     },
     {
+      "collectionGroup": "groupFundEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "fundId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "goalEvents",
       "queryScope": "COLLECTION",
       "fields": [

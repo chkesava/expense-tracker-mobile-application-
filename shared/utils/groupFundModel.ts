@@ -3,6 +3,7 @@
  * Pure: no React Native, no Firestore.
  */
 
+import type { AccountEntrySource } from "../types/expense";
 import {
   GROUP_FUND_CADENCES,
   GROUP_FUND_EVENT_KINDS,
@@ -46,6 +47,8 @@ export type GroupFundIssue =
   | "member_archived"
   | "member_required"
   | "account_required"
+  /** The account is a credit card or no longer exists; group money sits in cash or a bank. */
+  | "account_unsupported"
   | "accounts_same"
   | "purposes_same"
   | "fund_archived"
@@ -150,6 +153,18 @@ export function isGroupFundCadence(value: unknown): value is GroupFundCadence {
 
 export function isGroupFundEventKind(value: unknown): value is GroupFundEventKind {
   return typeof value === "string" && (GROUP_FUND_EVENT_KINDS as readonly string[]).includes(value);
+}
+
+const GROUP_FUND_ENTRY_SOURCES: readonly string[] = [
+  "group_fund_contribution",
+  "group_fund_payout",
+  "group_fund_move",
+  "group_fund_reversal",
+] satisfies AccountEntrySource[];
+
+/** True for an `accountEntries` row posted by Group Funds (money held for others). */
+export function isGroupFundEntrySource(source: unknown): boolean {
+  return typeof source === "string" && GROUP_FUND_ENTRY_SOURCES.includes(source);
 }
 
 export function groupFundStatus(fund: Pick<GroupFund, "status">): GroupFundStatus {

@@ -18,7 +18,7 @@ It is **custodial money**: it belongs to the group, not the user.
 | Story | Scope | State |
 |---|---|---|
 | SPENDLY-683 (S1) | Accounting model (this doc), types, pure logic and write plans | Merged to the epic branch (`60808c94`) |
-| SPENDLY-684 (S2) | Store, Firestore rules, `CREATE_ONLY_SEGMENTS`, how entries show on account screens, index | To do |
+| SPENDLY-684 (S2) | Store, Firestore rules, `CREATE_ONLY_SEGMENTS`, how entries show on account screens, index | Built on `feature/SPENDLY-684-group-funds-persistence`; awaiting merge approval |
 | SPENDLY-685 (S3) | Supabase read model: mapping, migration, RLS, allowlist, purge, indexes, read switch, history read path | To do |
 | SPENDLY-686 (S4) | "Group funds held" liability in net worth and runway | To do |
 | SPENDLY-687 (S5) | Money hub section, screens and sheets | To do |
@@ -65,7 +65,7 @@ Group money lives in the user's real accounts, so the real balance must move. It
 ### Concurrency
 - **Money events** write `increment()` for every total and `version: increment(1)`. Two devices' contributions therefore both apply.
 - **Config edits** (name, notes, purposes, members, status) write a literal `version: base + 1`. A stale edit is rejected instead of overwriting.
-- **Risk to cover in S2 rules:** two offline devices could each pay out the full held amount. The builders refuse an over-payout as the device sees the fund. S2 rules must also reject any write that leaves `totals.held` or `byPurpose.*.held` below zero (the same approach as goals' `currentAmount`).
+- **Two offline devices paying out the same money:** the builders refuse an over-payout as the device sees the fund. The rules (S2) also reject any write that leaves `totals.held`, or the linked event's purpose, below zero. The linked event is the one that takes money out (`moneyPlan`).
 
 ### Guards in the builders
 - A payout or purpose transfer can't exceed what the purpose holds.
@@ -114,8 +114,11 @@ Group money lives in the user's real accounts, so the real balance must move. It
   - Opening balance is an event, not a stored field, so every number comes from the history.
   - Transfers between funds are out of the first version; only transfers between purposes of one fund are supported.
   - A payout may come from any account (no per-account check). Reconciliation (S6) shows where held money sits against each balance.
+- **S2:**
+  - Group-fund account entries can't be edited or deleted; only a reversal undoes them.
+  - Contributions and payouts must use cash or a bank account. A credit card or a missing account is refused.
+  - Account screens show these rows as transfers labelled "Group fund".
 
 ## Deploys pending
-Nothing yet. To come:
-- S2: rules and index deploy.
+- **S2 (SPENDLY-684):** `firestore.rules` and the `groupFundEvents (fundId, createdAtMs desc)` index. Both are production changes and need approval. Diff the indexes against live first.
 - S3: the Supabase migration, run as a dry run first and applied only with approval.

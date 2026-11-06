@@ -267,6 +267,8 @@ describe("buildPurposeTransfer", () => {
       ["t1", "transfer_out", "t1"],
       ["t1__in", "transfer_in", "t1"],
     ]);
+    // Rules check the linked event's purpose; link the one money leaves.
+    expect(p.fields.lastEventId).toBe("t1");
     expect(p.accountEntries).toEqual([]);
     expect(p.increments).toEqual({
       "totals.transfersOut": 100,
@@ -378,6 +380,7 @@ describe("buildReversal (AC7 corrections)", () => {
     const inHalf = state.events.find((e) => e.id === "t1__in")!;
     const p = plan(buildReversal(ctx("x"), state.fund, { target: inHalf, knownEvents: state.events, date: "2026-11-09" }));
     expect(p.events.map((e) => e.id)).toEqual(["rev_t1", "rev_t1__in"]);
+    expect(p.fields.lastEventId).toBe("rev_t1__in");
     expect(p.accountEntries).toEqual([]);
   });
 
