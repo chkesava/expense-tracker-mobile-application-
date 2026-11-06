@@ -15,10 +15,10 @@ site, and the app's default URLs don't change.
 
 | Key | Story | State |
 |---|---|---|
-| SPENDLY-701 | S1 Test on Cloudflare, compatibility matrix | Built on `feature/SPENDLY-701-cloudflare-compat`, awaiting review ([matrix](SPENDLY-621-compatibility.md)) |
+| SPENDLY-701 | S1 Test on Cloudflare, compatibility matrix | Merged into epic ([matrix](SPENDLY-621-compatibility.md)) |
 | SPENDLY-702 | S2 Static site and routing for Cloudflare Pages | To do |
-| SPENDLY-703 | S3 Worker, request adapter, market functions, nutrition-ai | To do |
-| SPENDLY-704 | S4 The 6 firebase-admin functions | To do |
+| SPENDLY-703 | S3 Worker, request adapter, the functions that run on Cloudflare | To do |
+| SPENDLY-704 | S4 The 6 firebase-admin functions | Won't do (D5) |
 | SPENDLY-705 | S5 Manual-only backup workflow and smoke tests | To do |
 | SPENDLY-706 | S6 Runbook, secrets checklist, operator setup, first end-to-end run | To do |
 
@@ -35,6 +35,17 @@ Follow-up, not in this epic: SPENDLY-707 native app failover.
 - **D4:** 621 is an epic (its type was changed from Feature), built story by
   story with approval before each merge and before each next story
   (owner, 2026-11-06).
+- **D5 (replaces D1):** the backup implements **only the functions that run on
+  Cloudflare as they are**; nothing is rewritten for it (owner, 2026-11-06, after
+  SPENDLY-701).
+  - **Covered:** stock, mutual-funds, crypto, stock-history, stock-quotes,
+    market-overview, nutrition-ai, readmodel-claims.
+  - **Not on the backup:** ganesh-summary, ganesh-draw, epf-cron, delete-account,
+    readmodel-push (Firestore Admin can't run on Workers), and screener-universe
+    (over the Free CPU limit).
+  - Their paths answer a clear JSON **503 "not available on the backup"**, never the
+    SPA's HTML. The app's existing error states handle that.
+  - Netlify keeps serving all 14 unchanged. SPENDLY-704 is won't-do.
 
 ## What Netlify does today (main 363e4e6a)
 

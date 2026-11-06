@@ -120,7 +120,27 @@ which the Workers version won't use.
   by Cloudflare. S3 rebuilds it with the Cache API. That also keeps market-overview
   and stock-quotes misses rare.
 
-## What this means for the next stories
+## Owner decision D5 (2026-11-06, after this test)
+**The backup only runs what works on Cloudflare as it is; nothing is rewritten for
+it.** This replaces the S3/S4 plan below.
+
+| On the backup | Functions |
+|---|---|
+| **Served** | stock, mutual-funds, crypto, stock-history, stock-quotes, market-overview, nutrition-ai, readmodel-claims |
+| **Not served** (JSON 503 "not available on the backup") | ganesh-summary, ganesh-draw, epf-cron, delete-account, readmodel-push, screener-universe |
+
+- S4 (SPENDLY-704) is won't-do.
+- The Worker imports only `firebase-admin/app` and `firebase-admin/auth`, never
+  `firebase-admin/firestore`. That leaves out google-gax and `scripts/readmodel-sync.ts`,
+  so blockers 1 and 2 don't arise.
+- **Effect on users of the backup:**
+  - Ganesh festival totals and the Token Laddu draw can't be run.
+  - Account deletion waits for Netlify.
+  - The monthly EPF job stays on Netlify only.
+  - Saves reach the read model by the nightly sync instead of the per-save push.
+  - The stock screener shows its "unavailable" state.
+
+## What this test meant for the next stories (before D5)
 - **S2 (SPENDLY-702):** routing variant C. Spell out per-product header rules; no
   `/api` lines in `_redirects`; `_routes.json` as above.
 - **S3 (SPENDLY-703):**
