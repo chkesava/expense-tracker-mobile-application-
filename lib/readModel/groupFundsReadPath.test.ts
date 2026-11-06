@@ -25,7 +25,13 @@ vi.mock("@/lib/readModelClient", () => ({ connectReadModel: vi.fn() }));
 import type { GroupFundEvent } from "@/shared/types/groupFund";
 
 import { groupFundCursorBelow, groupFundEventsPageFrom } from "./groupFundSources";
-import { readGroupFundHistoryPage, readGroupFundMonth } from "./groupFundsReadPath";
+import {
+  compareGroupFundEventIds,
+  readGroupFundHistoryPage,
+  readGroupFundMonth,
+  shadowCompareGroupFundHistoryPage,
+  shadowCompareGroupFundMonth,
+} from "./groupFundsReadPath";
 import { createReadPath } from "./readPath";
 import { setReadModelPathForTests } from "./screenReadPath";
 
@@ -124,6 +130,17 @@ describe("supabase mode", () => {
 });
 
 describe("groupFundEventsPageFrom", () => {
+  it("drops rows whose document isn't a valid event, but pages by the raw rows", () => {
+    const good = { fundId: "f1", kind: "contribution", amount: 10, purposeId: "a", date: "2026-11-01", actorUid: "u", createdAtMs: 2 };
+    const rows = [
+      { doc_id: "ok", created_at: "2026-11-02T00:00:00.000Z", doc: good },
+      { doc_id: "bad", created_at: "2026-11-01T00:00:00.000Z", doc: { ...good, amount: "10" } },
+    ];
+    const page = groupFundEventsPageFrom(rows, 2);
+    expect(page.items.map((e) => e.id)).toEqual(["ok"]);
+    expect(page).toMatchObject({ exhausted: false, next: { createdAt: "2026-11-01T00:00:00.000Z", docId: "bad" } });
+  });
+
   it("returns a cursor only on a full page", () => {
     const rows = [{ doc_id: "x", created_at: "2026-11-01T00:00:00.000Z", doc: { fundId: "f1" } }];
     expect(groupFundEventsPageFrom(rows, 1)).toMatchObject({ exhausted: false, next: { createdAt: "2026-11-01T00:00:00.000Z", docId: "x" } });
@@ -152,5 +169,45 @@ describe("month view (SPENDLY-688)", () => {
     expect(reads).toEqual([]);
     expect(await month("supabase", { loopbackFail: true })).toBeNull();
     expect(await month("supabase")).toBeNull();
+  });
+});
+
+describe("shadow mode compares, Firestore still serves (CodeRabbit #263)", () => {
+  it("logs ids that differ for a month, ignoring events younger than the sync SLO", async () => {
+    emulator.groupFundEvents.push(doc({ ...ev("m1", "f1", NOW - 48 * H), period: "2026-11" }));
+    const firestoreEvents = [{ ...ev("fs-only", "f1", NOW - 48 * H), period: "2026-11" }, { ...ev("young", "f1", NOW - 60 * 1000), period: "2026-11" }];
+    const ran = await shadowCompareGroupFundMonth({
+      db: {} as never, user, conditions: conditions("shadow"), fundId: "f1", period: "2026-11", firestoreEvents, now: () => NOW,
+    });
+    expect(ran).toBe(true);
+    await vi.waitFor(() => expect(log).toHaveBeenCalled());
+    const [event, detail] = log.mock.calls[0];
+    expect(event).toBe("readModel.shadow.groupFundHistory");
+    expect(detail.differences).toEqual(expect.arrayContaining(["missing in read model: fs-only", "only in read model: m1"]));
+    expect(detail.differences.join(" ")).not.toContain("young");
+  });
+
+  it("compares an older page over the same time span only", async () => {
+    const ran = await shadowCompareGroupFundHistoryPage({
+      db: {} as never, user, conditions: conditions("shadow"), fundId: "f1",
+      aboveMs: NOW - 4 * 24 * H, firestoreItems: [ev("a2", "f1", NOW - 5 * 24 * H, 100), ev("a1", "f1", NOW - 10 * 24 * H)], now: () => NOW,
+    });
+    expect(ran).toBe(true);
+    // a0 (90 days old) is outside the page's span, so it isn't a difference; both pages agree.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(log).not.toHaveBeenCalledWith("readModel.shadow.groupFundHistory", expect.anything());
+  });
+
+  it("does nothing outside shadow mode", async () => {
+    for (const mode of [undefined, "supabase"]) {
+      expect(
+        await shadowCompareGroupFundMonth({ db: {} as never, user, conditions: conditions(mode), fundId: "f1", period: "2026-11", firestoreEvents: [] })
+      ).toBe(false);
+    }
+  });
+
+  it("compareGroupFundEventIds reports nothing when both sides agree", () => {
+    const e = [ev("x", "f1", NOW - 10 * H)];
+    expect(compareGroupFundEventIds(e, e, NOW)).toEqual([]);
   });
 });

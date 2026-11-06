@@ -14,7 +14,7 @@ import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { useGroupFundMonth } from "@/hooks/useGroupFundMonth";
 import { toast } from "@/lib/toast";
 import { useSettings } from "@/providers/SettingsProvider";
-import type { GroupFund } from "@/shared/types/groupFund";
+import type { GroupFund, GroupFundEvent } from "@/shared/types/groupFund";
 import { formatMonthLabel } from "@/shared/utils/dateDisplay";
 import { shiftMonthKey, todayDateKey } from "@/shared/utils/dates";
 import { memberMonthStatus } from "@/shared/utils/groupFundMath";
@@ -29,6 +29,8 @@ export type GroupFundBackfillSheetProps = {
   fund: GroupFund;
   accounts: { id: string; name: string }[];
   currency: string;
+  /** This device's newest events, laid over the read-model copy (R3.4). */
+  recentEvents?: readonly GroupFundEvent[];
   onClose: () => void;
   onSubmit: (rows: BackfillContributionInput[], monthLabel: string) => Promise<boolean>;
 };
@@ -42,7 +44,7 @@ export type GroupFundBackfillSheetProps = {
  * Each member's month has a fixed id, so a month already recorded for them is
  * shown as done and can't be recorded again.
  */
-export function GroupFundBackfillSheet({ visible, fund, accounts, currency, onClose, onSubmit }: GroupFundBackfillSheetProps) {
+export function GroupFundBackfillSheet({ visible, fund, accounts, currency, recentEvents, onClose, onSubmit }: GroupFundBackfillSheetProps) {
   const { theme } = useTheme();
   const { settings } = useSettings();
   const money = useGhostMoney(currency);
@@ -69,7 +71,7 @@ export function GroupFundBackfillSheet({ visible, fund, accounts, currency, onCl
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  const month = useGroupFundMonth(visible ? fund.id : undefined, period, fund.version);
+  const month = useGroupFundMonth(visible ? fund.id : undefined, period, fund.version, recentEvents);
   const purpose = fund.purposes.find((p) => p.id === purposeId);
   const members = useMemo(() => fund.members.filter((m) => memberOwesIn(m, period)), [fund.members, period]);
   const recordedIds = useMemo(() => new Set(month.events.map((e) => e.id)), [month.events]);

@@ -107,6 +107,21 @@ export function buildRunwaySources(input: RunwaySourcesInput): RunwaySources {
   // SPENDLY-686: money held for others is inside the counted account balances
   // but isn't spendable. Take it out, less any that sits in an account runway
   // doesn't count (that money was never counted). Locked: no override.
+  // Unknown (the funds couldn't load) is said out loud, never taken as 0: a
+  // visible, uncounted line, and an assumption on the runway (runwayModel).
+  if (input.groupFundHeld === null) {
+    resources.push({
+      kind: "group_funds_held",
+      refId: "groupFunds",
+      label: "Held for others",
+      amount: 0,
+      liquidity: "unknown",
+      included: false,
+      overridable: false,
+      reasons: ["held_for_others_unknown"],
+      provenance: { source: "groupFunds", refId: "groupFunds", asOf, certainty: "assumed" },
+    });
+  }
   const held = input.groupFundHeld ?? 0;
   if (held > 0) {
     const excludedHeld = resources

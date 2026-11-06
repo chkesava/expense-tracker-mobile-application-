@@ -137,6 +137,7 @@ export type RunwayAssumptionCode =
   | "currency_unsupported"
   | "overdrawn_counted"
   | "held_for_others_deducted"
+  | "held_for_others_unknown"
   | "user_included"
   | "user_excluded"
   | "category_mapped_from_legacy"

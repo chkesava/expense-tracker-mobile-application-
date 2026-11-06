@@ -143,6 +143,14 @@ describe("runway (money held for others isn't spendable)", () => {
     expect(excluded.resources.some((r) => r.kind === "group_funds_held")).toBe(false);
   });
 
+  it("says so when the funds couldn't be loaded, instead of treating them as 0 (CodeRabbit #263)", () => {
+    const s = buildRunwaySources(inputs({ groupFundHeld: null }));
+    const line = s.resources.find((r) => r.kind === "group_funds_held");
+    expect(line).toMatchObject({ included: false, liquidity: "unknown", reasons: ["held_for_others_unknown"] });
+    expect(s.notCounted).toContainEqual(line);
+    expect(s.liquidTotal).toBe(106_000);
+  });
+
   it("opening money with no account is still taken out", () => {
     const s = buildRunwaySources(inputs({ groupFundHeld: 5_000, groupFundHeldByAccount: {} }));
     expect(s.resources.find((r) => r.kind === "group_funds_held")?.amount).toBe(-5_000);

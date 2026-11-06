@@ -327,9 +327,13 @@ export type HeldByAccountRow = {
   accountId: string;
   /** Held for others in this account, across every fund (stored totals). */
   held: number;
-  /** The account's stored balance, or null if the account is gone. */
+  /** The account's stored balance, or null if it's gone or its balance isn't known yet. */
   balance: number | null;
-  /** How much more is recorded as held than the account has (0 when fine). */
+  /** The account exists but has no stored balance yet: nothing to compare against. */
+  balanceUnknown: boolean;
+  /** The account no longer exists. */
+  deleted: boolean;
+  /** How much more is recorded as held than the account has (0 when fine or unknown). */
   shortfall: number;
 };
 
@@ -338,10 +342,14 @@ export type HeldByAccountRow = {
  * balance. A shortfall means the group money recorded in an account is more
  * than the account holds — usually a payout recorded from the wrong account
  * or a contribution that never arrived. Stored figures only.
+ *
+ * `balances`: an account missing from the map is deleted (all its held money
+ * is a shortfall); one mapped to `null` exists but has no stored balance yet,
+ * so it is never compared (an unknown balance is not zero).
  */
 export function reconcileHeldByAccount(
   funds: readonly Pick<GroupFund, "heldByAccount">[],
-  balances: ReadonlyMap<string, number>
+  balances: ReadonlyMap<string, number | null>
 ): HeldByAccountRow[] {
   const held = new Map<string, number>();
   for (const fund of funds) {
@@ -352,9 +360,12 @@ export function reconcileHeldByAccount(
   return [...held.entries()]
     .filter(([, amount]) => Math.abs(amount) > 0.005)
     .map(([accountId, amount]) => {
-      const balance = balances.has(accountId) ? balances.get(accountId)! : null;
-      const shortfall = balance === null ? amount : roundMoney(Math.max(0, amount - balance));
-      return { accountId, held: amount, balance, shortfall };
+      const deleted = !balances.has(accountId);
+      const known = balances.get(accountId);
+      const balanceUnknown = !deleted && (known === null || known === undefined);
+      const balance = deleted || balanceUnknown ? null : (known as number);
+      const shortfall = deleted ? amount : balanceUnknown ? 0 : roundMoney(Math.max(0, amount - (balance as number)));
+      return { accountId, held: amount, balance, balanceUnknown, deleted, shortfall };
     })
     .sort((a, b) => b.held - a.held);
 }

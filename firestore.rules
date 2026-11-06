@@ -837,7 +837,15 @@ service cloud.firestore {
           && goalMoneyClose(d.totals.held - r.totals.held, groupFundHeldDelta(ev))
           // The writer links the event that takes money out of a purpose, so
           // that purpose is the one checked (groupFundWrites.moneyPlan).
-          && d.byPurpose.get(ev.purposeId, {}).get('held', 0) > -0.005;
+          && d.byPurpose.get(ev.purposeId, {}).get('held', 0) > -0.005
+          // An account move (or its undo) can't leave the account it takes
+          // from holding less than nothing for this fund, even from a stale
+          // device. Payouts may come from any account by design (S1), so
+          // they aren't held to this.
+          && (ev.kind != 'account_move'
+              || d.heldByAccount.get(ev.get('accountId', ''), 0) > -0.005)
+          && (!(ev.kind == 'reversal' && ev.get('reversedKind', '') == 'account_move')
+              || d.heldByAccount.get(ev.get('toAccountId', ''), 0) > -0.005);
       }
 
       function groupFundUpdate(fundId) {
@@ -890,10 +898,45 @@ service cloud.firestore {
                        'transfer_out', 'transfer_in', 'account_move']))
           && (d.actorUid == request.auth.uid || d.actorUid == request.auth.uid + '_duress')
           && d.createdAtMs is number
-          // Only inside a batch that moves its fund.
-          && exists(groupFundPath(d.fundId))
-          && getAfter(groupFundPath(d.fundId)).data.version
-               == get(groupFundPath(d.fundId)).data.version + 1;
+          && groupFundEventLinked(eventId, d)
+          && (d.kind != 'reversal' || groupFundReversalMatches(d));
+      }
+
+      // Only inside the money write that explains it: the fund moved by one
+      // version AND to a new linked event, and this event is that linked
+      // event or its transfer partner (a transfer, or the undo of one, writes
+      // two events and links only one). A config edit can't carry an event,
+      // and no extra event can ride along with a money write.
+      function groupFundEventLinked(eventId, d) {
+        let fundPath = groupFundPath(d.fundId);
+        let before = get(fundPath).data;
+        let after = getAfter(fundPath).data;
+        let linkedId = after.get('lastEventId', '');
+        return exists(fundPath)
+          && after.version == before.version + 1
+          && linkedId != before.get('lastEventId', '')
+          && (linkedId == eventId || groupFundTransferPartner(d, linkedId));
+      }
+
+      function groupFundTransferPartner(d, linkedId) {
+        let linked = getAfter(groupFundEventPath(linkedId)).data;
+        return d.get('transferPairId', '') != ''
+          && linked.get('transferPairId', '') == d.transferPairId
+          && linked.fundId == d.fundId
+          && (d.kind in ['transfer_in', 'transfer_out']
+              || (d.kind == 'reversal'
+                  && d.get('reversedKind', '') in ['transfer_in', 'transfer_out']));
+      }
+
+      // A reversal undoes a real event of the same fund, exactly.
+      function groupFundReversalMatches(d) {
+        let targetPath = groupFundEventPath(d.reversalOf);
+        let target = get(targetPath).data;
+        return exists(targetPath)
+          && target.fundId == d.fundId
+          && target.kind == d.reversedKind
+          && target.amount == d.amount
+          && target.purposeId == d.purposeId;
       }
 
       // A group-fund account entry is created only with the new event that lists it.

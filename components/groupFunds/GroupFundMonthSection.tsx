@@ -10,7 +10,7 @@ import { Chip } from "@/components/ui/Chip";
 import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { useGroupFundMonth } from "@/hooks/useGroupFundMonth";
 import { useSettings } from "@/providers/SettingsProvider";
-import type { GroupFund } from "@/shared/types/groupFund";
+import type { GroupFund, GroupFundEvent } from "@/shared/types/groupFund";
 import { formatMonthLabel } from "@/shared/utils/dateDisplay";
 import { shiftMonthKey } from "@/shared/utils/dates";
 import { groupFundMonthSummary, type MemberMonthState } from "@/shared/utils/groupFundMath";
@@ -25,6 +25,8 @@ export type GroupFundMonthSectionProps = {
   period: string;
   currentPeriod: string;
   onPeriodChange: (period: string) => void;
+  /** This device's newest events (the history's live window), laid over the read-model copy. */
+  recentEvents?: readonly GroupFundEvent[];
   /** Open the contribution sheet for someone who still owes. */
   onCollect?: (memberId: string, purposeId: string, period: string, pending: number) => void;
 };
@@ -35,13 +37,13 @@ export type GroupFundMonthSectionProps = {
  * (one bounded read); nothing is created per month, so every month — past
  * ones included — is always there.
  */
-export function GroupFundMonthSection({ fund, currency, period, currentPeriod, onPeriodChange, onCollect }: GroupFundMonthSectionProps) {
+export function GroupFundMonthSection({ fund, currency, period, currentPeriod, onPeriodChange, recentEvents, onCollect }: GroupFundMonthSectionProps) {
   const { theme } = useTheme();
   const { settings } = useSettings();
   const money = useGhostMoney(currency);
   const start = fundStartPeriod(fund);
   const tracked = fund.purposes.some((p) => !p.archived && p.cadence === "monthly" && (p.expectedPerMember ?? 0) > 0);
-  const month = useGroupFundMonth(tracked ? fund.id : undefined, period, fund.version);
+  const month = useGroupFundMonth(tracked ? fund.id : undefined, period, fund.version, recentEvents);
   const summary = useMemo(() => groupFundMonthSummary(fund, month.events, period), [fund, month.events, period]);
   const label = formatMonthLabel(period, settings.dateFormat, { long: true });
   const muted = { color: theme.colors.mutedForeground };

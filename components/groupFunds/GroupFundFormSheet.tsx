@@ -26,7 +26,16 @@ import {
 import type { GroupFundConfigInput } from "@/shared/utils/groupFundWrites";
 import { useTheme } from "@/theme/ThemeProvider";
 
-type PurposeDraft = { id: string; name: string; cadence: GroupFundCadence; expected: string; archived: boolean; saved: boolean };
+type PurposeDraft = {
+  id: string;
+  name: string;
+  cadence: GroupFundCadence;
+  expected: string;
+  archived: boolean;
+  saved: boolean;
+  /** Not edited here, but kept so saving doesn't drop it. */
+  target?: number;
+};
 type MemberDraft = {
   id: string;
   name: string;
@@ -56,6 +65,7 @@ const purposeDrafts = (fund?: GroupFund | null): PurposeDraft[] =>
         expected: p.expectedPerMember !== undefined ? String(p.expectedPerMember) : "",
         archived: Boolean(p.archived),
         saved: true,
+        target: p.target,
       }))
     : [];
 
@@ -124,6 +134,7 @@ export function GroupFundFormSheet({ visible, fund, newKey, onClose, onSubmit }:
         name: p.name,
         cadence: p.cadence,
         ...(expected !== undefined ? { expectedPerMember: expected } : {}),
+        ...(p.target !== undefined ? { target: p.target } : {}),
         ...(p.archived ? { archived: true } : {}),
       });
     }

@@ -633,9 +633,14 @@ export function buildAccountMove(
  * The fixed id of a member's backfilled payment for one purpose and month.
  * Events are create-only, so the same month can't be backfilled twice for
  * them, from any device or a double tap.
+ *
+ * Parts are joined with "~", which no fund, purpose or member id can contain
+ * (`isSafeKey`: letters, digits, "_" and "-"), so two different members'
+ * months can never produce the same id. (Nothing used the earlier "_" form:
+ * it never shipped.)
  */
 export const groupFundBackfillId = (fundId: string, period: string, purposeId: string, memberId: string) =>
-  `bf_${fundId}_${period}_${purposeId}_${memberId}`;
+  `bf~${fundId}~${period}~${purposeId}~${memberId}`;
 
 export type BackfillContributionInput = {
   purposeId: string;

@@ -118,16 +118,19 @@ describe("groupFundMonthSummary", () => {
 describe("reconcileHeldByAccount (feature 7)", () => {
   it("adds held money across funds per account and flags a shortfall", () => {
     const rows = reconcileHeldByAccount(
-      [{ heldByAccount: { hdfc: 6100, cash: 500 } }, { heldByAccount: { hdfc: 1000, gone: 200, zero: 0 } }],
-      new Map([
+      [{ heldByAccount: { hdfc: 6100, cash: 500 } }, { heldByAccount: { hdfc: 1000, gone: 200, zero: 0, fresh: 300 } }],
+      new Map<string, number | null>([
         ["hdfc", 470910],
         ["cash", 300],
+        ["fresh", null],
       ])
     );
     expect(rows).toEqual([
-      { accountId: "hdfc", held: 7100, balance: 470910, shortfall: 0 },
-      { accountId: "cash", held: 500, balance: 300, shortfall: 200 },
-      { accountId: "gone", held: 200, balance: null, shortfall: 200 },
+      { accountId: "hdfc", held: 7100, balance: 470910, balanceUnknown: false, deleted: false, shortfall: 0 },
+      { accountId: "cash", held: 500, balance: 300, balanceUnknown: false, deleted: false, shortfall: 200 },
+      // An existing account with no stored balance yet is never "short": unknown isn't zero.
+      { accountId: "fresh", held: 300, balance: null, balanceUnknown: true, deleted: false, shortfall: 0 },
+      { accountId: "gone", held: 200, balance: null, balanceUnknown: false, deleted: true, shortfall: 200 },
     ]);
   });
 });

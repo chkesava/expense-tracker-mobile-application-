@@ -4,6 +4,7 @@ import { ArrowLeftRight, Calendar, SlidersHorizontal } from "lucide-react-native
 
 import { AccountSafeIllustration } from "@/components/accounts/AccountSafeIllustration";
 import { Amount } from "@/components/common/Amount";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { splitAccountBalance } from "@/shared/utils/groupFundMath";
 import { useSettings } from "@/providers/SettingsProvider";
 import { currencySymbol, formatAmountNumber } from "@/shared/utils/formatCurrency";
@@ -109,6 +110,8 @@ export function AccountBalanceCard({
 }) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
+  // Formatted and masked like the visible amounts (ghost mode), never raw numbers.
+  const money = useGhostMoney(currency);
   // SPENDLY-537: the theme accent and its own foreground, on the same deep
   // surface as the dashboard hero, instead of a fixed green palette.
   const accent = theme.colors.primary;
@@ -158,7 +161,7 @@ export function AccountBalanceCard({
             <View
               style={[styles.heldRow, { borderColor: withAlpha(theme.colors.warning, 0.35), backgroundColor: withAlpha(theme.colors.warning, 0.1) }]}
               accessible
-              accessibilityLabel={`Includes ${heldForOthers} held for others. Yours: ${splitAccountBalance(availableBalance, heldForOthers).yours}`}
+              accessibilityLabel={`Includes ${money(heldForOthers)} held for others. Yours: ${money(splitAccountBalance(availableBalance, heldForOthers).yours)}`}
             >
               <View style={styles.heldCol}>
                 <Text style={[styles.metaLabel, { color: theme.colors.warning }]}>HELD FOR OTHERS</Text>

@@ -31,6 +31,13 @@ describe("groupFundFromDoc", () => {
     });
   });
 
+  it("keeps a saved start month (CodeRabbit #263)", () => {
+    expect(groupFundFromDoc("f1", { name: "Dokra", purposes: [], startPeriod: "2026-03", createdAtMs: Date.UTC(2026, 10, 1) })?.startPeriod).toBe(
+      "2026-03"
+    );
+    expect(groupFundFromDoc("f1", { name: "Dokra", purposes: [] })?.startPeriod).toBeUndefined();
+  });
+
   it("rejects something that isn't a fund", () => {
     expect(groupFundFromDoc("x", undefined)).toBeNull();
     expect(groupFundFromDoc("x", { name: "No purposes" })).toBeNull();

@@ -142,6 +142,40 @@ Group money lives in the user's real accounts, so the real balance must move. It
   - Each member's month has a fixed id, so it can't be backfilled twice.
   - Each member is saved separately, because the rules allow one explained event per money write.
 
+## Review fixes (CodeRabbit, PR #263)
+All 17 comments were checked against the code; all were valid and fixed.
+
+**Rules**
+- Each event must be the linked event of a money write that moves the fund to a new event, or that event's transfer partner. A config edit or an extra event is refused.
+- A reversal must match its target exactly: fund, kind, amount and purpose.
+- An account move, or its undo, can't leave the account it takes from below zero for that fund.
+- 5 new emulator tests.
+
+**Data**
+- `groupFundFromDoc` keeps `startPeriod`.
+- Read-model rows are validated like Firestore ones, with paging still driven by the raw rows.
+- Purpose targets survive an edit.
+- The hub total includes archived funds, matching net worth.
+- Backfill ids use `~` (no fund, purpose or member id can contain it), so ids can't collide. Nothing used the old form, because it never shipped.
+
+**Reads**
+- The month view overlays this device's live window on the copy (R3.4).
+- `shadow` compares both the month and older history pages.
+- An older-history page that finishes after a reset is dropped.
+- A new fund missing from the list is read from Firestore before the screen says it's gone.
+
+**Money signals**
+- An account with no stored balance shows "unknown", not a shortfall.
+- Runway adds a `held_for_others_unknown` line and assumption when the funds can't load.
+- The accessibility label is ghost-masked and formatted.
+
+**Supabase**
+- The migration is re-runnable (`if not exists`). A second run and `assert_security` both pass.
+- The perf suite covers the history page and the month query. p95 is about 1 ms on the existing index, with no sequential scan, so no new index is needed.
+
+**Checklist**
+- The web deploy now comes before the Android release. The deployed push function rejects a whole request that has an unknown collection.
+
 ## Deploys pending
 **Go-live steps, in order:** `docs/SPENDLY-678-post-merge-checklist.md`.
 

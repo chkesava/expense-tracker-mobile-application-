@@ -42,7 +42,7 @@ begin
            (select string_agg(distinct x #>> '{}', ', ') from jsonb_path_query(plan, 'strict $.**."Index Name"') x),
            (select string_agg(distinct r #>> '{}', ', ')
               from jsonb_path_query(plan, 'strict $.** ? (@."Node Type" == "Seq Scan")."Relation Name"') r
-             where r #>> '{}' in ('expenses', 'incomes', 'ledger_events', 'account_payments', 'goal_events'));
+             where r #>> '{}' in ('expenses', 'incomes', 'ledger_events', 'account_payments', 'goal_events', 'group_fund_events'));
 end
 $$;
 grant execute on function perf.measure(text, text, integer) to authenticated;
@@ -135,6 +135,20 @@ insert into perf_results select * from perf.measure('goals with status filter (g
   select doc_id, name, status, target_amount, doc from public.financial_goals
   where source_deleted = false and status in ('completed', 'archived')
   order by doc_id limit 1000 $q$);
+
+-- SPENDLY-678 Group Funds. Shapes match lib/readModel/groupFundSources.ts:
+-- an older history page of one fund (keyset), and the month view (one fund,
+-- one period, every member at once).
+insert into perf_results select * from perf.measure('group fund history, one fund, deep keyset (group fund history page)', $q$
+  select doc_id, created_at, doc from public.group_fund_events
+  where source_deleted = false and fund_id = 'f0001' and created_at is not null
+    and (created_at < '2024-06-01T00:00:00.000Z' or (created_at = '2024-06-01T00:00:00.000Z' and doc_id < ''))
+  order by created_at desc, doc_id desc limit 25 $q$);
+
+insert into perf_results select * from perf.measure('group fund month, one fund x one period (month view)', $q$
+  select doc_id, doc from public.group_fund_events
+  where source_deleted = false and fund_id = 'f0001' and period = '2024-06'
+  order by doc_id limit 500 $q$);
 
 insert into perf_results select * from perf.measure('freshness (lastSyncedAt)', $q$
   select collection, last_synced_at from public.sync_status where collection in ('expenses', 'incomes') $q$);

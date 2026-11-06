@@ -44,6 +44,7 @@ export function groupFundFromDoc(id: string, data: Record<string, unknown> | und
     name: data.name,
     notes: typeof data.notes === "string" ? data.notes : undefined,
     status: isGroupFundStatus(data.status) ? data.status : "active",
+    startPeriod: typeof data.startPeriod === "string" ? data.startPeriod : undefined,
     purposes: (data.purposes as GroupFund["purposes"]).filter((p) => isRecord(p) && typeof p.id === "string"),
     members: Array.isArray(data.members)
       ? (data.members as GroupFund["members"]).filter((m) => isRecord(m) && typeof m.id === "string")

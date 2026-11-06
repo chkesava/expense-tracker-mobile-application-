@@ -41,7 +41,8 @@ export function GroupFundsList() {
     setCreating(true);
   };
   const open = (fund: GroupFund) => router.push(`/group-funds/${fund.id}` as Href);
-  const held = totalGroupFundsHeld(funds.filter((f) => f.status !== "archived"));
+  // Every fund, archived ones too: money still held is still not yours (as in net worth).
+  const held = totalGroupFundsHeld(funds);
   const muted = { color: theme.colors.mutedForeground };
 
   let body;

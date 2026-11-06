@@ -19,7 +19,7 @@ import { getFirestoreDb } from "@/lib/firebase";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
 import { forgetSnapshotPath, logDirectRead, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { groupFundCursorBelow, type GroupFundEventsCursor } from "@/lib/readModel/groupFundSources";
-import { readGroupFundHistoryPage } from "@/lib/readModel/groupFundsReadPath";
+import { readGroupFundHistoryPage, shadowCompareGroupFundHistoryPage } from "@/lib/readModel/groupFundsReadPath";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
@@ -70,9 +70,14 @@ export function useGroupFundHistory(fundId: string | undefined, options?: { enab
   const cursorRef = useRef<QueryDocumentSnapshot | null>(null);
   const readModelCursorRef = useRef<GroupFundEventsCursor | undefined>(undefined);
   const olderLoadedRef = useRef(false);
+  // Bumped on every reset (fund change, retry); an older-page read started
+  // before it is discarded instead of moving the new cursor.
+  const generationRef = useRef(0);
 
   useEffect(() => {
     const db = getFirestoreDb();
+    generationRef.current += 1;
+    setLoadingMore(false);
     liveRef.current = [];
     cursorRef.current = null;
     readModelCursorRef.current = undefined;
@@ -129,6 +134,7 @@ export function useGroupFundHistory(fundId: string | undefined, options?: { enab
   const loadMoreFromReadModel = useCallback(async (): Promise<boolean> => {
     const db = getFirestoreDb();
     if (!db || !user || !fundId) return false;
+    const generation = generationRef.current;
     let cursor = readModelCursorRef.current;
     if (cursor === undefined) {
       const oldest = [...liveRef.current].sort((a, b) => a.createdAtMs - b.createdAtMs)[0];
@@ -144,6 +150,7 @@ export function useGroupFundHistory(fundId: string | undefined, options?: { enab
       conditions: { setting: settings.readModel, online: isOnline, duress: isDuress, localTestMode: isLocalTestMode() },
     });
     if (!page) return false;
+    if (generation !== generationRef.current) return true; // reset meanwhile: drop it
     olderLoadedRef.current = true;
     readModelCursorRef.current = page.next;
     setOlder((prev) => mergeEventPages(prev, page.items));
@@ -155,6 +162,7 @@ export function useGroupFundHistory(fundId: string | undefined, options?: { enab
     const db = getFirestoreDb();
     const cursor = cursorRef.current;
     if (!uid || !db || !fundId || loadingMore || !hasMore) return;
+    const generation = generationRef.current;
     if (configuredReadModelMode(settings.readModel, "groupFundHistory") === "supabase") {
       setLoadingMore(true);
       let served = false;
@@ -163,7 +171,7 @@ export function useGroupFundHistory(fundId: string | undefined, options?: { enab
       } catch (failure) {
         logError("groupFundHistory.loadMore.readModel", failure);
       } finally {
-        setLoadingMore(false);
+        if (generation === generationRef.current) setLoadingMore(false);
       }
       if (served) return;
     }
@@ -182,17 +190,31 @@ export function useGroupFundHistory(fundId: string | undefined, options?: { enab
         feature: "groupFunds",
         queryShape: "fund history older page",
       });
+      if (generation !== generationRef.current) return; // reset meanwhile: drop it
+      const page = toEvents(snap.docs);
+      // Shadow: compare this Firestore page with the copy over the same span.
+      const above = (cursor.data() as { createdAtMs?: number }).createdAtMs;
+      if (user && typeof above === "number" && configuredReadModelMode(settings.readModel, "groupFundHistory") === "shadow") {
+        void shadowCompareGroupFundHistoryPage({
+          db,
+          user,
+          fundId,
+          aboveMs: above,
+          firestoreItems: page,
+          conditions: { setting: settings.readModel, online: isOnline, duress: isDuress, localTestMode: isLocalTestMode() },
+        }).catch((failure) => logError("groupFundHistory.shadow", failure));
+      }
       olderLoadedRef.current = true;
       cursorRef.current = snap.docs.at(-1) ?? cursor;
-      setOlder((prev) => mergeEventPages(prev, toEvents(snap.docs)));
+      setOlder((prev) => mergeEventPages(prev, page));
       setHasMore(pageMayHaveMore(snap.docs.length, GROUP_FUND_HISTORY_PAGE_SIZE));
     } catch (failure) {
       logError("groupFundHistory.loadMore", failure);
       toast.error(friendlyErrorMessage(failure, "Couldn't load older entries."));
     } finally {
-      setLoadingMore(false);
+      if (generation === generationRef.current) setLoadingMore(false);
     }
-  }, [uid, fundId, loadingMore, hasMore, settings.readModel, loadMoreFromReadModel]);
+  }, [uid, user, fundId, loadingMore, hasMore, settings.readModel, isOnline, isDuress, loadMoreFromReadModel]);
 
   const events = sortGroupFundEvents(mergeEventPages(live, older));
   return { events, pendingIds, loading, error, retry, hasMore, loadingMore, loadMore };

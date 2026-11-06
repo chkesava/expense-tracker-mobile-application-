@@ -16,8 +16,8 @@ Merging to `main` ships nothing by itself. Every step below is a production chan
 | 1 | **Firestore indexes** | "Deploy Firestore rules" workflow with `deploy_indexes: true`, **`dry_run: true` first**. It refuses a deploy that would delete live indexes. Diff first: `firebase firestore:indexes --project expenseapp-27f94` against `firestore.indexes.json` | ☐ |
 | 2 | **Firestore rules** | The same workflow, `dry_run: true`, then `dry_run: false`. It can run together with step 1 | ☐ |
 | 3 | **Supabase migration** `20261106000000_readmodel_group_funds.sql` | Read-model project, SQL editor (or `supabase db push --workdir supabase-readmodel`). Check first that the previous migrations are applied. Then confirm with `supabase-readmodel/tests/assert_security.sql` §1–4 (owner-read policies are now **56**) | ☐ |
-| 4 | **Expense Android release** | `release-expense.yml` (workflow_dispatch), with approval. Follow the SPENDLY-586 release notes (the `expo-sqlite` native module is already in v5.2.0) | ☐ |
-| 5 | **Web deploy** (Netlify), the user's call because of Netlify credits | `web-deploy.yml`. It also redeploys `readmodel-push` with the new tables. Until then, the per-write server push doesn't know `groupFunds` / `groupFundEvents`, and the nightly sync copies them instead | ☐ |
+| 4 | **Web deploy** (Netlify), the user's call because of Netlify credits | `web-deploy.yml`. **Before the Android release:** it ships the web app and redeploys `readmodel-push` with the new tables. The deployed push function validates every ref in a request and **rejects the whole request** if one collection is unknown (`parsePushRequest`). So until this runs, a Group Funds save's push is refused, including that save's `accounts` / `accountEntries` refs. The on-device outbox (`rm_client_apply`, after step 3) still copies them, and the nightly sync repairs anything left | ☐ |
+| 5 | **Expense Android release** | `release-expense.yml` (workflow_dispatch), with approval. Follow the SPENDLY-586 release notes (the `expo-sqlite` native module is already in v5.2.0). If the web deploy is deferred, expect rejected pushes (step 6) | ☐ |
 | 6 | **Verify in production** (read-only) | See below | ☐ |
 | 7 | **Jira** | Move SPENDLY-678 and 683, 684, 685, 686, 687, 688 and 700 to **Done** with the merge commit. Leftovers stay in their own tickets | ☐ |
 | 8 | **Device QA** | Spendly Test on the Firebase emulator (`docs/LOCAL_TEST_MODE.md`), never the real app. Record the phone's display settings first and restore them exactly | ☐ |
@@ -54,7 +54,7 @@ Merging to `main` ships nothing by itself. Every step below is a production chan
    - `select count(*) from group_funds;` and `select count(*) from group_fund_events;` (service role) grow after the save;
    - `v_data_quality` shows no `groupFunds` / `groupFundEvents` rows;
    - the next nightly `readmodel-verify` reports 0 mismatches for both collections.
-4. **Read health:** `readmodel-health` shows no rejected pushes. Before step 5, expect the per-write push to skip the new tables; the nightly sync covers them.
+4. **Read health:** `readmodel-health` shows no rejected pushes once step 4 is done. If the Android release went out first, expect `[PUSH] rejected: bad-request` for Group Funds saves until the web deploy, with the outbox and the nightly sync still copying the data.
 
 ## Read-model switches (later, not part of go-live)
 - **Leave both at `firestore`** (the default) for go-live:

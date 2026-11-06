@@ -27,6 +27,7 @@ import { supabaseJournalPage, type SupabaseCursor, type SupabasePage } from "./j
 import { journalMonthRange, supabaseJournalMonth, type JournalCollection } from "./journalMonthSource";
 import { fromReadModelDoc } from "./readModelDoc";
 import type { GroupFundEvent } from "@/shared/types/groupFund";
+import { groupFundEventFromDoc } from "@/shared/utils/groupFundDocs";
 
 /**
  * SPENDLY-512 — what a read-model screen reads, behind one interface.
@@ -227,7 +228,11 @@ export function loopbackBackend(db: Firestore, uid: string, knobs: LoopbackKnobs
     async groupFundMonthEvents(fundId, period) {
       return (await rows("groupFundEvents"))
         .filter((r) => r.fund_id === fundId && r.period === period)
-        .map((r) => toApp<GroupFundEvent>(r));
+        .map((r) => {
+          const { id, ...data } = toApp<GroupFundEvent>(r);
+          return groupFundEventFromDoc(id ?? r.doc_id, data as unknown as Record<string, unknown>);
+        })
+        .filter((e): e is GroupFundEvent => !!e);
     },
     async lastSyncedAt() {
       if (knobs.fail) throw new Error("loopback read model: simulated outage (readModel.loopbackFail)");

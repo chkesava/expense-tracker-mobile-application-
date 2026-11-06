@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { GroupFundEvent } from "@/shared/types/groupFund";
 
+import { groupFundEventFromDoc } from "@/shared/utils/groupFundDocs";
+
 import { auditKeysetAfter } from "./analyticsSources";
 import { fromReadModelDoc } from "./readModelDoc";
 
@@ -19,11 +21,23 @@ export type GroupFundEventsCursor = { createdAt: string; docId: string } | null;
 export type GroupFundEventsPage = { items: GroupFundEvent[]; next: GroupFundEventsCursor; exhausted: boolean };
 export type GroupFundEventsQuery = { fundId: string; cursor: GroupFundEventsCursor; pageSize: number };
 
+/** A read-model row as an app event, or null when its document isn't a valid event. */
+function eventFromRow(docId: string, doc: Record<string, unknown>): GroupFundEvent | null {
+  const raw = fromReadModelDoc<GroupFundEvent>(docId, doc);
+  const { id, ...data } = raw;
+  return groupFundEventFromDoc(id ?? docId, data as unknown as Record<string, unknown>);
+}
+
+/**
+ * Invalid rows are dropped (the same contract as Firestore reads); the cursor
+ * and `exhausted` still come from the raw rows, so paging never stops early
+ * or skips past a valid event because a bad one was filtered out.
+ */
 export function groupFundEventsPageFrom(
   rows: { doc_id: string; created_at: string | null; doc: Record<string, unknown> }[],
   pageSize: number
 ): GroupFundEventsPage {
-  const items = rows.map((r) => fromReadModelDoc<GroupFundEvent>(r.doc_id, r.doc));
+  const items = rows.map((r) => eventFromRow(r.doc_id, r.doc)).filter((e): e is GroupFundEvent => !!e);
   const last = rows[rows.length - 1];
   if (rows.length >= pageSize && last) {
     return { items, next: { createdAt: String(last.created_at), docId: last.doc_id }, exhausted: false };
@@ -76,7 +90,7 @@ export async function supabaseGroupFundMonthEvents(
     .order("doc_id")
     .limit(GROUP_FUND_MONTH_LIMIT);
   if (error) throw new Error(`read model group_fund_events: ${error.message}`);
-  return ((data ?? []) as { doc_id: string; doc: Record<string, unknown> }[]).map((r) =>
-    fromReadModelDoc<GroupFundEvent>(r.doc_id, r.doc)
-  );
+  return ((data ?? []) as { doc_id: string; doc: Record<string, unknown> }[])
+    .map((r) => eventFromRow(r.doc_id, r.doc))
+    .filter((e): e is GroupFundEvent => !!e);
 }

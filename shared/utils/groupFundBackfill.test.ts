@@ -54,7 +54,7 @@ describe("buildBackfillContribution", () => {
       })
     );
     const id = groupFundBackfillId("f1", "2026-07", "society", "amma");
-    expect(id).toBe("bf_f1_2026-07_society_amma");
+    expect(id).toBe("bf~f1~2026-07~society~amma");
     expect(p.events).toEqual([
       expect.objectContaining({ id, kind: "contribution", period: "2026-07", date: "2026-07-01", attributionOnly: true, accountId: "hdfc" }),
     ]);
@@ -83,7 +83,7 @@ describe("buildBackfillContribution", () => {
       })
     );
     expect(p.accountEntries).toEqual([
-      expect.objectContaining({ id: "gf_bf_f1_2026-07_society_amma", accountId: "cash", direction: "credit", amount: 6100 }),
+      expect.objectContaining({ id: "gf_bf~f1~2026-07~society~amma", accountId: "cash", direction: "credit", amount: 6100 }),
     ]);
     expect(p.balanceLegs).toEqual([{ accountId: "cash", amountDelta: 6100, date: "2026-11-06" }]);
     expect(p.events[0]).not.toHaveProperty("attributionOnly");
@@ -106,6 +106,10 @@ describe("buildBackfillContribution", () => {
     expect(bad({ amount: 0 })).toMatchObject({ issues: ["amount_not_positive"] });
     expect(bad({ alreadyInBalance: false, accountId: undefined })).toMatchObject({ issues: ["account_required"] });
     expect(bad({ memberId: "nobody" })).toMatchObject({ issues: ["member_unknown"] });
+  });
+
+  it("never gives two different members' months the same id (CodeRabbit #263)", () => {
+    expect(groupFundBackfillId("f1", "2026-07", "x_y", "z")).not.toBe(groupFundBackfillId("f1", "2026-07", "x", "y_z"));
   });
 
   it("is the same document every time, so a month can't be backfilled twice", () => {

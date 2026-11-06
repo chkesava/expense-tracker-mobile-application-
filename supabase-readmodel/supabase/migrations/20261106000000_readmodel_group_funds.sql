@@ -10,13 +10,14 @@
 --
 -- On both allowlists: the app's dual write copies every commitMutations path.
 --
--- Additive: two new tables with their realtime ping triggers, then
+-- Additive and re-runnable (R2.4): two new tables with their realtime ping
+-- triggers (`if not exists` / `drop ... if exists`), then
 -- `create or replace` of every function and view that lists the synced
 -- tables, restated in full from 20261103000000.
 
 -- ─── Tables ─────────────────────────────────────────────────────────────────
 
-create table public.group_funds (
+create table if not exists public.group_funds (
   uid                 text        not null,
   doc_id              text        not null,
   name                text,
@@ -36,7 +37,7 @@ create table public.group_funds (
   primary key (uid, doc_id)
 );
 
-create table public.group_fund_events (
+create table if not exists public.group_fund_events (
   uid                 text        not null,
   doc_id              text        not null,
   fund_id             text,
@@ -61,7 +62,7 @@ create table public.group_fund_events (
   primary key (uid, doc_id)
 );
 -- The history page: one fund's events, newest first, keyset on (created_at, doc_id).
-create index group_fund_events_uid_fund_created_idx
+create index if not exists group_fund_events_uid_fund_created_idx
   on public.group_fund_events (uid, fund_id, created_at desc, doc_id desc);
 
 -- ─── Default deny, then owner-only SELECT (as SPENDLY-504/505) ──────────────

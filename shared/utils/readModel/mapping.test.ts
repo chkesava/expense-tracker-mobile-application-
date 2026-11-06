@@ -18,7 +18,8 @@ const CONTRACT = new Set([
 ]);
 
 function tableColumns(table: string): string[] {
-  const body = new RegExp(`create table public\\.${table} \\(([\\s\\S]*?)\\n\\);`).exec(sql)?.[1] ?? "";
+  // R2.4: a re-runnable migration may say `create table if not exists`.
+  const body = new RegExp(`create table (?:if not exists )?public\\.${table} \\(([\\s\\S]*?)\\n\\);`).exec(sql)?.[1] ?? "";
   return body
     .split("\n")
     .map((line) => /^\s+([a-z_]+)\s+[a-z]/.exec(line)?.[1])

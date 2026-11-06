@@ -23,6 +23,7 @@ import type { GroupFund, GroupFundEvent } from "../shared/types/groupFund";
 import type { MutationOp } from "../shared/types/mutations";
 import { reconcileGroupFund } from "../shared/utils/groupFundMath";
 import {
+  buildAccountMove,
   buildBackfillContribution,
   buildContribution,
   buildCreateGroupFund,
@@ -361,6 +362,65 @@ describe("backfill (SPENDLY-700)", () => {
     const p = backfill(await readFund(), false);
     p.events[0] = { ...p.events[0], attributionOnly: true };
     await assertFails(commit(ownerDb(), p));
+  });
+});
+
+describe("every event belongs to the write that explains it (CodeRabbit #263)", () => {
+  it("rejects an event riding along with a config edit", async () => {
+    await createFund();
+    const fund = await readFund();
+    const edit = groupFundWritePlanToOps(OWNER, plan(buildEditGroupFund(ctx("e1"), fund, { name: "Dokra 2" })), sentinels);
+    const stray = groupFundWritePlanToOps(OWNER, contribution(fund, "c1"), sentinels).filter((o) =>
+      o.ref.path.includes("/groupFundEvents/")
+    );
+    await assertFails(commitOps(ownerDb(), [...edit, ...stray]));
+  });
+
+  it("rejects an extra event beside a money write", async () => {
+    await createFund();
+    const fund = await readFund();
+    const real = appOps(contribution(fund, "c1"));
+    const extra = groupFundWritePlanToOps(OWNER, contribution(fund, "c2", 500), sentinels).filter((o) =>
+      o.ref.path.includes("/groupFundEvents/")
+    );
+    await assertFails(commitOps(ownerDb(), [...real, ...extra]));
+    await assertSucceeds(commitOps(ownerDb(), real));
+  });
+
+  it("rejects a reversal that doesn't match its target", async () => {
+    await createFund();
+    await commit(ownerDb(), contribution(await readFund(), "c1"));
+    const target = await readEvent("c1");
+    const forged = plan(buildReversal(ctx("x1"), await readFund(), { target: { ...target, amount: 100 }, knownEvents: [target], date: "2026-11-07" }));
+    await assertFails(commit(ownerDb(), forged));
+    const ghost = plan(
+      buildReversal(ctx("x2"), await readFund(), { target: { ...target, id: "nope" }, knownEvents: [], date: "2026-11-07" })
+    );
+    await assertFails(commit(ownerDb(), ghost));
+  });
+
+  it("rejects an account move that leaves the source account below zero, even from a stale device", async () => {
+    await createFund();
+    await commit(ownerDb(), contribution(await readFund(), "c1", 6000, "cash"));
+    const real = await readFund();
+    const imagined = { ...real, heldByAccount: { cash: 9000 } };
+    const p = plan(
+      buildAccountMove(ctx("mv1"), imagined, { purposeId: "appu", fromAccountId: "cash", toAccountId: "hdfc", amount: 9000, date: "2026-11-08" })
+    );
+    await assertFails(commit(ownerDb(), p));
+    const ok = plan(buildAccountMove(ctx("mv2"), real, { purposeId: "appu", fromAccountId: "cash", toAccountId: "hdfc", amount: 6000, date: "2026-11-08" }));
+    await assertSucceeds(commit(ownerDb(), ok));
+  });
+
+  it("still allows both halves of a transfer and of its undo", async () => {
+    await createFund();
+    await commit(ownerDb(), contribution(await readFund(), "c1"));
+    await assertSucceeds(
+      commit(ownerDb(), plan(buildPurposeTransfer(ctx("t1"), await readFund(), { fromPurposeId: "appu", toPurposeId: "podupu", amount: 100, date: "2026-11-06" })))
+    );
+    const half = await readEvent("t1__in");
+    const both = [await readEvent("t1"), half];
+    await assertSucceeds(commit(ownerDb(), plan(buildReversal(ctx("x1"), await readFund(), { target: half, knownEvents: both, date: "2026-11-09" }))));
   });
 });
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { MoreHorizontal, Users } from "lucide-react-native";
@@ -24,7 +24,10 @@ import { useGroupFundActions } from "@/hooks/useGroupFundActions";
 import { useGroupFundHistory } from "@/hooks/useGroupFundHistory";
 import { useGroupFunds } from "@/hooks/useGroupFunds";
 import { appDialog } from "@/lib/appDialog";
-import type { GroupFundEvent } from "@/shared/types/groupFund";
+import { logError } from "@/lib/errors";
+import { useAuth } from "@/providers/AuthProvider";
+import { loadGroupFund } from "@/services/groupFunds/groupFundStore";
+import type { GroupFund, GroupFundEvent } from "@/shared/types/groupFund";
 import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import { todayDateKey } from "@/shared/utils/dates";
 import { groupFundAccountOptions } from "@/shared/utils/groupFundDocs";
@@ -44,7 +47,26 @@ export default function GroupFundScreen() {
   const currency = useDisplayCurrency();
   const money = useGhostMoney(currency);
   const { funds, loading, error, retry } = useGroupFunds();
-  const fund = funds.find((f) => f.id === id) ?? null;
+  const listed = funds.find((f) => f.id === id) ?? null;
+  // A fund just created (or one the on-device copy hasn't caught up with)
+  // isn't in the list yet: read it from Firestore before saying it's gone.
+  const { user } = useAuth();
+  const [direct, setDirect] = useState<{ id: string; fund: GroupFund | null } | null>(null);
+  useEffect(() => {
+    if (listed || loading || !user?.uid || !id || direct?.id === id) return;
+    let live = true;
+    void loadGroupFund(user.uid, id)
+      .then((found) => live && setDirect({ id, fund: found }))
+      .catch((failure) => {
+        logError("groupFund.screen.load", failure);
+        if (live) setDirect({ id, fund: null });
+      });
+    return () => {
+      live = false;
+    };
+  }, [listed, loading, user?.uid, id, direct?.id]);
+  const fund = listed ?? (direct?.id === id ? direct.fund : null);
+  const resolving = !listed && !loading && direct?.id !== id;
   const history = useGroupFundHistory(fund ? fund.id : undefined);
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
@@ -64,7 +86,8 @@ export default function GroupFundScreen() {
   }, [accounts]);
   const reversed = useMemo(() => reversedGroupFundEventIds(history.events), [history.events]);
   const accountInfo = useMemo(
-    () => new Map(accounts.map((a) => [a.id, { name: a.name, balance: a.currentBalance ?? 0 }])),
+    // An account without a stored balance is "unknown", never a zero to compare against.
+    () => new Map(accounts.map((a) => [a.id, { name: a.name, balance: typeof a.currentBalance === "number" ? a.currentBalance : null }])),
     [accounts]
   );
   const openSheet = (mode: GroupFundEventMode, initial?: typeof sheetInitial) => {
@@ -85,7 +108,7 @@ export default function GroupFundScreen() {
       </PageShell>
     );
   }
-  if (loading) {
+  if (loading || resolving) {
     return (
       <PageShell scrollable={false}>
         {header("Group fund")}
@@ -264,6 +287,7 @@ export default function GroupFundScreen() {
           period={period}
           currentPeriod={currentPeriod}
           onPeriodChange={setPeriod}
+          recentEvents={history.events}
           onCollect={(memberId, purposeId, forPeriod, pending) =>
             openSheet("contribution", { memberId, purposeId, period: forPeriod, amount: pending })
           }
@@ -372,6 +396,7 @@ export default function GroupFundScreen() {
         fund={fund}
         accounts={accountOptions}
         currency={currency}
+        recentEvents={history.events}
         onClose={() => setBackfilling(false)}
         onSubmit={(rows, monthLabel) => actions.recordBackfill(fund.id, rows, monthLabel)}
       />

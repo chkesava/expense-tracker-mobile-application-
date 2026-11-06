@@ -13,8 +13,8 @@ export type GroupFundAccountsSectionProps = {
   fund: GroupFund;
   /** Every fund, so an account shared by several funds is checked once, in full. */
   allFunds: readonly GroupFund[];
-  /** Account id → stored balance and name. */
-  accounts: ReadonlyMap<string, { name: string; balance: number }>;
+  /** Account id → name and stored balance (null when the account has none yet). */
+  accounts: ReadonlyMap<string, { name: string; balance: number | null }>;
   currency: string;
 };
 
@@ -50,7 +50,11 @@ export function GroupFundAccountsSection({ fund, allFunds, accounts, currency }:
               <View style={styles.flex}>
                 <Text style={[styles.name, { color: theme.colors.foreground }]}>{account?.name ?? "Deleted account"}</Text>
                 <Text style={[styles.detail, muted]}>
-                  {account ? `Balance ${money(account.balance)}` : "This account no longer exists"}
+                  {!account
+                    ? "This account no longer exists"
+                    : account.balance === null
+                      ? "Balance not set up yet, so it can't be checked"
+                      : `Balance ${money(account.balance)}`}
                   {check && Math.abs(check.held - amount) > 0.005 ? ` · ${money(check.held)} held across all funds` : ""}
                 </Text>
                 {short ? (
