@@ -626,6 +626,136 @@ export function buildAccountMove(
 }
 
 // ---------------------------------------------------------------------------
+// SPENDLY-700: manual backfill of past months (no cron)
+// ---------------------------------------------------------------------------
+
+/**
+ * The fixed id of a member's backfilled payment for one purpose and month.
+ * Events are create-only, so the same month can't be backfilled twice for
+ * them, from any device or a double tap.
+ */
+export const groupFundBackfillId = (fundId: string, period: string, purposeId: string, memberId: string) =>
+  `bf_${fundId}_${period}_${purposeId}_${memberId}`;
+
+export type BackfillContributionInput = {
+  purposeId: string;
+  memberId: string;
+  /** The month it counts for (YYYY-MM). */
+  period: string;
+  amount: number;
+  /**
+   * `true` (the default for past months): the money is already in the
+   * account balance, so no account entry is written and no balance changes.
+   * `false`: it hasn't reached the account yet; `accountId` is credited once.
+   */
+  alreadyInBalance: boolean;
+  /** Where the money sits (attribution) or, when not yet in the balance, the account credited. */
+  accountId?: string;
+  /** Date the money arrived when it moves an account now; defaults to the month's first day. */
+  date?: string;
+  note?: string;
+};
+
+/**
+ * A past month's contribution. Archived members and purposes are allowed:
+ * the member may have left since. Uses the fixed backfill id, not
+ * `ctx.eventId`.
+ */
+export function buildBackfillContribution(
+  ctx: GroupFundWriteContext,
+  fund: GroupFund,
+  input: BackfillContributionInput
+): GroupFundWriteResult {
+  const issues: GroupFundIssue[] = [];
+  if (groupFundStatus(fund) === "archived") issues.push("fund_archived");
+  if (!findPurpose(fund, input.purposeId)) issues.push("purpose_unknown");
+  if (!input.memberId) issues.push("member_required");
+  else if (!findMember(fund, input.memberId)) issues.push("member_unknown");
+  issues.push(...validateGroupFundAmount(input.amount), ...validatePeriod(input.period));
+  if (!input.period) issues.push("period_invalid");
+  const date = input.date ?? `${input.period}-01`;
+  issues.push(...validateDate(date));
+  issues.push(...validateOptionalText(input.note, GROUP_FUND_LIMITS.noteMax, "note_too_long"));
+  if (!input.alreadyInBalance && !isSafeKey(input.accountId)) issues.push("account_required");
+  if (input.alreadyInBalance && input.accountId !== undefined && !isSafeKey(input.accountId)) issues.push("account_required");
+  if (issues.length > 0) return { ok: false, issues };
+
+  const purpose = findPurpose(fund, input.purposeId)!;
+  const member = findMember(fund, input.memberId)!;
+  const amount = roundMoney(input.amount);
+  const eventId = groupFundBackfillId(fund.id, input.period, purpose.id, member.id);
+  const entries: GroupFundAccountEntry[] = input.alreadyInBalance
+    ? []
+    : [
+        stripUndefined({
+          id: groupFundEntryId(eventId),
+          accountId: input.accountId!,
+          amount,
+          direction: "credit" as const,
+          date,
+          note: entryNote(fund, purpose, member.name),
+          source: "group_fund_contribution" as const,
+          linkedGroupFundId: fund.id,
+          linkedGroupFundEventId: eventId,
+        }),
+      ];
+  const event = newEvent({ ...ctx, eventId }, fund.id, {
+    kind: "contribution",
+    amount,
+    purposeId: purpose.id,
+    memberId: member.id,
+    date,
+    period: input.period,
+    accountId: input.accountId,
+    accountEntryIds: entries.length > 0 ? entries.map((e) => e.id) : undefined,
+    attributionOnly: input.alreadyInBalance ? true : undefined,
+    note: optionalText(input.note),
+  });
+  return { ok: true, plan: moneyPlan({ ...ctx, eventId }, fund, [event], entries) };
+}
+
+export type PastPayoutInput = {
+  purposeId: string;
+  amount: number;
+  date: string;
+  /** Where it was paid from: attribution only, nothing is debited again. */
+  accountId?: string;
+  recipient?: string;
+  reference?: string;
+  note?: string;
+};
+
+/**
+ * A payout made before it was tracked here: the money already left the
+ * account, so no account entry is written. It lowers the fund's held total
+ * (and, when `accountId` is set, what the fund holds in that account).
+ */
+export function buildPastPayout(ctx: GroupFundWriteContext, fund: GroupFund, input: PastPayoutInput): GroupFundWriteResult {
+  const issues = checkMoneyInput(fund, input, { allowArchivedPurpose: true });
+  if (input.accountId !== undefined && !isSafeKey(input.accountId)) issues.push("account_required");
+  issues.push(
+    ...validateOptionalText(input.recipient, GROUP_FUND_LIMITS.recipientMax, "recipient_too_long"),
+    ...validateOptionalText(input.reference, GROUP_FUND_LIMITS.referenceMax, "reference_too_long")
+  );
+  if (issues.length === 0 && roundMoney(input.amount) > purposeHeld(fund, input.purposeId) + 0.005) {
+    issues.push("exceeds_held");
+  }
+  if (issues.length > 0) return { ok: false, issues };
+  const event = newEvent(ctx, fund.id, {
+    kind: "payout",
+    amount: roundMoney(input.amount),
+    purposeId: input.purposeId,
+    date: input.date,
+    accountId: input.accountId,
+    attributionOnly: true,
+    recipient: optionalText(input.recipient),
+    reference: optionalText(input.reference),
+    note: optionalText(input.note),
+  });
+  return { ok: true, plan: moneyPlan(ctx, fund, [event], []) };
+}
+
+// ---------------------------------------------------------------------------
 // Reversal
 // ---------------------------------------------------------------------------
 

@@ -23,6 +23,7 @@ import type { GroupFund, GroupFundEvent } from "../shared/types/groupFund";
 import type { MutationOp } from "../shared/types/mutations";
 import { reconcileGroupFund } from "../shared/utils/groupFundMath";
 import {
+  buildBackfillContribution,
   buildContribution,
   buildCreateGroupFund,
   buildEditGroupFund,
@@ -316,6 +317,50 @@ describe("money events", () => {
     await commit(ownerDb(), plan(buildEditGroupFund(ctx("e1"), fund, { status: "archived" })));
     // Built as if still active: rules check the stored status.
     await assertFails(commit(ownerDb(), contribution(fund, "c1")));
+  });
+});
+
+describe("backfill (SPENDLY-700)", () => {
+  const backfill = (fund: GroupFund, alreadyInBalance: boolean) =>
+    plan(
+      buildBackfillContribution(ctx("ignored"), fund, {
+        purposeId: "appu",
+        memberId: "m1",
+        period: "2026-09",
+        amount: 6000,
+        alreadyInBalance,
+        accountId: "hdfc",
+        date: "2026-11-06",
+      })
+    );
+
+  it("money already in the balance: recorded for the month with no account change", async () => {
+    await createFund();
+    await assertSucceeds(commit(ownerDb(), backfill(await readFund(), true)));
+    expect((await readFund()).totals.held).toBe(6000);
+    const account = await read<{ currentBalance: number }>("users", OWNER, "accounts", "hdfc");
+    expect(account?.currentBalance).toBe(1000);
+  });
+
+  it("money not yet in the balance: credits the account once", async () => {
+    await createFund();
+    await assertSucceeds(commit(ownerDb(), backfill(await readFund(), false)));
+    const account = await read<{ currentBalance: number }>("users", OWNER, "accounts", "hdfc");
+    expect(account?.currentBalance).toBe(7000);
+  });
+
+  it("can't backfill the same member's month twice", async () => {
+    await createFund();
+    await commit(ownerDb(), backfill(await readFund(), true));
+    await assertFails(commit(ownerDb(), backfill(await readFund(), true)));
+    expect((await readFund()).totals.held).toBe(6000);
+  });
+
+  it("refuses an attribution-only event that also lists an account entry", async () => {
+    await createFund();
+    const p = backfill(await readFund(), false);
+    p.events[0] = { ...p.events[0], attributionOnly: true };
+    await assertFails(commit(ownerDb(), p));
   });
 });
 

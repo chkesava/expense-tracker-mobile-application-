@@ -79,13 +79,19 @@ export function describeGroupFundEvent(
   const member = event.memberId ? fund.members.find((m) => m.id === event.memberId)?.name ?? "Member" : null;
   const account = event.accountId ? accountName(event.accountId) : null;
   const heldDelta = groupFundEventEffect(event).heldDelta;
+  // SPENDLY-700: recorded after the fact; the account balance didn't move.
+  const later = event.attributionOnly ? "recorded later, balance unchanged" : null;
   switch (event.kind) {
     case "contribution":
-      return { title: member ?? "Contribution", detail: [purpose, account && `into ${account}`, event.period].filter(Boolean).join(" · "), heldDelta };
+      return {
+        title: member ?? "Contribution",
+        detail: [purpose, account && (later ? `in ${account}` : `into ${account}`), event.period, later].filter(Boolean).join(" · "),
+        heldDelta,
+      };
     case "payout":
       return {
         title: event.recipient ? `Paid to ${event.recipient}` : "Payout",
-        detail: [purpose, account && `from ${account}`, event.reference].filter(Boolean).join(" · "),
+        detail: [purpose, account && `from ${account}`, event.reference, later].filter(Boolean).join(" · "),
         heldDelta,
       };
     case "opening":

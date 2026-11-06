@@ -141,6 +141,13 @@ export interface GroupFundEvent {
   toAccountId?: string;
   /** Ids of the `accountEntries` rows this event wrote. */
   accountEntryIds?: string[];
+  /**
+   * SPENDLY-700: recorded after the fact for money that was already in (or
+   * already out of) the account balance. Counts for the member, month and
+   * fund totals, but writes no account entry, so no balance moves again.
+   * `accountId`, when set, only says where the money sits.
+   */
+  attributionOnly?: boolean;
   recipient?: string;
   reference?: string;
   note?: string;

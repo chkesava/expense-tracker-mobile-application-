@@ -46,6 +46,15 @@ describe("describeGroupFundEvent", () => {
     ).toEqual({ title: "Correction: contribution undone", detail: "Ravi · Appu loan", heldDelta: -6000 });
   });
 
+  it("SPENDLY-700: marks a backfilled entry as recorded later, balance unchanged", () => {
+    expect(
+      describeGroupFundEvent(ev({ memberId: "m1", accountId: "hdfc", period: "2026-08", attributionOnly: true }), fund, accountName).detail
+    ).toBe("Appu loan · in HDFC · 2026-08 · recorded later, balance unchanged");
+    expect(
+      describeGroupFundEvent(ev({ kind: "payout", accountId: "hdfc", attributionOnly: true }), fund, accountName).detail
+    ).toBe("Appu loan · from HDFC · recorded later, balance unchanged");
+  });
+
   it("shows a move between accounts as no change to what's held", () => {
     expect(
       describeGroupFundEvent(ev({ kind: "account_move", accountId: "cash", toAccountId: "hdfc" }), fund, accountName)

@@ -19,20 +19,24 @@ import { memberMonthStatus, type MemberMonthStatus } from "@/shared/utils/groupF
 import { groupFundIssueMessage } from "@/shared/utils/groupFundMessages";
 import {
   buildAccountMove,
+  buildBackfillContribution,
   buildContribution,
   buildCreateGroupFund,
   buildEditGroupFund,
   buildOpening,
+  buildPastPayout,
   buildPayout,
   buildPurposeTransfer,
   buildReversal,
   type AccountMoveInput,
+  type BackfillContributionInput,
   type ContributionInput,
   type GroupFundConfigInput,
   type GroupFundEditPatch,
   type GroupFundWriteContext,
   type GroupFundWriteResult,
   type OpeningInput,
+  type PastPayoutInput,
   type PayoutInput,
   type PurposeTransferInput,
 } from "@/shared/utils/groupFundWrites";
@@ -127,6 +131,60 @@ export function useGroupFundActions() {
     [run]
   );
 
+  const recordPastPayout = useCallback(
+    (fundId: string, eventId: string, input: PastPayoutInput) =>
+      run("pastPayout", "Past payout recorded", (ctx, fund) => buildPastPayout(ctx, fund!, input), fundId, eventId),
+    [run]
+  );
+
+  /**
+   * SPENDLY-700: record past months by hand, one member at a time (each is
+   * its own batch with a fixed id, so nothing can be recorded twice). Rows
+   * already recorded are skipped. Stops at the first failure and says how
+   * many were saved, so the user can fix it and press Save again.
+   */
+  const recordBackfill = useCallback(
+    async (fundId: string, rows: BackfillContributionInput[], monthLabel: string): Promise<boolean> => {
+      if (!uid || rows.length === 0) return false;
+      let saved = 0;
+      let queued = false;
+      for (const row of rows) {
+        try {
+          const fund = await loadGroupFund(uid, fundId);
+          if (!fund) {
+            toast.error("This fund isn't here any more.");
+            return false;
+          }
+          const outcome = await commitGroupFundWrite(
+            uid,
+            buildBackfillContribution({ uid, nowMs: Date.now(), eventId: "" }, fund, row),
+            "backfill",
+            {
+              onLateFailure: (error) => {
+                logError("groupFunds.backfill.late", error);
+                toast.error(friendlyErrorMessage(error, "A past payment couldn't be saved. Please try again."));
+              },
+            }
+          );
+          if (outcome !== "acked") queued = true;
+          saved += 1;
+        } catch (error) {
+          const message =
+            error instanceof GroupFundInvalidError
+              ? groupFundIssueMessage(error.issues)
+              : friendlyErrorMessage(error, "A past payment couldn't be saved.");
+          if (!(error instanceof GroupFundInvalidError)) logError("groupFunds.backfill", error);
+          toast.error(saved > 0 ? `Saved ${saved} of ${rows.length}. ${message}` : message);
+          return false;
+        }
+      }
+      const what = `${saved} past payment${saved === 1 ? "" : "s"} for ${monthLabel}`;
+      toast.success(queued ? `Recorded ${what}. It will sync when you're online.` : `Recorded ${what}.`);
+      return true;
+    },
+    [uid]
+  );
+
   /** Undo one entry. Earlier corrections and a transfer's other half are read fresh first. */
   const reverse = useCallback(
     async (fundId: string, target: GroupFundEvent, date: string, note?: string): Promise<boolean> => {
@@ -178,6 +236,8 @@ export function useGroupFundActions() {
     recordOpening,
     movePurpose,
     moveAccount,
+    recordPastPayout,
+    recordBackfill,
     reverse,
   };
 }

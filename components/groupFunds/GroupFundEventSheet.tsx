@@ -22,7 +22,7 @@ import { contributionDuplicateWarning } from "@/shared/utils/groupFundMessages";
 import { parseGroupFundAmount } from "@/shared/utils/groupFundModel";
 import { useTheme } from "@/theme/ThemeProvider";
 
-export type GroupFundEventMode = "contribution" | "payout" | "opening" | "transfer" | "move";
+export type GroupFundEventMode = "contribution" | "payout" | "pastPayout" | "opening" | "transfer" | "move";
 
 export type GroupFundEventValues = {
   purposeId: string;
@@ -41,6 +41,7 @@ export type GroupFundEventValues = {
 const TITLES: Record<GroupFundEventMode, string> = {
   contribution: "Add contribution",
   payout: "Record payout",
+  pastPayout: "Past payout",
   opening: "Opening balance",
   transfer: "Move between purposes",
   move: "Move between accounts",
@@ -49,6 +50,7 @@ const TITLES: Record<GroupFundEventMode, string> = {
 const HINTS: Record<GroupFundEventMode, string> = {
   contribution: "Adds to the account's balance once. Never counted as your income.",
   payout: "Takes it out of the account once. Never counted as your spending.",
+  pastPayout: "A payout made before you tracked it here. The money already left your account, so no balance changes.",
   opening: "Money you already held before tracking. No account balance changes.",
   transfer: "The fund's total stays the same. No account balance changes.",
   move: "E.g. cash deposited in the bank. Shows as a transfer on both accounts.",
@@ -175,7 +177,7 @@ export function GroupFundEventSheet({
 
   const heldInPurpose = purpose ? fund.byPurpose[purpose.id]?.held ?? 0 : 0;
   const needsAccount = mode !== "transfer";
-  const accountOptional = mode === "opening";
+  const accountOptional = mode === "opening" || mode === "pastPayout";
 
   const ready =
     Boolean(purposeId) &&
@@ -292,7 +294,7 @@ export function GroupFundEventSheet({
         <View style={styles.group}>
           <Text style={label}>{mode === "transfer" ? "From purpose *" : "Purpose *"}</Text>
           {chipRow(sourcePurposes, purposeId, setPurposeId, (n) => `Purpose ${n}`)}
-          {purpose && (mode === "payout" || mode === "transfer") ? (
+          {purpose && (mode === "payout" || mode === "pastPayout" || mode === "transfer") ? (
             <Text style={helper}>Holds {money(heldInPurpose)}</Text>
           ) : null}
         </View>
@@ -376,6 +378,8 @@ export function GroupFundEventSheet({
                 ? "Received in *"
                 : mode === "payout"
                   ? "Paid from *"
+                  : mode === "pastPayout"
+                    ? "Paid from (optional)"
                   : mode === "move"
                     ? "From account *"
                     : "Held in (optional)"}
@@ -400,7 +404,7 @@ export function GroupFundEventSheet({
           <DateField value={date} onChange={setDate} accessibilityLabel="Date" />
         </View>
 
-        {mode === "payout" ? (
+        {mode === "payout" || mode === "pastPayout" ? (
           <>
             <View style={styles.group}>
               <Text style={label}>Paid to (optional)</Text>
