@@ -33,6 +33,7 @@ const ISSUE_TEXT: Record<GroupFundIssue, string> = {
   member_unknown: "Choose a member.",
   member_archived: "That member is archived.",
   member_required: "Choose who paid.",
+  member_months_invalid: "A member's leaving month must be after their joining month.",
   account_required: "Choose the account.",
   account_unsupported: "Choose a bank or cash account. Group money can't sit on a credit card or a deleted account.",
   accounts_same: "Choose two different accounts.",

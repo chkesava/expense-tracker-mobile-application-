@@ -784,14 +784,16 @@ service cloud.firestore {
 
       function groupFundShape(d) {
         return d.keys().hasOnly([
-            'name', 'notes', 'status', 'purposes', 'members', 'totals', 'byPurpose',
-            'heldByAccount', 'schemaVersion', 'version', 'lastEventId', 'createdAtMs',
-            'createdAt', 'updatedAt'])
+            'name', 'notes', 'status', 'startPeriod', 'purposes', 'members', 'totals',
+            'byPurpose', 'heldByAccount', 'schemaVersion', 'version', 'lastEventId',
+            'createdAtMs', 'createdAt', 'updatedAt'])
           && d.keys().hasAll(['name', 'status', 'purposes', 'members', 'totals',
             'byPurpose', 'heldByAccount', 'schemaVersion', 'version'])
           && d.name is string && d.name.size() >= 1 && d.name.size() <= 60
           && optionalText(d, 'notes', 500)
           && d.status in ['active', 'archived']
+          // SPENDLY-688: the first month the fund collects for.
+          && optionalYm(d, 'startPeriod')
           && d.purposes is list && d.purposes.size() >= 1 && d.purposes.size() <= 20
           && d.members is list && d.members.size() <= 200
           && groupFundTotalsOk(d.totals)
@@ -846,8 +848,8 @@ service cloud.firestore {
           && d.schemaVersion == r.schemaVersion
           && d.get('createdAtMs', null) == r.get('createdAtMs', null)
           && d.version == r.version + 1
-          && (changed.hasOnly(['name', 'notes', 'status', 'purposes', 'members',
-                               'version', 'updatedAt'])
+          && (changed.hasOnly(['name', 'notes', 'status', 'startPeriod', 'purposes',
+                               'members', 'version', 'updatedAt'])
               || groupFundMoneyUpdate(fundId, d, r, changed));
       }
 

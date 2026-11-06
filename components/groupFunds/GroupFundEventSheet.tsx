@@ -63,6 +63,8 @@ export type GroupFundEventSheetProps = {
   newEventId: () => string;
   /** Contribution only: what this member already paid toward this purpose for the month. */
   checkMemberMonth?: (memberId: string, purposeId: string, period: string) => Promise<MemberMonthStatus | null>;
+  /** SPENDLY-688: pre-filled from the month view ("record Ravi's October payment"). */
+  initial?: { memberId?: string; purposeId?: string; period?: string; amount?: number };
   onClose: () => void;
   onSubmit: (eventId: string, values: GroupFundEventValues) => Promise<boolean>;
 };
@@ -79,6 +81,7 @@ export function GroupFundEventSheet({
   accounts,
   newEventId,
   checkMemberMonth,
+  initial,
   onClose,
   onSubmit,
 }: GroupFundEventSheetProps) {
@@ -117,19 +120,19 @@ export function GroupFundEventSheet({
   useEffect(() => {
     if (!visible) return;
     eventIdRef.current = null;
-    setPurposeId(sourcePurposes.length === 1 ? sourcePurposes[0].id : "");
+    setPurposeId(initial?.purposeId ?? (sourcePurposes.length === 1 ? sourcePurposes[0].id : ""));
     setToPurposeId("");
-    setMemberId("");
+    setMemberId(initial?.memberId ?? "");
     setAccountId(accounts.length === 1 ? accounts[0].id : "");
     setToAccountId("");
-    setAmount("");
+    setAmount(initial?.amount ? String(initial.amount) : "");
     amountAutoRef.current = true;
     setDate(todayDateKey());
     setRecipient("");
     setReference("");
     setNote("");
-    setPeriod(todayDateKey().slice(0, 7));
-    setPeriodTouched(false);
+    setPeriod(initial?.period ?? todayDateKey().slice(0, 7));
+    setPeriodTouched(Boolean(initial?.period));
     setStatus(null);
     // Reset only when the sheet opens or its mode changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -14,7 +14,7 @@ import type {
   GroupFundPurpose,
   GroupFundTotals,
 } from "../types/groupFund";
-import { emptyGroupFundTotals } from "./groupFundModel";
+import { emptyGroupFundTotals, fundStartPeriod, memberOwesIn } from "./groupFundModel";
 import { roundMoney } from "./money";
 
 type Bucket = Exclude<keyof GroupFundTotals, "held">;
@@ -183,24 +183,29 @@ function periodOf(event: Pick<GroupFundEvent, "period" | "date">): string {
 }
 
 /**
- * Expected / received / pending for each active member and each purpose that
- * has `expectedPerMember` set. Purposes without an expected amount are left
- * out entirely — there is nothing to be pending against.
+ * Expected / received / pending for each member who owes in `period` and each
+ * purpose that has `expectedPerMember` set. Purposes without an expected
+ * amount are left out entirely — there is nothing to be pending against.
  *
  * Monthly purposes compare against contributions for `period` (YYYY-MM).
  * Ad-hoc purposes compare against every contribution ever made.
  * Reversed contributions do not count as received.
+ *
+ * SPENDLY-688: nothing is owed before the fund's start month, by a member
+ * before their join month, or from their leave month on.
  */
 export function memberContributionStatus(
-  fund: Pick<GroupFund, "purposes" | "members">,
+  fund: Pick<GroupFund, "purposes" | "members"> & Partial<Pick<GroupFund, "startPeriod" | "createdAtMs">>,
   events: readonly GroupFundEvent[],
   period: string
 ): MemberContributionStatus[] {
+  const start = fundStartPeriod(fund);
+  if (start && period < start) return [];
   const purposes = fund.purposes.filter(
     (p): p is GroupFundPurpose & { expectedPerMember: number } =>
       !p.archived && typeof p.expectedPerMember === "number" && p.expectedPerMember > 0
   );
-  const members = fund.members.filter((m) => !m.archived);
+  const members = fund.members.filter((m) => memberOwesIn(m, period));
   const received = new Map<string, number>();
   const key = (memberId: string, purposeId: string) => `${memberId}|${purposeId}`;
   for (const e of events) {
@@ -265,4 +270,91 @@ export function memberMonthStatus(
 export function splitAccountBalance(balance: number, heldForOthers: number): { held: number; yours: number } {
   const held = roundMoney(Math.max(0, heldForOthers));
   return { held, yours: roundMoney(balance - held) };
+}
+
+// ---------------------------------------------------------------------------
+// SPENDLY-688: the month view and account reconciliation
+// ---------------------------------------------------------------------------
+
+export type MemberMonthState = "paid" | "partial" | "unpaid";
+
+export type GroupFundMonthRow = MemberContributionStatus & { state: MemberMonthState };
+
+export type GroupFundMonthPurpose = {
+  purposeId: string;
+  rows: GroupFundMonthRow[];
+  expected: number;
+  collected: number;
+  pending: number;
+  paidCount: number;
+};
+
+/**
+ * Who paid, who partly paid and who didn't, for each **monthly** purpose with
+ * an expected amount, in `period`. Built from that month's events only (one
+ * bounded read); nothing is created per month, so no month can be missed.
+ */
+export function groupFundMonthSummary(
+  fund: Pick<GroupFund, "purposes" | "members"> & Partial<Pick<GroupFund, "startPeriod" | "createdAtMs">>,
+  monthEvents: readonly GroupFundEvent[],
+  period: string
+): GroupFundMonthPurpose[] {
+  const monthly = { ...fund, purposes: fund.purposes.filter((p) => p.cadence === "monthly") };
+  const statuses = memberContributionStatus(monthly, monthEvents, period);
+  const out: GroupFundMonthPurpose[] = [];
+  for (const purpose of monthly.purposes) {
+    const rows: GroupFundMonthRow[] = statuses
+      .filter((s) => s.purposeId === purpose.id)
+      .map((s) => ({
+        ...s,
+        state: s.pending <= 0.005 ? "paid" : s.received > 0.005 ? "partial" : "unpaid",
+      }));
+    if (rows.length === 0) continue;
+    out.push({
+      purposeId: purpose.id,
+      rows,
+      expected: roundMoney(rows.reduce((sum, r) => sum + r.expected, 0)),
+      // Collected toward what was expected: an overpayment doesn't hide someone else's due.
+      collected: roundMoney(rows.reduce((sum, r) => sum + Math.min(r.received, r.expected), 0)),
+      pending: roundMoney(rows.reduce((sum, r) => sum + r.pending, 0)),
+      paidCount: rows.filter((r) => r.state === "paid").length,
+    });
+  }
+  return out;
+}
+
+export type HeldByAccountRow = {
+  accountId: string;
+  /** Held for others in this account, across every fund (stored totals). */
+  held: number;
+  /** The account's stored balance, or null if the account is gone. */
+  balance: number | null;
+  /** How much more is recorded as held than the account has (0 when fine). */
+  shortfall: number;
+};
+
+/**
+ * SPENDLY-688 (feature 7): where held money sits, against each account's real
+ * balance. A shortfall means the group money recorded in an account is more
+ * than the account holds — usually a payout recorded from the wrong account
+ * or a contribution that never arrived. Stored figures only.
+ */
+export function reconcileHeldByAccount(
+  funds: readonly Pick<GroupFund, "heldByAccount">[],
+  balances: ReadonlyMap<string, number>
+): HeldByAccountRow[] {
+  const held = new Map<string, number>();
+  for (const fund of funds) {
+    for (const [accountId, amount] of Object.entries(fund.heldByAccount ?? {})) {
+      held.set(accountId, roundMoney((held.get(accountId) ?? 0) + amount));
+    }
+  }
+  return [...held.entries()]
+    .filter(([, amount]) => Math.abs(amount) > 0.005)
+    .map(([accountId, amount]) => {
+      const balance = balances.has(accountId) ? balances.get(accountId)! : null;
+      const shortfall = balance === null ? amount : roundMoney(Math.max(0, amount - balance));
+      return { accountId, held: amount, balance, shortfall };
+    })
+    .sort((a, b) => b.held - a.held);
 }

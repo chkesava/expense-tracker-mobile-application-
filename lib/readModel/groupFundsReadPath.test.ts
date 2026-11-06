@@ -25,7 +25,7 @@ vi.mock("@/lib/readModelClient", () => ({ connectReadModel: vi.fn() }));
 import type { GroupFundEvent } from "@/shared/types/groupFund";
 
 import { groupFundCursorBelow, groupFundEventsPageFrom } from "./groupFundSources";
-import { readGroupFundHistoryPage } from "./groupFundsReadPath";
+import { readGroupFundHistoryPage, readGroupFundMonth } from "./groupFundsReadPath";
 import { createReadPath } from "./readPath";
 import { setReadModelPathForTests } from "./screenReadPath";
 
@@ -128,5 +128,29 @@ describe("groupFundEventsPageFrom", () => {
     const rows = [{ doc_id: "x", created_at: "2026-11-01T00:00:00.000Z", doc: { fundId: "f1" } }];
     expect(groupFundEventsPageFrom(rows, 1)).toMatchObject({ exhausted: false, next: { createdAt: "2026-11-01T00:00:00.000Z", docId: "x" } });
     expect(groupFundEventsPageFrom(rows, 2)).toMatchObject({ exhausted: true, next: null });
+  });
+});
+
+describe("month view (SPENDLY-688)", () => {
+  const month = (mode: string | undefined, extra = {}) =>
+    readGroupFundMonth({ db: {} as never, user, conditions: conditions(mode, extra), fundId: "f1", period: "2026-11" });
+
+  it("reads one fund's month from the read model in supabase mode", async () => {
+    emulator.groupFundEvents.push(
+      doc({ ...ev("n1", "f1", NOW - H), period: "2026-11" }),
+      doc({ ...ev("n2", "f1", NOW - 2 * H), period: "2026-11", memberId: "m2" }),
+      doc({ ...ev("o1", "f1", NOW - 40 * 24 * H), period: "2026-10" }),
+      doc({ ...ev("x1", "f2", NOW - H), period: "2026-11" })
+    );
+    const rows = await month("supabase");
+    expect(rows?.map((e) => e.id).sort()).toEqual(["n1", "n2"]);
+  });
+
+  it("other modes never connect; a failure falls back for the session", async () => {
+    expect(await month(undefined)).toBeNull();
+    expect(await month("shadow")).toBeNull();
+    expect(reads).toEqual([]);
+    expect(await month("supabase", { loopbackFail: true })).toBeNull();
+    expect(await month("supabase")).toBeNull();
   });
 });

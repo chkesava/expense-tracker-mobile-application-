@@ -22,7 +22,8 @@ It is **custodial money**: it belongs to the group, not the user.
 | SPENDLY-685 (S3) | Supabase read model: mapping, migration, RLS, allowlist, purge, indexes, read switch, history read path | Merged to the epic branch (`2185769d`); Supabase migration pending |
 | SPENDLY-686 (S4) | "Group funds held" liability in net worth and runway | Merged to the epic branch (`5724cf2a`) |
 | SPENDLY-687 (S5) | Money hub section, screens and sheets | Merged to the epic branch (`a535aa0b`); UI reviewed by the user |
-| SPENDLY-688 (S6) | Member pending amounts, reconciliation view, QA suite, read instrumentation | To do |
+| SPENDLY-688 (S6) | Monthly collection tracker (derived, no cron), reconciliation, QA suite, read budget | Built on `feature/SPENDLY-688-group-funds-monthly-tracker`; awaiting UI review and merge approval |
+| SPENDLY-700 (S7) | Manual backfill of previous months (no cron) | To do |
 
 ## Accounting model
 
@@ -131,6 +132,11 @@ Group money lives in the user's real accounts, so the real balance must move. It
   - The section lives in the Money hub, in a new "Held for others" group, with one detail route, `/group-funds/[id]`.
   - Undo is a tap on a history entry, with a confirmation. It adds a correction and keeps the original.
   - One event sheet serves every money mode.
+- **S6:**
+  - Months are derived when read, never created, so no cron or scheduled job is needed.
+  - The fund has a start month, and each member has join and leave months.
+  - The month view is one equality query, so no composite index is needed.
+  - Reconciliation compares the held amount in each account (across all funds) with the account's balance.
 
 ## Deploys pending
 - **S2 (SPENDLY-684):** `firestore.rules` and the `groupFundEvents (fundId, createdAtMs desc)` index. Both are production changes and need approval. Diff the indexes against live first.

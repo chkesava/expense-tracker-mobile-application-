@@ -8,7 +8,9 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
 import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
 import { MetaLabel, Section } from "@/components/dashboard/primitives";
+import { GroupFundAccountsSection } from "@/components/groupFunds/GroupFundAccountsSection";
 import { GroupFundEventSheet, type GroupFundEventMode, type GroupFundEventValues } from "@/components/groupFunds/GroupFundEventSheet";
+import { GroupFundMonthSection } from "@/components/groupFunds/GroupFundMonthSection";
 import { GroupFundFormSheet } from "@/components/groupFunds/GroupFundFormSheet";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
@@ -47,7 +49,10 @@ export default function GroupFundScreen() {
   const { accountTypes } = useAccountTypes();
   const actions = useGroupFundActions();
   const [sheet, setSheet] = useState<GroupFundEventMode | null>(null);
+  const [sheetInitial, setSheetInitial] = useState<{ memberId?: string; purposeId?: string; period?: string; amount?: number } | undefined>();
   const [editing, setEditing] = useState(false);
+  const currentPeriod = todayDateKey().slice(0, 7);
+  const [period, setPeriod] = useState(currentPeriod);
 
   const typeNames = useMemo(() => new Map(accountTypes.map((t) => [t.id, t.name])), [accountTypes]);
   const accountOptions = useMemo(() => groupFundAccountOptions(accounts, typeNames), [accounts, typeNames]);
@@ -56,6 +61,14 @@ export default function GroupFundScreen() {
     return (accountId: string) => names.get(accountId) ?? "Deleted account";
   }, [accounts]);
   const reversed = useMemo(() => reversedGroupFundEventIds(history.events), [history.events]);
+  const accountInfo = useMemo(
+    () => new Map(accounts.map((a) => [a.id, { name: a.name, balance: a.currentBalance ?? 0 }])),
+    [accounts]
+  );
+  const openSheet = (mode: GroupFundEventMode, initial?: typeof sheetInitial) => {
+    setSheetInitial(initial);
+    setSheet(mode);
+  };
 
   const back = () => (router.canGoBack() ? router.back() : router.replace("/ledger?tab=groupFunds" as Href));
   const header = (title: string) => (
@@ -147,9 +160,9 @@ export default function GroupFundScreen() {
 
   const openMore = () =>
     appDialog.actionMenu(fund.name, [
-      { text: "Opening balance", onPress: () => setSheet("opening"), disabled: archived },
-      { text: "Move between purposes", onPress: () => setSheet("transfer"), disabled: archived },
-      { text: "Move between accounts", onPress: () => setSheet("move"), disabled: archived },
+      { text: "Opening balance", onPress: () => openSheet("opening"), disabled: archived },
+      { text: "Move between purposes", onPress: () => openSheet("transfer"), disabled: archived },
+      { text: "Move between accounts", onPress: () => openSheet("move"), disabled: archived },
       { text: "Edit fund", onPress: () => setEditing(true) },
       archived
         ? { text: "Restore fund", onPress: () => void actions.editFund(fund.id, { status: "active" }, "Fund restored") }
@@ -212,10 +225,10 @@ export default function GroupFundScreen() {
             </View>
             {archived ? null : (
               <View style={styles.row}>
-                <Button variant="primary" onPress={() => setSheet("contribution")} style={styles.flex}>
+                <Button variant="primary" onPress={() => openSheet("contribution")} style={styles.flex}>
                   Add contribution
                 </Button>
-                <Button variant="secondary" onPress={() => setSheet("payout")} style={styles.flex}>
+                <Button variant="secondary" onPress={() => openSheet("payout")} style={styles.flex}>
                   Record payout
                 </Button>
                 <Button variant="ghost" size="icon" onPress={openMore} accessibilityLabel="More actions">
@@ -230,6 +243,17 @@ export default function GroupFundScreen() {
             ) : null}
           </View>
         </Section>
+
+        <GroupFundMonthSection
+          fund={fund}
+          currency={currency}
+          period={period}
+          currentPeriod={currentPeriod}
+          onPeriodChange={setPeriod}
+          onCollect={(memberId, purposeId, forPeriod, pending) =>
+            openSheet("contribution", { memberId, purposeId, period: forPeriod, amount: pending })
+          }
+        />
 
         <Section title="By purpose" subtitle="Each purpose keeps its own balance">
           <View>
@@ -262,6 +286,8 @@ export default function GroupFundScreen() {
             })}
           </View>
         </Section>
+
+        <GroupFundAccountsSection fund={fund} allFunds={funds} accounts={accountInfo} currency={currency} />
 
         <Section title="History" subtitle={archived ? undefined : "Tap an entry to undo it"}>
           {history.error ? (
@@ -321,7 +347,8 @@ export default function GroupFundScreen() {
           fund={fund}
           accounts={accountOptions}
           newEventId={actions.newEventId}
-          checkMemberMonth={(memberId, purposeId, period) => actions.checkMemberMonth(fund, memberId, purposeId, period)}
+          checkMemberMonth={(memberId, purposeId, forPeriod) => actions.checkMemberMonth(fund, memberId, purposeId, forPeriod)}
+          initial={sheetInitial}
           onClose={() => setSheet(null)}
           onSubmit={submitEvent(sheet)}
         />

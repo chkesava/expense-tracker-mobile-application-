@@ -78,6 +78,10 @@ export interface GroupFundMember {
   id: string;
   name: string;
   archived?: boolean;
+  /** SPENDLY-688: first month (YYYY-MM) this member owes. Missing = from the fund's start. */
+  joinedPeriod?: string;
+  /** SPENDLY-688: first month (YYYY-MM) this member no longer owes. Missing = still owes. */
+  leftPeriod?: string;
 }
 
 /**
@@ -99,6 +103,11 @@ export interface GroupFund {
   name: string;
   notes?: string;
   status?: GroupFundStatus;
+  /**
+   * SPENDLY-688: first month (YYYY-MM) of collection. Months before it are
+   * never pending. Missing (older funds) = the month the fund was created.
+   */
+  startPeriod?: string;
   purposes: GroupFundPurpose[];
   members: GroupFundMember[];
   totals: GroupFundTotals;

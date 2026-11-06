@@ -46,6 +46,7 @@ export type GroupFundIssue =
   | "member_unknown"
   | "member_archived"
   | "member_required"
+  | "member_months_invalid"
   | "account_required"
   /** The account is a credit card or no longer exists; group money sits in cash or a bank. */
   | "account_unsupported"
@@ -135,6 +136,8 @@ export function validateMembers(members: readonly GroupFundMember[]): GroupFundI
   for (const m of members) {
     if (!isSafeKey(m.id)) return ["member_invalid"];
     if (validateFundName(m.name).length > 0) return ["member_invalid"];
+    if (validatePeriod(m.joinedPeriod).length > 0 || validatePeriod(m.leftPeriod).length > 0) return ["period_invalid"];
+    if (m.joinedPeriod && m.leftPeriod && m.leftPeriod <= m.joinedPeriod) return ["member_months_invalid"];
     const key = normalizedName(m.name);
     if (ids.has(m.id) || names.has(key)) return ["member_duplicate"];
     ids.add(m.id);
@@ -165,6 +168,25 @@ const GROUP_FUND_ENTRY_SOURCES: readonly string[] = [
 /** True for an `accountEntries` row posted by Group Funds (money held for others). */
 export function isGroupFundEntrySource(source: unknown): boolean {
   return typeof source === "string" && GROUP_FUND_ENTRY_SOURCES.includes(source);
+}
+
+/**
+ * SPENDLY-688: the first month a fund collects for. Older funds have no
+ * `startPeriod`; they start in the month they were created (local time).
+ */
+export function fundStartPeriod(fund: Pick<GroupFund, "startPeriod" | "createdAtMs">): string | null {
+  if (fund.startPeriod) return fund.startPeriod;
+  if (typeof fund.createdAtMs !== "number") return null;
+  const d = new Date(fund.createdAtMs);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** SPENDLY-688: does this member owe for `period`? (joined on or before it, and hasn't left). */
+export function memberOwesIn(member: GroupFundMember, period: string): boolean {
+  if (member.joinedPeriod && period < member.joinedPeriod) return false;
+  if (member.leftPeriod) return period < member.leftPeriod;
+  // Archived before join/leave months existed: no longer owes anything.
+  return !member.archived;
 }
 
 export function groupFundStatus(fund: Pick<GroupFund, "status">): GroupFundStatus {
