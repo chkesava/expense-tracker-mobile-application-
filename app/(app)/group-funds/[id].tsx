@@ -321,6 +321,7 @@ export default function GroupFundScreen() {
           fund={fund}
           accounts={accountOptions}
           newEventId={actions.newEventId}
+          checkMemberMonth={(memberId, purposeId, period) => actions.checkMemberMonth(fund, memberId, purposeId, period)}
           onClose={() => setSheet(null)}
           onSubmit={submitEvent(sheet)}
         />

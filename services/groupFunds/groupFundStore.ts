@@ -106,6 +106,33 @@ export async function loadReversalContext(uid: string, target: GroupFundEvent): 
   return [...byId.values()];
 }
 
+/**
+ * SPENDLY-687: one member's events for one month (contributions and their
+ * reversals carry `period`), to stop the same payment being recorded twice.
+ * Equality filters only, so no composite index is needed; bounded.
+ */
+export async function loadMemberMonthEvents(
+  uid: string,
+  fundId: string,
+  memberId: string,
+  period: string
+): Promise<GroupFundEvent[]> {
+  const snap = await getDocs(
+    query(
+      collection(db(), "users", uid, "groupFundEvents"),
+      where("fundId", "==", fundId),
+      where("memberId", "==", memberId),
+      where("period", "==", period),
+      limit(50)
+    )
+  );
+  logDirectRead(`users/${uid}/groupFundEvents`, snap.docs.length, snap.metadata.fromCache ? "cache" : "server", {
+    feature: "groupFunds",
+    queryShape: "member month",
+  });
+  return snap.docs.map((d) => ({ ...(d.data() as Omit<GroupFundEvent, "id">), id: d.id }));
+}
+
 export async function commitGroupFundWrite(
   uid: string,
   result: GroupFundWriteResult,

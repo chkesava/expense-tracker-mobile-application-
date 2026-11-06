@@ -1,17 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ChevronLeft, ChevronRight } from "lucide-react-native";
 
 import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
 import { DateField } from "@/components/common/DateField";
 import { Modal } from "@/components/common/Modal";
 import { SheetActions } from "@/components/common/SheetActions";
+import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { Input } from "@/components/ui/Input";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { appDialog } from "@/lib/appDialog";
 import { toast } from "@/lib/toast";
+import { useSettings } from "@/providers/SettingsProvider";
 import type { GroupFund } from "@/shared/types/groupFund";
-import { todayDateKey } from "@/shared/utils/dates";
+import { formatMonthLabel } from "@/shared/utils/dateDisplay";
+import { shiftMonthKey, todayDateKey } from "@/shared/utils/dates";
+import type { MemberMonthStatus } from "@/shared/utils/groupFundMath";
+import { contributionDuplicateWarning } from "@/shared/utils/groupFundMessages";
 import { parseGroupFundAmount } from "@/shared/utils/groupFundModel";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -54,6 +61,8 @@ export type GroupFundEventSheetProps = {
   accounts: { id: string; name: string }[];
   /** Mint one event id per submit; a retry of the same submit reuses it. */
   newEventId: () => string;
+  /** Contribution only: what this member already paid toward this purpose for the month. */
+  checkMemberMonth?: (memberId: string, purposeId: string, period: string) => Promise<MemberMonthStatus | null>;
   onClose: () => void;
   onSubmit: (eventId: string, values: GroupFundEventValues) => Promise<boolean>;
 };
@@ -63,8 +72,18 @@ export type GroupFundEventSheetProps = {
  * follow the mode; the builders in shared/utils/groupFundWrites validate
  * again (and the store and rules after them), so this only guides input.
  */
-export function GroupFundEventSheet({ visible, mode, fund, accounts, newEventId, onClose, onSubmit }: GroupFundEventSheetProps) {
+export function GroupFundEventSheet({
+  visible,
+  mode,
+  fund,
+  accounts,
+  newEventId,
+  checkMemberMonth,
+  onClose,
+  onSubmit,
+}: GroupFundEventSheetProps) {
   const { theme } = useTheme();
+  const { settings } = useSettings();
   const currency = useDisplayCurrency();
   const money = useGhostMoney(currency);
   const activePurposes = useMemo(() => fund.purposes.filter((p) => !p.archived), [fund.purposes]);
@@ -85,8 +104,15 @@ export function GroupFundEventSheet({ visible, mode, fund, accounts, newEventId,
   const [recipient, setRecipient] = useState("");
   const [reference, setReference] = useState("");
   const [note, setNote] = useState("");
+  // The month a contribution counts for. Defaults to the payment's month; a
+  // payment made in November for October is moved back here.
+  const [period, setPeriod] = useState(todayDateKey().slice(0, 7));
+  const [periodTouched, setPeriodTouched] = useState(false);
+  const [status, setStatus] = useState<MemberMonthStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const eventIdRef = useRef<string | null>(null);
+  // True while the amount is our suggestion, so it follows the member and month.
+  const amountAutoRef = useRef(true);
 
   useEffect(() => {
     if (!visible) return;
@@ -97,20 +123,52 @@ export function GroupFundEventSheet({ visible, mode, fund, accounts, newEventId,
     setAccountId(accounts.length === 1 ? accounts[0].id : "");
     setToAccountId("");
     setAmount("");
+    amountAutoRef.current = true;
     setDate(todayDateKey());
     setRecipient("");
     setReference("");
     setNote("");
+    setPeriod(todayDateKey().slice(0, 7));
+    setPeriodTouched(false);
+    setStatus(null);
     // Reset only when the sheet opens or its mode changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, mode]);
 
   const purpose = fund.purposes.find((p) => p.id === purposeId);
-  // Suggest the expected amount for a contribution when one is set.
+  const member = fund.members.find((m) => m.id === memberId);
+
+  // The month follows the payment date until the user picks one.
   useEffect(() => {
-    if (mode === "contribution" && purpose?.expectedPerMember && !amount) setAmount(String(purpose.expectedPerMember));
+    if (!periodTouched && /^\d{4}-\d{2}/.test(date)) setPeriod(date.slice(0, 7));
+  }, [date, periodTouched]);
+
+  // What this member already paid for this purpose and month (one bounded read).
+  useEffect(() => {
+    setStatus(null);
+    if (mode !== "contribution" || !checkMemberMonth || !memberId || !purposeId) return;
+    let live = true;
+    void checkMemberMonth(memberId, purposeId, period).then((s) => {
+      if (!live) return;
+      setStatus(s);
+      // Suggest what's still due (or the expected amount) when nothing was typed.
+      if (s && s.expected !== null && amountAutoRef.current) {
+        const pending = Math.max(0, s.expected - s.received);
+        setAmount(pending > 0 ? String(pending) : "");
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, [mode, checkMemberMonth, memberId, purposeId, period]);
+
+  // Without a member check (e.g. offline), still suggest the expected amount.
+  useEffect(() => {
+    if (mode === "contribution" && !checkMemberMonth && purpose?.expectedPerMember && !amount) setAmount(String(purpose.expectedPerMember));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [purposeId]);
+
+  const monthLabel = formatMonthLabel(period, settings.dateFormat, { long: true });
 
   const heldInPurpose = purpose ? fund.byPurpose[purpose.id]?.held ?? 0 : 0;
   const needsAccount = mode !== "transfer";
@@ -130,6 +188,33 @@ export function GroupFundEventSheet({ visible, mode, fund, accounts, newEventId,
       toast.error("Enter a valid amount.");
       return;
     }
+    const warning =
+      mode === "contribution" && status && member && purpose
+        ? contributionDuplicateWarning({
+            memberName: member.name,
+            purposeName: purpose.name,
+            monthLabel,
+            expected: status.expected,
+            received: status.received,
+            amount: value,
+            money,
+          })
+        : null;
+    if (warning) {
+      appDialog.show({
+        title: "Already paid?",
+        message: warning,
+        buttons: [
+          { text: "Check again", style: "cancel" },
+          { text: "Record anyway", onPress: () => void save(value) },
+        ],
+      });
+      return;
+    }
+    await save(value);
+  };
+
+  const save = async (value: number) => {
     // One id per submit: a retry after a failure reuses it, so it can't apply twice.
     eventIdRef.current ??= newEventId();
     setBusy(true);
@@ -142,7 +227,7 @@ export function GroupFundEventSheet({ visible, mode, fund, accounts, newEventId,
         toAccountId,
         amount: value,
         date,
-        period: date.slice(0, 7),
+        period,
         recipient,
         reference,
         note,
@@ -209,6 +294,56 @@ export function GroupFundEventSheet({ visible, mode, fund, accounts, newEventId,
           ) : null}
         </View>
 
+        {mode === "contribution" ? (
+          <View style={styles.group}>
+            <Text style={label}>Counts for</Text>
+            <View style={styles.monthRow}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onPress={() => {
+                  setPeriodTouched(true);
+                  setPeriod((p) => shiftMonthKey(p, -1));
+                }}
+                accessibilityLabel="Previous month"
+              >
+                <ChevronLeft size={18} color={theme.colors.foreground} />
+              </Button>
+              <Text style={[styles.monthText, { color: theme.colors.foreground }]}>{monthLabel}</Text>
+              <Button
+                variant="ghost"
+                size="icon"
+                onPress={() => {
+                  setPeriodTouched(true);
+                  setPeriod((p) => shiftMonthKey(p, 1));
+                }}
+                accessibilityLabel="Next month"
+              >
+                <ChevronRight size={18} color={theme.colors.foreground} />
+              </Button>
+            </View>
+            {member && purpose && status ? (
+              <Text
+                style={[
+                  helper,
+                  status.expected !== null && status.received >= status.expected ? { color: theme.colors.warning } : null,
+                ]}
+                accessibilityLiveRegion="polite"
+              >
+                {status.expected !== null
+                  ? status.received >= status.expected
+                    ? `${member.name} has already paid ${money(status.received)} of ${money(status.expected)} for ${monthLabel}.`
+                    : status.received > 0
+                      ? `${member.name} paid ${money(status.received)} of ${money(status.expected)} for ${monthLabel}; ${money(status.expected - status.received)} still due.`
+                      : `${member.name} hasn't paid for ${monthLabel} yet. Expected ${money(status.expected)}.`
+                  : status.received > 0
+                    ? `${member.name} already paid ${money(status.received)} for ${monthLabel}.`
+                    : `Nothing recorded from ${member.name} for ${monthLabel} yet.`}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+
         {mode === "transfer" ? (
           <View style={styles.group}>
             <Text style={label}>To purpose *</Text>
@@ -221,7 +356,10 @@ export function GroupFundEventSheet({ visible, mode, fund, accounts, newEventId,
           <Input
             leadingIcon={<CurrencyPrefix />}
             value={amount}
-            onChangeText={setAmount}
+            onChangeText={(v) => {
+              amountAutoRef.current = false;
+              setAmount(v);
+            }}
             placeholder="e.g. 6000"
             keyboardType="decimal-pad"
             accessibilityLabel="Amount"
@@ -287,4 +425,6 @@ const styles = StyleSheet.create({
   label: { fontSize: 12, fontWeight: "700" },
   helper: { fontSize: 11 },
   chips: { flexDirection: "row", gap: 8 },
+  monthRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  monthText: { fontSize: 14, fontWeight: "600", minWidth: 120, textAlign: "center" },
 });

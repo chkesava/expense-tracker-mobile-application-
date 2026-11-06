@@ -110,3 +110,34 @@ export function describeGroupFundEvent(
 export function canReverseGroupFundEvent(event: GroupFundEvent, reversedIds: ReadonlySet<string>): boolean {
   return event.kind !== "reversal" && !reversedIds.has(event.id);
 }
+
+/**
+ * SPENDLY-687: why a contribution might be a duplicate, or null when it looks
+ * fine. A member who has already paid for this month (in full, or anything at
+ * all when no expected amount is set), or a payment above what's still due,
+ * asks for confirmation instead of silently adding a second entry.
+ */
+export function contributionDuplicateWarning(input: {
+  memberName: string;
+  purposeName: string;
+  monthLabel: string;
+  expected: number | null;
+  received: number;
+  amount: number;
+  money: (value: number) => string;
+}): string | null {
+  const { memberName, purposeName, monthLabel, expected, received, amount, money } = input;
+  if (expected !== null && expected > 0) {
+    const pending = Math.max(0, expected - received);
+    if (received >= expected) {
+      return `${memberName} has already paid ${money(received)} of ${money(expected)} for ${purposeName} in ${monthLabel}. Record ${money(amount)} more anyway?`;
+    }
+    if (amount > pending + 0.005) {
+      return `${memberName} only owes ${money(pending)} more for ${purposeName} in ${monthLabel}. Record ${money(amount)} anyway?`;
+    }
+    return null;
+  }
+  return received > 0
+    ? `${memberName} already paid ${money(received)} for ${purposeName} in ${monthLabel}. Record another ${money(amount)}?`
+    : null;
+}

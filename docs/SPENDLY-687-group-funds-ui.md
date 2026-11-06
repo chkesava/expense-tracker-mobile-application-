@@ -47,8 +47,19 @@
 - **`tsc`:** only the two known missing-package errors.
 - **Web bundle:** `npx expo export --platform web` (see the commit report).
 
+## Review fixes (user, 2026-11-06)
+1. **The same member could be recorded twice for a month.** The contribution sheet now:
+   - has a **"Counts for"** month (it defaults to the payment's month and can be stepped back, e.g. November money for October);
+   - shows what the member already paid for that purpose and month, from one bounded query: `groupFundEvents where fundId, memberId, period`, equality filters only, with no composite index;
+   - pre-fills what's still due;
+   - asks **"Already paid?"** before recording more than is due, or a second payment for the month (`contributionDuplicateWarning`).
+2. **Group money looked like the user's income and spending on account screens.**
+   - Rows now carry a **"Held for others"** badge in the warning tone, with a neutral amount and icon, instead of "Income" / "Expense".
+   - The account balance card shows **Held for others** and **Yours** under the real balance (`splitAccountBalance`, from the funds' stored `heldByAccount`).
+   - The balance itself is unchanged.
+
 ## Not done here (S6, SPENDLY-688)
-- Member expected / received / pending per period.
+- The month view (every member, paid / partial / not paid), fund start month and member join/leave months. The "for month" field moved into S5.
 - Reconciliation of held money against each account's balance.
 - The QA suite and read instrumentation.
 

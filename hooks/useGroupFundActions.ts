@@ -8,12 +8,14 @@ import {
   commitGroupFundWrite,
   GroupFundInvalidError,
   loadGroupFund,
+  loadMemberMonthEvents,
   loadReversalContext,
   newGroupFundEventId,
   newGroupFundId,
   newGroupFundKey,
 } from "@/services/groupFunds/groupFundStore";
 import type { GroupFund, GroupFundEvent } from "@/shared/types/groupFund";
+import { memberMonthStatus, type MemberMonthStatus } from "@/shared/utils/groupFundMath";
 import { groupFundIssueMessage } from "@/shared/utils/groupFundMessages";
 import {
   buildAccountMove,
@@ -149,7 +151,23 @@ export function useGroupFundActions() {
     [uid, run, newEventId]
   );
 
+  /** What a member has already paid toward a purpose for a month, or null if it can't be checked. */
+  const checkMemberMonth = useCallback(
+    async (fund: GroupFund, memberId: string, purposeId: string, period: string): Promise<MemberMonthStatus | null> => {
+      if (!uid) return null;
+      try {
+        const events = await loadMemberMonthEvents(uid, fund.id, memberId, period);
+        return memberMonthStatus(fund, events, memberId, purposeId, period);
+      } catch (error) {
+        logError("groupFunds.checkMemberMonth", error);
+        return null;
+      }
+    },
+    [uid]
+  );
+
   return {
+    checkMemberMonth,
     newEventId,
     newKey,
     newFundId,

@@ -228,3 +228,41 @@ export function memberContributionStatus(
   }
   return out;
 }
+
+export type MemberMonthStatus = {
+  /** The purpose's expected amount per member, or null when none is set. */
+  expected: number | null;
+  /** Received for this member, purpose and month, net of reversed contributions. */
+  received: number;
+};
+
+/**
+ * SPENDLY-687: what one member has paid toward one purpose for one month
+ * (`period`), from that month's events. Used to stop the same payment being
+ * recorded twice; works whether or not an expected amount is set.
+ */
+export function memberMonthStatus(
+  fund: Pick<GroupFund, "purposes">,
+  events: readonly GroupFundEvent[],
+  memberId: string,
+  purposeId: string,
+  period: string
+): MemberMonthStatus {
+  const purpose = fund.purposes.find((p) => p.id === purposeId);
+  let received = 0;
+  for (const e of events) {
+    if (e.memberId !== memberId || e.purposeId !== purposeId || periodOf(e) !== period) continue;
+    if (e.kind === "contribution") received += e.amount;
+    else if (e.kind === "reversal" && e.reversedKind === "contribution") received -= e.amount;
+  }
+  return { expected: purpose?.expectedPerMember ?? null, received: roundMoney(received) };
+}
+
+/**
+ * SPENDLY-687: an account's balance split into money held for others and the
+ * user's own. Display only; both inputs are stored figures.
+ */
+export function splitAccountBalance(balance: number, heldForOthers: number): { held: number; yours: number } {
+  const held = roundMoney(Math.max(0, heldForOthers));
+  return { held, yours: roundMoney(balance - held) };
+}
