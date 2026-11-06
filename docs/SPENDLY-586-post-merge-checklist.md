@@ -158,6 +158,8 @@ Only after step 1 (indexes Enabled) and step 6 (app writes live and divergences 
 
 ### Step 9: Collection and screen switches (673; then 596–599, 674)
 
+**Quickest way (SPENDLY-690):** GitHub → Actions → **Read-model switches**, `target = all-collections`, `mode = shadow`. Then, after the shadow period, `mode = supabase`. Run with `dry_run` first. It sets all 34 switched collections in one write.
+
 Each wired collection has `system_settings/global.readModel.<collection>`:
 - first set it to `shadow`, and watch `readModel.shadow.<collection>` (none means equal);
 - after the shadow period (7 days, 14 where money is shown) and the user's approval, set it to `supabase`.

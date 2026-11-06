@@ -1,0 +1,107 @@
+# SPENDLY-690 — set the read-model switches in system_settings/global.readModel
+# (SPENDLY-586 checklist §4 steps 6–9) without editing the Firebase console by hand.
+#
+#   target = all-collections  every collection the app reads through the switch
+#                             (SWITCHED_COLLECTIONS), to `mode`, in one merge write
+#   target = collection       one collection (`collection`), to `mode`
+#   target = switch           an app-wide switch (`switch_name` = localCopy | realtime |
+#                             clientWrites) to `switch_value`
+#
+# Dry run by default: the log shows each key's current → new value. Untick
+# `dry_run` to write. Only `readModel.<keys>` change; every other setting is
+# kept. Devices pick the change up live; no release.
+#
+# Rollback: the same workflow with mode = firestore, or switch localCopy = false
+# (every collection back to Firestore at once).
+#
+# Secret: FIREBASE_SERVICE_ACCOUNT (writes system_settings, which clients can't).
+
+name: Read-model switches
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "What to set"
+        required: true
+        default: all-collections
+        type: choice
+        options: [all-collections, collection, switch]
+      mode:
+        description: "Collection mode (all-collections / collection)"
+        required: false
+        default: shadow
+        type: choice
+        options: [firestore, shadow, supabase]
+      collection:
+        description: "Collection name (target = collection), e.g. expenses"
+        required: false
+        type: string
+      switch_name:
+        description: "Switch (target = switch)"
+        required: false
+        default: localCopy
+        type: choice
+        options: [localCopy, realtime, clientWrites]
+      switch_value:
+        description: "Switch value (target = switch)"
+        required: false
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+      dry_run:
+        description: "Dry run (show the changes, write nothing)"
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: readmodel-switches
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  set:
+    name: Set read-model switches
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set the switches
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          TARGET: ${{ inputs.target }}
+          MODE: ${{ inputs.mode }}
+          COLLECTION: ${{ inputs.collection }}
+          SWITCH_NAME: ${{ inputs.switch_name }}
+          SWITCH_VALUE: ${{ inputs.switch_value }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT secret is empty."
+            exit 1
+          fi
+          case "$TARGET" in
+            all-collections) args=(--all-collections "--mode=$MODE") ;;
+            collection)
+              if [ -z "$COLLECTION" ]; then echo "::error::Set 'collection' for target = collection."; exit 1; fi
+              args=("--collection=$COLLECTION" "--mode=$MODE") ;;
+            switch) args=("--switch=$SWITCH_NAME" "--value=$SWITCH_VALUE") ;;
+            *) echo "::error::Unknown target '$TARGET'."; exit 1 ;;
+          esac
+          if [ "$DRY_RUN" != "true" ]; then args+=(--apply); fi
+          npx --no-install tsx scripts/readmodel-set-mode.ts "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"

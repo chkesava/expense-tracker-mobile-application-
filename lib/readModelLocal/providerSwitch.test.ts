@@ -3,7 +3,7 @@ import { join, relative } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { READ_MODEL_COLLECTIONS } from "@/shared/utils/readModel/collectionMode";
+import { READ_MODEL_COLLECTIONS, SWITCHED_COLLECTIONS } from "@/shared/utils/readModel/collectionMode";
 
 /**
  * SPENDLY-673 — providers' read switches, checked in their source.
@@ -73,6 +73,8 @@ describe("provider read switches (SPENDLY-673)", () => {
   it("the integrated collections are exactly the expected ones", () => {
     expect([...new Set(uses.map((u) => u.collection))].sort()).toEqual(INTEGRATED);
     for (const c of INTEGRATED) expect(READ_MODEL_COLLECTIONS).toContain(c);
+    // SPENDLY-690: the bulk switch workflow sets exactly these.
+    expect([...SWITCHED_COLLECTIONS].sort()).toEqual(INTEGRATED);
   });
 
   it("no provider reads a not-yet collection from the copy", () => {

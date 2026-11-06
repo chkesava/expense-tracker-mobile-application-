@@ -23,6 +23,23 @@ export type CollectionMode = (typeof COLLECTION_MODES)[number];
  */
 export const READ_MODEL_COLLECTIONS: readonly string[] = READ_MODEL_TABLES.filter((t) => !t.root).map((t) => t.collection);
 
+/**
+ * SPENDLY-690: the collections the app actually reads through
+ * `readModel.<collection>` (596–599, 673, 674). The bulk switch workflow
+ * sets exactly these; `lib/readModelLocal/providerSwitch.test.ts` keeps the
+ * list equal to the wired providers.
+ */
+export const SWITCHED_COLLECTIONS: readonly string[] = [
+  "categories", "spaces", "categorizationRules", "calendarReminders",
+  "expenses", "incomes",
+  "accounts", "accountTypes", "accountPayments", "accountEntries", "accountTransfers", "creditCardBills",
+  "categoryBudgets", "financialSummaries", "netWorthHistory", "financialGoals",
+  "investments", "holdings", "investmentCashTransactions", "portfolioSettings", "portfolioTransactions",
+  "sipPlans", "sipTransactions", "virtualPositions", "subscriptions", "watchlists", "watchlists/items",
+  "epfContributions", "epfEstablishments", "epfInterestEntries",
+  "borrowings", "borrowingRepayments", "receivables", "receivableRepayments",
+];
+
 export function configuredCollectionMode(readModelSetting: unknown, collection: string): CollectionMode {
   if (!readModelSetting || typeof readModelSetting !== "object") return "firestore";
   const value = (readModelSetting as Record<string, unknown>)[collection];
