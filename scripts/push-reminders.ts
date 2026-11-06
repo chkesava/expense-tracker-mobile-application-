@@ -14,8 +14,8 @@
  *                                        optional: copy pruned device deletes to the read model
  *                                        now (SPENDLY-680); without them the nightly sync does
  *
- * Sources: credit card bills (231). Calendar (694), dues (695) and goals (696)
- * add theirs to buildSources.
+ * Sources: credit card bills (231), calendar reminders (694). Dues (695) and
+ * goals (696) add theirs to buildSources.
  */
 
 import { applicationDefault, cert, initializeApp } from "firebase-admin/app";
@@ -26,10 +26,11 @@ import { serverPushPorts } from "../netlify/functions/readmodel-push";
 import type { AdminFirestoreLike } from "../shared/utils/push/firestorePorts";
 import type { ReminderSource } from "../shared/utils/push/reminderEngine";
 import { createBillSource } from "../shared/utils/push/sources/billSource";
+import { createCalendarReminderSource } from "../shared/utils/push/sources/calendarReminderSource";
 import { runPushReminders } from "./lib/pushRunCore";
 
 export function buildSources(db: AdminFirestoreLike): ReminderSource[] {
-  return [createBillSource(db) as ReminderSource];
+  return [createBillSource(db) as ReminderSource, createCalendarReminderSource(db) as ReminderSource];
 }
 
 function positive(value: string | undefined, fallback: number): number {
