@@ -26,13 +26,18 @@ function matches(value: unknown, op: string, x: unknown): boolean {
   }
 }
 
+/** A field by its Firestore path, e.g. "reminders.frequency". */
+function fieldAt(data: Record<string, unknown> | undefined, path: string): unknown {
+  return path.split(".").reduce<unknown>((v, key) => (v && typeof v === "object" ? (v as Record<string, unknown>)[key] : undefined), data);
+}
+
 export function fakeAdminDb(seed: Record<string, Record<string, unknown>>) {
   const docs = new Map(Object.entries(seed));
   const snap = (path: string) => ({ exists: docs.has(path), id: path.split("/").pop()!, ref: { path }, data: () => docs.get(path) });
   const query = (match: (p: string) => boolean, filters: Filter[] = []): ReturnType<AdminFirestoreLike["collection"]> => ({
     where: (f, op, v) => query(match, [...filters, [f, op, v]]),
     get: async () => ({
-      docs: [...docs.keys()].filter(match).filter((p) => filters.every(([f, op, v]) => matches(docs.get(p)?.[f], op, v))).map(snap),
+      docs: [...docs.keys()].filter(match).filter((p) => filters.every(([f, op, v]) => matches(fieldAt(docs.get(p), f), op, v))).map(snap),
     }),
   });
   const db: AdminFirestoreLike = {
