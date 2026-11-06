@@ -48,7 +48,7 @@ Everything that has to **run or be done outside the code** before Spendly push n
 
 | Story | What it adds to go-live |
 |---|---|
-| 231 Credit card bills | The bills source joins `SOURCES` in `scripts/push-reminders.ts`. It needs the collection-group index its query uses (listed in the 231 doc), deployed with B2. |
+| 231 Credit card bills | **Indexes, with B1/B2:** `creditCardBills.dueDate` field override (collection group) and the composite collection-group index `creditCardBills (status ASC, dueDate ASC)`. The bill source is already in `buildSources`. **Check after C4:** a bill paid in the app gets no further push. Its `creditCardBillReminderLogs` show `channel: "push"`. |
 | 230, 693, 694, 695, 696, 229, 697, 698, 225, 233 | *(pending)* |
 
 ## E. After everything is live

@@ -98,3 +98,28 @@ export function shouldSendBillReminder(opts: {
   if (opts.remainingAmount <= 0) return false;
   return true;
 }
+
+/**
+ * A stored bill as the app uses it (SPENDLY-231: shared by the app's listener
+ * mapping and the server push). The stored `status` is never trusted:
+ * CANCELLED is a manual override, every other status is recomputed for `today`
+ * (SPENDLY-417), and `remainingAmount` falls back to statement − paid.
+ */
+export function parseStoredBill(id: string, raw: Record<string, unknown>, today: string): CreditCardBill {
+  const data = raw as Partial<CreditCardBill>;
+  const statementAmount = Number(data.statementAmount) || 0;
+  const amountPaid = Number(data.amountPaid) || 0;
+  return {
+    ...data,
+    id,
+    statementAmount,
+    amountPaid,
+    remainingAmount:
+      data.remainingAmount == null ? computeRemainingAmount(statementAmount, amountPaid) : Number(data.remainingAmount),
+    paymentIds: data.paymentIds ?? [],
+    status:
+      data.status === "CANCELLED"
+        ? "CANCELLED"
+        : computeCreditCardBillStatus({ today, dueDate: data.dueDate || "", amountPaid, statementAmount }),
+  } as CreditCardBill;
+}

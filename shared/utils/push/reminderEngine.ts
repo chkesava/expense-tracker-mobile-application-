@@ -30,7 +30,7 @@
 
 import type { UserSettings } from "../../types/settings";
 import { isWithinDeliveryWindow, resolveDeliveryWindow, type DeliveryWindow, type PushCategory } from "../pushPreferences";
-import { sendLogId, sendToUsers, type PushPorts } from "./pushSender";
+import { sendLogId, sendToUsers, type PushPorts, type SendResult } from "./pushSender";
 
 export type ReminderSlot = {
   /** Stable per user, e.g. `ccbill:{billId}:due`; the idempotency key is `{uid}:{slotId}`. */
@@ -62,6 +62,8 @@ export interface ReminderSource<Item = unknown> {
   reload(uid: string, itemId: string): Promise<Item | null>;
   /** One notice standing for several due slots (no burst). */
   summarize?(slots: readonly ReminderSlot[], ctx: SlotContext): { title: string; body: string; url: string };
+  /** After each send attempt, e.g. the bill reminder log. Must not throw. */
+  onSent?(uid: string, itemId: string, slot: ReminderSlot, status: SendResult["status"]): Promise<void>;
 }
 
 export type EnginePorts = {
@@ -198,12 +200,14 @@ export async function runReminderTick(sources: readonly ReminderSource[], ports:
         skip("deleted");
         continue;
       }
-      if (!source.slotsFor(fresh, ctx).some((s) => s.slotId === slot.slotId)) {
+      // Send the re-read version: its wording carries today's amounts and names.
+      const freshSlot = source.slotsFor(fresh, ctx).find((s) => s.slotId === slot.slotId);
+      if (!freshSlot) {
         skip("resolved");
         continue;
       }
       const list = ready.get(source) ?? [];
-      list.push({ slot, itemId });
+      list.push({ slot: freshSlot, itemId });
       ready.set(source, list);
     }
 
@@ -251,6 +255,7 @@ export async function runReminderTick(sources: readonly ReminderSource[], ports:
         if (res.status === "sent") result.sent++;
         else if (res.status === "duplicate") result.duplicates++;
         else skip(res.status);
+        if (res.status !== "duplicate") await source.onSent?.(uid, itemId, slot, res.status).catch(() => undefined);
       }
     }
   }

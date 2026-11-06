@@ -11,9 +11,12 @@ import type {
 import {
   buildReminderSlots,
   applyQuietHours,
+  isBillSnoozed,
+  resolveBillReminderFrequency,
   stableReminderNotificationId,
   type ReminderSlot,
 } from "@/shared/utils/creditCardBillReminders";
+import { billReminderAmount } from "@/shared/utils/billReminderCopy";
 import { shouldSendBillReminder } from "@/shared/utils/creditCardBillStatus";
 import { todayDateKey } from "@/shared/utils/dates";
 import { buildBillReminderCopy } from "./billNotificationCopy";
@@ -165,6 +168,8 @@ export async function reconcileBillReminders(opts: {
   accountsById: Map<string, Account>;
   globalPrefs: CreditCardBillRemindersSettings;
   timezone?: string;
+  /** SPENDLY-231: lock-screen amounts and card digits (settings.pushNotifications.showAmounts). */
+  showAmounts?: boolean;
   onLog?: (entry: {
     billId: string;
     notificationType: "days_before" | "due_date" | "overdue" | "skipped";
@@ -209,18 +214,13 @@ export async function reconcileBillReminders(opts: {
     const account = opts.accountsById.get(bill.accountId);
     if (!account) continue;
 
-    const frequency = {
-      daysBefore: bill.reminderFrequency?.daysBefore?.length
-        ? bill.reminderFrequency.daysBefore
-        : opts.globalPrefs.daysBefore,
-      onDueDate:
-        bill.reminderFrequency?.onDueDate ?? opts.globalPrefs.onDueDate,
-      overdueEveryDays:
-        bill.reminderFrequency?.overdueEveryDays ??
-        opts.globalPrefs.overdueEveryDays,
-    };
+    const frequency = resolveBillReminderFrequency(bill, opts.globalPrefs);
 
-    const slots = buildReminderSlots(bill.dueDate, frequency, today, 60);
+    // SPENDLY-231: a snoozed bill stays quiet until its snooze date.
+    const snoozedUntil = isBillSnoozed(bill, today) ? bill.nextReminderAt!.slice(0, 10) : null;
+    const slots = buildReminderSlots(bill.dueDate, frequency, today, 60).filter(
+      (slot) => !snoozedUntil || slot.dateKey >= snoozedUntil
+    );
     // Cap scheduled local notifications to avoid OS limits
     const upcoming = slots.slice(0, 12);
 
@@ -232,6 +232,7 @@ export async function reconcileBillReminders(opts: {
         quietStart: opts.globalPrefs.quietHoursStart,
         quietEnd: opts.globalPrefs.quietHoursEnd,
         timezone: opts.timezone,
+        showAmounts: opts.showAmounts,
         onLog: opts.onLog,
       });
     }
@@ -245,6 +246,7 @@ async function scheduleSlot(opts: {
   quietStart: string;
   quietEnd: string;
   timezone?: string;
+  showAmounts?: boolean;
   onLog?: (entry: {
     billId: string;
     notificationType: "days_before" | "due_date" | "overdue" | "skipped";
@@ -279,10 +281,12 @@ async function scheduleSlot(opts: {
     const copy = buildBillReminderCopy({
       billId: opts.bill.id,
       account: opts.account,
-      statementAmount: opts.bill.statementAmount,
+      // SPENDLY-231: what is still owed, not the statement total.
+      amount: billReminderAmount(opts.bill),
       currency: opts.bill.currency,
       dueDate: opts.bill.dueDate,
       slot: opts.slot,
+      showAmounts: opts.showAmounts,
     });
 
     const identifier = stableReminderNotificationId(opts.bill.id, opts.slot);
