@@ -20,6 +20,11 @@ export type TransactionRowProps = {
   compact: boolean;
   showRunningBalance: boolean;
   onPress: (id: string) => void;
+  /**
+   * SPENDLY-687: money held for others (Group Funds). Shown with its own
+   * badge and a neutral amount, never as the user's income or expense.
+   */
+  heldForOthers?: boolean;
 };
 
 export const TransactionRow = memo(function TransactionRow({
@@ -35,15 +40,35 @@ export const TransactionRow = memo(function TransactionRow({
   compact,
   showRunningBalance,
   onPress,
+  heldForOthers = false,
 }: TransactionRowProps) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   // SPENDLY-537: same vocabulary as the Activity list — money in is success
   // green with "+", money out is ink with "-"; red is kept for real negatives.
-  const amountColor = isCredit ? theme.colors.success : theme.colors.foreground;
-  const badgeBg = isCredit ? surfaces.wash(theme.colors.success) : surfaces.control;
-  const badgeFg = isCredit ? theme.colors.success : theme.colors.mutedForeground;
-  const iconBg = isCredit ? surfaces.wash(theme.colors.success) : surfaces.tile;
+  // SPENDLY-687: group money is neither: a warm "held" tone, neutral amount.
+  const amountColor = heldForOthers
+    ? theme.colors.mutedForeground
+    : isCredit
+      ? theme.colors.success
+      : theme.colors.foreground;
+  const badgeBg = heldForOthers
+    ? surfaces.wash(theme.colors.warning)
+    : isCredit
+      ? surfaces.wash(theme.colors.success)
+      : surfaces.control;
+  const badgeFg = heldForOthers
+    ? theme.colors.warning
+    : isCredit
+      ? theme.colors.success
+      : theme.colors.mutedForeground;
+  const badgeLabel = heldForOthers ? "Held for others" : isCredit ? "Income" : "Expense";
+  const iconBg = heldForOthers
+    ? surfaces.wash(theme.colors.warning)
+    : isCredit
+      ? surfaces.wash(theme.colors.success)
+      : surfaces.tile;
+  const iconColor = heldForOthers ? theme.colors.warning : isCredit ? theme.colors.success : amountColor;
   const prefix = `${isCredit ? "+ " : "- "}${currencySymbol(currency)}`;
 
   return (
@@ -57,14 +82,14 @@ export const TransactionRow = memo(function TransactionRow({
         },
       ]}
       accessibilityRole="button"
-      accessibilityLabel={`${title}, ${dateLabel}${timeLabel ? `, ${timeLabel}` : ""}, ${isCredit ? "income" : "expense"} ${amount}`}
+      accessibilityLabel={`${title}, ${dateLabel}${timeLabel ? `, ${timeLabel}` : ""}, ${badgeLabel.toLowerCase()} ${isCredit ? "in" : "out"} ${amount}`}
       accessibilityHint="Opens transaction details"
     >
       <View style={[styles.icon, { backgroundColor: iconBg }]}>
         {isCredit ? (
-          <ArrowDownLeft size={16} color={theme.colors.success} strokeWidth={2.4} />
+          <ArrowDownLeft size={16} color={iconColor} strokeWidth={2.4} />
         ) : (
-          <ArrowUpRight size={16} color={amountColor} strokeWidth={2.4} />
+          <ArrowUpRight size={16} color={iconColor} strokeWidth={2.4} />
         )}
       </View>
 
@@ -84,7 +109,7 @@ export const TransactionRow = memo(function TransactionRow({
                 </Text>
                 <View style={[styles.badge, { backgroundColor: badgeBg }]}>
                   <Text style={[styles.badgeText, { color: badgeFg }]}>
-                    {isCredit ? "Income" : "Expense"}
+                    {badgeLabel}
                   </Text>
                 </View>
               </View>
@@ -138,7 +163,7 @@ export const TransactionRow = memo(function TransactionRow({
               </Text>
               <View style={[styles.badge, { backgroundColor: badgeBg }]}>
                 <Text style={[styles.badgeText, { color: badgeFg }]}>
-                  {isCredit ? "Income" : "Expense"}
+                  {badgeLabel}
                 </Text>
               </View>
             </View>

@@ -30,6 +30,8 @@ const RESTORABLE_ROUTES = [
   "/calendar",
   "/goals",
   "/goals/",
+  // SPENDLY-687: a Group Fund's detail screen.
+  "/group-funds/",
   "/what-if",
   "/what-if/",
   "/inbox",

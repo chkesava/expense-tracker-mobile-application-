@@ -4,7 +4,9 @@
  * Pure: no React Native, no Firestore.
  */
 
+import type { Account } from "../types/expense";
 import type { GroupFund, GroupFundEvent, GroupFundTotals } from "../types/groupFund";
+import { getAccountKind } from "./accountKind";
 import { emptyGroupFundTotals, isGroupFundEventKind, isGroupFundStatus } from "./groupFundModel";
 
 /** Newest page of a fund's history kept live; older pages load on demand. */
@@ -76,4 +78,18 @@ export function sortGroupFunds(funds: readonly GroupFund[]): GroupFund[] {
 /** Newest first; ties by id, descending (the read model's keyset order). */
 export function sortGroupFundEvents(events: readonly GroupFundEvent[]): GroupFundEvent[] {
   return [...events].sort((a, b) => b.createdAtMs - a.createdAtMs || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+}
+
+/**
+ * SPENDLY-687: accounts group money can move through — bank, cash or wallet,
+ * never a credit card (the store refuses one too). Sorted by name.
+ */
+export function groupFundAccountOptions(
+  accounts: readonly Pick<Account, "id" | "name" | "typeId">[],
+  typeNameById: ReadonlyMap<string, string>
+): { id: string; name: string }[] {
+  return accounts
+    .filter((a) => getAccountKind(typeNameById.get(a.typeId) ?? "") !== "credit")
+    .map((a) => ({ id: a.id, name: a.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
