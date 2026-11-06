@@ -23,7 +23,7 @@ It is **custodial money**: it belongs to the group, not the user.
 | SPENDLY-686 (S4) | "Group funds held" liability in net worth and runway | Merged to the epic branch (`5724cf2a`) |
 | SPENDLY-687 (S5) | Money hub section, screens and sheets | Merged to the epic branch (`a535aa0b`); UI reviewed by the user |
 | SPENDLY-688 (S6) | Monthly collection tracker (derived, no cron), reconciliation, QA suite, read budget | Merged to the epic branch (`955ce1da`) |
-| SPENDLY-700 (S7) | Manual backfill of previous months (no cron) | Built on `feature/SPENDLY-700-group-funds-backfill`; awaiting UI review and merge approval |
+| SPENDLY-700 (S7) | Manual backfill of previous months (no cron) | Merged to the epic branch (`7e522735`) |
 
 ## Accounting model
 
@@ -143,6 +143,8 @@ Group money lives in the user's real accounts, so the real balance must move. It
   - Each member is saved separately, because the rules allow one explained event per money write.
 
 ## Deploys pending
+**Go-live steps, in order:** `docs/SPENDLY-678-post-merge-checklist.md`.
+
 - **S2 (SPENDLY-684):** `firestore.rules` and the `groupFundEvents (fundId, createdAtMs desc)` index. Both are production changes and need approval. Diff the indexes against live first.
 - **S3 (SPENDLY-685):**
   - The Supabase migration `20261106000000_readmodel_group_funds.sql`, as a dry run first, then applied only with approval.
