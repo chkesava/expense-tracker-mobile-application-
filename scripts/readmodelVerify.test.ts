@@ -66,8 +66,8 @@ describe("read-model count parity (SPENDLY-509)", () => {
     expect(r.mismatches).toBe(0);
     expect(r.byCollection.find((c) => c.collection === "expenses")).toEqual({ collection: "expenses", firestore: 4, model: 4, mismatchedUsers: 0 });
     expect(s.recorded).toContainEqual({ uid: "alice", collection: "categories", sourceCount: 2, modelCount: 2 });
-    // 2 users × 53 collections (Wave 1 + SPENDLY-609 goals + Waves 2 and 3 + SPENDLY-591/592), every pair recorded.
-    expect(s.recorded).toHaveLength(106);
+    // 2 users × 54 collections (Wave 1 + SPENDLY-609 goals + Waves 2 and 3 + SPENDLY-591/592 + SPENDLY-224 devices), every pair recorded.
+    expect(s.recorded).toHaveLength(108);
   });
 
   it("fails on a missing row (e.g. deleted by hand in Postgres), naming the collection", async () => {

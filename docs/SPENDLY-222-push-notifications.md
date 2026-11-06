@@ -10,8 +10,8 @@
 | Story | Title | Blocked by | State |
 |---|---|---|---|
 | [691](https://kesavach.atlassian.net/browse/SPENDLY-691) | Clear local reminders on sign-out / account switch | — | Merged to epic 9de24cb0 ([doc](SPENDLY-691-signout-clear-reminders.md)) |
-| [223](https://kesavach.atlassian.net/browse/SPENDLY-223) | Push credentials (Expense app) | — | In Progress: transport decided, guard test built; FCM key upload is an owner action ([doc](SPENDLY-223-push-credentials.md)) |
-| [224](https://kesavach.atlassian.net/browse/SPENDLY-224) | Device registration | 223 | To Do |
+| [223](https://kesavach.atlassian.net/browse/SPENDLY-223) | Push credentials (Expense app) | — | Merged to epic (owner FCM key upload pending) ([doc](SPENDLY-223-push-credentials.md)) |
+| [224](https://kesavach.atlassian.net/browse/SPENDLY-224) | Device registration | 223 | In Progress: built, awaiting review and merge ([doc](SPENDLY-224-device-registration.md)) |
 | [226](https://kesavach.atlassian.net/browse/SPENDLY-226) | Preferences + one delivery window | — | To Do |
 | [227](https://kesavach.atlassian.net/browse/SPENDLY-227) | Push sender (transport) | 224, 226 | To Do |
 | [692](https://kesavach.atlassian.net/browse/SPENDLY-692) | Reminder engine (send-time re-check, ledger) | 227 | To Do |
@@ -34,8 +34,15 @@
   - New stories 691 to 698 were created.
   - 228 (Ganesh) and 232 (SMS, removed in SPENDLY-486) were taken out of the epic.
   - Their stale Blocks links to 227, 230 and 233 need removing by hand in Jira.
-- Open decisions D1 to D9 are listed in the plan, §6.
+- **2026-11-06:** D2 decided by the user: `devices` is dual-written to Supabase (full read-model treatment), not exempt.
+- Open decisions D1, D3 to D9 are listed in the plan, §6.
 
 ## Pending deploys
 
-None yet.
+All are production changes and need approval.
+- **From 224:**
+  - `firestore.rules` (`devices`);
+  - `firestore.indexes.json` (`devices` collection-group overrides; diff against live first);
+  - Supabase migration `20261107000000_readmodel_devices.sql`.
+  - Rules must be live before any build containing 224 ships.
+- **Merge note:** Group Funds (SPENDLY-678) migration `20261106000000` restates the same SQL lists. Whichever epic reaches main second must restate them with both sets of tables.
