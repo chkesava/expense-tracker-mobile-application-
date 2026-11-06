@@ -133,15 +133,18 @@ export function describeDaysUntilDue(today: string, dueDate: string): number {
   return daysBetweenDateKeys(today, dueDate);
 }
 
+export const BILL_REMINDER_NOTIFICATION_PREFIX = "ccbill:";
+
 export function stableReminderNotificationId(
   billId: string,
   slot: ReminderSlot
 ): string {
+  const base = `${BILL_REMINDER_NOTIFICATION_PREFIX}${billId}`;
   if (slot.kind === "days_before") {
-    return `ccbill:${billId}:before:${slot.daysBefore}`;
+    return `${base}:before:${slot.daysBefore}`;
   }
   if (slot.kind === "due_date") {
-    return `ccbill:${billId}:due`;
+    return `${base}:due`;
   }
-  return `ccbill:${billId}:overdue:${slot.dateKey}`;
+  return `${base}:overdue:${slot.dateKey}`;
 }
