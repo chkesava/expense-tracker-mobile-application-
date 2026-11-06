@@ -122,3 +122,19 @@ describe("devices rules", () => {
     await assertFails(setDoc(deviceRef(db(), "short"), created()));
   });
 });
+
+/** SPENDLY-227: the push sender's own documents are server-only. */
+describe("pushConfig and pushSendLogs", () => {
+  it("no client can read or write them, signed in or not", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), "pushConfig", "global"), { sendsDisabled: false });
+      await setDoc(doc(ctx.firestore(), "pushSendLogs", "k1"), { status: "done" });
+    });
+    for (const fs of [db(), anon()]) {
+      await assertFails(getDoc(doc(fs, "pushConfig", "global")));
+      await assertFails(setDoc(doc(fs, "pushConfig", "global"), { sendsDisabled: true }));
+      await assertFails(getDoc(doc(fs, "pushSendLogs", "k1")));
+      await assertFails(setDoc(doc(fs, "pushSendLogs", "k2"), { status: "sending" }));
+    }
+  });
+});
