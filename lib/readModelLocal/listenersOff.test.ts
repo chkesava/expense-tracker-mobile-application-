@@ -25,6 +25,7 @@ const MIGRATED = new Set([
   "epfContributions", "epfEstablishments", "epfInterestEntries",
   "financialGoals", "financialSummaries", "netWorthHistory",
   "calendarReminders", "categories", "categorizationRules", "spaces",
+  "groupFunds",
 ]);
 
 /** `file:collection` listeners that stay on Firestore on purpose. */

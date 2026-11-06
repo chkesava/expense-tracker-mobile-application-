@@ -291,7 +291,7 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'financial_summaries'
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'financial_summaries', 'group_funds', 'group_fund_events'
   ] loop
     res := public.rm_client_apply(t, jsonb_build_array(jsonb_build_object(
       'uid', 'user-a', 'doc_id', 'all-' || t, 'doc', '{}'::jsonb,
