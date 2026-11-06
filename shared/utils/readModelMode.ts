@@ -27,8 +27,11 @@ export type ReadModelMode = (typeof READ_MODEL_MODES)[number];
  * - `cashback` (SPENDLY-513): cashback history's linked purchases.
  * - `goals` (SPENDLY-611): Save Goals analytics, exports and older goal
  *   history pages. A goal's saved amount never moves (current state, R4).
+ * - `groupFundHistory` (SPENDLY-685): older Group Funds history pages. A
+ *   fund's held amount never moves (current state, R4). Not `groupFunds`:
+ *   that key is the fund list's per-collection switch.
  */
-export const READ_MODEL_SCREENS = ["journal", "insights", "cashFlow", "audit", "cashback", "goals"] as const;
+export const READ_MODEL_SCREENS = ["journal", "insights", "cashFlow", "audit", "cashback", "goals", "groupFundHistory"] as const;
 export type ReadModelScreen = (typeof READ_MODEL_SCREENS)[number];
 
 /** The configured mode for a screen; anything missing or unknown is `firestore`. */

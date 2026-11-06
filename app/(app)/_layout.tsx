@@ -197,6 +197,13 @@ function AppShellInner() {
                 animation: "slide_from_right",
               }}
             />
+            {/* SPENDLY-687: one Group Fund. */}
+            <Stack.Screen
+              name="group-funds/[id]"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
             {/* SPENDLY-608: Save Goals list and detail. */}
             <Stack.Screen
               name="goals/index"

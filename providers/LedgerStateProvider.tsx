@@ -22,6 +22,7 @@ export type LedgerTab =
   | "ccBills"
   | "borrowings"
   | "receivables"
+  | "groupFunds"
   | "subscriptions";
 
 export interface LedgerStateContextType {

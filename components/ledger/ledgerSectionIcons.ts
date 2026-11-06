@@ -6,6 +6,7 @@ import {
   History,
   Landmark,
   Repeat,
+  Users,
   Wallet,
 } from "lucide-react-native";
 
@@ -24,5 +25,6 @@ export const LEDGER_SECTION_ICONS: Record<LedgerHubTabId, SectionIcon> = {
   ccBills: Calendar,
   borrowings: Landmark,
   receivables: ArrowDownLeft,
+  groupFunds: Users,
   subscriptions: Repeat,
 };

@@ -84,6 +84,8 @@ export function buildRunwayModel(input: RunwayModelInput): RunwayModel {
   
   const allAssumptions = new Set<RunwayAssumptionCode>([...reasons, ...baseline.assumptions]);
   if (hasUncertainCommitments) allAssumptions.add("uncertain_commitments");
+  // SPENDLY-686: money held for others couldn't be loaded, so liquid may be overstated.
+  if (resources.some((r) => r.reasons.includes("held_for_others_unknown"))) allAssumptions.add("held_for_others_unknown");
   const assumptions = [...allAssumptions];
   
   return { baseline, events, output, confidence: level, assumptions };

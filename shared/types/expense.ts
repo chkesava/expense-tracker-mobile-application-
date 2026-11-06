@@ -226,7 +226,12 @@ export function isCashbackPayment(
 export type AccountEntrySource =
   | "split_collection"
   | "split_spend"
-  | "split_reversal";
+  | "split_reversal"
+  /** SPENDLY-678 Group Funds: money held for others, never income or an expense. */
+  | "group_fund_contribution"
+  | "group_fund_payout"
+  | "group_fund_move"
+  | "group_fund_reversal";
 
 /** Manual account adjustment entry for non-credit account tracking */
 export interface AccountEntry {
@@ -239,8 +244,11 @@ export interface AccountEntry {
   createdAt?: unknown;
   /** Present when this entry was posted by a collect-mode split. */
   linkedSplitId?: string;
+  /** Present when this entry was posted by a Group Funds event (SPENDLY-678). */
+  linkedGroupFundId?: string;
+  linkedGroupFundEventId?: string;
   source?: AccountEntrySource;
-  /** Set on `split_reversal` rows that undo a collection or gift pass-through. */
+  /** Set on `split_reversal` / `group_fund_reversal` rows that undo an earlier entry. */
   reversalOf?: string;
   /**
    * Shared with the Investment Cash row for a Demat ↔ bank transfer (SPENDLY-29).
@@ -381,6 +389,11 @@ export interface AccountActivity {
    */
   isCashback?: boolean;
   isManualEntry?: boolean;
+  /**
+   * SPENDLY-684: an entry posted by Group Funds (money held for others).
+   * Pass-through, never income, an expense or a manual adjustment.
+   */
+  isGroupFund?: boolean;
   isTransfer?: boolean;
   /** Money received from a lender. A liability, never income. */
   isBorrowing?: boolean;

@@ -138,6 +138,7 @@ export function activitySubtypeLabel(
     | "isBillPayment"
     | "isCashback"
     | "isManualEntry"
+    | "isGroupFund"
     | "isBorrowing"
     | "isLoanRepayment"
     | "isReceivable"
@@ -153,6 +154,7 @@ export function activitySubtypeLabel(
   // a payment does, and must never be labelled as a bill the user settled.
   if (activity.isCashback) return "Cashback";
   if (activity.isBillPayment) return "Bill payment";
+  if (activity.isGroupFund) return "Group fund";
   if (activity.isManualEntry) return "Adjustment";
   if (activity.isBorrowing) return "Borrowing";
   if (activity.isLoanRepayment) return "Loan repayment";

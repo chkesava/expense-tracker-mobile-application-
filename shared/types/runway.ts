@@ -24,6 +24,8 @@ export const RUNWAY_RESOURCE_KINDS = [
   "epf",
   "receivable",
   "borrowing",
+  /** SPENDLY-686: money held for others in Group Funds, taken out of spendable money. */
+  "group_funds_held",
 ] as const;
 export type RunwayResourceKind = (typeof RUNWAY_RESOURCE_KINDS)[number];
 
@@ -134,6 +136,8 @@ export type RunwayAssumptionCode =
   | "unknown_kind_excluded"
   | "currency_unsupported"
   | "overdrawn_counted"
+  | "held_for_others_deducted"
+  | "held_for_others_unknown"
   | "user_included"
   | "user_excluded"
   | "category_mapped_from_legacy"

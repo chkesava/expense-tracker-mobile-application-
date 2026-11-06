@@ -38,6 +38,8 @@ export const SWITCHED_COLLECTIONS: readonly string[] = [
   "sipPlans", "sipTransactions", "virtualPositions", "subscriptions", "watchlists", "watchlists/items",
   "epfContributions", "epfEstablishments", "epfInterestEntries",
   "borrowings", "borrowingRepayments", "receivables", "receivableRepayments",
+  // SPENDLY-685: Group Funds (the fund list; history uses the groupFundHistory screen switch).
+  "groupFunds",
 ];
 
 export function configuredCollectionMode(readModelSetting: unknown, collection: string): CollectionMode {

@@ -103,6 +103,7 @@ export const LEDGER_HUB_TAB_IDS = [
   "ccBills",
   "borrowings",
   "receivables",
+  "groupFunds",
   "subscriptions",
 ] as const;
 
@@ -120,6 +121,8 @@ export const LEDGER_GROUPS = [
   { id: "accounts", label: "Money & Accounts" },
   { id: "debt", label: "Credit & Debt" },
   { id: "owed", label: "Receivables" },
+  // SPENDLY-687: money held for others (Group Funds).
+  { id: "held", label: "Held for others" },
   { id: "recurring", label: "Recurring" },
 ] as const;
 
@@ -182,6 +185,13 @@ export const LEDGER_SECTIONS: LedgerSectionMeta[] = [
     label: "Receivables",
     title: "Receivables",
     subtitle: "Money lent and what is owed back",
+  },
+  {
+    id: "groupFunds",
+    group: "held",
+    label: "Group funds",
+    title: "Group funds",
+    subtitle: "Money you collect and hold for others",
   },
   {
     id: "subscriptions",
@@ -300,6 +310,7 @@ const SUB_SCREEN_PREFIXES = [
   "/runway/",
   "/goals/",
   "/what-if/",
+  "/group-funds/",
 ];
 
 const SUB_SCREEN_ROUTES = ["/settings", "/decisions", "/goals", "/fees", "/app-selector", "/add", "/runway", "/calendar", "/what-if", "/inbox", "/spending", "/budgets", "/transactions", "/trends", "/top-categories", "/recurring", "/screener"];
