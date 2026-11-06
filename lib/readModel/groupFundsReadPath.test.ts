@@ -1,0 +1,132 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+/**
+ * SPENDLY-685 — Group Funds history on the read path (`groupFundHistory` switch).
+ * `firestore` and `shadow` never page from the read model; `supabase` pages
+ * one fund's older events from it (here the loopback, which round-trips rows
+ * exactly as the sync maps them); a failure falls back for the session.
+ */
+let emulator: Record<string, { id: string; data: () => Record<string, unknown> }[]> = {};
+const reads: string[] = [];
+vi.mock("firebase/firestore", () => ({
+  Timestamp: { fromMillis: (ms: number) => ({ __ts: ms, toMillis: () => ms }) },
+  collection: (...args: unknown[]) => ({ path: args.slice(1).join("/") }),
+  query: (ref: { path: string }) => ref,
+  getDocs: async (ref: { path: string }) => {
+    reads.push(ref.path);
+    const coll = ref.path.split("/").at(-1) ?? "";
+    return { metadata: { fromCache: false }, docs: emulator[coll] ?? [] };
+  },
+}));
+vi.mock("@/lib/firestoreReadDebug", () => ({ logDirectRead: vi.fn() }));
+vi.mock("@/lib/errors", () => ({ logWarning: vi.fn() }));
+vi.mock("@/lib/readModelClient", () => ({ connectReadModel: vi.fn() }));
+
+import type { GroupFundEvent } from "@/shared/types/groupFund";
+
+import { groupFundCursorBelow, groupFundEventsPageFrom } from "./groupFundSources";
+import { readGroupFundHistoryPage } from "./groupFundsReadPath";
+import { createReadPath } from "./readPath";
+import { setReadModelPathForTests } from "./screenReadPath";
+
+const H = 3600 * 1000;
+const NOW = Date.UTC(2026, 10, 6, 12);
+const ev = (id: string, fundId: string, createdAtMs: number, amount = 6000): GroupFundEvent => ({
+  id,
+  fundId,
+  kind: "contribution",
+  amount,
+  purposeId: "appu",
+  memberId: "m1",
+  date: "2026-11-05",
+  accountId: "hdfc",
+  actorUid: "u1",
+  createdAtMs,
+});
+const doc = (e: GroupFundEvent) => {
+  const { id, ...data } = e;
+  return { id, data: () => data };
+};
+const user = { uid: "u1", getIdToken: async () => "t", getIdTokenResult: async () => ({ claims: {} }) };
+const conditions = (mode: string | undefined, extra: Record<string, unknown> = {}) => ({
+  setting: mode ? { groupFundHistory: mode, ...extra } : undefined,
+  online: true,
+  duress: false,
+  localTestMode: true,
+});
+const page = (mode: string | undefined, cursor: Parameters<typeof readGroupFundHistoryPage>[0]["cursor"], pageSize = 2, extra = {}) =>
+  readGroupFundHistoryPage({ db: {} as never, user, conditions: conditions(mode, extra), fundId: "f1", cursor, pageSize });
+let log: ReturnType<typeof vi.fn>;
+
+beforeEach(() => {
+  reads.length = 0;
+  log = vi.fn();
+  setReadModelPathForTests(createReadPath({ timeoutMs: 500, log, shadowLogIntervalMs: 0 }));
+  emulator = {
+    groupFundEvents: [
+      doc(ev("a1", "f1", NOW - 10 * 24 * H)),
+      doc(ev("a2", "f1", NOW - 5 * 24 * H, 100)),
+      doc(ev("b1", "f2", NOW - 4 * 24 * H)),
+      doc(ev("a0", "f1", NOW - 90 * 24 * H)),
+    ],
+  };
+});
+
+describe("firestore and shadow modes never page from the read model", () => {
+  it("returns null (use the Firestore cursor) without connecting or reading", async () => {
+    const connect = vi.fn();
+    // `groupFunds` (the fund list's collection switch) never moves history paging.
+    for (const setting of [undefined, { groupFundHistory: "firestore" }, { groupFundHistory: "shadow" }, { groupFunds: "supabase" }]) {
+      expect(
+        await readGroupFundHistoryPage({
+          db: {} as never,
+          user,
+          connect,
+          conditions: { setting, online: true, duress: false },
+          fundId: "f1",
+          cursor: null,
+          pageSize: 25,
+        })
+      ).toBeNull();
+    }
+    expect(connect).not.toHaveBeenCalled();
+    expect(reads).toEqual([]);
+  });
+});
+
+describe("supabase mode", () => {
+  it("pages one fund's older history by keyset, newest first", async () => {
+    const first = await page("supabase", null);
+    expect(first?.items.map((e) => e.id)).toEqual(["a2", "a1"]);
+    expect(first?.exhausted).toBe(false);
+    const second = await page("supabase", first!.next);
+    expect(second?.items.map((e) => e.id)).toEqual(["a0"]);
+    expect(second?.exhausted).toBe(true);
+    const below = await page("supabase", groupFundCursorBelow(NOW - 5 * 24 * H - 1), 10);
+    expect(below?.items.map((e) => e.id)).toEqual(["a1", "a0"]);
+    // Rows come back as the app's events, amounts intact.
+    expect(first?.items[0]).toMatchObject({ fundId: "f1", amount: 100, createdAtMs: NOW - 5 * 24 * H });
+  });
+
+  it("a read-model failure falls back to Firestore for the rest of the session", async () => {
+    expect(await page("supabase", null, 2, { loopbackFail: true })).toBeNull();
+    expect(log).toHaveBeenCalledWith("readModel.fallback.groupFundHistory", expect.anything());
+    expect(await page("supabase", null)).toBeNull();
+  });
+
+  it("duress and offline sessions stay on Firestore", async () => {
+    for (const c of [{ ...conditions("supabase"), duress: true }, { ...conditions("supabase"), online: false }]) {
+      expect(
+        await readGroupFundHistoryPage({ db: {} as never, user, conditions: c, fundId: "f1", cursor: null, pageSize: 2 })
+      ).toBeNull();
+    }
+  });
+});
+
+describe("groupFundEventsPageFrom", () => {
+  it("returns a cursor only on a full page", () => {
+    const rows = [{ doc_id: "x", created_at: "2026-11-01T00:00:00.000Z", doc: { fundId: "f1" } }];
+    expect(groupFundEventsPageFrom(rows, 1)).toMatchObject({ exhausted: false, next: { createdAt: "2026-11-01T00:00:00.000Z", docId: "x" } });
+    expect(groupFundEventsPageFrom(rows, 2)).toMatchObject({ exhausted: true, next: null });
+  });
+});

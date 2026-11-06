@@ -19,7 +19,7 @@ It is **custodial money**: it belongs to the group, not the user.
 |---|---|---|
 | SPENDLY-683 (S1) | Accounting model (this doc), types, pure logic and write plans | Merged to the epic branch (`60808c94`) |
 | SPENDLY-684 (S2) | Store, Firestore rules, `CREATE_ONLY_SEGMENTS`, how entries show on account screens, index | Merged to the epic branch (`f949d596`); rules + index deploy pending |
-| SPENDLY-685 (S3) | Supabase read model: mapping, migration, RLS, allowlist, purge, indexes, read switch, history read path | To do |
+| SPENDLY-685 (S3) | Supabase read model: mapping, migration, RLS, allowlist, purge, indexes, read switch, history read path | Built on `feature/SPENDLY-685-group-funds-read-model`; awaiting merge approval |
 | SPENDLY-686 (S4) | "Group funds held" liability in net worth and runway | To do |
 | SPENDLY-687 (S5) | Money hub section, screens and sheets | To do |
 | SPENDLY-688 (S6) | Member pending amounts, reconciliation view, QA suite, read instrumentation | To do |
@@ -118,7 +118,15 @@ Group money lives in the user's real accounts, so the real balance must move. It
   - Group-fund account entries can't be edited or deleted; only a reversal undoes them.
   - Contributions and payouts must use cash or a bank account. A credit card or a missing account is refused.
   - Account screens show these rows as transfers labelled "Group fund".
+- **S3:**
+  - The fund's totals stay in Supabase `doc` with no typed money column. SQL never filters or sums them, and the mapper copies only top-level fields.
+  - The fund list reads through the `groupFunds` collection switch. History pages read through a separate `groupFundHistory` screen switch, so each can be flipped on its own.
+  - Writers never build from the list hook: they load the fund from Firestore (R4.3a).
 
 ## Deploys pending
 - **S2 (SPENDLY-684):** `firestore.rules` and the `groupFundEvents (fundId, createdAtMs desc)` index. Both are production changes and need approval. Diff the indexes against live first.
+- **S3 (SPENDLY-685):**
+  - The Supabase migration `20261106000000_readmodel_group_funds.sql`, as a dry run first, then applied only with approval.
+  - The six cross-user field overrides (`groupFunds` and `groupFundEvents` × `createdAt`, `updatedAt`, `createdAtMs`), deployed with the S2 index.
+  - **Order:** apply the migration before any app build that writes group funds (S5 adds the first writer). Until it is applied, `rm_client_apply` refuses the unknown tables, and the client outbox drops that whole batch. That includes the same write's `account_entries` and `accounts` rows, so their Supabase copy waits for the per-write server push or the nightly sync. Firestore is unaffected either way.
 - S3: the Supabase migration, run as a dry run first and applied only with approval.
