@@ -34,14 +34,9 @@ export async function ensureBillNotificationHandler(): Promise<void> {
   if (handlerReady) return;
   try {
     const Notifications = await loadNotifications();
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldPlaySound: false,
-        shouldSetBadge: false,
-        shouldShowBanner: true,
-        shouldShowList: true,
-      }),
-    });
+    // SPENDLY-230: the app's one handler (no banner for the screen already open).
+    const { spendlyNotificationHandler } = await import("@/lib/notificationHandler");
+    Notifications.setNotificationHandler(spendlyNotificationHandler);
     handlerReady = true;
   } catch {
     // soft-fail

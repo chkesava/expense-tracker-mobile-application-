@@ -49,7 +49,8 @@ Everything that has to **run or be done outside the code** before Spendly push n
 | Story | What it adds to go-live |
 |---|---|
 | 231 Credit card bills | **Indexes, with B1/B2:** `creditCardBills.dueDate` field override (collection group) and the composite collection-group index `creditCardBills (status ASC, dueDate ASC)`. The bill source is already in `buildSources`. **Check after C4:** a bill paid in the app gets no further push. Its `creditCardBillReminderLogs` show `channel: "push"`. |
-| 230, 693, 694, 695, 696, 229, 697, 698, 225, 233 | *(pending)* |
+| 230 Tap routing + inbox | **Supabase migration `20261108000000_readmodel_notifications.sql`, applied after `20261107` in step B4.** The Group Funds note applies again. **Indexes, with B1/B2:** `notifications.createdAt` and `notifications.updatedAt` field overrides (collection group). **Read switch:** `readModel.notifications` starts as `firestore`. Move it to `shadow`, then `supabase`, like the other collections (READMODEL_RUNBOOK), after a clean parity run. **Check after B5:** tapping a push opens its screen. The inbox shows SIP updates, and reading one on a phone clears its badge on the other devices. |
+| 693, 694, 695, 696, 229, 697, 698, 225, 233 | *(pending)* |
 
 ## E. After everything is live
 

@@ -8,6 +8,7 @@ import { useCalendarReminders } from "@/hooks/useCalendarReminders";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useFinancialGoals } from "@/hooks/useFinancialGoals";
+import { useNotificationRows } from "@/hooks/useNotificationRows";
 import { useSaveGoalsEnabled } from "@/hooks/useSaveGoalsEnabled";
 import { goalInboxItems } from "@/shared/utils/goalReminders";
 import { useReceivables } from "@/hooks/useReceivables";
@@ -33,20 +34,28 @@ import {
   unreadCount,
   type InboxItem,
 } from "@/shared/utils/remindersInbox";
+import { unreadRowCount, type NotificationRow } from "@/shared/utils/notificationRows";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 
 type RemindersInboxValue = {
   /** Dues: overdue or due soon, newest occurrence ids. */
   items: InboxItem[];
+  /** SPENDLY-230: recent notification rows (SIP, and the server events' rows). */
+  updates: NotificationRow[];
+  /** Unseen dues plus unread rows. */
   unread: number;
-  /** Marks every current due as seen on this device. */
+  /** Marks every current due as seen on this device, and every row read on all devices. */
   markAllSeen: () => void;
+  /** Marks one row read (on all devices). */
+  markUpdateRead: (id: string) => void;
 };
 
 const RemindersInboxContext = createContext<RemindersInboxValue>({
   items: [],
+  updates: [],
   unread: 0,
   markAllSeen: () => undefined,
+  markUpdateRead: () => undefined,
 });
 
 const seenKey = (uid: string) => `spendly:remindersInboxSeen:${uid}`;
@@ -79,6 +88,9 @@ export function RemindersInboxProvider({ children }: { children: ReactNode }) {
   // SPENDLY-612: in-app goal reminders (work without push permission and on web).
   const saveGoals = useSaveGoalsEnabled();
   const { goals } = useFinancialGoals({ enabled: ready && saveGoals });
+  // SPENDLY-230: the stored notification rows; read state is on the row, so
+  // it's the same on every device.
+  const { rows: updates, markRead } = useNotificationRows({ enabled: ready });
 
   const cardNames = useMemo(() => {
     const typeName = new Map(accountTypes.map((t) => [t.id, t.name]));
@@ -130,18 +142,25 @@ export function RemindersInboxProvider({ children }: { children: ReactNode }) {
   }, [uid]);
 
   const seenSet = useMemo(() => new Set(seenIds), [seenIds]);
-  const unread = useMemo(() => unreadCount(items, seenSet), [items, seenSet]);
+  const unread = useMemo(() => unreadCount(items, seenSet) + unreadRowCount(updates), [items, seenSet, updates]);
 
   const markAllSeen = useCallback(() => {
+    const unreadRows = updates.filter((r) => !r.read).map((r) => r.id);
+    if (unreadRows.length) void markRead(unreadRows);
     if (!uid || items.length === 0 || unreadCount(items, seenSet) === 0) return;
     const next = markInboxSeen(seenIds, items);
     setSeenIds(next);
     AsyncStorage.setItem(seenKey(uid), JSON.stringify(next)).catch((error) =>
       logError("remindersInbox.saveSeen", error)
     );
-  }, [uid, items, seenIds, seenSet]);
+  }, [uid, items, seenIds, seenSet, updates, markRead]);
 
-  const value = useMemo(() => ({ items, unread, markAllSeen }), [items, unread, markAllSeen]);
+  const markUpdateRead = useCallback((id: string) => void markRead([id]), [markRead]);
+
+  const value = useMemo(
+    () => ({ items, updates, unread, markAllSeen, markUpdateRead }),
+    [items, updates, unread, markAllSeen, markUpdateRead]
+  );
   return <RemindersInboxContext.Provider value={value}>{children}</RemindersInboxContext.Provider>;
 }
 

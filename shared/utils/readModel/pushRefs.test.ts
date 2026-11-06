@@ -12,7 +12,7 @@ describe("push refs (SPENDLY-583)", () => {
       "epfProfile", "epfReconciliations", "epfTransferEvents", "epfTransfers", "epfWageHistory",
       "expenses", "feeReviews", "feeSignalDismissals", "financialGoals", "financialSummaries", "goalEvents",
       "goalFundingPlans", "holdings", "incomes", "investmentCashTransactions", "investments",
-      "ledgerEvents", "merchantOverrides", "netWorthHistory", "portfolioSettings",
+      "ledgerEvents", "merchantOverrides", "netWorthHistory", "notifications", "portfolioSettings",
       "portfolioTransactions", "receivableRepayments", "receivables", "recurringDismissals",
       "runwayOverrides", "runwaySettings", "sipPlans", "sipTransactions", "spaces",
       "subscriptions", "trips", "userSettings", "virtualPositions", "watchlists", "watchlists/items", "whatIfScenarios",
@@ -27,7 +27,7 @@ describe("push refs (SPENDLY-583)", () => {
     expect(pushRefFromPath("users/u2/expenses/e1", "u1")).toBeNull();
     expect(pushRefFromPath("users/u1_duress/expenses/e1", "u1")).toBeNull();
     expect(pushRefFromPath("users/u1/expenses/e1", "u1_duress")).toBeNull();
-    expect(pushRefFromPath("users/u1/notifications/n1", "u1")).toBeNull();
+    expect(pushRefFromPath("users/u1/stats/n1", "u1")).toBeNull();
     expect(pushRefFromPath("users/u1/meta/outbox/acks/x", "u1")).toBeNull();
     // SPENDLY-591 part C: the users/{uid} document itself, under its fixed id.
     expect(pushRefFromPath("users/u1", "u1")).toEqual({ collection: "userSettings", docId: "settings" });
