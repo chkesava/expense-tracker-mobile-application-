@@ -46,7 +46,7 @@ These rules sit beside `CLAUDE.md` (Spendly safety invariants) and `docs/AGENT_W
 
 ## 2. New collections and fields
 
-**Synced today (54 tables):**
+**Synced today (55 tables):**
 - Wave 1: `expenses`, `incomes`, `ledgerEvents`, `accounts`, `accountTypes`, `accountTransfers`, `accountEntries`, `accountPayments`, `creditCardBills`, `categories`.
 - Save Goals (SPENDLY-609): `financialGoals`, `goalEvents`.
 - Wave 2 (SPENDLY-589): `borrowings`, `borrowingRepayments`, `receivables`, `receivableRepayments`, `subscriptions`.
@@ -54,6 +54,7 @@ These rules sit beside `CLAUDE.md` (Spendly safety invariants) and `docs/AGENT_W
 - Remaining screen collections (SPENDLY-591 part A): `categoryBudgets`, `decisions`, `calendarReminders`, `feeReviews`, `feeSignalDismissals`, `merchantOverrides`, `recurringDismissals`, `spaces`, `categorizationRules`, `trips`, `runwaySettings`, `runwayOverrides`, `whatIfScenarios`, `goalFundingPlans`, `sipPlans`, `sipTransactions`, `virtualPositions`, `netWorthHistory`, `watchlists`. Dates stored as full ISO strings (trip and SIP plan dates) are copied as text, never cut to a UTC day.
 - Stored summaries (SPENDLY-592): `financialSummaries` (`dashboard_{YYYY-MM}`, `epf`), copied exactly (R4.1).
 - Push devices (SPENDLY-224): `devices`, one row per signed-in install. The Expo push token stays in `doc`; no screen reads it, and the server sender reads Firestore.
+- Notification rows (SPENDLY-230): `notifications`, the unified inbox's rows (SIP today, server events later), read through `readModel.notifications`.
 
 Everything else is **not** in the read model. Waves 2 and 3 were first closed as won't-do (514–518, the no-Blaze decision); SPENDLY-586 brings them back: Wave 2 in 589, Wave 3 in 590. Still not synced: `financialSummaries/netWorth` and `/investments` (retired; R4.1a), `holdingAdjustments`, `portfolioReconciliationAudits`, `decisionEvents`; the `users/{uid}` settings document is copied as `user_settings` (591 part C): allowlisted fields only (`RootSpec.docKeys`; never PIN, lock, role or identity), server-only (not on the client allowlist). Nested collections (591 part B, `watchlists/{listId}/items`) key on doc_id `"{parentId}/{id}"` with a `TableSpec.parent`.
 

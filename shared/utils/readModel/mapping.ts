@@ -895,6 +895,23 @@ export const READ_MODEL_TABLES: TableSpec[] = [
       f("last_seen_at", "lastSeenAt", "timestamp"),
     ],
   },
+  // SPENDLY-230 (migration 20261108000000): the in-app notification rows the
+  // unified inbox shows (SIP execution today; server events later). `read`
+  // is the cross-device read state; the body and meta stay in `doc`.
+  {
+    table: "notifications",
+    collection: "notifications",
+    fields: [
+      f("type", "type", "text"),
+      f("category", "category", "text"),
+      f("title", "title", "text"),
+      f("url", "url", "text"),
+      f("entity_id", "entityId", "text"),
+      f("read", "read", "boolean"),
+      f("created_at", "createdAt", "timestamp"),
+      f("updated_at", "updatedAt", "timestamp"),
+    ],
+  },
 ];
 
 export const SPEC_BY_COLLECTION = new Map(READ_MODEL_TABLES.map((s) => [s.collection, s]));

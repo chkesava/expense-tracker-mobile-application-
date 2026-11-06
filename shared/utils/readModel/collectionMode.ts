@@ -38,6 +38,8 @@ export const SWITCHED_COLLECTIONS: readonly string[] = [
   "sipPlans", "sipTransactions", "virtualPositions", "subscriptions", "watchlists", "watchlists/items",
   "epfContributions", "epfEstablishments", "epfInterestEntries",
   "borrowings", "borrowingRepayments", "receivables", "receivableRepayments",
+  // SPENDLY-230: the unified inbox's notification rows.
+  "notifications",
 ];
 
 export function configuredCollectionMode(readModelSetting: unknown, collection: string): CollectionMode {

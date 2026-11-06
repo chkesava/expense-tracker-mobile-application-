@@ -15,7 +15,7 @@
 | [226](https://kesavach.atlassian.net/browse/SPENDLY-226) | Preferences + one delivery window | — | Merged to epic ([doc](SPENDLY-226-push-preferences.md)) |
 | [227](https://kesavach.atlassian.net/browse/SPENDLY-227) | Push sender (transport) | 224, 226 | Merged to epic ([doc](SPENDLY-227-push-sender.md)) |
 | [692](https://kesavach.atlassian.net/browse/SPENDLY-692) | Reminder engine (send-time re-check, ledger) | 227 | Merged to epic ([doc](SPENDLY-692-reminder-engine.md)) |
-| [230](https://kesavach.atlassian.net/browse/SPENDLY-230) | Tap routing + unified inbox | — | To Do |
+| [230](https://kesavach.atlassian.net/browse/SPENDLY-230) | Tap routing + unified inbox | — | In Progress: built, awaiting UI review and merge ([doc](SPENDLY-230-tap-routing-inbox.md)) |
 | [231](https://kesavach.atlassian.net/browse/SPENDLY-231) | Credit card bill reminders via push | 692 | Merged to epic ([doc](SPENDLY-231-bill-push.md)) |
 | [693](https://kesavach.atlassian.net/browse/SPENDLY-693) | Local → push handover (no duplicates or stale reminders) | 692, 231 | To Do |
 | [694](https://kesavach.atlassian.net/browse/SPENDLY-694) | Financial calendar reminders via push | 692 | To Do |
@@ -37,6 +37,7 @@
 - **2026-11-06:** D2 decided by the user: `devices` is dual-written to Supabase (full read-model treatment), not exempt.
 - **2026-11-06:** Correction: the Firebase project is on **Spark**, so Cloud Functions can't run (`functions/` was never deployed). **D3 decided by the user: GitHub Actions cron.**
 - **2026-11-06 (692):** the sender's idempotency claim (`pushSendLogs/{uid}:{slotId}`) is the delivery ledger. There is no separate `pushDeliveries` collection.
+- **2026-11-06 (230):** the user decided the inbox rows (`notifications`) are dual-written to Supabase (migration 20261108).
 - Open decisions D1, D4 to D9 are listed in the plan, §6.
 
 ## Pending deploys
