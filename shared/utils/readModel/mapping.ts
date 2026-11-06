@@ -877,6 +877,24 @@ export const READ_MODEL_TABLES: TableSpec[] = [
       f("updated_at", "updatedAt", "timestamp"),
     ],
   },
+  // SPENDLY-224 (migration 20261107000000): one row per signed-in install,
+  // holding its Expo push token for the server sender. The token stays in
+  // `doc` only; owner-only RLS as every table. Dual-written by
+  // lib/pushRegistration (noteDirectWrites), purged with the account.
+  {
+    table: "devices",
+    collection: "devices",
+    fields: [
+      f("platform", "platform", "text"),
+      f("product", "product", "text"),
+      f("token_type", "tokenType", "text"),
+      f("app_version", "appVersion", "text"),
+      f("locale", "locale", "text"),
+      f("created_at", "createdAt", "timestamp"),
+      f("updated_at", "updatedAt", "timestamp"),
+      f("last_seen_at", "lastSeenAt", "timestamp"),
+    ],
+  },
 ];
 
 export const SPEC_BY_COLLECTION = new Map(READ_MODEL_TABLES.map((s) => [s.collection, s]));

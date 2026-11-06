@@ -34,7 +34,7 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries'
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'devices'
   ] loop
     execute format(
       $sql$insert into public.%I (uid, doc_id, doc, source_path, source_update_time, source_deleted) values
@@ -79,7 +79,7 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries'
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'devices'
   ] loop
     return query execute format('select %L::text, r.uid, r.doc_id from public.%I r', t, t);
   end loop;
@@ -177,7 +177,7 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'sync_status',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'devices', 'sync_status',
     'sync_runs', 'sync_checkpoints', 'sync_failures'
   ] loop
     -- Column-free (or last-column) statements, so the probe fails on
@@ -276,7 +276,7 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'devices',
     'sync_runs', 'sync_status', 'sync_checkpoints', 'sync_failures',
     'v_cash_flow_by_month'
   ] loop

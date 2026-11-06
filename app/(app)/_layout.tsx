@@ -24,6 +24,7 @@ import { useAndroidBackHandler } from "@/hooks/useAndroidBackHandler";
 import { useAppShortcutHandler } from "@/hooks/useAppShortcutHandler";
 import { useNavigationStateRestoration } from "@/hooks/useNavigationStateRestoration";
 import { useNotificationTapRouting } from "@/hooks/useNotificationTapRouting";
+import { usePushRegistration } from "@/hooks/usePushRegistration";
 import { useRecurringSync } from "@/hooks/useRecurringSync";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -61,6 +62,9 @@ function AppShellInner() {
 
   // Bill and calendar reminder taps, including the one that launched the app.
   useNotificationTapRouting();
+
+  // SPENDLY-224: keep this install's push token registered for the signed-in user.
+  usePushRegistration();
 
   // Queue recurring merchants found in the expense list for review.
   useRecurringSync();

@@ -7,7 +7,7 @@ describe("push refs (SPENDLY-583)", () => {
     expect([...PUSHABLE_COLLECTIONS].sort()).toEqual([
       "accountEntries", "accountPayments", "accountTransfers", "accountTypes", "accounts",
       "borrowingRepayments", "borrowings", "calendarReminders", "categories",
-      "categorizationRules", "categoryBudgets", "creditCardBills", "decisions",
+      "categorizationRules", "categoryBudgets", "creditCardBills", "decisions", "devices",
       "epfContributionEvents", "epfContributions", "epfEstablishments", "epfInterestEntries",
       "epfProfile", "epfReconciliations", "epfTransferEvents", "epfTransfers", "epfWageHistory",
       "expenses", "feeReviews", "feeSignalDismissals", "financialGoals", "financialSummaries", "goalEvents",

@@ -48,6 +48,7 @@ import { enforceGoogleSignupGate } from "@/lib/googleSignupGate";
 import { perfMark, perfStart, perfEnd } from "@/lib/perf";
 import { privacySession } from "@/lib/privacySession";
 import { clearUserReminderNotifications } from "@/lib/userReminderNotifications";
+import { unregisterPushDevice } from "@/lib/pushRegistration";
 import { duressUid } from "@/shared/utils/duress";
 import { getGlobalPendingSyncCount } from "@/lib/syncStatusStore";
 import { ganeshSessionStorageKey } from "@/shared/utils/ganeshSessionStorage";
@@ -342,6 +343,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // SPENDLY-691: the next person on this device must not get this user's
       // bill, calendar or goal reminders. Never throws.
       await clearUserReminderNotifications();
+      // SPENDLY-224: stop this account's pushes reaching this device. Runs while
+      // still signed in (the rules need the owner). Never throws.
+      await unregisterPushDevice(signedOutUid);
       await GoogleSignin.signOut().catch(() => {});
       await signOut(auth);
       await recycleFirestoreAfterLogout();
