@@ -4,7 +4,9 @@
 #   target = all-collections  every collection the app reads through the switch
 #                             (SWITCHED_COLLECTIONS), to `mode`, in one merge write
 #   target = collection       one collection (`collection`), to `mode`
-#   target = switch           an app-wide switch (`switch_name` = localCopy | realtime |
+#   target = screen           one screen's history/report read (`screen`, from
+#                             READ_MODEL_SCREENS, e.g. groupFundHistory), to `mode`
+#   target = switch          an app-wide switch (`switch_name` = localCopy | realtime |
 #                             clientWrites) to `switch_value`
 #
 # Dry run by default: the log shows each key's current → new value. Untick
@@ -26,9 +28,9 @@ on:
         required: true
         default: all-collections
         type: choice
-        options: [all-collections, collection, switch]
+        options: [all-collections, collection, screen, switch]
       mode:
-        description: "Collection mode (all-collections / collection)"
+        description: "Mode (all-collections / collection / screen)"
         required: false
         default: shadow
         type: choice
@@ -37,6 +39,13 @@ on:
         description: "Collection name (target = collection), e.g. expenses"
         required: false
         type: string
+      screen:
+        description: "Screen (target = screen)"
+        required: false
+        default: groupFundHistory
+        type: choice
+        # Keep in step with READ_MODEL_SCREENS (scripts/readmodelSetMode.test.ts checks it).
+        options: [journal, insights, cashFlow, audit, cashback, goals, groupFundHistory]
       switch_name:
         description: "Switch (target = switch)"
         required: false
@@ -86,6 +95,7 @@ jobs:
           TARGET: ${{ inputs.target }}
           MODE: ${{ inputs.mode }}
           COLLECTION: ${{ inputs.collection }}
+          SCREEN: ${{ inputs.screen }}
           SWITCH_NAME: ${{ inputs.switch_name }}
           SWITCH_VALUE: ${{ inputs.switch_value }}
           DRY_RUN: ${{ inputs.dry_run }}
@@ -100,6 +110,9 @@ jobs:
             collection)
               if [ -z "$COLLECTION" ]; then echo "::error::Set 'collection' for target = collection."; exit 1; fi
               args=("--collection=$COLLECTION" "--mode=$MODE") ;;
+            screen)
+              if [ -z "$SCREEN" ]; then echo "::error::Set 'screen' for target = screen."; exit 1; fi
+              args=("--screen=$SCREEN" "--mode=$MODE") ;;
             switch) args=("--switch=$SWITCH_NAME" "--value=$SWITCH_VALUE") ;;
             *) echo "::error::Unknown target '$TARGET'."; exit 1 ;;
           esac
