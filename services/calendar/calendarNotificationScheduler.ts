@@ -35,22 +35,6 @@ async function ensureChannel(): Promise<void> {
   channelReady = true;
 }
 
-/** Ask for permission (used by the settings switch). */
-export async function requestCalendarNotificationPermission(): Promise<boolean> {
-  try {
-    const { Platform } = await import("react-native");
-    if (Platform.OS === "web") return false;
-    await ensureBillNotificationHandler();
-    await ensureChannel();
-    const Notifications = await loadNotifications();
-    const existing = await Notifications.getPermissionsAsync();
-    if (existing.status === "granted") return true;
-    return (await Notifications.requestPermissionsAsync()).status === "granted";
-  } catch {
-    return false;
-  }
-}
-
 /** Cancel every calendar notification (switches off, sign-out, plan rebuild). */
 export async function cancelCalendarNotifications(): Promise<void> {
   try {

@@ -64,17 +64,18 @@ async function ensureAndroidChannel(): Promise<void> {
   }
 }
 
-export async function requestBillNotificationPermission(): Promise<boolean> {
+/**
+ * SPENDLY-225: background reconcile only reads the permission. It never asks
+ * (asking happens from the settings switch, with an explanation first).
+ */
+export async function billNotificationsAllowed(): Promise<boolean> {
   try {
     const { Platform } = await import("react-native");
     if (Platform.OS === "web") return false;
     await ensureBillNotificationHandler();
     await ensureAndroidChannel();
     const Notifications = await loadNotifications();
-    const existing = await Notifications.getPermissionsAsync();
-    if (existing.status === "granted") return true;
-    const asked = await Notifications.requestPermissionsAsync();
-    return asked.status === "granted";
+    return (await Notifications.getPermissionsAsync()).status === "granted";
   } catch {
     return false;
   }
@@ -189,7 +190,7 @@ export async function reconcileBillReminders(opts: {
   }) => Promise<void> | void;
 }): Promise<void> {
   const today = todayDateKey(opts.timezone);
-  const granted = await requestBillNotificationPermission();
+  const granted = await billNotificationsAllowed();
 
   for (const bill of opts.bills) {
     await cancelBillReminders(bill.id);

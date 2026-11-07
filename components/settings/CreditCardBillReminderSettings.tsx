@@ -7,7 +7,7 @@ import { ThemedSwitch } from "@/components/settings/SettingsControls";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
 import { useSettings } from "@/providers/SettingsProvider";
-import { requestBillNotificationPermission } from "@/services/creditCardBills/billReminderScheduler";
+import { askForNotifications } from "@/lib/notificationPermission";
 import { useTheme } from "@/theme/ThemeProvider";
 import { haptic } from "@/lib/haptics";
 
@@ -49,11 +49,12 @@ export function CreditCardBillReminderSettings() {
             onValueChange={async (enabled) => {
               setCreditCardBillReminders({ enabled });
               if (enabled) {
-                const ok = await requestBillNotificationPermission();
+                // SPENDLY-225: explained first; "Open settings" if the phone won't ask again.
+                const ok = await askForNotifications("bills");
                 setPermHint(
                   ok
                     ? null
-                    : "Notification permission is off — enable it in system settings."
+                    : "Notifications aren't allowed yet. Turn them on from Notifications, above, to get these reminders."
                 );
               }
             }}
