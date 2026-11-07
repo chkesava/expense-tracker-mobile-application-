@@ -77,4 +77,14 @@ describe("readmodel-set-mode (SPENDLY-511)", () => {
   it("only names synced collections", () => {
     for (const c of SWITCHED_COLLECTIONS) expect(READ_MODEL_COLLECTIONS).toContain(c);
   });
+
+  it("--except leaves the named collections as they are", () => {
+    const args = parseSetModeArgs(["--all-collections", "--mode=supabase", "--except=categories, groupFunds", "--apply"]);
+    expect(args).toEqual({ allCollections: true, mode: "supabase", apply: true, except: ["categories", "groupFunds"] });
+    const patch = setModePatch(args) as { readModel: Record<string, unknown> };
+    expect(patch.readModel).not.toHaveProperty("categories");
+    expect(patch.readModel).not.toHaveProperty("groupFunds");
+    expect(Object.keys(patch.readModel)).toHaveLength(SWITCHED_COLLECTIONS.length - 2);
+    expect(() => parseSetModeArgs(["--all-collections", "--mode=supabase", "--except=categoreis"])).toThrow(/unknown collections: categoreis/);
+  });
 });
