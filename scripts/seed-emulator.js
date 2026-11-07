@@ -310,6 +310,14 @@ function buildDemoData(today = new Date()) {
     taxEntry('taxentry-ded-elss', 'deduction', { category: 'elss', amount: 50000, proofStatus: 'missing' }, 'elss|50000.00'),
     taxEntry('taxentry-ded-ppf', 'deduction', { category: 'ppf', amount: 30000, proofStatus: 'not_needed' }, 'ppf|30000.00'),
     taxEntry('taxentry-ded-health', 'deduction', { category: 'health_parents', amount: 32000, proofStatus: 'missing' }, 'health_parents|32000.00'),
+    // SPENDLY-294: two advance-tax instalments (one also in the 26AS), a
+    // self-assessment payment without challan details, and a 26AS tax-paid
+    // line nothing accounts for.
+    taxEntry('taxentry-pay-sep', 'tax_payment', { paymentType: 'advance_tax', date: ymd(new Date(lastFyStart, 8, 15)), amount: 15000, bsrCode: '0510308', challanSerial: '00412' }, `challan|0510308|00412|${ymd(new Date(lastFyStart, 8, 15))}`),
+    taxEntry('taxentry-pay-dec', 'tax_payment', { paymentType: 'advance_tax', date: ymd(new Date(lastFyStart, 11, 15)), amount: 15000, bsrCode: '0510308', challanSerial: '00977' }, `challan|0510308|00977|${ymd(new Date(lastFyStart, 11, 15))}`),
+    taxEntry('taxentry-pay-sat', 'tax_payment', { paymentType: 'self_assessment', date: ymd(new Date(lastFyStart + 1, 6, 20)), amount: 3460 }, `self_assessment|${ymd(new Date(lastFyStart + 1, 6, 20))}|3460.00`),
+    taxEntry('taxentry-26as-paid', 'ais_value', { statement: '26AS', infoCategory: 'tax_paid', sourceName: 'Advance tax (challan 00412)', reportedAmount: 15000 }, '26AS|tax_paid|advance tax challan 00412||15000.00'),
+    taxEntry('taxentry-26as-paid2', 'ais_value', { statement: '26AS', infoCategory: 'tax_paid', sourceName: 'Advance tax (challan 01123)', reportedAmount: 12000 }, '26AS|tax_paid|advance tax challan 01123||12000.00'),
   ];
 
   const currentMonth = ym(today);

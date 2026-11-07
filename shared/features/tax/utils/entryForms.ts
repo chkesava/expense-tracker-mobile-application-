@@ -10,6 +10,7 @@
 import { DEDUCTION_CATEGORIES } from "../data/deductionCategories";
 import {
   TAX_AIS_CATEGORIES,
+  TAX_PAYMENT_TYPES,
   TAX_PROOF_STATUSES,
   TAX_QUARTERS,
   TAX_STATEMENTS,
@@ -27,7 +28,7 @@ import { validateTaxEntry, type TaxEntryDraft, type TaxIssue } from "./validatio
  * `sourceRef` links an existing Spendly record (SPENDLY-292): its options are
  * supplied at runtime (`"{kind}:{id}"`) and it is stored as `{ kind, id }`.
  */
-export type FormFieldType = "text" | "money" | "date" | "tan" | "section" | "option" | "sourceRef";
+export type FormFieldType = "text" | "money" | "date" | "tan" | "section" | "option" | "sourceRef" | "digits";
 
 export interface FormField {
   key: string;
@@ -36,6 +37,10 @@ export interface FormField {
   required: boolean;
   /** Money only: an empty value is stored as `null` ("not known") rather than left out. */
   nullable?: boolean;
+  /** Date only: `afterYearStart` lets the date run past the year's end, up to today (SPENDLY-294). */
+  dateRange?: "year" | "afterYearStart";
+  /** Digits only: the exact length expected (BSR 7, challan 5, CIN 20). */
+  length?: number;
   options?: readonly { id: string; label: string }[];
   placeholder?: string;
   helper?: string;
@@ -110,6 +115,31 @@ export const ENTRY_FORMS: Partial<Record<TaxEntryKind, EntryFormSpec>> = {
       if (!fields.proofStatus) fields.proofStatus = extra.documentIds?.length ? "attached" : "missing";
     },
   },
+  tax_payment: {
+    kind: "tax_payment",
+    title: "Tax payment",
+    fields: [
+      {
+        key: "paymentType",
+        label: "Payment",
+        type: "option",
+        required: true,
+        options: opt(TAX_PAYMENT_TYPES, (id) => ({ advance_tax: "Advance tax", self_assessment: "Self-assessment tax", other: "Other" })[id] ?? id),
+      },
+      {
+        key: "date",
+        label: "Date paid",
+        type: "date",
+        required: true,
+        dateRange: "afterYearStart",
+        helper: "Advance tax is paid during the year; self-assessment tax usually after it ends.",
+      },
+      { key: "amount", label: "Amount paid", type: "money", required: true },
+      { key: "bsrCode", label: "BSR code (optional)", type: "digits", length: 7, required: false, helper: "7 digits on the challan." },
+      { key: "challanSerial", label: "Challan serial number (optional)", type: "digits", length: 5, required: false },
+      { key: "cin", label: "CIN (optional)", type: "digits", length: 20, required: false, helper: "Or the 20-digit challan identification number." },
+    ],
+  },
   ais_value: {
     kind: "ais_value",
     title: "AIS / 26AS line",
@@ -180,7 +210,12 @@ export function entryFormToDraft(
       else fields[f.key] = { kind, id };
       continue;
     }
-    fields[f.key] = f.type === "tan" || f.type === "section" ? raw.replace(/\s+/g, "").toUpperCase() : raw;
+    fields[f.key] =
+      f.type === "tan" || f.type === "section"
+        ? raw.replace(/\s+/g, "").toUpperCase()
+        : f.type === "digits"
+          ? raw.replace(/\s+/g, "")
+          : raw;
   }
   spec.complete?.(fields, extra);
   const draft: TaxEntryDraft = {

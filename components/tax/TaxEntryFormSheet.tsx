@@ -124,7 +124,7 @@ export function TaxEntryFormSheet({
           value={value}
           onChange={(date) => set(f.key, date)}
           minDate={bounds?.startDate}
-          maxDate={bounds?.endDate}
+          maxDate={f.dateRange === "afterYearStart" ? todayKey : bounds?.endDate}
           clearable={!f.required}
           helperText={f.helper}
         />
@@ -138,9 +138,9 @@ export function TaxEntryFormSheet({
         onChangeText={(text) => set(f.key, text)}
         placeholder={f.placeholder}
         helperText={f.helper}
-        keyboardType={f.type === "money" ? "decimal-pad" : "default"}
-        autoCapitalize={f.type === "tan" || f.type === "section" ? "characters" : "sentences"}
-        maxLength={f.type === "tan" ? 10 : f.type === "section" ? 24 : 120}
+        keyboardType={f.type === "money" ? "decimal-pad" : f.type === "digits" ? "number-pad" : "default"}
+        autoCapitalize={f.type === "tan" || f.type === "section" ? "characters" : f.type === "digits" ? "none" : "sentences"}
+        maxLength={f.type === "tan" ? 10 : f.type === "section" ? 24 : f.type === "digits" ? f.length ?? 20 : 120}
       />
     );
   };
