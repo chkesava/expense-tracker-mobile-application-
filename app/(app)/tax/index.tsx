@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Redirect, useLocalSearchParams, useRouter, type Href } from "expo-router";
-import { ChevronRight, IndianRupee, Landmark } from "lucide-react-native";
+import { ChevronRight, FolderLock, IndianRupee, Landmark } from "lucide-react-native";
+import type { ReactNode } from "react";
 
 import { LoadingState } from "@/components/common/LoadingState";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -22,7 +23,6 @@ import { useTheme } from "@/theme/ThemeProvider";
  */
 export default function TaxCenterScreen() {
   const { theme } = useTheme();
-  const surfaces = useSurfaces();
   const router = useRouter();
   const { enabled, loading: flagLoading } = useTaxCenterFlag();
   const { settings } = useSettings();
@@ -56,36 +56,67 @@ export default function TaxCenterScreen() {
             figure against your Form 16, AIS and certificates before you file.
           </TaxNotice>
 
-          <Pressable
-            onPress={() => router.push(`/tax/${fy}/income` as Href)}
-            accessibilityRole="button"
+          <SectionRow
+            title="Income"
+            subtitle="Interest, dividends, rent and income you add, by head of income"
+            icon={<IndianRupee size={20} color={theme.colors.primary} />}
             accessibilityLabel={`Income for ${taxYearLabel(fy)}`}
-            accessibilityHint="Opens the income you have for this year"
-            style={({ pressed }) => [
-              styles.row,
-              {
-                gap: theme.space.md,
-                padding: theme.space.lg,
-                borderRadius: theme.radius.lg,
-                borderColor: theme.colors.border,
-                backgroundColor: pressed ? surfaces.tile : theme.colors.card,
-              },
-            ]}
-          >
-            <View style={[styles.icon, { backgroundColor: surfaces.tile, borderRadius: theme.radius.md }]}>
-              <IndianRupee size={20} color={theme.colors.primary} />
-            </View>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.md }}>Income</Text>
-              <Text style={{ color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs }}>
-                Interest, dividends, rent and income you add, by head of income
-              </Text>
-            </View>
-            <ChevronRight size={18} color={theme.colors.mutedForeground} />
-          </Pressable>
+            onPress={() => router.push(`/tax/${fy}/income` as Href)}
+          />
+          <SectionRow
+            title="Documents"
+            subtitle="Form 16, AIS, 26AS, proofs and receipts, kept privately"
+            icon={<FolderLock size={20} color={theme.colors.primary} />}
+            accessibilityLabel={`Documents for ${taxYearLabel(fy)}`}
+            onPress={() => router.push(`/tax/${fy}/documents` as Href)}
+          />
         </View>
       </View>
     </PageShell>
+  );
+}
+
+/** One section of the tax center: icon, what it holds, and where it goes. */
+function SectionRow({
+  title,
+  subtitle,
+  icon,
+  accessibilityLabel,
+  onPress,
+}: {
+  title: string;
+  subtitle: string;
+  icon: ReactNode;
+  accessibilityLabel: string;
+  onPress: () => void;
+}) {
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      style={({ pressed }) => [
+        styles.row,
+        {
+          gap: theme.space.md,
+          padding: theme.space.lg,
+          borderRadius: theme.radius.lg,
+          borderColor: theme.colors.border,
+          backgroundColor: pressed ? surfaces.tile : theme.colors.card,
+        },
+      ]}
+    >
+      <View style={[styles.icon, { backgroundColor: surfaces.tile, borderRadius: theme.radius.md }]}>{icon}</View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.md }}>{title}</Text>
+        <Text style={{ color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs }}>
+          {subtitle}
+        </Text>
+      </View>
+      <ChevronRight size={18} color={theme.colors.mutedForeground} />
+    </Pressable>
   );
 }
 

@@ -22,6 +22,7 @@ import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useTaxCenterFlag } from "@/hooks/useTaxCenterEnabled";
 import { useTaxIncome } from "@/hooks/useTaxIncome";
 import { useTaxIncomeActions } from "@/hooks/useTaxIncomeActions";
+import { useTaxDocuments } from "@/hooks/useTaxData";
 import { useNetwork } from "@/providers/NetworkProvider";
 import type { TaxEntryOf, TaxLine } from "@/shared/features/tax/types";
 import {
@@ -63,6 +64,8 @@ export default function TaxIncomeScreen() {
   const [selected, setSelected] = useState<TaxLine | null>(null);
   const [form, setForm] = useState<{ open: boolean; editing: TaxEntryOf<"income"> | null }>({ open: false, editing: null });
   const [deleting, setDeleting] = useState<string | null>(null);
+  // SPENDLY-406: the year's documents are read only while the form is open.
+  const taxDocuments = useTaxDocuments(fy, { enabled: enabled && !!fy && form.open });
 
   const incomeEntries = useMemo(
     () => entries.filter((e): e is TaxEntryOf<"income"> => e.kind === "income" && !e.deletedAt),
@@ -188,6 +191,8 @@ export default function TaxIncomeScreen() {
         todayKey={todayKey}
         editing={form.editing}
         entries={entries}
+        documents={taxDocuments.documents}
+        documentsLoading={taxDocuments.loading}
         saving={actions.saving}
         onSave={actions.saveEntry}
         onClose={() => setForm({ open: false, editing: null })}

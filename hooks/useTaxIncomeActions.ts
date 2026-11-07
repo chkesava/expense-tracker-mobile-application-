@@ -81,7 +81,7 @@ export function useTaxIncomeActions(fy: FinancialYearKey, todayKey: string) {
 
   /** Add (no `id`) or correct an income the user enters. Never a ledger row. */
   const saveEntry = useCallback(
-    (input: { id?: string; fields: TaxIncomeFields; note?: string; duplicateConfirmed?: boolean }) =>
+    (input: { id?: string; fields: TaxIncomeFields; note?: string; documentIds?: string[]; duplicateConfirmed?: boolean }) =>
       run("tax.income.saveEntry", "Couldn't save this income.", async (u) => {
         const id = input.id ?? newTaxDocId(u, "taxEntries");
         const { outcome } = await saveTaxEntry(
@@ -92,6 +92,7 @@ export function useTaxIncomeActions(fy: FinancialYearKey, todayKey: string) {
             kind: "income",
             fields: input.fields,
             note: input.note,
+            ...(input.documentIds?.length ? { documentIds: input.documentIds } : {}),
             ...(input.duplicateConfirmed ? { duplicateConfirmed: true } : {}),
           },
           { ctx: { todayKey } }
