@@ -11,6 +11,9 @@
  * 2. Receipts of earlier sends (≥15 min old, ≤24 h): prune devices Expo says
  *    are unregistered.
  * 3. The reminder engine over every source.
+ * 3b. Once an hour (the run that starts in the first quarter of the hour), the
+ *    event pass (SIP/EPF, 229): events are polled with a day's lookback, so an
+ *    hourly pass misses nothing and reads far less than every 15 minutes.
  * 4. Device deletes (pruning) are copied to the read model (SPENDLY-680), then
  *    the day's usage is saved.
  *
@@ -20,6 +23,7 @@
 
 import { createFirestorePushPorts, PUSH_SEND_LOGS, type AdminFirestoreLike } from "../../shared/utils/push/firestorePorts";
 import { processReceipts, type PendingReceipt, type PushPorts } from "../../shared/utils/push/pushSender";
+import { runEventTick, type EventResult, type EventSource } from "../../shared/utils/push/events";
 import { runReminderTick, type EngineResult, type ReminderSource } from "../../shared/utils/push/reminderEngine";
 import { mergeSettingsFromDoc } from "../../shared/types/settings";
 
@@ -123,6 +127,8 @@ export async function processPendingReceipts(db: AdminFirestoreLike, ports: Push
 export type RunOptions = {
   db: AdminFirestoreLike;
   sources: readonly ReminderSource[];
+  /** SPENDLY-229: event sources, polled hourly. */
+  eventSources?: readonly EventSource[];
   now: Date;
   dryRun: boolean;
   maxReadsPerRun: number;
@@ -139,8 +145,15 @@ export type RunSummary = {
   readsToday: number;
   receipts: Awaited<ReturnType<typeof processPendingReceipts>>;
   engine: EngineResult;
+  /** Null when this run isn't the hourly event pass. */
+  events: EventResult | null;
   readModel: unknown;
 };
+
+/** The hourly event pass runs in the first quarter of each UTC hour. */
+export function isEventPass(now: Date): boolean {
+  return now.getUTCMinutes() < 15;
+}
 
 export async function runPushReminders(opts: RunOptions): Promise<RunSummary> {
   const day = opts.now.toISOString().slice(0, 10);
@@ -154,22 +167,32 @@ export async function runPushReminders(opts: RunOptions): Promise<RunSummary> {
   let ports = createFirestorePushPorts(db, { readModel: opts.readModel, expoAccessToken: opts.expoAccessToken, now: () => opts.now, log: opts.log });
   if (opts.dryRun) ports = dryRunPorts(ports, opts.log);
 
+  const loadSettings = async (uid: string) => {
+    const snap = await db.doc(`users/${uid}`).get();
+    return snap.exists ? mergeSettingsFromDoc(snap.data() ?? {}) : null;
+  };
+
   const receipts = await processPendingReceipts(db, ports, opts.now, opts.dryRun);
   const engine = await runReminderTick(
     opts.sources,
     {
-      loadSettings: async (uid) => {
-        const snap = await db.doc(`users/${uid}`).get();
-        return snap.exists ? mergeSettingsFromDoc(snap.data() ?? {}) : null;
-      },
+      loadSettings,
       push: ports,
       budget,
       log: opts.log,
     },
     opts.now
   );
-  const readModel = opts.readModel ? await opts.readModel.flush() : { skipped: "read model not configured: the nightly sync copies device deletes" };
+  const events =
+    opts.eventSources?.length && isEventPass(opts.now)
+      ? await runEventTick(
+          opts.eventSources,
+          { db, push: ports, loadSettings, readModel: opts.readModel, budget, dryRun: opts.dryRun },
+          opts.now
+        )
+      : null;
+  const readModel = opts.readModel ? await opts.readModel.flush() : { skipped: "read model not configured: the nightly sync copies device deletes and new inbox rows" };
 
   if (!opts.dryRun) await usageRef.set({ reads: usedToday + budget.spent(), updatedAt: opts.now }, { merge: true });
-  return { dryRun: opts.dryRun, reads: budget.spent(), readsToday: usedToday + budget.spent(), receipts, engine, readModel };
+  return { dryRun: opts.dryRun, reads: budget.spent(), readsToday: usedToday + budget.spent(), receipts, engine, events, readModel };
 }

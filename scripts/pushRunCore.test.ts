@@ -143,3 +143,20 @@ describe("runPushReminders", () => {
     expect(f.docs.get("pushSendLogs/fresh")).toMatchObject({ receiptsPending: true });
   });
 });
+
+describe("hourly event pass (SPENDLY-229)", () => {
+  const eventSource = {
+    name: "test-events",
+    category: "investments" as const,
+    poll: async () => [{ uid: "u1", key: "evt:1", kind: "sip_executed", title: "SIP Executed", body: "Fund", url: "/investments", entityId: "p1" }],
+  };
+
+  it("runs in the first quarter of the hour, and not otherwise", async () => {
+    vi.stubGlobal("fetch", okFetch());
+    const atQuarterPast = await runPushReminders({ db: fakeDb(seed()).db, sources: [], eventSources: [eventSource], now: new Date("2026-11-06T04:20:00Z"), dryRun: false, maxReadsPerRun: 400, maxReadsPerDay: 6000, readModel: null, log: () => undefined });
+    expect(atQuarterPast.events).toBeNull();
+    const onTheHour = await runPushReminders({ db: fakeDb(seed()).db, sources: [], eventSources: [eventSource], now: new Date("2026-11-06T04:05:00Z"), dryRun: false, maxReadsPerRun: 400, maxReadsPerDay: 6000, readModel: null, log: () => undefined });
+    vi.unstubAllGlobals();
+    expect(onTheHour.events).toMatchObject({ events: 1, sent: 1 });
+  });
+});

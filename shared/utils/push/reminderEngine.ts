@@ -252,7 +252,9 @@ export async function runReminderTick(sources: readonly ReminderSource[], ports:
           },
           ports.push
         );
-        if (res.status === "sent") result.sent++;
+        // "sent" with no messages means opted out or no device: not delivered.
+        if (res.status === "sent" && res.messages > 0) result.sent++;
+        else if (res.status === "sent") skip("no-delivery");
         else if (res.status === "duplicate") result.duplicates++;
         else skip(res.status);
         if (res.status !== "duplicate") await source.onSent?.(uid, itemId, slot, res.status).catch(() => undefined);
