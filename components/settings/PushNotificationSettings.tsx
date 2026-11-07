@@ -2,7 +2,10 @@ import { Text, View } from "react-native";
 import { BellRing } from "lucide-react-native";
 
 import { ChipRow, RowSwitch } from "@/components/settings/SettingsControls";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { useNotificationPermission } from "@/hooks/useNotificationPermission";
+import { askForNotifications, openNotificationSettings } from "@/lib/notificationPermission";
 import { useSettings } from "@/providers/SettingsProvider";
 import { resolveDeliveryWindow } from "@/shared/utils/pushPreferences";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -21,7 +24,9 @@ export function PushNotificationSettings() {
   const { settings, setPushNotifications, setDeliveryWindow } = useSettings();
   const prefs = settings.pushNotifications;
   const current = resolveDeliveryWindow(settings);
-  const muted = { color: theme.colors.mutedForeground, fontSize: theme.typography.xs };
+  // SPENDLY-225: the phone's permission, shown with the way to fix it.
+  const { state: permission, muted, refresh } = useNotificationPermission();
+  const mutedText = { color: theme.colors.mutedForeground, fontSize: theme.typography.xs };
 
   const setCategory = (key: keyof typeof prefs.categories, value: boolean) =>
     setPushNotifications({ categories: { ...prefs.categories, [key]: value } });
@@ -36,19 +41,51 @@ export function PushNotificationSettings() {
           </Text>
         </View>
 
+        {permission ? (
+          <View style={{ gap: 6 }}>
+            <Text style={{ color: theme.colors.foreground, fontWeight: "600" }}>
+              {permission === "granted"
+                ? "Notifications are on"
+                : permission === "unavailable"
+                  ? "Phone notifications aren't available here"
+                  : "Notifications are off"}
+            </Text>
+            <Text style={mutedText}>
+              {permission === "granted"
+                ? muted.length
+                  ? `Muted in your phone's settings: ${muted.join(", ")}.`
+                  : "Spendly can reach you on this phone."
+                : permission === "blocked"
+                  ? "Your phone won't ask again. Turn on notifications for Spendly in your phone's settings."
+                  : permission === "unavailable"
+                    ? "Use the Spendly app on your phone to get reminders and updates."
+                    : "Allow notifications to get bill reminders and updates on this phone."}
+            </Text>
+            {permission === "undetermined" || permission === "denied" ? (
+              <Button size="sm" onPress={() => void askForNotifications("general").then(() => refresh())}>
+                Turn on notifications
+              </Button>
+            ) : permission === "blocked" || muted.length ? (
+              <Button variant="ghost" size="sm" onPress={() => void openNotificationSettings()}>
+                Open phone settings
+              </Button>
+            ) : null}
+          </View>
+        ) : null}
+
         <View style={{ gap: 6 }}>
           <Text style={{ color: theme.colors.foreground, fontWeight: "600" }}>When to notify me</Text>
-          <Text style={muted}>
+          <Text style={mutedText}>
             Every Spendly reminder and alert arrives inside this window ({settings.timezone}). Anything due outside it
             waits until the window opens.
           </Text>
-          <Text style={muted}>Not before</Text>
+          <Text style={mutedText}>Not before</Text>
           <ChipRow<string>
             options={WINDOW_START.map((t) => ({ value: t, label: t }))}
             selected={current.start}
             onSelect={(start) => setDeliveryWindow({ start, end: current.end })}
           />
-          <Text style={muted}>…and not after</Text>
+          <Text style={mutedText}>…and not after</Text>
           <ChipRow<string>
             options={WINDOW_END.map((t) => ({ value: t, label: t }))}
             selected={current.end}
@@ -80,7 +117,7 @@ export function PushNotificationSettings() {
           value={prefs.showAmounts}
           onValueChange={(v) => setPushNotifications({ showAmounts: v })}
         />
-        <Text style={muted}>
+        <Text style={mutedText}>
           Card bill, calendar and goal reminders have their own switches below and on each goal.
         </Text>
       </View>

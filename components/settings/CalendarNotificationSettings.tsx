@@ -5,7 +5,7 @@ import { CalendarDays } from "lucide-react-native";
 import { ChipRow, RowSwitch } from "@/components/settings/SettingsControls";
 import { Card } from "@/components/ui/Card";
 import { useSettings } from "@/providers/SettingsProvider";
-import { requestCalendarNotificationPermission } from "@/services/calendar/calendarNotificationScheduler";
+import { askForNotifications } from "@/lib/notificationPermission";
 import { useTheme } from "@/theme/ThemeProvider";
 
 /**
@@ -21,8 +21,9 @@ export function CalendarNotificationSettings() {
 
   const enable = async (patch: Parameters<typeof setCalendarNotifications>[0]) => {
     setCalendarNotifications(patch);
-    const ok = await requestCalendarNotificationPermission();
-    setHint(ok ? null : "Notifications are off for Spendly in your phone's settings, so these can't be shown.");
+    // SPENDLY-225: explained first; "Open settings" if the phone won't ask again.
+    const ok = await askForNotifications("calendar");
+    setHint(ok ? null : "Notifications aren't allowed yet. Turn them on from Notifications, above, to get these.");
   };
 
   return (

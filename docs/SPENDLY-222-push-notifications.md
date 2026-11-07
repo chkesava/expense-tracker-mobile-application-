@@ -24,7 +24,7 @@
 | [229](https://kesavach.atlassian.net/browse/SPENDLY-229) | SIP + EPF events | 227 | Merged to epic ([doc](SPENDLY-229-sip-epf-push.md)) |
 | [697](https://kesavach.atlassian.net/browse/SPENDLY-697) | Shared splits and vaults activity | 227 | Merged to epic ([doc](SPENDLY-697-shared-push.md)) |
 | [698](https://kesavach.atlassian.net/browse/SPENDLY-698) | Price alert push | 227, SPENDLY-625 | To Do |
-| [225](https://kesavach.atlassian.net/browse/SPENDLY-225) | Contextual permission prompt + recovery | — | To Do |
+| [225](https://kesavach.atlassian.net/browse/SPENDLY-225) | Contextual permission prompt + recovery | — | In Progress: built, awaiting UI review and merge ([doc](SPENDLY-225-permission-prompt.md)) |
 | [233](https://kesavach.atlassian.net/browse/SPENDLY-233) | QA, monitoring, rollout | all | To Do |
 
 ## Decisions
