@@ -48,7 +48,8 @@ describe("phase ordering", () => {
     expect(nextDeletePhase("shared")).toBe("ganesh");
     expect(nextDeletePhase("ganesh")).toBe("user-tree");
     expect(nextDeletePhase("user-tree")).toBe("duress-tree");
-    expect(nextDeletePhase("duress-tree")).toBe("readmodel");
+    expect(nextDeletePhase("duress-tree")).toBe("files");
+    expect(nextDeletePhase("files")).toBe("readmodel");
     expect(nextDeletePhase("readmodel")).toBe("auth");
   });
 

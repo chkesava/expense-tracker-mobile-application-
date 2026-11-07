@@ -20,6 +20,7 @@ import {
 import { planMembershipRemoval } from "../../shared/utils/ganeshAccountRemoval";
 import { duressUid, isDuressUid } from "../../shared/utils/duress";
 import { purgeReadModel, readModelPurgeEnv } from "./_readmodelPurge";
+import { purgeUserFiles } from "./_spendlyFilesPurge";
 
 type NetlifyEvent = {
   httpMethod?: string;
@@ -383,6 +384,15 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
       case "duress-tree":
         finished = await runTreePhase(db, `users/${duressUid(uid)}`, startedAt, state);
         break;
+      case "files": {
+        // SPENDLY-711. Bounded by the phase budget: an account with many
+        // files simply runs this phase again. Throws on failure and when the
+        // site lacks the settings, so Auth is never deleted with files left.
+        const files = await purgeUserFiles(uid, readModelPurgeEnv(), { deadlineMs: startedAt + PHASE_BUDGET_MS });
+        state.deleted.files += files.deleted;
+        finished = files.done;
+        break;
+      }
       case "readmodel": {
         // SPENDLY-508. Throws on failure, and when the site lacks the
         // read-model settings, so the client retries this phase and never
@@ -398,6 +408,14 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
         // did) right before the login goes. It throws, and fails closed when
         // unconfigured, so Auth is never deleted with read-model data left.
         state.deleted.readModelRows += (await purgeReadModel(uid, readModelPurgeEnv())).rows;
+        // SPENDLY-711, same reasoning: confirm no stored file is left before
+        // the login goes. If some are (the client skipped `files`), clear them
+        // and stay on `auth`; the next call finds none and finishes.
+        {
+          const files = await purgeUserFiles(uid, readModelPurgeEnv(), { deadlineMs: startedAt + PHASE_BUDGET_MS });
+          state.deleted.files += files.deleted;
+          if (!files.done) break;
+        }
         try {
           await getAuth().deleteUser(uid);
         } catch (error) {
