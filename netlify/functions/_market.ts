@@ -56,23 +56,31 @@ export function isTimeout(error: unknown): boolean {
   return name === "AbortError" || name === "TimeoutError";
 }
 
-/** GET with a timeout and one retry on a transport failure (not on an HTTP error). */
-export async function upstreamGet(url: string, attempt = 1): Promise<Response> {
-  return upstreamGetWithTimeout(url, FETCH_TIMEOUT_MS, attempt);
+/**
+ * GET with a timeout and one retry on a transport failure (not on an HTTP error).
+ * `extraHeaders` carries a provider's API key (crypto, SPENDLY-714).
+ */
+export async function upstreamGet(url: string, extraHeaders: Record<string, string> = {}): Promise<Response> {
+  return upstreamGetWithTimeout(url, FETCH_TIMEOUT_MS, extraHeaders);
 }
 
 /**
  * `upstreamGet` with a caller-chosen timeout. stock-history uses a short one so
  * both attempts fit inside Netlify's 10 s function limit.
  */
-export async function upstreamGetWithTimeout(url: string, timeoutMs: number, attempt = 1): Promise<Response> {
+export async function upstreamGetWithTimeout(
+  url: string,
+  timeoutMs: number,
+  extraHeaders: Record<string, string> = {},
+  attempt = 1
+): Promise<Response> {
   try {
     return await fetch(url, {
-      headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0 (Spendly)" },
+      headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0 (Spendly)", ...extraHeaders },
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
-    if (attempt < 2) return upstreamGetWithTimeout(url, timeoutMs, attempt + 1);
+    if (attempt < 2) return upstreamGetWithTimeout(url, timeoutMs, extraHeaders, attempt + 1);
     throw error;
   }
 }

@@ -174,10 +174,11 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           # Same fallback as web-deploy.yml: the older client-named secret.
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || secrets.EXPO_PUBLIC_GEMINI_API_KEY }}
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
         run: node scripts/check-backup-secrets.js dist-cloudflare
 
       # Function runtime secrets. Only the served functions need any
-      # (cloudflare/functions.ts): readmodel-claims and nutrition-ai.
+      # (cloudflare/functions.ts): readmodel-claims, nutrition-ai and crypto.
       - name: Set the backup's function secrets
         working-directory: cloudflare
         env:
@@ -186,6 +187,8 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           # Same fallback as web-deploy.yml: the older client-named secret.
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || secrets.EXPO_PUBLIC_GEMINI_API_KEY }}
+          # SPENDLY-714: CoinGecko's keyless API refuses Cloudflare's addresses.
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
         run: |
           if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
             echo "::error::FIREBASE_SERVICE_ACCOUNT is empty. readmodel-claims and nutrition-ai can't verify sign-ins without it."
@@ -197,6 +200,11 @@ jobs:
             printf '%s' "$GEMINI_API_KEY" | npx --yes "$WRANGLER" pages secret put GEMINI_API_KEY --project-name "$CLOUDFLARE_PAGES_PROJECT"
           else
             echo "::warning::GEMINI_API_KEY is not set. nutrition-ai on the backup will return 500 until it is."
+          fi
+          if [ -n "$COINGECKO_API_KEY" ]; then
+            printf '%s' "$COINGECKO_API_KEY" | npx --yes "$WRANGLER" pages secret put COINGECKO_API_KEY --project-name "$CLOUDFLARE_PAGES_PROJECT"
+          else
+            echo "::warning::COINGECKO_API_KEY is not set. Crypto prices on the backup will be rate-limited (SPENDLY-714)."
           fi
 
       # Pages re-bundles _worker.js (no --no-bundle): the bundle imports Node

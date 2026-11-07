@@ -200,6 +200,11 @@ describe("the backup workflow", () => {
     expect(commands).not.toContain("GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}");
   });
 
+  it("passes the CoinGecko key to the Pages secrets and the leak check (SPENDLY-714)", () => {
+    expect(commands.split("COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}").length - 1).toBe(2);
+    expect(commands).toContain("pages secret put COINGECKO_API_KEY");
+  });
+
   it("checks for leaked secrets with the tested scanner, not ad-hoc greps", () => {
     expect(commands).toContain("run: node scripts/check-backup-secrets.js dist-cloudflare");
     expect(commands).not.toMatch(/grep -rqE "BEGIN/);
