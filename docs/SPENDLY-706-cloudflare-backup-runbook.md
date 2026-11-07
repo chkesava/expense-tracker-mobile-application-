@@ -44,6 +44,20 @@ nothing reached Cloudflare.**
   - Secret values are looked for everywhere.
   - The smoke test now also checks that `/_worker.js` is never served.
 
+**Run 42347422568 (2026-11-07, `main` de864a7a, after #268): stopped before
+deploying.**
+- **Passed:** everything up to and including the secret check.
+- **Failed at:** "Set the backup's function secrets". Cloudflare answered
+  `Authentication error [code: 10000]` for
+  `/accounts/<id>/pages/projects/spendly-web-backup`: the API token can't reach
+  the project (permission, account or token value). That's for the owner to
+  fix (runbook §9).
+- **Also seen:** `GEMINI_API_KEY` is empty in the repo secrets.
+- **Fix** (`fix/SPENDLY-705-backup-gemini-fallback`):
+  - fall back to `EXPO_PUBLIC_GEMINI_API_KEY`, as `web-deploy.yml` does;
+  - the settings check now asks Cloudflare for the project first, so a bad
+    token fails in seconds.
+
 Still to record after the next run:
 - the run number;
 - the smoke result;

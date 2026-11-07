@@ -121,7 +121,7 @@ key, the service account's key id or any private key is found in the output.
 | `CLOUDFLARE_PAGES_PROJECT` | GitHub variable | the workflow | CI only |
 | `CLOUDFLARE_BACKUP_ORIGIN` | GitHub variable | the workflow: becomes `EXPO_PUBLIC_SHARE_URL`; the smoke test | Client (public address) |
 | `FIREBASE_SERVICE_ACCOUNT` | GitHub secret → **Pages secret** (set by the workflow) | readmodel-claims, nutrition-ai (verify sign-ins, set the read-model claim) | **Server** |
-| `GEMINI_API_KEY` | GitHub secret → **Pages secret** | nutrition-ai | **Server**. Never `EXPO_PUBLIC_`; the workflow strips `EXPO_PUBLIC_GEMINI_API_KEY` from `.env`. |
+| `GEMINI_API_KEY` (falls back to the older `EXPO_PUBLIC_GEMINI_API_KEY` secret, as the Netlify deploy does) | GitHub secret → **Pages secret** | nutrition-ai | **Server**. Never in the app; the workflow strips `EXPO_PUBLIC_GEMINI_API_KEY` from `.env`. |
 | `MOBILE_ENV_FILE` *or* the individual `EXPO_PUBLIC_FIREBASE_*`, `EXPO_PUBLIC_SUPABASE_*`, `EXPO_PUBLIC_READMODEL_SUPABASE_PUBLISHABLE_KEY`, `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, `EXPO_PUBLIC_APP_URL` secrets | GitHub secrets (shared with the Netlify workflow) | the web build | Client (public config) |
 | `READMODEL_SUPABASE_URL` | GitHub variable (shared) | the web build, as `EXPO_PUBLIC_READMODEL_SUPABASE_URL` | Client |
 | `EXPO_PUBLIC_SHARE_URL` | **Not used** by this workflow | replaced by `CLOUDFLARE_BACKUP_ORIGIN` | Client |
@@ -225,10 +225,11 @@ Leave the backup as it is; it costs nothing while idle.
 | Workflow fails at "Check the backup settings" | A secret or variable from §2c is missing, or the origin isn't `https://…` or points at Netlify |
 | "The backup origin is not in the built app" | `CLOUDFLARE_BACKUP_ORIGIN` wasn't applied to `.env`; check the variable's spelling |
 | "Server secrets found in dist-cloudflare" | An `EXPO_PUBLIC_` copy of a server secret exists in `MOBILE_ENV_FILE`; remove it there |
-| `pages secret put` / deploy: project not found or 403 | §2a not done, a different project name, or the token lacks **Pages: Edit** on this account |
+| "Cloudflare refused access to Pages project" (in "Check the backup settings"), or `Authentication error [code: 10000]` | The token can't reach the project. Check, in order: (1) the token is active (`curl -H "Authorization: Bearer <token>" https://api.cloudflare.com/client/v4/user/tokens/verify`); (2) it has **Account → Cloudflare Pages → Edit**, with **Account Resources** including the account that holds `spendly-web-backup`; (3) `CLOUDFLARE_ACCOUNT_ID` is that account's ID; (4) both GitHub secrets were pasted without quotes, spaces or a trailing newline |
+| `pages secret put` / deploy: project not found | §2a not done, or a different project name (set `CLOUDFLARE_PAGES_PROJECT`) |
 | Sign-in fails with "unauthorized domain" / reCAPTCHA error | §2e step 1 (and step 2 if App Check is on) |
 | `readmodel-claims` 401 for signed-in users / read model doesn't load | `FIREBASE_SERVICE_ACCOUNT` Pages secret missing or stale; rerun the workflow |
-| Nutrition AI 500 | `GEMINI_API_KEY` missing; add the GitHub secret and rerun |
+| Nutrition AI 500 | Neither `GEMINI_API_KEY` nor `EXPO_PUBLIC_GEMINI_API_KEY` is set; add `GEMINI_API_KEY` and rerun |
 | 503 "not available on the backup site" | Expected for the §1 right-hand column |
 | Cloudflare error 1102 on `/api/market-overview` | Over the Free CPU limit on an uncached call; it clears once cached (15 min). If it persists, add `market-overview` to `NETLIFY_ONLY_FUNCTIONS` in `cloudflare/functions.ts` |
 | A deep link shows the wrong app or 404 | `_routes.json` / `_worker.js` missing from the deployment; check the "Make the Cloudflare Pages output" step |
