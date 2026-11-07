@@ -203,6 +203,13 @@ function AppShellInner() {
                 animation: "slide_from_right",
               }}
             />
+            {/* SPENDLY-295: informational estimate, old vs new regime. */}
+            <Stack.Screen
+              name="tax/[fy]/estimate"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
             {/* SPENDLY-293: capital gains from portfolio sales and statements. */}
             <Stack.Screen
               name="tax/[fy]/capital-gains"

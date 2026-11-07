@@ -55,6 +55,7 @@ describe("resolveAndroidBackAction", () => {
     expect(resolveAndroidBackAction("/tax/2025-26/deductions")).toBe("pop");
     expect(resolveAndroidBackAction("/tax/2025-26/payments")).toBe("pop");
     expect(resolveAndroidBackAction("/tax/2025-26/capital-gains")).toBe("pop");
+    expect(resolveAndroidBackAction("/tax/2025-26/estimate")).toBe("pop");
     expect(resolveAndroidBackAction("/goals/analytics")).toBe("pop");
     // SPENDLY-574 spending drill-downs.
     expect(resolveAndroidBackAction("/spending?month=2026-10")).toBe("pop");

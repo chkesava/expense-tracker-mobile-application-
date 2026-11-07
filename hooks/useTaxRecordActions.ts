@@ -5,7 +5,7 @@ import { writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { TaxSourceChangedError } from "@/services/tax/taxIncomeStore";
-import { deleteTaxEntry, newTaxDocId, saveTaxEntry, TaxWriteInvalidError } from "@/services/tax/taxStore";
+import { deleteTaxEntry, newTaxDocId, saveTaxEntry, saveTaxProfile, TaxWriteInvalidError } from "@/services/tax/taxStore";
 import {
   confirmDeductionEligibility,
   saveEpfDeductionDecision,
@@ -14,7 +14,7 @@ import {
 } from "@/services/tax/taxDeductionStore";
 import { acceptTdsDifference, undoTdsAcceptance } from "@/services/tax/taxTdsStore";
 import { saveSaleDecision, undoSaleDecision, type SaleDecision } from "@/services/tax/taxCapitalGainStore";
-import type { FinancialYearKey, TaxEntry, TaxLine } from "@/shared/features/tax/types";
+import type { FinancialYearKey, TaxAgeBand, TaxEntry, TaxLine, TaxProfile, TaxResidentialStatus } from "@/shared/features/tax/types";
 import { taxIssueMessage } from "@/shared/features/tax/utils/issueMessages";
 import type { TdsMatchRow } from "@/shared/features/tax/utils/tdsReconcile";
 import type { TaxEntryDraft } from "@/shared/features/tax/utils/validation";
@@ -138,8 +138,25 @@ export function useTaxRecordActions(fy: FinancialYearKey, todayKey: string) {
     [fy, run]
   );
 
+  // SPENDLY-295: the profile the estimate uses. Other profile fields are kept as they are.
+  const saveProfile = useCallback(
+    (previous: TaxProfile | null, values: { residentialStatus: TaxResidentialStatus; ageBand: TaxAgeBand }) =>
+      run("tax.profile.save", "Couldn't save your details.", async (u) => {
+        const { outcome } = await saveTaxProfile(u, {
+          fy,
+          ...values,
+          ...(previous?.employerCount !== undefined ? { employerCount: previous.employerCount } : {}),
+          ...(previous?.regimeNote !== undefined ? { regimeNote: previous.regimeNote } : {}),
+          ...(previous?.note !== undefined ? { note: previous.note } : {}),
+        });
+        return writeSavedMessage(outcome, "Details saved");
+      }),
+    [fy, run]
+  );
+
   return {
     saving,
+    saveProfile,
     saveRecord,
     removeRecord,
     acceptDifference,
