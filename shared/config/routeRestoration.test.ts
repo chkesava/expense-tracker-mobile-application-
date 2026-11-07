@@ -81,6 +81,7 @@ describe("isRestorableRoute", () => {
     expect(isRestorableRoute("/tax/2025-26/documents")).toBe(true);
     expect(isRestorableRoute("/tax/2025-26/tds")).toBe(true);
     expect(isRestorableRoute("/tax/2025-26/deductions")).toBe(true);
+    expect(isRestorableRoute("/tax/2025-26/payments")).toBe(true);
     expect(isRestorableRoute("/goals/analytics")).toBe(true);
     expect(isRestorableRoute("/spending?month=2026-10&tab=trends")).toBe(true);
     expect(isRestorableRoute("/spending/Food?month=2026-10")).toBe(true);

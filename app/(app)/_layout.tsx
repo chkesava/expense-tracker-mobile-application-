@@ -196,6 +196,13 @@ function AppShellInner() {
                 animation: "slide_from_right",
               }}
             />
+            {/* SPENDLY-294: advance-tax and self-assessment payments. */}
+            <Stack.Screen
+              name="tax/[fy]/payments"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
             {/* SPENDLY-292: deductions and tax-saving investments. */}
             <Stack.Screen
               name="tax/[fy]/deductions"

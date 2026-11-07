@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Redirect, useLocalSearchParams, useRouter, type Href } from "expo-router";
-import { ChevronRight, FolderLock, IndianRupee, Landmark, PiggyBank, Scale } from "lucide-react-native";
+import { ChevronRight, FolderLock, IndianRupee, Landmark, PiggyBank, ReceiptIndianRupee, Scale } from "lucide-react-native";
 import type { ReactNode } from "react";
 
 import { LoadingState } from "@/components/common/LoadingState";
@@ -76,6 +76,13 @@ export default function TaxCenterScreen() {
             icon={<PiggyBank size={20} color={theme.colors.primary} />}
             accessibilityLabel={`Deductions for ${taxYearLabel(fy)}`}
             onPress={() => router.push(`/tax/${fy}/deductions` as Href)}
+          />
+          <SectionRow
+            title="Tax payments"
+            subtitle="Advance tax and self-assessment tax, from your challans"
+            icon={<ReceiptIndianRupee size={20} color={theme.colors.primary} />}
+            accessibilityLabel={`Tax payments for ${taxYearLabel(fy)}`}
+            onPress={() => router.push(`/tax/${fy}/payments` as Href)}
           />
           <SectionRow
             title="Documents"

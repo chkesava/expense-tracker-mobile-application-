@@ -16,12 +16,15 @@ export const TaxRecordRow = memo(function TaxRecordRow({
   entry,
   summary,
   duplicate,
+  status,
   currency,
   onPress,
 }: {
   entry: TaxEntry;
   summary: TaxRecordSummary;
   duplicate: boolean;
+  /** A screen's own status line, e.g. a payment's match (SPENDLY-294). */
+  status?: { label: string; tone: "success" | "warning" | "muted" };
   currency: string;
   onPress: (entry: TaxEntry) => void;
 }) {
@@ -53,6 +56,17 @@ export const TaxRecordRow = memo(function TaxRecordRow({
         <Text numberOfLines={2} style={{ color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs }}>
           {subtitle}
         </Text>
+        {status ? (
+          <Text
+            style={{
+              color: status.tone === "warning" ? theme.colors.warning : status.tone === "success" ? theme.colors.success : theme.colors.mutedForeground,
+              fontFamily: theme.fontFamily.medium,
+              fontSize: theme.typography.xs,
+            }}
+          >
+            {status.label}
+          </Text>
+        ) : null}
         {duplicate ? (
           <Text style={{ color: theme.colors.warning, fontFamily: theme.fontFamily.medium, fontSize: theme.typography.xs }}>
             Possible duplicate: the same details were entered twice
