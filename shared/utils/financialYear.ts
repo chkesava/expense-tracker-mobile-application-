@@ -9,7 +9,12 @@
  * two-digit year it ends in: April 2021 through March 2022 is "2021-22".
  */
 
-import { isValidMonthKey, shiftMonthKey } from "@/shared/utils/dates";
+import {
+  isValidDateKey,
+  isValidMonthKey,
+  monthFromDateKey,
+  shiftMonthKey,
+} from "@/shared/utils/dates";
 
 /** First month (1-indexed) of the Indian financial year. */
 const FY_START_MONTH = 4;
@@ -21,6 +26,16 @@ export function financialYearOfMonth(monthKey: string): string {
   const month = Number(monthKey.slice(5, 7));
   const startYear = month >= FY_START_MONTH ? year : year - 1;
   return `${startYear}-${String((startYear + 1) % 100).padStart(2, "0")}`;
+}
+
+/**
+ * "2021-06-15" -> "2021-22"; "2022-03-31" -> "2021-22". Empty string when
+ * malformed. Date keys are already local (IST for Indian users), so 31 March
+ * and 1 April never shift across the boundary.
+ */
+export function financialYearOfDate(dateKey: string): string {
+  if (!isValidDateKey(dateKey)) return "";
+  return financialYearOfMonth(monthFromDateKey(dateKey));
 }
 
 /** "2021-22" -> "FY 2021-22". */
