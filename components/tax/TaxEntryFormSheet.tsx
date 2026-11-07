@@ -38,6 +38,7 @@ export function TaxEntryFormSheet({
   entries,
   documents,
   documentsLoading,
+  sourceOptions,
   saving,
   onSave,
   onDelete,
@@ -51,6 +52,8 @@ export function TaxEntryFormSheet({
   entries: readonly TaxEntry[];
   documents: readonly TaxDocument[];
   documentsLoading?: boolean;
+  /** Choices for a `sourceRef` field: existing Spendly records, as `"{kind}:{id}"`. */
+  sourceOptions?: readonly { id: string; label: string }[];
   saving: boolean;
   onSave: (input: { id?: string; draft: TaxEntryDraft; duplicateConfirmed?: boolean; labels: Record<string, string> }) => Promise<boolean>;
   onDelete: (entry: TaxEntry) => void;
@@ -90,12 +93,14 @@ export function TaxEntryFormSheet({
 
   const field = (f: FormField) => {
     const value = values[f.key] ?? "";
-    if (f.type === "option") {
+    if (f.type === "option" || f.type === "sourceRef") {
+      const options = f.type === "sourceRef" ? sourceOptions ?? [] : f.options ?? [];
+      if (f.type === "sourceRef" && options.length === 0) return null;
       return (
         <View key={f.key} style={{ gap: theme.space.sm }}>
           <Text style={{ color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm }}>{f.label}</Text>
           <View style={[styles.wrap, { gap: theme.space.sm }]} accessibilityRole="radiogroup">
-            {(f.options ?? []).map((o) => (
+            {options.map((o) => (
               <Chip
                 key={o.id}
                 label={o.label}

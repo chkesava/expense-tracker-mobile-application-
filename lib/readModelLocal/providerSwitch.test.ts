@@ -155,6 +155,9 @@ describe("provider read switches (SPENDLY-673)", () => {
       "components/epf/EpfCurrentMonthCard.tsx",
       "hooks/useEpfNetWorth.ts",
       "hooks/useFinancialCalendar.ts",
+      // SPENDLY-292: the tax deductions screen shows the EPF employee share;
+      // its decisions re-read EPF from Firestore before writing (taxDeductionStore).
+      "hooks/useTaxDeductions.ts",
     ]);
     // The EPF writers that compute from loaded rows (R4.3a).
     const writers = /\b(saveContributions?|applyTransition|recordCredit|markMissed|markReversed|deleteContribution|discardDrafts|repairCreditWindows|repairLifecycleStates|recomputeInterest|recordReconciliation|saveProfile|addEstablishment|updateEstablishment|closeEstablishment|archiveEstablishment|restoreEstablishment|deleteEstablishment)\b/;

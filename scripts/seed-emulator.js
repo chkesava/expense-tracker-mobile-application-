@@ -306,6 +306,10 @@ function buildDemoData(today = new Date()) {
     taxEntry('taxentry-16a-sbi', 'tds', { deductorName: 'State Bank of India', tan: 'MUMS98765C', section: '194A', form: '16A', quarter: 'Q3', amountPaid: 18405, tdsAmount: 1840.5 }, 'MUMS98765C|194a|Q3|1840.50'),
     taxEntry('taxentry-26as-sbi', 'ais_value', { statement: '26AS', infoCategory: 'interest', sourceName: 'STATE BANK OF INDIA', tan: 'MUMS98765C', section: '194A', reportedAmount: 18405, tdsAmount: 1840.5 }, '26AS|interest|MUMS98765C|194a|18405.00'),
     taxEntry('taxentry-26as-other', 'ais_value', { statement: '26AS', infoCategory: 'dividend', sourceName: 'INFOSYS LTD', tan: 'BLRI11111I', section: '194', reportedAmount: 3120, tdsAmount: 312 }, '26AS|dividend|BLRI11111I|194|3120.00'),
+    // SPENDLY-292: claims, one of them eligibility-sensitive and not yet confirmed.
+    taxEntry('taxentry-ded-elss', 'deduction', { category: 'elss', amount: 50000, proofStatus: 'missing' }, 'elss|50000.00'),
+    taxEntry('taxentry-ded-ppf', 'deduction', { category: 'ppf', amount: 30000, proofStatus: 'not_needed' }, 'ppf|30000.00'),
+    taxEntry('taxentry-ded-health', 'deduction', { category: 'health_parents', amount: 32000, proofStatus: 'missing' }, 'health_parents|32000.00'),
   ];
 
   const currentMonth = ym(today);
