@@ -84,6 +84,11 @@ export type SendLog = {
 
 export interface PushPorts {
   killSwitchOn(): Promise<boolean>;
+  /**
+   * SPENDLY-233 staged rollout: when this returns a non-empty list, only those
+   * uids are sent to (`pushConfig/global.allowUids`); null/empty = everyone.
+   */
+  rolloutUids?(): Promise<readonly string[] | null>;
   /** Creates the log entry for `key`; false if it already exists (already sent). */
   claim(key: string, meta: { category: PushCategory; kind: string }): Promise<boolean>;
   loadPreferences(uid: string): Promise<PushPreferenceSource | null>;
@@ -99,7 +104,7 @@ export interface PushPorts {
 }
 
 export type SendResult =
-  | { status: "disabled" | "duplicate" }
+  | { status: "disabled" | "duplicate" | "rollout" }
   | { status: "invalid"; reason: string }
   | ({ status: "sent" } & Omit<SendLog, "pendingReceipts" | "category" | "kind">);
 
@@ -176,6 +181,13 @@ export async function sendToUsers(req: PushRequest, ports: PushPorts): Promise<S
   const invalid = validateRequest(req);
   if (invalid) return { status: "invalid", reason: invalid };
   if (await ports.killSwitchOn()) return { status: "disabled" };
+
+  // Staged rollout: decided before the claim, so a user outside the rollout
+  // still gets this notice if they are added before it expires.
+  const rollout = (await ports.rolloutUids?.()) ?? null;
+  const inRollout = rollout && rollout.length ? req.uids.filter((u) => rollout.includes(u)) : req.uids;
+  if (!inRollout.length) return { status: "rollout" };
+  req = { ...req, uids: inRollout };
 
   const key = sendLogId(req.idempotencyKey);
   if (!(await ports.claim(key, { category: req.category, kind: req.kind }))) return { status: "duplicate" };

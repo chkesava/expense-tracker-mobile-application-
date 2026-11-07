@@ -25,7 +25,7 @@
 | [697](https://kesavach.atlassian.net/browse/SPENDLY-697) | Shared splits and vaults activity | 227 | Merged to epic ([doc](SPENDLY-697-shared-push.md)) |
 | [698](https://kesavach.atlassian.net/browse/SPENDLY-698) | Price alert push | 227, SPENDLY-625 | Blocked by 625. Switch hidden (`PRICE_ALERT_PUSH_AVAILABLE = false`), merged to epic |
 | [225](https://kesavach.atlassian.net/browse/SPENDLY-225) | Contextual permission prompt + recovery | — | Merged to epic ([doc](SPENDLY-225-permission-prompt.md)) |
-| [233](https://kesavach.atlassian.net/browse/SPENDLY-233) | QA, monitoring, rollout | all | To Do |
+| [233](https://kesavach.atlassian.net/browse/SPENDLY-233) | QA, monitoring, rollout | all | In Progress: built (staged rollout, report, runbook, QA matrix), awaiting review and merge; the device QA is the owner's ([doc](SPENDLY-233-qa-rollout.md)) |
 
 ## Decisions
 
@@ -40,7 +40,8 @@
 - **2026-11-06 (230):** the user decided the inbox rows (`notifications`) are dual-written to Supabase (migration 20261108).
 - **2026-11-07 (694):** D8 applied: a calendar reminder's own time is honoured inside the delivery window.
 - **2026-11-07:** the user chose to hide the "Price alerts" switch until SPENDLY-625 and 698 ship.
-- Open decisions D1, D4 to D7, D9 are listed in the plan, §6.
+- **2026-11-07 (233):** D6 resolved: the audit doc was never committed, so its criterion is dropped. The plan and story docs record each problem and fix.
+- Open decisions D1, D4, D5, D7, D9 are listed in the plan, §6.
 
 ## Pending deploys
 

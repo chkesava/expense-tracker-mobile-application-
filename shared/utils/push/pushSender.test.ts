@@ -191,6 +191,21 @@ describe("sendToUsers", () => {
     expect(f.calls()).toBe(1);
   });
 
+  it("staged rollout: only listed users, decided before the claim (SPENDLY-233)", async () => {
+    const f = fakePorts({ devices: [device("u1", 1), device("u2", 2)] });
+    f.ports.rolloutUids = async () => ["u2"];
+    expect(await sendToUsers(request({ uids: ["u1", "u2"] }), f.ports)).toMatchObject({ status: "sent", recipients: 1, messages: 1 });
+    expect(f.sent.flat().map((m) => m.to)).toEqual([tok(2)]);
+
+    // Someone outside the rollout: nothing sent and the key isn't used up.
+    const g = fakePorts({ devices: [device("u1", 1)] });
+    g.ports.rolloutUids = async () => ["u2"];
+    expect(await sendToUsers(request({ uids: ["u1"] }), g.ports)).toEqual({ status: "rollout" });
+    expect(g.claimed.size).toBe(0);
+    g.ports.rolloutUids = async () => [];
+    expect(await sendToUsers(request({ uids: ["u1"] }), g.ports)).toMatchObject({ status: "sent", messages: 1 });
+  });
+
   it("refuses an invalid request before claiming the key", async () => {
     const f = fakePorts({ devices: [device("u1", 1)] });
     expect(await sendToUsers(request({ url: "https://evil.example" }), f.ports)).toMatchObject({ status: "invalid" });
