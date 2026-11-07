@@ -12,7 +12,7 @@
 | One job sends everything | GitHub Actions **Push reminders** (`push-reminders.yml`, every 15 min), `scripts/push-reminders.ts` |
 | Reminders (each run) | Bills (231), calendar (694), dues (695), goals (696). Each item is **re-read before sending**, so a paid, done or settled item gets no push. |
 | Events (hourly) | SIP and EPF (229), splits and vaults (697). Each also writes an inbox row (`users/{uid}/notifications`). |
-| Sender | `shared/utils/push/pushSender.ts`, via the Expo Push Service. Once per key (`pushSendLogs/{key}`, kept 30 days), never to opted-out users. A token shared by several accounts goes only to the latest owner. |
+| Sender | `shared/utils/push/pushSender.ts`, via the Expo Push Service. Once per key (`pushSendLogs/{key}`, kept 30 days; the job's hourly pass deletes expired logs, up to 200 a run, because Spark has no TTL policies: SPENDLY-713), never to opted-out users. A token shared by several accounts goes only to the latest owner. |
 | Phones stop their own reminders | Only while `system_settings/global.pushRemindersLive` is on, or the user is in `pushRemindersLiveFor` (693) |
 
 ## Switches (no deploy needed)

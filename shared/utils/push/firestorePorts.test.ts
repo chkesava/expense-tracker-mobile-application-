@@ -13,6 +13,7 @@ function fakeDb(seed: Record<string, Record<string, unknown>>) {
   });
   const query = (match: (path: string) => boolean, filters: [string, unknown[]][] = []): ReturnType<AdminFirestoreLike["collection"]> => ({
     where: (field, _op, value) => query(match, [...filters, [field, value as unknown[]]]),
+    limit: () => query(match, filters),
     get: async () => ({
       docs: [...docs.keys()]
         .filter(match)

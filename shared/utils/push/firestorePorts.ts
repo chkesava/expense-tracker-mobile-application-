@@ -6,7 +6,8 @@
  * are denied by firestore.rules):
  *   pushConfig/global      { sendsDisabled: boolean, allowUids?: string[] }
  *                          — the kill switch and the staged rollout (233), no deploy needed
- *   pushSendLogs/{key}     one per idempotency key; `expireAt` drives a 30-day TTL
+ *   pushSendLogs/{key}     one per idempotency key, kept until `expireAt` (30 days). Spark has
+ *                          no TTL policies, so the job deletes expired logs (SPENDLY-713)
  *
  * Pruning a dead token deletes `users/{uid}/devices/{installId}`, a synced
  * collection, so the caller must say how the read model hears about it
@@ -42,7 +43,7 @@ type DocRef = {
   create(data: Record<string, unknown>): Promise<unknown>;
   set(data: Record<string, unknown>, opts?: { merge: boolean }): Promise<unknown>;
 };
-type Query = { where(field: string, op: string, value: unknown): Query; get(): Promise<QuerySnap> };
+type Query = { where(field: string, op: string, value: unknown): Query; limit(n: number): Query; get(): Promise<QuerySnap> };
 export type AdminFirestoreLike = {
   doc(path: string): DocRef;
   collection(path: string): Query;

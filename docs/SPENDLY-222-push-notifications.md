@@ -26,6 +26,7 @@
 | [698](https://kesavach.atlassian.net/browse/SPENDLY-698) | Price alert push | 227, SPENDLY-625 | Blocked by 625. Switch hidden (`PRICE_ALERT_PUSH_AVAILABLE = false`), merged to epic |
 | [225](https://kesavach.atlassian.net/browse/SPENDLY-225) | Contextual permission prompt + recovery | — | Merged to epic ([doc](SPENDLY-225-permission-prompt.md)) |
 | [233](https://kesavach.atlassian.net/browse/SPENDLY-233) | QA, monitoring, rollout | all | Merged to epic; device QA and staged rollout are the owner's ([doc](SPENDLY-233-qa-rollout.md)) |
+| [713](https://kesavach.atlassian.net/browse/SPENDLY-713) | Bug: send-log TTL needs Blaze | 227 | The index deploy failed on the `pushSendLogs.expireAt` TTL (Spark: billing disabled). TTL removed; the job's hourly pass deletes expired logs (≤ 200 a run) |
 
 ## Decisions
 
@@ -40,6 +41,7 @@
 - **2026-11-06 (230):** the user decided the inbox rows (`notifications`) are dual-written to Supabase (migration 20261108).
 - **2026-11-07 (694):** D8 applied: a calendar reminder's own time is honoured inside the delivery window.
 - **2026-11-07:** the user chose to hide the "Price alerts" switch until SPENDLY-625 and 698 ship.
+- **2026-11-07 (713):** Spark has no TTL policies. `pushSendLogs` expiry is done by the job, not Firestore.
 - **2026-11-07 (233):** D6 resolved: the audit doc was never committed, so its criterion is dropped. The plan and story docs record each problem and fix.
 - Open decisions D1, D4, D5, D7, D9 are listed in the plan, §6.
 

@@ -2651,12 +2651,6 @@
       ]
     },
     {
-      "collectionGroup": "pushSendLogs",
-      "fieldPath": "expireAt",
-      "ttl": true,
-      "indexes": []
-    },
-    {
       "collectionGroup": "whatIfScenarios",
       "fieldPath": "createdAt",
       "indexes": [

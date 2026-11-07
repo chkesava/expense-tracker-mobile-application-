@@ -123,6 +123,7 @@ function fakeDb(seed: Record<string, Record<string, unknown>>) {
   const snap = (path: string) => ({ exists: docs.has(path), id: path.split("/").pop()!, ref: { path }, data: () => docs.get(path) });
   const query = (match: (p: string) => boolean, filters: F[] = []): ReturnType<AdminFirestoreLike["collection"]> => ({
     where: (f, op, v) => query(match, [...filters, [f, op, v]]),
+    limit: () => query(match, filters),
     get: async () => ({ docs: [...docs.keys()].filter(match).filter((p) => filters.every(([f, op, v]) => ok(docs.get(p)?.[f], op, v))).map(snap) }),
   });
   const db: AdminFirestoreLike = {

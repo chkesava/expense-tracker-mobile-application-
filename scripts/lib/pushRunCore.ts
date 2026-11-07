@@ -46,6 +46,7 @@ export function readBudget(opts: { perRun: number; perDay: number; usedToday: nu
 export function meteredFirestore(db: AdminFirestoreLike, budget: ReadBudget): AdminFirestoreLike {
   const meterQuery = (q: ReturnType<AdminFirestoreLike["collection"]>): ReturnType<AdminFirestoreLike["collection"]> => ({
     where: (field, op, value) => meterQuery(q.where(field, op, value)),
+    limit: (n) => meterQuery(q.limit(n)),
     get: async () => {
       const snap = await q.get();
       budget.add(Math.max(1, snap.docs.length));
@@ -124,6 +125,24 @@ export async function processPendingReceipts(db: AdminFirestoreLike, ports: Push
   return out;
 }
 
+/** Expired send logs deleted per hourly pass (SPENDLY-713). */
+export const SEND_LOG_CLEANUP_LIMIT = 200;
+
+/**
+ * SPENDLY-713: the project is on Spark, which has no TTL policies, so the job
+ * deletes send logs past `expireAt` (30 days after the send) itself. Bounded per
+ * run and skipped when the read budget is spent; a backlog clears over later passes.
+ */
+export async function deleteExpiredSendLogs(db: AdminFirestoreLike, budget: ReadBudget, now: Date, dryRun: boolean) {
+  if (budget.exhausted()) return { deleted: 0, skipped: "read budget spent" };
+  const snap = await db.collection(PUSH_SEND_LOGS).where("expireAt", "<", now).limit(SEND_LOG_CLEANUP_LIMIT).get();
+  if (dryRun || !snap.docs.length) return dryRun ? { deleted: 0, wouldDelete: snap.docs.length } : { deleted: 0 };
+  const batch = db.batch();
+  for (const doc of snap.docs) batch.delete(db.doc(doc.ref.path));
+  await batch.commit();
+  return { deleted: snap.docs.length };
+}
+
 export type RunOptions = {
   db: AdminFirestoreLike;
   sources: readonly ReminderSource[];
@@ -147,6 +166,8 @@ export type RunSummary = {
   engine: EngineResult;
   /** Null when this run isn't the hourly event pass. */
   events: EventResult | null;
+  /** Expired send logs removed (hourly pass only; null otherwise). */
+  sendLogCleanup: Awaited<ReturnType<typeof deleteExpiredSendLogs>> | null;
   readModel: unknown;
 };
 
@@ -191,8 +212,9 @@ export async function runPushReminders(opts: RunOptions): Promise<RunSummary> {
           opts.now
         )
       : null;
+  const sendLogCleanup = isEventPass(opts.now) ? await deleteExpiredSendLogs(db, budget, opts.now, opts.dryRun) : null;
   const readModel = opts.readModel ? await opts.readModel.flush() : { skipped: "read model not configured: the nightly sync copies device deletes and new inbox rows" };
 
   if (!opts.dryRun) await usageRef.set({ reads: usedToday + budget.spent(), updatedAt: opts.now }, { merge: true });
-  return { dryRun: opts.dryRun, reads: budget.spent(), readsToday: usedToday + budget.spent(), receipts, engine, events, readModel };
+  return { dryRun: opts.dryRun, reads: budget.spent(), readsToday: usedToday + budget.spent(), receipts, engine, events, sendLogCleanup, readModel };
 }
