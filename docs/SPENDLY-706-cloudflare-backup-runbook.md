@@ -29,7 +29,22 @@ Part of epic [SPENDLY-621](SPENDLY-621-cloudflare-web-backup.md).
 | e. Firebase Auth authorized domain (+ App Check key domain if web App Check is on) | Pending |
 
 ## First end-to-end run
-Not run yet; it needs the steps above. To be recorded here:
+**Run 42341897313 (2026-11-07, `main` a54adea8): stopped before deploying, so
+nothing reached Cloudflare.**
+- **Passed:** the settings check (secrets and variables in place), rules, tests,
+  typechecks, the four web builds and the Cloudflare output.
+- **Stopped at:** the secret check, on "a-private-key". It was a false positive:
+  `_worker.js` bundles `jose`, which contains the text
+  `-----BEGIN PRIVATE KEY-----` to recognise PEM input.
+- **Fix** (`fix/SPENDLY-705-backup-secret-check`): `scripts/check-backup-secrets.js`
+  replaces the grep.
+  - Browser files still fail on a key header.
+  - `_worker.js` (server code, never served) fails only on an actual key
+    (header + key data).
+  - Secret values are looked for everywhere.
+  - The smoke test now also checks that `/_worker.js` is never served.
+
+Still to record after the next run:
 - the run number;
 - the smoke result;
 - a manual sign-in on the backup;
