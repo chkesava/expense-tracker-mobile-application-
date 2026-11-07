@@ -23,7 +23,7 @@
 | [696](https://kesavach.atlassian.net/browse/SPENDLY-696) | Save goal reminders via push | 692 | Merged to epic ([doc](SPENDLY-696-goal-push.md)) |
 | [229](https://kesavach.atlassian.net/browse/SPENDLY-229) | SIP + EPF events | 227 | Merged to epic ([doc](SPENDLY-229-sip-epf-push.md)) |
 | [697](https://kesavach.atlassian.net/browse/SPENDLY-697) | Shared splits and vaults activity | 227 | Merged to epic ([doc](SPENDLY-697-shared-push.md)) |
-| [698](https://kesavach.atlassian.net/browse/SPENDLY-698) | Price alert push | 227, SPENDLY-625 | To Do |
+| [698](https://kesavach.atlassian.net/browse/SPENDLY-698) | Price alert push | 227, SPENDLY-625 | Blocked by 625. Switch hidden (`PRICE_ALERT_PUSH_AVAILABLE = false`) on `feature/SPENDLY-698-hide-price-alerts-switch` |
 | [225](https://kesavach.atlassian.net/browse/SPENDLY-225) | Contextual permission prompt + recovery | — | Merged to epic ([doc](SPENDLY-225-permission-prompt.md)) |
 | [233](https://kesavach.atlassian.net/browse/SPENDLY-233) | QA, monitoring, rollout | all | To Do |
 
@@ -39,6 +39,7 @@
 - **2026-11-06 (692):** the sender's idempotency claim (`pushSendLogs/{uid}:{slotId}`) is the delivery ledger. There is no separate `pushDeliveries` collection.
 - **2026-11-06 (230):** the user decided the inbox rows (`notifications`) are dual-written to Supabase (migration 20261108).
 - **2026-11-07 (694):** D8 applied: a calendar reminder's own time is honoured inside the delivery window.
+- **2026-11-07:** the user chose to hide the "Price alerts" switch until SPENDLY-625 and 698 ship.
 - Open decisions D1, D4 to D7, D9 are listed in the plan, §6.
 
 ## Pending deploys

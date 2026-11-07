@@ -38,6 +38,13 @@ export const DEFAULT_PUSH_NOTIFICATIONS: PushNotificationSettings = {
 export const DEFAULT_DELIVERY_WINDOW: DeliveryWindow = { start: "08:00", end: "21:00" };
 
 /**
+ * Price alert pushes need SPENDLY-625 (alerts evaluated on the server) and
+ * SPENDLY-698. Until both exist the switch is hidden, so it never promises
+ * something that can't arrive. The stored preference is kept as it is.
+ */
+export const PRICE_ALERT_PUSH_AVAILABLE = false;
+
+/**
  * Android channel per category, so users can also mute a category from the
  * phone's own settings. Existing channel ids are kept (bills, calendar,
  * goals); dues are part of the calendar card and share its channel.
