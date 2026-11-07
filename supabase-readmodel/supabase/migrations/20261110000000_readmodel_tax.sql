@@ -15,11 +15,10 @@
 --
 -- Additive and re-runnable (R2.4): five new tables with their realtime ping
 -- triggers, then `create or replace` of every function and view that lists
--- the synced tables, restated in full from 20261106000000.
---
--- SPENDLY-222 (push notifications) restates the same lists in 20261107000000
--- and 20261108000000 on its own epic branch. Whichever epic reaches main
--- second must restate both sets of tables.
+-- the synced tables, restated in full from 20261108000000 (SPENDLY-222's
+-- notifications, the latest restatement on main), so 222's `devices` and
+-- `notifications` keep their place on both allowlists, the purge, the counts
+-- and the data-quality view.
 
 -- ─── Tables ─────────────────────────────────────────────────────────────────
 
@@ -197,7 +196,7 @@ as $$
     'spaces', 'categorization_rules', 'trips', 'runway_settings', 'runway_overrides',
     'what_if_scenarios', 'goal_funding_plans', 'sip_plans', 'sip_transactions',
     'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items',
-    'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events',
+    'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications',
     'tax_profiles', 'tax_entries', 'tax_reviews', 'tax_documents', 'tax_snapshots'
   ])
 $$;
@@ -221,7 +220,7 @@ as $$
     'spaces', 'categorization_rules', 'trips', 'runway_settings', 'runway_overrides',
     'what_if_scenarios', 'goal_funding_plans', 'sip_plans', 'sip_transactions',
     'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items',
-    'financial_summaries', 'group_funds', 'group_fund_events',
+    'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications',
     'tax_profiles', 'tax_entries', 'tax_reviews', 'tax_documents', 'tax_snapshots'
   ])
 $$;
@@ -260,6 +259,7 @@ begin
     'what_if_scenarios', 'goal_funding_plans', 'sip_plans', 'sip_transactions',
     'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items',
     'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events',
+    'devices', 'notifications',
     'tax_profiles', 'tax_entries', 'tax_reviews', 'tax_documents', 'tax_snapshots',
     'sync_status', 'sync_checkpoints', 'sync_failures'
   ] loop
@@ -342,6 +342,8 @@ as $$
   union all select uid, 'financialSummaries', count(*) from public.financial_summaries where not source_deleted group by uid
   union all select uid, 'groupFunds', count(*) from public.group_funds where not source_deleted group by uid
   union all select uid, 'groupFundEvents', count(*) from public.group_fund_events where not source_deleted group by uid
+  union all select uid, 'devices', count(*) from public.devices where not source_deleted group by uid
+  union all select uid, 'notifications', count(*) from public.notifications where not source_deleted group by uid
   union all select uid, 'taxProfiles', count(*) from public.tax_profiles where not source_deleted group by uid
   union all select uid, 'taxEntries', count(*) from public.tax_entries where not source_deleted group by uid
   union all select uid, 'taxReviews', count(*) from public.tax_reviews where not source_deleted group by uid
@@ -482,6 +484,10 @@ create or replace view public.v_data_quality with (security_invoker = true) as
   union all
   select uid, 'groupFundEvents', doc_id, case when mapping_status = 'unmapped' then 'unmapped' else 'missing amount or fund' end
   from public.group_fund_events where not source_deleted and (mapping_status = 'unmapped' or amount is null or fund_id is null)
+  union all
+  select uid, 'devices', doc_id, 'unmapped' from public.devices where not source_deleted and mapping_status = 'unmapped'
+  union all
+  select uid, 'notifications', doc_id, 'unmapped' from public.notifications where not source_deleted and mapping_status = 'unmapped'
   union all
   select uid, 'taxProfiles', doc_id, case when mapping_status = 'unmapped' then 'unmapped' else 'missing year' end
   from public.tax_profiles where not source_deleted and (mapping_status = 'unmapped' or fy is null)

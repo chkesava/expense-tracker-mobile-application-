@@ -26,6 +26,55 @@ function tableColumns(table: string): string[] {
     .filter((c): c is string => !!c && c !== "primary");
 }
 
+/**
+ * The body of the LAST `create or replace` of a function or view across all
+ * migrations, in order: the one production ends up with.
+ */
+function latestRestatement(name: string): string {
+  const marker = new RegExp(`create or replace (?:function|view) public\\.${name}\\b`, "g");
+  let last = -1;
+  for (const m of sql.matchAll(marker)) last = m.index ?? last;
+  if (last < 0) return "";
+  const end = sql.indexOf("\n$$;", last);
+  const viewEnd = sql.indexOf(";\n", last);
+  return sql.slice(last, end > 0 && name !== "v_data_quality" ? end : viewEnd);
+}
+
+const quotedNames = (text: string) => new Set([...text.matchAll(/'([a-zA-Z_/]+)'/g)].map((m) => m[1]));
+
+/** Server-only tables: copied by the sync, never written by the app (`rm_client_apply`). */
+const SERVER_ONLY = new Set(["user_settings"]);
+
+// SPENDLY-709: two epics each restated these lists from an older migration;
+// the later one silently dropped the other's tables. The latest restatement
+// must always name every synced table.
+describe("the latest migration restates every synced table", () => {
+  const tables = READ_MODEL_TABLES.map((s) => s.table);
+
+  it("on the server sync allowlist", () => {
+    expect([...quotedNames(latestRestatement("readmodel_sync_table_ok"))].sort()).toEqual([...tables].sort());
+  });
+
+  it("on the rm_client_apply allowlist (all but the server-only tables)", () => {
+    const expected = tables.filter((t) => !SERVER_ONLY.has(t)).sort();
+    expect([...quotedNames(latestRestatement("readmodel_client_table_ok"))].sort()).toEqual(expected);
+  });
+
+  it("in the account purge", () => {
+    const purged = quotedNames(latestRestatement("readmodel_purge_user"));
+    for (const t of tables) expect(purged, t).toContain(t);
+  });
+
+  it("in the count parity and data-quality views", () => {
+    const counted = quotedNames(latestRestatement("readmodel_live_counts"));
+    const quality = quotedNames(latestRestatement("v_data_quality"));
+    for (const spec of READ_MODEL_TABLES) {
+      expect(counted, spec.collection).toContain(spec.collection);
+      expect(quality, spec.collection).toContain(spec.collection);
+    }
+  });
+});
+
 const UPDATE_TIME = { seconds: 1_790_000_000, nanoseconds: 0 };
 const expenses = SPEC_BY_COLLECTION.get("expenses")!;
 
