@@ -188,6 +188,18 @@ describe("the backup workflow", () => {
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 
+  it("checks the token can reach the Pages project before building", () => {
+    const access = commands.indexOf("/pages/projects/$CLOUDFLARE_PAGES_PROJECT");
+    expect(access).toBeGreaterThan(0);
+    expect(access).toBeLessThan(commands.indexOf("npm ci"));
+  });
+
+  it("falls back to the older Gemini secret name, like the Netlify deploy", () => {
+    const fallback = "GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || secrets.EXPO_PUBLIC_GEMINI_API_KEY }}";
+    expect(commands.split(fallback).length - 1).toBe(2);
+    expect(commands).not.toContain("GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}");
+  });
+
   it("checks for leaked secrets with the tested scanner, not ad-hoc greps", () => {
     expect(commands).toContain("run: node scripts/check-backup-secrets.js dist-cloudflare");
     expect(commands).not.toMatch(/grep -rqE "BEGIN/);
