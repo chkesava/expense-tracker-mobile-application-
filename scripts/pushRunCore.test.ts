@@ -114,6 +114,19 @@ describe("runPushReminders", () => {
     expect(lines.some((l) => l.includes("[DRY RUN] would send 1"))).toBe(true);
   });
 
+  it("dry run never calls a source's onSent (SPENDLY-715: the bill source writes a reminder log there)", async () => {
+    const onSent = vi.fn(async () => undefined);
+    const run = (db: AdminFirestoreLike, dryRun: boolean) =>
+      runPushReminders({ db, sources: [{ ...source, onSent }], now: NOW, dryRun, maxReadsPerRun: 400, maxReadsPerDay: 6000, readModel: null, log: () => undefined });
+
+    // The go-live case: the kill switch is on, so the send is "disabled".
+    await run(fakeDb(seed({ "pushConfig/global": { sendsDisabled: true } })).db, true);
+    expect(onSent).not.toHaveBeenCalled();
+
+    await run(fakeDb(seed({ "pushConfig/global": { sendsDisabled: true } })).db, false);
+    expect(onSent).toHaveBeenCalledWith("u1", "b1", expect.objectContaining({ slotId: "ccbill:b1:due" }), "disabled");
+  });
+
   it("stops early once today's allowance is used up", async () => {
     const f = fakeDb(seed({ "pushConfig/usage-2026-11-06": { reads: 6000 } }));
     const summary = await runPushReminders({ db: f.db, sources: [source], now: NOW, dryRun: false, maxReadsPerRun: 400, maxReadsPerDay: 6000, readModel: null, log: () => undefined });
