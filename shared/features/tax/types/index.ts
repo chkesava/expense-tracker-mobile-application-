@@ -294,6 +294,48 @@ export interface TaxEntryFieldsByKind {
   tax_payment: TaxPaymentFields;
 }
 
+/**
+ * Every field each kind may store, in one list per kind. firestore.rules allow
+ * exactly these (`hasOnly`), checked by the contract test (SPENDLY-709).
+ */
+export const TAX_ENTRY_FIELD_KEYS = {
+  income: ["category", "amount", "date", "payer"],
+  form16: [
+    "employerName",
+    "tan",
+    "periodFrom",
+    "periodTo",
+    "grossSalary",
+    "exemptAllowances",
+    "standardDeduction",
+    "professionalTax",
+    "taxableSalary",
+    "tdsDeducted",
+  ],
+  tds: ["deductorName", "tan", "section", "form", "quarter", "amountPaid", "tdsAmount"],
+  ais_value: ["statement", "infoCategory", "sourceName", "tan", "section", "reportedAmount", "tdsAmount"],
+  deduction: ["category", "amount", "proofStatus", "sourceRef"],
+  capital_gain: [
+    "mode",
+    "assetClass",
+    "assetName",
+    "isin",
+    "quantity",
+    "acquiredDate",
+    "soldDate",
+    "costOfAcquisition",
+    "saleValue",
+    "transferExpenses",
+  ],
+  tax_payment: ["paymentType", "date", "amount", "bsrCode", "challanSerial", "cin"],
+} as const satisfies { [K in TaxEntryKind]: readonly (keyof TaxEntryFieldsByKind[K])[] };
+
+/** Compile-time check that no field of a kind is missing from its list above. */
+type MissingFieldKeys = {
+  [K in TaxEntryKind]: Exclude<keyof TaxEntryFieldsByKind[K], (typeof TAX_ENTRY_FIELD_KEYS)[K][number]>;
+}[TaxEntryKind];
+export const TAX_ENTRY_FIELD_KEYS_COMPLETE: [MissingFieldKeys] extends [never] ? true : never = true;
+
 /** One earlier state of an entry: the previous values of the fields that changed. */
 export interface TaxHistoryEntry {
   revision: number;

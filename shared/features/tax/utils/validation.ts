@@ -24,7 +24,9 @@ import {
   TAX_QUARTERS,
   TAX_REGIME_NOTES,
   TAX_RESIDENTIAL_STATUSES,
+  TAX_LAWS,
   TAX_REVIEW_DECISIONS,
+  TAX_SNAPSHOT_REASONS,
   TAX_SOURCE_KINDS,
   TAX_STATEMENTS,
   TAX_TDS_FORMS,
@@ -34,9 +36,10 @@ import {
   type TaxEntryKind,
   type TaxProfile,
   type TaxReview,
+  type TaxSnapshot,
   type TaxSourceRef,
 } from "../types";
-import { isOwnTaxStoragePath, isTaxSourceKind, isValidTaxIdSegment } from "./ids";
+import { isOwnTaxStoragePath, isTaxSourceKind, isValidTaxIdSegment, taxSnapshotDocId } from "./ids";
 import { financialYearDateBounds, isDateInFinancialYear, isFinancialYearKey } from "./taxYear";
 
 export type TaxIssueCode =
@@ -446,5 +449,39 @@ export function validateTaxDocument(uid: string, doc: TaxDocument): TaxIssue[] {
   issues.option("status", TAX_DOCUMENT_STATUSES, doc.status);
   issues.idList("entryIds", doc.entryIds, TAX_LIMITS.maxDocumentIds);
   issues.meta(doc.createdAtMs, doc.updatedAtMs);
+  return issues.list;
+}
+
+/** Most output figures one snapshot may hold. Mirrored by firestore.rules. */
+export const TAX_SNAPSHOT_MAX_OUTPUTS = 100;
+const SNAPSHOT_OUTPUT_KEY = /^[a-zA-Z0-9_.]{1,60}$/;
+
+export function validateTaxSnapshot(snapshot: TaxSnapshot): TaxIssue[] {
+  const issues = new Issues();
+  if (!isFinancialYearKey(snapshot.fy)) issues.add("fy", "invalid_year");
+  else if (snapshot.id !== taxSnapshotDocId(snapshot.fy, snapshot.createdAtMs)) {
+    issues.add("id", "invalid_format");
+  }
+  issues.option("law", TAX_LAWS, snapshot.law);
+  issues.option("reason", TAX_SNAPSHOT_REASONS, snapshot.reason);
+  issues.requiredText("ruleVersion", snapshot.ruleVersion, 40);
+  issues.requiredText("inputHash", snapshot.inputHash, 128);
+  const outputs = snapshot.outputs;
+  if (!outputs || typeof outputs !== "object" || Array.isArray(outputs)) {
+    issues.add("outputs", "required");
+  } else {
+    const keys = Object.keys(outputs);
+    if (keys.length > TAX_SNAPSHOT_MAX_OUTPUTS) issues.add("outputs", "too_many");
+    for (const key of keys) {
+      const value = outputs[key];
+      // Outputs may be negative (a refund due); unknown stays null.
+      const ok = value === null || (typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= TAX_LIMITS.maxAmount);
+      if (!SNAPSHOT_OUTPUT_KEY.test(key) || !ok) issues.add(`outputs.${key}`, "invalid_format");
+    }
+  }
+  if (!Number.isInteger(snapshot.unresolvedCount) || snapshot.unresolvedCount < 0) {
+    issues.add("unresolvedCount", "invalid_format");
+  }
+  issues.meta(snapshot.createdAtMs, undefined);
   return issues.list;
 }

@@ -284,6 +284,60 @@ describe("read-model mapping (SPENDLY-506)", () => {
     expect(bad.doc).toMatchObject({ amount: "lots" });
   });
 
+  it("SPENDLY-709: maps a tax entry; amounts stay in doc, a soft delete is typed", () => {
+    const entries = SPEC_BY_COLLECTION.get("taxEntries")!;
+    const fields = { deductorName: "State Bank of India", tan: "MUMS98765C", section: "194A", form: "16A", amountPaid: 48250.4, tdsAmount: 4825.04 };
+    const row = mapDocument(entries, "u1", {
+      id: "e1",
+      updateTime: UPDATE_TIME,
+      data: {
+        fy: "2025-26", kind: "tds", fields, dedupeKey: "k", revision: 2, schemaVersion: 1,
+        deletedAt: "2026-01-02T03:04:05.000Z", createdAtMs: 1_790_000_000_000, updatedAtMs: 1_790_000_100_000,
+      },
+    });
+    expect(row).toMatchObject({
+      source_path: "users/u1/taxEntries/e1", mapping_status: "mapped", fy: "2025-26", kind: "tds",
+      soft_deleted_at: "2026-01-02T03:04:05.000Z",
+      created_at: new Date(1_790_000_000_000).toISOString(), updated_at: new Date(1_790_000_100_000).toISOString(),
+    });
+    expect(row.doc).toMatchObject({ fields });
+    expect(row).not.toHaveProperty("amount");
+  });
+
+  it("SPENDLY-709: maps the other tax collections by year and identifiers only", () => {
+    const at = { createdAtMs: 1_790_000_000_000, updatedAtMs: 1_790_000_000_000 };
+    expect(
+      mapDocument(SPEC_BY_COLLECTION.get("taxProfiles")!, "u1", {
+        id: "2025-26", updateTime: UPDATE_TIME, data: { fy: "2025-26", residentialStatus: "resident", ageBand: "below_60", ...at },
+      })
+    ).toMatchObject({ fy: "2025-26", mapping_status: "mapped" });
+    expect(
+      mapDocument(SPEC_BY_COLLECTION.get("taxReviews")!, "u1", {
+        id: "2025-26__income__i1", updateTime: UPDATE_TIME,
+        data: { fy: "2025-26", sourceKind: "income", sourceId: "i1", decision: "exclude", sourceAmount: 1200, revision: 1, ...at },
+      })
+    ).toMatchObject({ fy: "2025-26", source_kind: "income", source_id: "i1", decision: "exclude" });
+    expect(
+      mapDocument(SPEC_BY_COLLECTION.get("taxDocuments")!, "u1", {
+        id: "d1", updateTime: UPDATE_TIME,
+        data: { fy: "2025-26", category: "form16", status: "pending", storagePath: "users/u1/tax/d1/f.pdf", ...at },
+      })
+    ).toMatchObject({ fy: "2025-26", category: "form16", status: "pending" });
+    const snapshot = mapDocument(SPEC_BY_COLLECTION.get("taxSnapshots")!, "u1", {
+      id: "2025-26__1790000000000", updateTime: UPDATE_TIME,
+      data: { fy: "2025-26", law: "ITA1961", reason: "export", ruleVersion: "FY2025-26.v1", outputs: { taxNew: 12345 }, createdAtMs: at.createdAtMs },
+    });
+    expect(snapshot).toMatchObject({ fy: "2025-26", rule_version: "FY2025-26.v1", reason: "export" });
+    expect(snapshot.doc).toMatchObject({ outputs: { taxNew: 12345 } });
+  });
+
+  it("SPENDLY-709: the tax collections are found by their millisecond stamps too", () => {
+    for (const c of ["taxProfiles", "taxEntries", "taxReviews", "taxDocuments"]) {
+      expect(changeFieldsOf({ collection: c }).map((f) => f.field)).toEqual(["createdAt", "updatedAt", "createdAtMs", "updatedAtMs"]);
+    }
+    expect(changeFieldsOf({ collection: "taxSnapshots" }).map((f) => f.field)).toEqual(["createdAt", "updatedAt", "createdAtMs"]);
+  });
+
   it("derives month from the date when the row has none", () => {
     const row = mapDocument(expenses, "u1", { id: "e", updateTime: UPDATE_TIME, data: { amount: 1, date: "2026-08-15" } });
     expect(row.month).toBe("2026-08");

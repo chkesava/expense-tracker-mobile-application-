@@ -17,14 +17,16 @@ import {
   type TaxProfile,
   type TaxReview,
   type TaxReviewDecision,
+  type TaxSnapshot,
   type TaxSourceRef,
 } from "../types";
 import { taxEntryDedupeKey } from "./dedupe";
-import { isValidTaxIdSegment, taxProfileDocId, taxReviewDocId } from "./ids";
+import { isValidTaxIdSegment, taxProfileDocId, taxReviewDocId, taxSnapshotDocId } from "./ids";
 import {
   validateTaxEntry,
   validateTaxProfile,
   validateTaxReview,
+  validateTaxSnapshot,
   type TaxEntryDraft,
   type TaxIssue,
   type TaxValidationContext,
@@ -265,4 +267,21 @@ export function buildTaxProfile(args: {
   const issues = validateTaxProfile(profile);
   if (issues.length > 0) return { ok: false, issues };
   return { ok: true, value: { id: taxProfileDocId(draft.fy), ...profile } };
+}
+
+/** A frozen calculation. Never rebuilt or updated: a new rule version means a new snapshot. */
+export function buildTaxSnapshot(
+  args: Omit<TaxSnapshot, "id" | "schemaVersion">
+): TaxBuildResult<TaxSnapshot> {
+  const createdAtMs = Math.trunc(args.createdAtMs);
+  const snapshot: TaxSnapshot = {
+    ...args,
+    id: taxSnapshotDocId(args.fy, createdAtMs),
+    outputs: { ...args.outputs },
+    schemaVersion: TAX_SCHEMA_VERSION,
+    createdAtMs,
+  };
+  const issues = validateTaxSnapshot(snapshot);
+  if (issues.length > 0) return { ok: false, issues };
+  return { ok: true, value: snapshot };
 }
