@@ -35,6 +35,8 @@ const INTEGRATED = [
   "calendarReminders", "categories", "categorizationRules", "spaces",
   // SPENDLY-685: Group Funds (display only; writers load the fund from Firestore).
   "groupFunds",
+  // SPENDLY-230: the unified inbox's notification rows.
+  "notifications",
   // SPENDLY-709: Tax & ITR Readiness (display only; writers load from Firestore).
   "taxDocuments", "taxEntries", "taxProfiles", "taxReviews", "taxSnapshots",
 ].sort();

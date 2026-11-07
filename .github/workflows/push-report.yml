@@ -1,0 +1,41 @@
+name: Push delivery report
+
+# SPENDLY-233: on demand, a read-only summary of Spendly push delivery
+# (devices, sends, Expo acceptance, errors, pruned devices) for the last N
+# days, written to the job summary. Uses count() aggregations; the send logs
+# hold counts and error codes only, never tokens.
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "How many days to cover (1-30)"
+        required: true
+        default: "7"
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    name: Delivery report
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Report
+        env:
+          PUSH_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.PUSH_FIREBASE_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          DAYS: ${{ inputs.days }}
+        run: npx --no-install tsx scripts/push-report.ts --days="$DAYS"

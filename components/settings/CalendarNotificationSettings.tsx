@@ -5,11 +5,8 @@ import { CalendarDays } from "lucide-react-native";
 import { ChipRow, RowSwitch } from "@/components/settings/SettingsControls";
 import { Card } from "@/components/ui/Card";
 import { useSettings } from "@/providers/SettingsProvider";
-import { requestCalendarNotificationPermission } from "@/services/calendar/calendarNotificationScheduler";
+import { askForNotifications } from "@/lib/notificationPermission";
 import { useTheme } from "@/theme/ThemeProvider";
-
-const QUIET_START = ["06:00", "07:00", "08:00", "09:00", "10:00"] as const;
-const QUIET_END = ["18:00", "20:00", "21:00", "22:00", "23:00"] as const;
 
 /**
  * Financial Calendar notification settings (SPENDLY-184). Card bills keep
@@ -24,8 +21,9 @@ export function CalendarNotificationSettings() {
 
   const enable = async (patch: Parameters<typeof setCalendarNotifications>[0]) => {
     setCalendarNotifications(patch);
-    const ok = await requestCalendarNotificationPermission();
-    setHint(ok ? null : "Notifications are off for Spendly in your phone's settings, so these can't be shown.");
+    // SPENDLY-225: explained first; "Open settings" if the phone won't ask again.
+    const ok = await askForNotifications("calendar");
+    setHint(ok ? null : "Notifications aren't allowed yet. Turn them on from Notifications, above, to get these.");
   };
 
   return (
@@ -61,13 +59,7 @@ export function CalendarNotificationSettings() {
             />
           </View>
         ) : null}
-        <View style={{ gap: 6 }}>
-          <Text style={muted}>Quiet hours: not before</Text>
-          <ChipRow<string> options={QUIET_START.map((t) => ({ value: t, label: t }))} selected={prefs.quietHoursStart} onSelect={(v) => setCalendarNotifications({ quietHoursStart: v })} />
-          <Text style={muted}>…and not after</Text>
-          <ChipRow<string> options={QUIET_END.map((t) => ({ value: t, label: t }))} selected={prefs.quietHoursEnd} onSelect={(v) => setCalendarNotifications({ quietHoursEnd: v })} />
-        </View>
-        <Text style={muted}>One notice before, one on the day, and one the day after if it's still open. Done or cancelled items stop notifying.</Text>
+        <Text style={muted}>Sent inside your notification window (Notifications, above). One notice before, one on the day, and one the day after if it's still open. Done or cancelled items stop notifying.</Text>
         {hint ? <Text style={[muted, { color: theme.colors.destructive }]}>{hint}</Text> : null}
       </View>
     </Card>

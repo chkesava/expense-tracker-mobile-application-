@@ -235,3 +235,20 @@ describe("calendar notification settings (SPENDLY-184)", () => {
     expect(mergeSettingsFromDoc({ calendarNotifications: { duesDaysBefore: 5 } }).calendarNotifications.duesDaysBefore).toBe(1);
   });
 });
+
+describe("pushNotifications (SPENDLY-226)", () => {
+  it("defaults when absent and reads a stored value, top-level or nested", () => {
+    expect(mergeSettingsFromDoc({}).pushNotifications).toEqual({
+      categories: { investments: true, shared: true, priceAlerts: true },
+      deliveryWindow: null,
+      showAmounts: false,
+    });
+    const stored = {
+      categories: { investments: false, shared: true, priceAlerts: true },
+      deliveryWindow: { start: "07:00", end: "22:00" },
+      showAmounts: true,
+    };
+    expect(mergeSettingsFromDoc({ pushNotifications: stored }).pushNotifications).toEqual(stored);
+    expect(mergeSettingsFromDoc({ settings: { pushNotifications: stored } }).pushNotifications).toEqual(stored);
+  });
+});

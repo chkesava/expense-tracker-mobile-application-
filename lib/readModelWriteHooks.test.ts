@@ -145,6 +145,8 @@ describe("every direct writer of a synced collection calls a read-model hook", (
       // SPENDLY-590: found through name constants.
       "hooks/useEpfContributions.ts",
       "services/portfolio/holdingAdjustments.ts",
+      // SPENDLY-224: push devices, found through DEVICES_COLLECTION.
+      "lib/pushRegistration.ts",
       // SPENDLY-591: a template path, and plain literals.
       "hooks/useSips.ts",
       "hooks/useCategoryBudgets.ts",

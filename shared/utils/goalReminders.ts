@@ -17,7 +17,7 @@
 
 import type { FinancialGoal } from "../types/expense";
 import type { GoalReminders } from "../types/goal";
-import { daysBetweenDateKeys, shiftDateKey } from "./dates";
+import { daysBetweenDateKeys, formatDateKey, shiftDateKey } from "./dates";
 import { goalProgress, goalStatus } from "./goalModel";
 
 export const GOAL_NOTIFICATION_PREFIX = "goal:";
@@ -73,19 +73,32 @@ export function scheduledDates(r: GoalReminders, today: string, horizonDays = GO
   return out;
 }
 
-/** Local date key a contribution timestamp falls on (device local time). */
-export function localDateKey(ms: number): string {
+/**
+ * Local date key a contribution timestamp falls on: device local time, or the
+ * given IANA timezone (SPENDLY-696: the server plans in the user's timezone).
+ */
+export function localDateKey(ms: number, timezone?: string): string {
+  if (timezone) {
+    try {
+      return formatDateKey(new Date(ms), timezone);
+    } catch {
+      // unknown timezone: fall back to the machine's local time
+    }
+  }
   const d = new Date(ms);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 /** The day the inactivity alert is due, or null when off / no baseline. */
-export function inactivityDate(goal: Pick<FinancialGoal, "lastContributionAtMs" | "createdAtMs" | "reminders">): string | null {
+export function inactivityDate(
+  goal: Pick<FinancialGoal, "lastContributionAtMs" | "createdAtMs" | "reminders">,
+  timezone?: string
+): string | null {
   const r = goalReminders(goal);
   if (!r.inactivityEnabled) return null;
   const base = goal.lastContributionAtMs ?? goal.createdAtMs;
   if (typeof base !== "number") return null;
-  return shiftDateKey(localDateKey(base), r.inactivityDays);
+  return shiftDateKey(localDateKey(base, timezone), r.inactivityDays);
 }
 
 export type PlannedGoalNotification = {
@@ -101,7 +114,7 @@ export type PlannedGoalNotification = {
   url: string;
 };
 
-export function planGoalNotifications(goals: readonly FinancialGoal[], today: string): PlannedGoalNotification[] {
+export function planGoalNotifications(goals: readonly FinancialGoal[], today: string, timezone?: string): PlannedGoalNotification[] {
   const out: PlannedGoalNotification[] = [];
   for (const g of goals) {
     if (!goalCanRemind(g)) continue;
@@ -119,7 +132,7 @@ export function planGoalNotifications(goals: readonly FinancialGoal[], today: st
         url,
       });
     }
-    const idle = inactivityDate(g);
+    const idle = inactivityDate(g, timezone);
     // A past inactivity date isn't re-sent as a notification (no nagging);
     // the inbox keeps showing it until the next contribution.
     if (idle && idle >= today) {

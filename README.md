@@ -317,6 +317,7 @@ Release workflows never run on `pull_request`, so fork PRs can't reach the signi
 | Team/agent workflow | [`docs/AGENT_WORKFLOW.md`](docs/AGENT_WORKFLOW.md) |
 | After-merge steps | [`docs/AFTER_MERGE_CHECKLIST.md`](docs/AFTER_MERGE_CHECKLIST.md) |
 | Firestore rules deploy | [`docs/FIREBASE_RULES_DEPLOY.md`](docs/FIREBASE_RULES_DEPLOY.md) |
+| Web backup (Cloudflare Pages) | [`docs/WEB_BACKUP_CLOUDFLARE_RUNBOOK.md`](docs/WEB_BACKUP_CLOUDFLARE_RUNBOOK.md) |
 | Read model rules / runbook | [`docs/READ_MODEL_RULES.md`](docs/READ_MODEL_RULES.md), [`docs/READMODEL_RUNBOOK.md`](docs/READMODEL_RUNBOOK.md) |
 | Local test mode | [`docs/LOCAL_TEST_MODE.md`](docs/LOCAL_TEST_MODE.md) |
 | Three-app split | [`docs/MULTI_APP_SEPARATION_ANALYSIS.md`](docs/MULTI_APP_SEPARATION_ANALYSIS.md) |

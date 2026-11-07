@@ -1,0 +1,237 @@
+name: Deploy Web Backup (Cloudflare Pages)
+
+# SPENDLY-621: deploys the web app to the Cloudflare Pages BACKUP, for when
+# Netlify (spendly-share.netlify.app, still the primary) is out of credits or
+# down. Runbook: docs/WEB_BACKUP_CLOUDFLARE_RUNBOOK.md.
+#
+# - Manual only. It never touches the Netlify site and never uses Netlify
+#   credentials; "Deploy Web (Netlify)" is unchanged.
+# - Same gate and build as the Netlify workflow, except EXPO_PUBLIC_SHARE_URL
+#   is the backup's address: the app calls its functions at that origin, and
+#   the CSP only allows its own origin.
+# - Serves the functions that run on Cloudflare unchanged (decision D5,
+#   cloudflare/functions.ts). The others answer "not available on the backup".
+#   Nothing is scheduled on Cloudflare.
+#
+# Needs (repository settings):
+#   secrets CLOUDFLARE_API_TOKEN (Account > Cloudflare Pages: Edit only),
+#           CLOUDFLARE_ACCOUNT_ID, FIREBASE_SERVICE_ACCOUNT, GEMINI_API_KEY,
+#           and the same EXPO_PUBLIC_* secrets as the Netlify workflow
+#   vars    CLOUDFLARE_PAGES_PROJECT (default spendly-web-backup),
+#           CLOUDFLARE_BACKUP_ORIGIN (e.g. https://spendly-web-backup.pages.dev)
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: web-deploy-cloudflare-backup
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Pinned; run with npx so wrangler stays out of package.json (SPENDLY-703).
+  WRANGLER: wrangler@4.158.0
+
+jobs:
+  rules:
+    name: Firestore rules
+    uses: ./.github/workflows/rules-tests.yml
+
+  deploy:
+    name: Build and deploy the Cloudflare backup
+    needs: rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'spendly-web-backup' }}
+      CLOUDFLARE_BACKUP_ORIGIN: ${{ vars.CLOUDFLARE_BACKUP_ORIGIN }}
+
+    steps:
+      - name: Check the backup settings
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          missing=""
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          [ -n "$CLOUDFLARE_BACKUP_ORIGIN" ] || missing="$missing CLOUDFLARE_BACKUP_ORIGIN(var)"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing:$missing. See docs/WEB_BACKUP_CLOUDFLARE_RUNBOOK.md."
+            exit 1
+          fi
+          case "$CLOUDFLARE_BACKUP_ORIGIN" in
+            https://*) ;;
+            *) echo "::error::CLOUDFLARE_BACKUP_ORIGIN must start with https://"; exit 1 ;;
+          esac
+          case "$CLOUDFLARE_BACKUP_ORIGIN" in
+            *netlify.app*) echo "::error::CLOUDFLARE_BACKUP_ORIGIN points at Netlify. It must be the Cloudflare address."; exit 1 ;;
+          esac
+          # Fail in seconds, not after the build, if the token can't reach the
+          # Pages project (wrong token, permission, account ID or project name).
+          RESPONSE=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PAGES_PROJECT")
+          if [ "$(printf '%s' "$RESPONSE" | jq -r '.success')" != "true" ]; then
+            echo "::error::Cloudflare refused access to Pages project '$CLOUDFLARE_PAGES_PROJECT': $(printf '%s' "$RESPONSE" | jq -c '[.errors[]? | {code, message}]')"
+            echo "Check: the token has Account > Cloudflare Pages > Edit on this account; CLOUDFLARE_ACCOUNT_ID is that account's ID; the project exists (docs/WEB_BACKUP_CLOUDFLARE_RUNBOOK.md §2)."
+            exit 1
+          fi
+          echo "Cloudflare token can reach Pages project '$CLOUDFLARE_PAGES_PROJECT'."
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit + integration-lite suite
+        run: npm test
+
+      - name: Shared typecheck
+        run: npm run typecheck:shared
+
+      - name: Full app typecheck
+        run: npm run typecheck
+
+      # Same EXPO_PUBLIC_* set as web-deploy.yml, then EXPO_PUBLIC_SHARE_URL is
+      # replaced with the backup's origin.
+      - name: Restore .env
+        env:
+          MOBILE_ENV_FILE: ${{ secrets.MOBILE_ENV_FILE }}
+          EXPO_PUBLIC_APP_URL: ${{ secrets.EXPO_PUBLIC_APP_URL }}
+          EXPO_PUBLIC_FIREBASE_API_KEY: ${{ secrets.EXPO_PUBLIC_FIREBASE_API_KEY }}
+          EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+          EXPO_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
+          EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+          EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER: ${{ secrets.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER }}
+          EXPO_PUBLIC_FIREBASE_APP_ID: ${{ secrets.EXPO_PUBLIC_FIREBASE_APP_ID }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+          EXPO_PUBLIC_READMODEL_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_READMODEL_SUPABASE_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
+        run: |
+          if [ -n "$MOBILE_ENV_FILE" ]; then
+            printf '%s\n' "$MOBILE_ENV_FILE" > .env
+            echo "Wrote .env from MOBILE_ENV_FILE."
+          else
+            : > .env
+            write_kv() {
+              if [ -n "$2" ]; then printf '%s=%s\n' "$1" "$2" >> .env; fi
+            }
+            write_kv EXPO_PUBLIC_APP_URL "$EXPO_PUBLIC_APP_URL"
+            write_kv EXPO_PUBLIC_FIREBASE_API_KEY "$EXPO_PUBLIC_FIREBASE_API_KEY"
+            write_kv EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN "$EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN"
+            write_kv EXPO_PUBLIC_FIREBASE_PROJECT_ID "$EXPO_PUBLIC_FIREBASE_PROJECT_ID"
+            write_kv EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET "$EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET"
+            write_kv EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER "$EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER"
+            write_kv EXPO_PUBLIC_FIREBASE_APP_ID "$EXPO_PUBLIC_FIREBASE_APP_ID"
+            write_kv EXPO_PUBLIC_SUPABASE_URL "$EXPO_PUBLIC_SUPABASE_URL"
+            write_kv EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY "$EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
+            write_kv EXPO_PUBLIC_READMODEL_SUPABASE_URL "$EXPO_PUBLIC_READMODEL_SUPABASE_URL"
+            write_kv EXPO_PUBLIC_READMODEL_SUPABASE_PUBLISHABLE_KEY "$EXPO_PUBLIC_READMODEL_SUPABASE_PUBLISHABLE_KEY"
+            write_kv EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID "$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"
+            echo "Wrote .env from individual EXPO_PUBLIC_* secrets."
+          fi
+          # SPENDLY-24: Gemini is a spendable secret. Never leave it in a client .env.
+          sed -i '/^EXPO_PUBLIC_GEMINI_API_KEY=/d' .env
+          # The backup's own origin: shareable links and every function call go here.
+          sed -i '/^EXPO_PUBLIC_SHARE_URL=/d' .env
+          printf 'EXPO_PUBLIC_SHARE_URL=%s\n' "${CLOUDFLARE_BACKUP_ORIGIN%/}" >> .env
+          KEY_COUNT=$(grep -c '^EXPO_PUBLIC_' .env || true)
+          if [ "$KEY_COUNT" -lt 7 ]; then
+            echo "::error::Need the Firebase EXPO_PUBLIC_* secrets (or one MOBILE_ENV_FILE). Found $KEY_COUNT EXPO_PUBLIC_* lines."
+            exit 1
+          fi
+          echo "Wrote .env with $KEY_COUNT EXPO_PUBLIC_* keys; EXPO_PUBLIC_SHARE_URL is the backup."
+
+      - name: Build web (expense, nutrition, ganesh, landing)
+        run: npm run build:web:all
+
+      - name: Make the Cloudflare Pages output
+        run: |
+          npm run build:cloudflare-pages
+          npm run build:cloudflare-worker
+          # The backup's own origin must be inlined, and Netlify's must not be
+          # what the app calls for its functions.
+          if ! grep -rqF "${CLOUDFLARE_BACKUP_ORIGIN%/}" dist-cloudflare/_expo dist-cloudflare/expense/_expo; then
+            echo "::error::The backup origin is not in the built app. EXPO_PUBLIC_SHARE_URL was not applied."
+            exit 1
+          fi
+
+      # Browser files: no secret value and no private-key header. _worker.js
+      # (server code, never served): no secret value and no actual key; its
+      # jose library legitimately contains the PEM header text.
+      - name: Check no server secret reached the bundle
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          # Same fallback as web-deploy.yml: the older client-named secret.
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || secrets.EXPO_PUBLIC_GEMINI_API_KEY }}
+        run: node scripts/check-backup-secrets.js dist-cloudflare
+
+      # Function runtime secrets. Only the served functions need any
+      # (cloudflare/functions.ts): readmodel-claims and nutrition-ai.
+      - name: Set the backup's function secrets
+        working-directory: cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          # Same fallback as web-deploy.yml: the older client-named secret.
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || secrets.EXPO_PUBLIC_GEMINI_API_KEY }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT is empty. readmodel-claims and nutrition-ai can't verify sign-ins without it."
+            exit 1
+          fi
+          python3 -c 'import json,os,sys; sys.stdout.write(json.dumps(json.loads(os.environ["FIREBASE_SERVICE_ACCOUNT"]), separators=(",", ":")))' \
+            | npx --yes "$WRANGLER" pages secret put FIREBASE_SERVICE_ACCOUNT --project-name "$CLOUDFLARE_PAGES_PROJECT"
+          if [ -n "$GEMINI_API_KEY" ]; then
+            printf '%s' "$GEMINI_API_KEY" | npx --yes "$WRANGLER" pages secret put GEMINI_API_KEY --project-name "$CLOUDFLARE_PAGES_PROJECT"
+          else
+            echo "::warning::GEMINI_API_KEY is not set. nutrition-ai on the backup will return 500 until it is."
+          fi
+
+      # Pages re-bundles _worker.js (no --no-bundle): the bundle imports Node
+      # built-ins by bare name, which only bundling resolves (SPENDLY-703).
+      - name: Deploy to Cloudflare Pages
+        working-directory: cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx --yes "$WRANGLER" pages deploy \
+            --project-name "$CLOUDFLARE_PAGES_PROJECT" \
+            --branch main \
+            --commit-hash "$GITHUB_SHA" \
+            --commit-message "Backup deploy $GITHUB_SHA" \
+            --commit-dirty=true
+
+      - name: Smoke test the backup
+        run: node scripts/smoke-web-backup.js "$CLOUDFLARE_BACKUP_ORIGIN" --mode=backup
+
+      - name: Clean up
+        if: always()
+        run: rm -f .env
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Web backup deploy (Cloudflare Pages)"
+            echo ""
+            echo "- ${CLOUDFLARE_BACKUP_ORIGIN}/"
+            echo "- ${CLOUDFLARE_BACKUP_ORIGIN}/expense"
+            echo "- ${CLOUDFLARE_BACKUP_ORIGIN}/nutrition"
+            echo "- ${CLOUDFLARE_BACKUP_ORIGIN}/ganesh"
+            echo ""
+            echo "Not on the backup (Netlify only): Ganesh totals, Token Laddu draw, account deletion, EPF job, per-save read-model push, stock screener."
+            echo "Netlify (spendly-share.netlify.app) was not touched."
+          } >> "$GITHUB_STEP_SUMMARY"

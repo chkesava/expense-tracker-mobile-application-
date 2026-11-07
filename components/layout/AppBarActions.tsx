@@ -68,7 +68,7 @@ export function AppBarActions({
         android_ripple={{ color: ripple, borderless: true, radius: 24 }}
         style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
         accessibilityRole="button"
-        accessibilityLabel={unread > 0 ? `Reminders, ${unread} new` : "Reminders"}
+        accessibilityLabel={unread > 0 ? `Inbox, ${unread} new` : "Inbox"}
       >
         <Bell size={APP_BAR_ICON_SIZE} color={iconColor} strokeWidth={2} />
         {unread > 0 ? (

@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 import {
   Bell,
+  BellRing,
   CalendarClock,
   CreditCard,
   HandCoins,
@@ -10,6 +11,8 @@ import {
   PiggyBank,
   Repeat,
   Target,
+  TrendingUp,
+  Users,
 } from "lucide-react-native";
 
 import { EmptyState } from "@/components/common/EmptyState";
@@ -24,6 +27,7 @@ import { useSettings } from "@/providers/SettingsProvider";
 import { computeActiveCategoryBudgets } from "@/shared/utils/dashboardWidgets";
 import { currentMonthKey } from "@/shared/utils/dates";
 import { budgetInboxItems, type InboxItem } from "@/shared/utils/remindersInbox";
+import { notificationRowHref, timeAgoLabel, type NotificationRow } from "@/shared/utils/notificationRows";
 import { useTheme } from "@/theme/ThemeProvider";
 
 type IconType = ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
@@ -39,8 +43,20 @@ const SOURCE_ICONS: Partial<Record<InboxItem["source"], IconType>> = {
   goal: PiggyBank,
 };
 
+/** SPENDLY-230: icons for the stored notification rows, by category or type. */
+function updateIcon(row: NotificationRow): IconType {
+  if (row.category === "investments" || row.type.startsWith("sip_") || row.type.startsWith("epf_")) return TrendingUp;
+  if (row.category === "shared") return Users;
+  if (row.category === "priceAlerts") return BellRing;
+  if (row.category === "bills") return CreditCard;
+  return Bell;
+}
+
 /**
- * SPENDLY-569 — the reminders inbox the app-bar bell opens. Dues come from
+ * SPENDLY-569 — the reminders inbox the app-bar bell opens. SPENDLY-230 adds
+ * "Updates": the stored notification rows (SIP runs today; the server's
+ * SIP/EPF, shared and price-alert notices later), whose read state is shared
+ * across devices. Dues come from
  * the shell's `RemindersInboxProvider` (the same calendar events the local
  * notifications use); budget alerts are read here only, while the screen is
  * open (SPENDLY-406). Opening the screen marks the current dues as seen on
@@ -52,7 +68,8 @@ export default function RemindersInboxScreen() {
   const surfaces = useSurfaces();
   const { settings } = useSettings();
   const currency = useDisplayCurrency();
-  const { items, markAllSeen } = useRemindersInbox();
+  const { items, updates, markAllSeen, markUpdateRead } = useRemindersInbox();
+  const nowMs = Date.now();
 
   useFocusEffect(
     useCallback(() => {
@@ -100,16 +117,42 @@ export default function RemindersInboxScreen() {
     );
   };
 
-  const nothing = items.length === 0 && budgetItems.length === 0;
+  const renderUpdate = (row: NotificationRow, index: number, count: number) => {
+    const Icon = updateIcon(row);
+    const tint = row.read ? theme.colors.mutedForeground : theme.colors.primary;
+    const href = notificationRowHref(row);
+    const when = timeAgoLabel(row.createdAtMs, nowMs);
+    const meta = [row.read ? null : "New", row.body, when].filter(Boolean).join(" · ");
+    return (
+      <DataRow
+        key={row.id}
+        divider={index < count - 1}
+        onPress={() => {
+          if (!row.read) markUpdateRead(row.id);
+          if (href) router.push(href as Href);
+        }}
+        leading={
+          <RowGlyph size={38} tint={surfaces.wash(tint)}>
+            <Icon size={17} color={tint} strokeWidth={2.3} />
+          </RowGlyph>
+        }
+        title={row.title}
+        meta={meta}
+        accessibilityLabel={`${row.read ? "" : "New. "}${row.title}. ${row.body}. ${when}`}
+      />
+    );
+  };
+
+  const nothing = items.length === 0 && budgetItems.length === 0 && updates.length === 0;
 
   return (
     <PageShell layout="readable">
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.foreground, fontFamily: theme.fontFamily.bold }]}>
-          Reminders
+          Inbox
         </Text>
         <Text style={[styles.subtitle, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
-          What's overdue or due in the next few days, and budgets that need a look.
+          What's overdue or due in the next few days, recent updates, and budgets that need a look.
         </Text>
       </View>
 
@@ -117,13 +160,18 @@ export default function RemindersInboxScreen() {
         <EmptyState
           illustration="general"
           title="You're all caught up"
-          description="Nothing is overdue or due in the next three days, and every budget is on track."
+          description="Nothing is overdue or due in the next three days, there are no new updates, and every budget is on track."
         />
       ) : (
         <View style={styles.sections}>
           {items.length > 0 ? (
             <Section title="Due" subtitle={`${items.length} need${items.length === 1 ? "s" : ""} attention`}>
               {items.map((item, i) => renderRow(item, i, items.length))}
+            </Section>
+          ) : null}
+          {updates.length > 0 ? (
+            <Section title="Updates" subtitle="SIPs, EPF and shared money">
+              {updates.map((row, i) => renderUpdate(row, i, updates.length))}
             </Section>
           ) : null}
           {budgetItems.length > 0 ? (

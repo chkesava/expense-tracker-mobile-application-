@@ -69,7 +69,8 @@ export type CreditCardBillReminderLog = {
   /** Lead days when type is days_before; else undefined. */
   daysBefore?: number;
   sentAt: string;
-  channel: "local";
+  /** SPENDLY-231: "push" for reminders the server sent. */
+  channel: "local" | "push";
   status: "sent" | "skipped" | "failed";
   reason?: string;
 };

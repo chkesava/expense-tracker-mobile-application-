@@ -46,7 +46,7 @@ These rules sit beside `CLAUDE.md` (Spendly safety invariants) and `docs/AGENT_W
 
 ## 2. New collections and fields
 
-**Synced today (60 tables):**
+**Synced today (62 tables):**
 - Wave 1: `expenses`, `incomes`, `ledgerEvents`, `accounts`, `accountTypes`, `accountTransfers`, `accountEntries`, `accountPayments`, `creditCardBills`, `categories`.
 - Save Goals (SPENDLY-609): `financialGoals`, `goalEvents`.
 - Wave 2 (SPENDLY-589): `borrowings`, `borrowingRepayments`, `receivables`, `receivableRepayments`, `subscriptions`.
@@ -54,6 +54,8 @@ These rules sit beside `CLAUDE.md` (Spendly safety invariants) and `docs/AGENT_W
 - Remaining screen collections (SPENDLY-591 part A): `categoryBudgets`, `decisions`, `calendarReminders`, `feeReviews`, `feeSignalDismissals`, `merchantOverrides`, `recurringDismissals`, `spaces`, `categorizationRules`, `trips`, `runwaySettings`, `runwayOverrides`, `whatIfScenarios`, `goalFundingPlans`, `sipPlans`, `sipTransactions`, `virtualPositions`, `netWorthHistory`, `watchlists`. Dates stored as full ISO strings (trip and SIP plan dates) are copied as text, never cut to a UTC day.
 - Stored summaries (SPENDLY-592): `financialSummaries` (`dashboard_{YYYY-MM}`, `epf`), copied exactly (R4.1).
 - Group Funds (SPENDLY-685): `groupFunds`, `groupFundEvents`. A fund's stored totals stay in `doc` as an exact copy (no typed column); the held amount is read from Firestore. History pages use the `groupFundHistory` screen switch, the fund list the `groupFunds` collection switch.
+- Push devices (SPENDLY-224): `devices`, one row per signed-in install. The Expo push token stays in `doc`; no screen reads it, and the server sender reads Firestore.
+- Notification rows (SPENDLY-230): `notifications`, the unified inbox's rows (SIP today, server events later), read through `readModel.notifications`.
 - Tax & ITR Readiness (SPENDLY-709): `taxProfiles`, `taxEntries`, `taxReviews`, `taxDocuments`, `taxSnapshots`. Typed columns are the year and identifiers only; every amount stays in `doc` (SQL never sums a tax figure). Each reads through its own collection switch, filtered to one year. `taxSnapshots` is append-only; `taxEntries` is soft-deleted (`deletedAt` → `soft_deleted_at`). Document files live in `spendly-files`, not in a table.
 
 Everything else is **not** in the read model. Waves 2 and 3 were first closed as won't-do (514–518, the no-Blaze decision); SPENDLY-586 brings them back: Wave 2 in 589, Wave 3 in 590. Still not synced: `financialSummaries/netWorth` and `/investments` (retired; R4.1a), `holdingAdjustments`, `portfolioReconciliationAudits`, `decisionEvents`; the `users/{uid}` settings document is copied as `user_settings` (591 part C): allowlisted fields only (`RootSpec.docKeys`; never PIN, lock, role or identity), server-only (not on the client allowlist). Nested collections (591 part B, `watchlists/{listId}/items`) key on doc_id `"{parentId}/{id}"` with a `TableSpec.parent`.
