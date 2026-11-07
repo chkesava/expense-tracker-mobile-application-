@@ -27,7 +27,7 @@ import {
   buildTaxSnapshot,
   softDeleteTaxEntry,
 } from "../shared/features/tax/utils/builders";
-import { ALL_RECORDS, RENT_RECEIVED } from "../shared/features/tax/utils/testRecords";
+import { ALL_RECORDS, EQUITY_SALE, RENT_RECEIVED } from "../shared/features/tax/utils/testRecords";
 import type { TaxEntryDraft } from "../shared/features/tax/utils/validation";
 import {
   taxDocumentWriteOps,
@@ -166,6 +166,23 @@ describe("taxEntries", () => {
     await assertFails(setDoc(doc(dbOf(OWNER), "users", OWNER, "taxEntries", "t1"), { ...good, fields: { ...fields, tan: "BAD" } }));
     await assertFails(setDoc(doc(dbOf(OWNER), "users", OWNER, "taxEntries", "t2"), { ...good, fields: { ...fields, form: "99" } }));
     await assertSucceeds(setDoc(doc(dbOf(OWNER), "users", OWNER, "taxEntries", "t3"), good));
+  });
+
+  it("takes a term on a statement total only, and requires it there (SPENDLY-293)", async () => {
+    const total = entry({
+      ...EQUITY_SALE,
+      fields: { mode: "statement_total", term: "long_term", assetClass: "listed_equity", assetName: "Broker P&L", soldDate: "2026-03-31", costOfAcquisition: 40_000, saleValue: 55_000 },
+    }, "cg1");
+    const good = setData(taxEntryWriteOps(OWNER, total, null, S));
+    const fields = good.fields as Record<string, unknown>;
+    const ref = (id: string) => doc(dbOf(OWNER), "users", OWNER, "taxEntries", id);
+    await assertSucceeds(setDoc(ref("cg1"), good));
+    const { term: _term, ...noTerm } = fields;
+    await assertFails(setDoc(ref("cg2"), { ...good, fields: noTerm }));
+    await assertFails(setDoc(ref("cg3"), { ...good, fields: { ...fields, term: "medium_term" } }));
+    const row = setData(taxEntryWriteOps(OWNER, entry(EQUITY_SALE, "cg4"), null, S));
+    await assertSucceeds(setDoc(ref("cg4"), row));
+    await assertFails(setDoc(ref("cg5"), { ...row, fields: { ...(row.fields as Record<string, unknown>), term: "long_term" } }));
   });
 });
 

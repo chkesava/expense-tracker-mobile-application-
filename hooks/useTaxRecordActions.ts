@@ -13,6 +13,7 @@ import {
   undoEpfDeductionDecision,
 } from "@/services/tax/taxDeductionStore";
 import { acceptTdsDifference, undoTdsAcceptance } from "@/services/tax/taxTdsStore";
+import { saveSaleDecision, undoSaleDecision, type SaleDecision } from "@/services/tax/taxCapitalGainStore";
 import type { FinancialYearKey, TaxEntry, TaxLine } from "@/shared/features/tax/types";
 import { taxIssueMessage } from "@/shared/features/tax/utils/issueMessages";
 import type { TdsMatchRow } from "@/shared/features/tax/utils/tdsReconcile";
@@ -119,6 +120,24 @@ export function useTaxRecordActions(fy: FinancialYearKey, todayKey: string) {
     [run]
   );
 
+  // SPENDLY-293: sales Spendly found in the portfolio.
+  const saleDecision = useCallback(
+    (sale: { id: string; saleValue: number }, choice: SaleDecision) =>
+      run("tax.capitalGains.decide", "Couldn't save your decision.", async (u) =>
+        writeSavedMessage(
+          await saveSaleDecision(u, { fy, saleId: sale.id, saleValue: sale.saleValue, ...choice }),
+          choice.decision === "confirm" ? "Sale counted" : choice.decision === "exclude" ? "Sale left out" : "Asset type changed"
+        )
+      ),
+    [fy, run]
+  );
+
+  const undoSale = useCallback(
+    (saleId: string) =>
+      run("tax.capitalGains.undo", "Couldn't undo this.", async (u) => writeSavedMessage(await undoSaleDecision(u, fy, saleId), "Back to Spendly's view")),
+    [fy, run]
+  );
+
   return {
     saving,
     saveRecord,
@@ -129,5 +148,7 @@ export function useTaxRecordActions(fy: FinancialYearKey, todayKey: string) {
     undoEpf,
     confirmEligibility,
     undoEligibility,
+    saleDecision,
+    undoSale,
   };
 }

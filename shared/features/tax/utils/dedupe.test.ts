@@ -56,12 +56,12 @@ describe("taxEntryDedupeKey", () => {
     );
   });
 
-  it("allows one statement total per asset class", () => {
+  it("allows one statement total per asset class and term", () => {
     const total = {
       ...EQUITY_SALE,
-      fields: { ...EQUITY_SALE.fields, mode: "statement_total" as const, saleValue: 99 },
+      fields: { ...EQUITY_SALE.fields, mode: "statement_total" as const, saleValue: 99, term: "long_term" as const },
     };
-    expect(taxEntryDedupeKey(total)).toBe("2025-26|capital_gain|total|listed_equity");
+    expect(taxEntryDedupeKey(total)).toBe("2025-26|capital_gain|total|listed_equity|long_term");
   });
 
   it("separates the same record in two years", () => {

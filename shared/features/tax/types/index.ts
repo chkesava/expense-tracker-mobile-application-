@@ -208,6 +208,10 @@ export const TAX_CAPITAL_GAIN_MODES = [
 ] as const;
 export type TaxCapitalGainMode = (typeof TAX_CAPITAL_GAIN_MODES)[number];
 
+/** A broker statement splits its totals by term (SPENDLY-293). */
+export const TAX_CG_TERMS = ["short_term", "long_term"] as const;
+export type TaxCgTerm = (typeof TAX_CG_TERMS)[number];
+
 export const TAX_PAYMENT_TYPES = ["advance_tax", "self_assessment", "other"] as const;
 export type TaxPaymentType = (typeof TAX_PAYMENT_TYPES)[number];
 
@@ -277,6 +281,11 @@ export interface TaxCapitalGainFields {
   costOfAcquisition: number | null;
   saleValue: number;
   transferExpenses?: number | null;
+  /**
+   * `statement_total` only: which part of the statement this total is (short-
+   * or long-term). A sale row's term is always calculated, never stored.
+   */
+  term?: TaxCgTerm;
 }
 
 export interface TaxPaymentFields {
@@ -332,6 +341,7 @@ export const TAX_ENTRY_FIELD_KEYS = {
     "costOfAcquisition",
     "saleValue",
     "transferExpenses",
+    "term",
   ],
   tax_payment: ["paymentType", "date", "amount", "bsrCode", "challanSerial", "cin"],
 } as const satisfies { [K in TaxEntryKind]: readonly (keyof TaxEntryFieldsByKind[K])[] };

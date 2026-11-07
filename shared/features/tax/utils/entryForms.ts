@@ -8,8 +8,11 @@
  */
 
 import { DEDUCTION_CATEGORIES } from "../data/deductionCategories";
+import { ASSET_CLASS_LABELS, CG_TERM_LABELS } from "./capitalGainLabels";
 import {
   TAX_AIS_CATEGORIES,
+  TAX_ASSET_CLASSES,
+  TAX_CG_TERMS,
   TAX_PAYMENT_TYPES,
   TAX_PROOF_STATUSES,
   TAX_QUARTERS,
@@ -28,7 +31,7 @@ import { validateTaxEntry, type TaxEntryDraft, type TaxIssue } from "./validatio
  * `sourceRef` links an existing Spendly record (SPENDLY-292): its options are
  * supplied at runtime (`"{kind}:{id}"`) and it is stored as `{ kind, id }`.
  */
-export type FormFieldType = "text" | "money" | "date" | "tan" | "section" | "option" | "sourceRef" | "digits";
+export type FormFieldType = "text" | "money" | "date" | "tan" | "section" | "option" | "sourceRef" | "digits" | "quantity";
 
 export interface FormField {
   key: string;
@@ -37,8 +40,12 @@ export interface FormField {
   required: boolean;
   /** Money only: an empty value is stored as `null` ("not known") rather than left out. */
   nullable?: boolean;
-  /** Date only: `afterYearStart` lets the date run past the year's end, up to today (SPENDLY-294). */
-  dateRange?: "year" | "afterYearStart";
+  /**
+   * Date only. `year` (default): inside the year. `afterYearStart`: from the
+   * year's start up to today (SPENDLY-294). `beforeYearEnd`: any date up to the
+   * year's end, e.g. when an asset sold this year was bought (SPENDLY-293).
+   */
+  dateRange?: "year" | "afterYearStart" | "beforeYearEnd";
   /** Digits only: the exact length expected (BSR 7, challan 5, CIN 20). */
   length?: number;
   options?: readonly { id: string; label: string }[];
@@ -140,6 +147,31 @@ export const ENTRY_FORMS: Partial<Record<TaxEntryKind, EntryFormSpec>> = {
       { key: "cin", label: "CIN (optional)", type: "digits", length: 20, required: false, helper: "Or the 20-digit challan identification number." },
     ],
   },
+  capital_gain: {
+    kind: "capital_gain",
+    title: "Sale",
+    fields: [
+      { key: "assetClass", label: "Asset", type: "option", required: true, options: opt(TAX_ASSET_CLASSES, (id) => ASSET_CLASS_LABELS[id as keyof typeof ASSET_CLASS_LABELS] ?? id) },
+      { key: "assetName", label: "Name", type: "text", required: true, placeholder: "e.g. Infosys Ltd, a fund's name, a flat" },
+      { key: "isin", label: "ISIN (optional)", type: "section", required: false, helper: "12 characters on the contract note or statement." },
+      { key: "quantity", label: "Quantity (optional)", type: "quantity", required: false },
+      {
+        key: "acquiredDate",
+        label: "Bought on (optional)",
+        type: "date",
+        required: false,
+        dateRange: "beforeYearEnd",
+        helper: "Decides short- or long-term. Without it the term stays unknown.",
+      },
+      { key: "soldDate", label: "Sold on", type: "date", required: true },
+      { key: "saleValue", label: "Sale value", type: "money", required: true },
+      { key: "costOfAcquisition", label: "Cost", type: "money", required: true, nullable: true, helper: "What you paid, with buying charges. Leave empty if you don't know it yet." },
+      { key: "transferExpenses", label: "Selling charges (optional)", type: "money", required: false, helper: "Brokerage and charges on the sale (not STT)." },
+    ],
+    complete: (fields) => {
+      fields.mode = "row";
+    },
+  },
   ais_value: {
     kind: "ais_value",
     title: "AIS / 26AS line",
@@ -154,6 +186,42 @@ export const ENTRY_FORMS: Partial<Record<TaxEntryKind, EntryFormSpec>> = {
     ],
   },
 };
+
+/**
+ * SPENDLY-293: a broker or registrar statement's total for one asset class and
+ * term. It replaces Spendly's own sales of that class (D7), so it has no
+ * per-sale fields.
+ */
+export const CAPITAL_GAIN_TOTAL_FORM: EntryFormSpec = {
+  kind: "capital_gain",
+  title: "Statement total",
+  fields: [
+    { key: "assetClass", label: "Asset", type: "option", required: true, options: opt(TAX_ASSET_CLASSES, (id) => ASSET_CLASS_LABELS[id as keyof typeof ASSET_CLASS_LABELS] ?? id) },
+    { key: "term", label: "Part of the statement", type: "option", required: true, options: opt(TAX_CG_TERMS, (id) => CG_TERM_LABELS[id as keyof typeof CG_TERM_LABELS] ?? id) },
+    { key: "assetName", label: "Statement", type: "text", required: true, placeholder: "e.g. Zerodha tax P&L, CAMS capital gains" },
+    { key: "soldDate", label: "Statement date", type: "date", required: true, helper: "The last sale it covers, or the year's end." },
+    { key: "saleValue", label: "Total sale value", type: "money", required: true },
+    { key: "costOfAcquisition", label: "Total cost", type: "money", required: true, nullable: true, helper: "Leave empty if the statement doesn't show it." },
+    { key: "transferExpenses", label: "Total charges (optional)", type: "money", required: false },
+  ],
+  complete: (fields) => {
+    fields.mode = "statement_total";
+  },
+};
+
+/** The spec that edits an entry: capital gains have two. */
+export function entryFormSpecFor(entry: TaxEntry): EntryFormSpec | undefined {
+  if (entry.kind === "capital_gain" && entry.fields.mode === "statement_total") return CAPITAL_GAIN_TOTAL_FORM;
+  return ENTRY_FORMS[entry.kind];
+}
+
+/** "12", "0.5", "1,000" → a positive number; anything else `null`. */
+export function parseTaxQuantity(raw: string): number | null {
+  const text = raw.replace(/,/g, "").trim();
+  if (!/^\d+(\.\d{1,8})?$/.test(text)) return null;
+  const q = Number(text);
+  return q > 0 && q < 1e12 ? q : null;
+}
 
 export type EntryFormValues = Record<string, string>;
 
@@ -202,6 +270,12 @@ export function entryFormToDraft(
       continue;
     }
     if (!raw) continue;
+    if (f.type === "quantity") {
+      const q = parseTaxQuantity(raw);
+      if (q === null) issues.push({ field: `fields.${f.key}`, code: "invalid_quantity" });
+      else fields[f.key] = q;
+      continue;
+    }
     if (f.type === "sourceRef") {
       const at = raw.indexOf(":");
       const kind = raw.slice(0, at);
