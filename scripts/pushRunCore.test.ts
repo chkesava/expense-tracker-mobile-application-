@@ -11,6 +11,7 @@ function fakeDb(seed: Record<string, Record<string, unknown>>) {
   const snap = (path: string) => ({ exists: docs.has(path), id: path.split("/").pop()!, ref: { path }, data: () => docs.get(path) });
   const query = (match: (p: string) => boolean, filters: [string, unknown][] = []): ReturnType<AdminFirestoreLike["collection"]> => ({
     where: (field, op, value) => query(match, [...filters, [field, op === "in" ? value : [value]]]),
+    limit: () => query(match, filters),
     get: async () => ({
       docs: [...docs.keys()].filter(match).filter((p) => filters.every(([f, vals]) => (vals as unknown[]).includes(docs.get(p)?.[f]))).map(snap),
     }),

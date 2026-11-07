@@ -44,10 +44,15 @@ function fieldAt(data: Record<string, unknown> | undefined, path: string): unkno
 export function fakeAdminDb(seed: Record<string, Record<string, unknown>>) {
   const docs = new Map(Object.entries(seed));
   const snap = (path: string) => ({ exists: docs.has(path), id: path.split("/").pop()!, ref: { path }, data: () => docs.get(path) });
-  const query = (match: (p: string) => boolean, filters: Filter[] = []): ReturnType<AdminFirestoreLike["collection"]> => ({
-    where: (f, op, v) => query(match, [...filters, [f, op, v]]),
+  const query = (match: (p: string) => boolean, filters: Filter[] = [], max = Infinity): ReturnType<AdminFirestoreLike["collection"]> => ({
+    where: (f, op, v) => query(match, [...filters, [f, op, v]], max),
+    limit: (n) => query(match, filters, n),
     get: async () => ({
-      docs: [...docs.keys()].filter(match).filter((p) => filters.every(([f, op, v]) => matches(fieldAt(docs.get(p), f), op, v))).map(snap),
+      docs: [...docs.keys()]
+        .filter(match)
+        .filter((p) => filters.every(([f, op, v]) => matches(fieldAt(docs.get(p), f), op, v)))
+        .slice(0, max)
+        .map(snap),
     }),
   });
   const db: AdminFirestoreLike = {
