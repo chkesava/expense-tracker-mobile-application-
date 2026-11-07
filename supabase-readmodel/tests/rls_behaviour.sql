@@ -99,8 +99,8 @@ begin
   if wrong is not null then
     raise exception 'user A saw rows that are not theirs or are tombstoned: %', wrong;
   end if;
-  if (select count(*) from rls_test.visible()) <> 110 then
-    raise exception 'user A should see 2 rows in each of 55 tables (Wave 1 + SPENDLY-609 goals + Waves 2 and 3 + SPENDLY-591 + SPENDLY-685), saw %', (select count(*) from rls_test.visible());
+  if (select count(*) from rls_test.visible()) <> 114 then
+    raise exception 'user A should see 2 rows in each of 57 tables (Wave 1 + SPENDLY-609 goals + Waves 2 and 3 + SPENDLY-591 + SPENDLY-685 + SPENDLY-224 + SPENDLY-230), saw %', (select count(*) from rls_test.visible());
   end if;
   if (select count(*) from public.sync_status) <> 1
      or exists (select 1 from public.sync_status s where s.uid <> 'user-a') then
@@ -114,7 +114,7 @@ do $$ begin perform set_config('request.jwt.claims', rls_test.claims('{"sub": "u
 do $$
 begin
   if exists (select 1 from rls_test.visible() v where v.uid <> 'user-b')
-     or (select count(*) from rls_test.visible()) <> 55 then
+     or (select count(*) from rls_test.visible()) <> 57 then
     raise exception 'user B isolation failed';
   end if;
 end

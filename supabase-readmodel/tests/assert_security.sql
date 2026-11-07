@@ -113,8 +113,8 @@ begin
     raise exception 'unexpected policies: %', bad;
   end if;
   select count(*) into n from pg_policies where schemaname = 'public';
-  if n <> 56 then  -- 10 Wave 1 + sync_status + SPENDLY-609 goals (2) + SPENDLY-589 Wave 2 (5) + SPENDLY-590 Wave 3 (14) + SPENDLY-591 (21) + SPENDLY-592 (1) + SPENDLY-685 group funds (2)
-    raise exception 'expected 56 owner-read policies, found %', n;
+  if n <> 58 then  -- 10 Wave 1 + sync_status + SPENDLY-609 goals (2) + SPENDLY-589 Wave 2 (5) + SPENDLY-590 Wave 3 (14) + SPENDLY-591 (21) + SPENDLY-592 (1) + SPENDLY-685 group funds (2) + SPENDLY-224 devices (1) + SPENDLY-230 notifications (1)
+    raise exception 'expected 58 owner-read policies, found %', n;
   end if;
   if exists (
     select 1 from pg_policies
