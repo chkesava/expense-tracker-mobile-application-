@@ -46,13 +46,14 @@ These rules sit beside `CLAUDE.md` (Spendly safety invariants) and `docs/AGENT_W
 
 ## 2. New collections and fields
 
-**Synced today (55 tables):**
+**Synced today (57 tables):**
 - Wave 1: `expenses`, `incomes`, `ledgerEvents`, `accounts`, `accountTypes`, `accountTransfers`, `accountEntries`, `accountPayments`, `creditCardBills`, `categories`.
 - Save Goals (SPENDLY-609): `financialGoals`, `goalEvents`.
 - Wave 2 (SPENDLY-589): `borrowings`, `borrowingRepayments`, `receivables`, `receivableRepayments`, `subscriptions`.
 - Wave 3 (SPENDLY-590): `investments`, `holdings`, `portfolioTransactions`, `investmentCashTransactions`, `portfolioSettings`, `epfProfile`, `epfEstablishments`, `epfContributions`, `epfContributionEvents`, `epfTransfers`, `epfTransferEvents`, `epfInterestEntries`, `epfReconciliations`, `epfWageHistory`. Quantities, prices, NAVs and rates use the `decimal` field type (`numeric(24,8)`); money stays `numeric(18,2)`.
 - Remaining screen collections (SPENDLY-591 part A): `categoryBudgets`, `decisions`, `calendarReminders`, `feeReviews`, `feeSignalDismissals`, `merchantOverrides`, `recurringDismissals`, `spaces`, `categorizationRules`, `trips`, `runwaySettings`, `runwayOverrides`, `whatIfScenarios`, `goalFundingPlans`, `sipPlans`, `sipTransactions`, `virtualPositions`, `netWorthHistory`, `watchlists`. Dates stored as full ISO strings (trip and SIP plan dates) are copied as text, never cut to a UTC day.
 - Stored summaries (SPENDLY-592): `financialSummaries` (`dashboard_{YYYY-MM}`, `epf`), copied exactly (R4.1).
+- Group Funds (SPENDLY-685): `groupFunds`, `groupFundEvents`. A fund's stored totals stay in `doc` as an exact copy (no typed column); the held amount is read from Firestore. History pages use the `groupFundHistory` screen switch, the fund list the `groupFunds` collection switch.
 - Push devices (SPENDLY-224): `devices`, one row per signed-in install. The Expo push token stays in `doc`; no screen reads it, and the server sender reads Firestore.
 - Notification rows (SPENDLY-230): `notifications`, the unified inbox's rows (SIP today, server events later), read through `readModel.notifications`.
 

@@ -33,6 +33,8 @@ const INTEGRATED = [
   "financialGoals", "financialSummaries", "netWorthHistory",
   // SPENDLY-674: reference data.
   "calendarReminders", "categories", "categorizationRules", "spaces",
+  // SPENDLY-685: Group Funds (display only; writers load the fund from Firestore).
+  "groupFunds",
   // SPENDLY-230: the unified inbox's notification rows.
   "notifications",
 ].sort();

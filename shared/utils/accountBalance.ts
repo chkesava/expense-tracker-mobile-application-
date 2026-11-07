@@ -13,6 +13,7 @@ import type { Receivable, ReceivableRepayment } from "../types/receivable";
 import { postingSortMs, resolveActivityClockTime } from "./activityDisplay";
 import { effectiveBalanceAsOfDate } from "./accountBaseline";
 import { getAccountKind } from "./accountKind";
+import { isGroupFundEntrySource } from "./groupFundModel";
 import {
   buildCreditCardLedger,
   oldestOpenStatement,
@@ -493,7 +494,8 @@ export function buildAccountActivities(
         entry.note ||
         (entry.direction === "credit" ? "Manual funds added" : "Manual account debit"),
       linkedAccountEntryId: entry.id,
-      isManualEntry: !entry.linkedSplitId,
+      isManualEntry: !entry.linkedSplitId && !isGroupFundEntrySource(entry.source),
+      isGroupFund: isGroupFundEntrySource(entry.source) || undefined,
     })),
     ...outgoingPayments.map((p) => ({
       id: p.id,

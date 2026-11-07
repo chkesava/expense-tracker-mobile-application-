@@ -110,6 +110,31 @@ from (
   cross join lateral generate_series(1, u.n) g(i)
 ) s;
 
+-- SPENDLY-678 Group Funds: perf-user's fund f0001 has 10 members paying two
+-- purposes every month for ~4 years (≈1,000 events) and 6,000 more events
+-- across 20 other funds; 1,000 events per noise user. Periods are YYYY-MM.
+insert into public.group_fund_events (uid, doc_id, fund_id, kind, amount, purpose_id, member_id, date, period,
+                                      created_at, doc, source_path, source_update_time)
+select s.uid, s.doc_id, s.fund_id, 'contribution', 6000, s.purpose_id, 'm' || (s.i % 10 + 1), s.at::date,
+       to_char(s.at, 'YYYY-MM'), s.at,
+       jsonb_build_object('fundId', s.fund_id, 'kind', 'contribution', 'amount', 6000, 'purposeId', s.purpose_id,
+                          'memberId', 'm' || (s.i % 10 + 1), 'date', to_char(s.at, 'YYYY-MM-DD'),
+                          'period', to_char(s.at, 'YYYY-MM'), 'actorUid', s.uid,
+                          'createdAtMs', (extract(epoch from s.at) * 1000)::bigint),
+       'users/' || s.uid || '/groupFundEvents/' || s.doc_id, now()
+from (
+  select u.uid, g.i, 'gfe' || lpad(g.i::text, 6, '0') as doc_id,
+         case when u.uid = 'perf-user' and g.i <= 1000 then 'f0001'
+              else 'f' || lpad((g.i % 20 + 2)::text, 4, '0') end as fund_id,
+         (array['appu', 'podupu'])[1 + g.i % 2] as purpose_id,
+         case when u.uid = 'perf-user' and g.i <= 1000
+              then timestamptz '2022-11-01' + ((g.i - 1) / 20) * interval '1 month' + (g.i % 20) * interval '1 day'
+              else timestamptz '2021-11-01' + (g.i * 9973 % 157766400) * interval '1 second' end as at
+  from (select 'perf-user' as uid, 7000 as n
+        union all select 'noise-' || k, 1000 from generate_series(1, 49) k) u
+  cross join lateral generate_series(1, u.n) g(i)
+) s;
+
 insert into public.sync_status (uid, collection, last_synced_at)
 select u, c, now() from unnest(array['perf-user']) u, unnest(array['expenses', 'incomes', 'ledgerEvents', 'accountPayments']) c;
 

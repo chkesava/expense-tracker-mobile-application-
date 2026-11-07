@@ -15,6 +15,11 @@ import type { NetWorthInputs } from "./netWorth";
 import { classifyAccountResource, classifyResource, liquidTotal, runwayOverrideId } from "./runwayContract";
 
 export interface RunwaySourcesInput extends NetWorthInputs {
+  /**
+   * SPENDLY-686: where `groupFundHeld` sits, by account (summed across funds).
+   * Held money in an account runway doesn't count isn't taken out twice.
+   */
+  groupFundHeldByAccount?: Readonly<Record<string, number>>;
   displayCurrency: string;
   overrides: readonly Pick<RunwayOverride, "kind" | "refId" | "included">[];
 }
@@ -98,6 +103,45 @@ export function buildRunwaySources(input: RunwaySourcesInput): RunwaySources {
   aggregate("epf", "epf", "EPF", input.epfValue, "epf", input.epfUnreconciledCount > 0 ? "estimated" : "actual");
   aggregate("receivable", "receivables", "Money owed to you", input.receivableOutstanding, "receivables", "expected");
   aggregate("borrowing", "borrowings", "Loans you owe", input.borrowingOutstanding, "borrowings", "actual");
+
+  // SPENDLY-686: money held for others is inside the counted account balances
+  // but isn't spendable. Take it out, less any that sits in an account runway
+  // doesn't count (that money was never counted). Locked: no override.
+  // Unknown (the funds couldn't load) is said out loud, never taken as 0: a
+  // visible, uncounted line, and an assumption on the runway (runwayModel).
+  if (input.groupFundHeld === null) {
+    resources.push({
+      kind: "group_funds_held",
+      refId: "groupFunds",
+      label: "Held for others",
+      amount: 0,
+      liquidity: "unknown",
+      included: false,
+      overridable: false,
+      reasons: ["held_for_others_unknown"],
+      provenance: { source: "groupFunds", refId: "groupFunds", asOf, certainty: "assumed" },
+    });
+  }
+  const held = input.groupFundHeld ?? 0;
+  if (held > 0) {
+    const excludedHeld = resources
+      .filter((r) => r.provenance.source === "accounts" && !r.included)
+      .reduce((sum, r) => sum + Math.max(0, input.groupFundHeldByAccount?.[r.refId] ?? 0), 0);
+    const deduction = roundMoney(Math.max(0, held - excludedHeld));
+    if (deduction > 0) {
+      resources.push({
+        kind: "group_funds_held",
+        refId: "groupFunds",
+        label: "Held for others",
+        amount: -deduction,
+        liquidity: "liquid",
+        included: true,
+        overridable: false,
+        reasons: ["held_for_others_deducted"],
+        provenance: { source: "groupFunds", refId: "groupFunds", asOf, certainty: "actual" },
+      });
+    }
+  }
 
   const counted = resources.filter((r) => r.included);
   const obligations = resources.filter((r) => r.liquidity === "obligation");

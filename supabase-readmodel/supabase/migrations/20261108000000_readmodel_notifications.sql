@@ -7,12 +7,9 @@
 -- inbox's mark-read / clear write (trackedBatch / noteDirectWrites). The purge
 -- clears it with the account (R5.1).
 --
--- Additive: one new table, then `create or replace` of every function and
--- view that lists the synced tables, restated in full from 20261107000000.
---
--- MERGE NOTE: the Group Funds epic (SPENDLY-678, migration 20261106000000, not
--- on main yet) restates the same lists. Whichever lands second must restate
--- them again with both its tables and the other's.
+-- Additive: one new table, its realtime ping triggers, then `create or
+-- replace` of every function and view that lists the synced tables, restated
+-- in full from 20261107000000 (which includes Group Funds and devices).
 
 -- ─── Tables ─────────────────────────────────────────────────────────────────
 
@@ -63,6 +60,28 @@ begin
 end
 $$;
 
+-- ─── Realtime pings (SPENDLY-593) ───────────────────────────────────────────
+-- 20261104000000 only covered the tables that existed then, so each new table
+-- adds its own two triggers.
+
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['notifications'] loop
+    execute format('drop trigger if exists %I on public.%I', t || '_rm_ping_ins', t);
+    execute format('drop trigger if exists %I on public.%I', t || '_rm_ping_upd', t);
+    execute format(
+      'create trigger %I after insert on public.%I referencing new table as changed '
+      'for each statement execute function public.readmodel_ping()', t || '_rm_ping_ins', t);
+    execute format(
+      'create trigger %I after update on public.%I referencing new table as changed '
+      'for each statement execute function public.readmodel_ping()', t || '_rm_ping_upd', t);
+  end loop;
+end
+$$;
+
+
 -- ─── Write paths: the server sync/push and the app's rm_client_apply ────────
 
 create or replace function public.readmodel_sync_table_ok(p_table text)
@@ -84,7 +103,7 @@ as $$
     'spaces', 'categorization_rules', 'trips', 'runway_settings', 'runway_overrides',
     'what_if_scenarios', 'goal_funding_plans', 'sip_plans', 'sip_transactions',
     'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items',
-    'user_settings', 'financial_summaries', 'devices', 'notifications'
+    'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications'
   ])
 $$;
 
@@ -107,13 +126,9 @@ as $$
     'spaces', 'categorization_rules', 'trips', 'runway_settings', 'runway_overrides',
     'what_if_scenarios', 'goal_funding_plans', 'sip_plans', 'sip_transactions',
     'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items',
-    'financial_summaries', 'devices', 'notifications'
+    'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications'
   ])
 $$;
-
-
-
-
 
 
 -- ─── Account deletion: the purge covers the new tables (R5.1) ───────────────
@@ -148,8 +163,8 @@ begin
     'spaces', 'categorization_rules', 'trips', 'runway_settings', 'runway_overrides',
     'what_if_scenarios', 'goal_funding_plans', 'sip_plans', 'sip_transactions',
     'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items',
-    'user_settings', 'financial_summaries', 'devices', 'notifications', 'sync_status', 'sync_checkpoints',
-    'sync_failures'
+    'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events',
+    'devices', 'notifications', 'sync_status', 'sync_checkpoints', 'sync_failures'
   ] loop
     execute format('delete from public.%I where uid = any($1)', t) using uids;
     get diagnostics n = row_count;
@@ -165,10 +180,6 @@ begin
   return jsonb_build_object('rows', total, 'tables', counts);
 end
 $$;
-
-
-
-
 
 
 -- ─── Count parity (SPENDLY-509) ─────────────────────────────────────────────
@@ -232,13 +243,11 @@ as $$
   union all select uid, 'watchlists/items', count(*) from public.watchlist_items where not source_deleted group by uid
   union all select uid, 'userSettings', count(*) from public.user_settings where not source_deleted group by uid
   union all select uid, 'financialSummaries', count(*) from public.financial_summaries where not source_deleted group by uid
+  union all select uid, 'groupFunds', count(*) from public.group_funds where not source_deleted group by uid
+  union all select uid, 'groupFundEvents', count(*) from public.group_fund_events where not source_deleted group by uid
   union all select uid, 'devices', count(*) from public.devices where not source_deleted group by uid
   union all select uid, 'notifications', count(*) from public.notifications where not source_deleted group by uid
 $$;
-
-
-
-
 
 
 -- ─── Data quality: unmapped rows are flagged, never dropped (R2.2) ──────────
@@ -368,6 +377,11 @@ create or replace view public.v_data_quality with (security_invoker = true) as
   select uid, 'userSettings', doc_id, 'unmapped' from public.user_settings where not source_deleted and mapping_status = 'unmapped'
   union all
   select uid, 'financialSummaries', doc_id, 'unmapped' from public.financial_summaries where not source_deleted and mapping_status = 'unmapped'
+  union all
+  select uid, 'groupFunds', doc_id, 'unmapped' from public.group_funds where not source_deleted and mapping_status = 'unmapped'
+  union all
+  select uid, 'groupFundEvents', doc_id, case when mapping_status = 'unmapped' then 'unmapped' else 'missing amount or fund' end
+  from public.group_fund_events where not source_deleted and (mapping_status = 'unmapped' or amount is null or fund_id is null)
   union all
   select uid, 'devices', doc_id, 'unmapped' from public.devices where not source_deleted and mapping_status = 'unmapped'
   union all

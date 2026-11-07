@@ -68,6 +68,15 @@ export interface NetWorthInputs {
   epfValue: number;
   /** Credited EPF months not yet confirmed against a passbook. */
   epfUnreconciledCount: number;
+  /**
+   * SPENDLY-686: money the user holds for others in Group Funds (the funds'
+   * stored `totals.held`). It sits in real accounts, so it is already inside
+   * `liquidBankAssets`; it is subtracted here as a liability so personal net
+   * worth excludes it. `null` = the funds couldn't be loaded: the totals then
+   * leave it out and `groupFundsHeldUnknown` says so (never silently 0).
+   * Omitted = the caller has no Group Funds input (treated as none).
+   */
+  groupFundHeld?: number | null;
   /** `YYYY-MM-DD` in the user's configured timezone. */
   today: string;
   /**
@@ -93,6 +102,10 @@ export interface NetWorthTotals {
   creditCardLiabilities: number;
   bankOverdraftLiabilities: number;
   borrowingLiabilities: number;
+  /** SPENDLY-686: money held for others (Group Funds). Part of `totalLiabilities`. */
+  groupFundLiabilities: number;
+  /** SPENDLY-686: the Group Funds amount couldn't be loaded, so net worth may be overstated. */
+  groupFundsHeldUnknown: boolean;
   receivableAssets: number;
   totalLiabilities: number;
   totalNetWorth: number;
@@ -149,6 +162,7 @@ export function composeNetWorth(inputs: NetWorthInputs): NetWorthTotals {
     investmentCashBalance,
     epfValue,
     epfUnreconciledCount,
+    groupFundHeld = 0,
     today,
     expensesComplete = true,
     incomesComplete = true,
@@ -199,9 +213,13 @@ export function composeNetWorth(inputs: NetWorthInputs): NetWorthTotals {
   // cash already debited when the money was lent.
   const borrowingLiabilities = borrowingOutstanding;
   const receivableAssets = receivableOutstanding;
+  // SPENDLY-686: group money is in the account balances above but isn't the
+  // user's; holding it is an obligation to the group. Never below zero.
+  const groupFundsHeldUnknown = groupFundHeld === null;
+  const groupFundLiabilities = Math.max(0, groupFundHeld ?? 0);
 
   const totalLiabilities =
-    creditCardLiabilities + bankOverdraftLiabilities + borrowingLiabilities;
+    creditCardLiabilities + bankOverdraftLiabilities + borrowingLiabilities + groupFundLiabilities;
   const totalAssets =
     liquidBankAssets + investmentsValue + totalStocksValue + receivableAssets + epfValue;
   const totalNetWorth = totalAssets - totalLiabilities;
@@ -218,6 +236,8 @@ export function composeNetWorth(inputs: NetWorthInputs): NetWorthTotals {
     creditCardLiabilities,
     bankOverdraftLiabilities,
     borrowingLiabilities,
+    groupFundLiabilities,
+    groupFundsHeldUnknown,
     receivableAssets,
     liquidBalanceMayBePartial,
     untrustedBalanceAccounts: untrustedBalanceAccountNames.length,

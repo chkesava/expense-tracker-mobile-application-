@@ -36,7 +36,7 @@ The app-bar bell's screen is now **Inbox**. Alongside **Due** (the computed remi
 - **Indexes:** `notifications.createdAt` and `updatedAt` collection-group overrides, for the cross-user sync.
 - **Tests and docs updated:** SQL tests, the identity check, the TS lists and counts (2 × 55), and READ_MODEL_RULES (55 tables).
 
-> **Merge note (as for 224):** Group Funds' `20261106000000` restates the same SQL lists. Whichever epic reaches main second must restate them with both sets.
+> **Resolved 2026-11-07:** Group Funds (SPENDLY-678, `20261106000000`) reached main first. `20261107` and `20261108` are rebuilt on its lists (all three features' tables), and each adds its realtime ping triggers. Apply in order: `20261106` (if not yet applied), then `20261107`, then `20261108`.
 
 ## Tests
 

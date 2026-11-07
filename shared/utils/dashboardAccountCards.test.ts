@@ -12,9 +12,21 @@ const EMPTY = {
   borrowingLiabilities: 0,
   receivableAssets: 0,
   bankOverdraftLiabilities: 0,
+  groupFundLiabilities: 0,
 };
 
 describe("dashboardAccountCards", () => {
+  it("SPENDLY-686: shows money held for others as owed, only when there is some", () => {
+    const cards = dashboardAccountCards({ ...EMPTY, liquidBankAssets: 61000, groupFundLiabilities: 61000 }, true);
+    expect(cards.find((c) => c.key === "groupFunds")).toMatchObject({
+      label: "Held for others",
+      value: 61000,
+      owed: true,
+      caption: "Group funds",
+    });
+    expect(dashboardAccountCards(EMPTY, true).some((c) => c.key === "groupFunds")).toBe(false);
+  });
+
   it("always shows bank & cash, even at zero, and nothing else", () => {
     const cards = dashboardAccountCards(EMPTY, true);
     expect(cards.map((c) => c.key)).toEqual(["bank"]);

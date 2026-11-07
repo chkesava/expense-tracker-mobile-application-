@@ -57,4 +57,4 @@ All are production changes and need approval.
   - `firestore.rules` (`pushConfig` and `pushSendLogs` denied to clients);
   - `firestore.indexes.json` (the `devices.token` collection-group index and the `pushSendLogs.expireAt` TTL).
 - **From 692:** before setting `PUSH_REMINDERS_ENABLED=true`, run a manual dry run of `push-reminders.yml`. Secrets: `FIREBASE_SERVICE_ACCOUNT` (exists); optional `EXPO_ACCESS_TOKEN`.
-- **Merge note:** Group Funds (SPENDLY-678) migration `20261106000000` restates the same SQL lists. Whichever epic reaches main second must restate them with both sets of tables.
+- **Resolved 2026-11-07:** Group Funds (SPENDLY-678, `20261106000000`) reached main first. `20261107` and `20261108` are rebuilt on its lists (all three features' tables), and each adds its realtime ping triggers. Apply in order: `20261106` (if not yet applied), then `20261107`, then `20261108`.

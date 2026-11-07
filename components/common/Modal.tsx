@@ -16,6 +16,7 @@ import { sheetBodyPadding, sheetFooterPadding } from "./sheetDensity";
 import { useKeyboardHeight } from "@/hooks/useKeyboardHeight";
 import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
+import { ToastSheetHost } from "@/lib/toast";
 import {
   SPENDLY_DIALOG_MAX_WIDTH,
   sheetPresentationOf,
@@ -152,6 +153,8 @@ export function Modal({
           </View>
         ) : null}
       </ModalContent>
+      {/* SPENDLY-708: toasts raised while the sheet is open show above it. */}
+      {isOpen ? <ToastSheetHost /> : null}
     </GluestackModal>
   );
 }

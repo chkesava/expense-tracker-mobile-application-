@@ -70,6 +70,8 @@ import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useCreditCardLedger, useCreditCardLiveUsage } from "@/hooks/useCreditCardLiveUsage";
 import { creditCardBillView } from "@/shared/utils/creditCardBillView";
 import { useExpenses } from "@/hooks/useExpenses";
+import { useGroupFunds } from "@/hooks/useGroupFunds";
+import { summarizeGroupFundsHeld } from "@/shared/utils/groupFundMath";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useReceivables } from "@/hooks/useReceivables";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -321,6 +323,13 @@ export default function AccountDetailScreen() {
     if (!account || isCreditCard) return 0;
     return account.currentBalance ?? 0;
   }, [account, isCreditCard]);
+
+  // SPENDLY-687: how much of this balance is Group Funds money (stored totals).
+  const { funds: groupFunds } = useGroupFunds({ enabled: Boolean(account) && !isCreditCard });
+  const heldForOthers = useMemo(
+    () => (account ? summarizeGroupFundsHeld(groupFunds).heldByAccount[account.id] ?? 0 : 0),
+    [groupFunds, account]
+  );
 
   // SPENDLY-497: cycle numbers are derived live from the ledger; only the
   // total outstanding is a stored value.
@@ -1083,6 +1092,7 @@ export default function AccountDetailScreen() {
         compact={compact}
         showRunningBalance={!isCreditCard}
         onPress={onPressActivity}
+        heldForOthers={Boolean(item.isGroupFund)}
       />
     ),
     [compact, currency, isCreditCard, onPressActivity]
@@ -1327,6 +1337,7 @@ export default function AccountDetailScreen() {
             })()}
             onTransfer={() => setIsTransferModalOpen(true)}
             onAdjust={() => setIsEntryModalOpen(true)}
+            heldForOthers={heldForOthers}
           />
         )}
 

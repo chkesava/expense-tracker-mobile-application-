@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("firebase-admin/app", () => ({ initializeApp: vi.fn(), applicationDefault: vi.fn(), cert: vi.fn() }));
@@ -5,6 +7,7 @@ vi.mock("firebase-admin/firestore", () => ({ getFirestore: vi.fn() }));
 
 import { parseSetModeArgs, setModeField, setModePatch } from "./readmodel-set-mode";
 import { READ_MODEL_COLLECTIONS, SWITCHED_COLLECTIONS } from "../shared/utils/readModel/collectionMode";
+import { READ_MODEL_SCREENS } from "../shared/utils/readModelMode";
 
 describe("readmodel-set-mode (SPENDLY-511)", () => {
   it("is a dry run unless --apply", () => {
@@ -59,6 +62,16 @@ describe("readmodel-set-mode (SPENDLY-511)", () => {
     expect(patch.readModel).not.toHaveProperty("localCopy");
     expect(() => parseSetModeArgs(["--all-collections", "--mode=postgres"])).toThrow(/--mode/);
     expect(parseSetModeArgs(["--all-collections", "--mode=supabase"]).apply).toBe(false); // dry run by default
+  });
+
+  // The workflow's screen target (SPENDLY-678 groupFundHistory) offers a fixed
+  // choice list; it must name every screen switch and nothing else.
+  it("the switches workflow offers exactly the screen switches", () => {
+    const yml = readFileSync(join(__dirname, "../.github/workflows/readmodel-switches.yml"), "utf8");
+    const options = yml.match(/^ {6}screen:[\s\S]*?options: \[([^\]]*)\]/m)?.[1];
+    expect(options?.split(",").map((s) => s.trim())).toEqual([...READ_MODEL_SCREENS]);
+    expect(parseSetModeArgs(["--screen=groupFundHistory", "--mode=shadow"])).toEqual({ screen: "groupFundHistory", mode: "shadow", apply: false });
+    expect(setModePatch(parseSetModeArgs(["--screen=groupFundHistory", "--mode=shadow"]))).toEqual({ readModel: { groupFundHistory: "shadow" } });
   });
 
   it("only names synced collections", () => {

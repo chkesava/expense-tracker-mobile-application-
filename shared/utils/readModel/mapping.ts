@@ -79,6 +79,8 @@ const ts = (field: string): ChangeField => ({ field, type: "timestamp" });
 export const EXTRA_CHANGE_FIELDS: Readonly<Record<string, readonly ChangeField[]>> = {
   financialGoals: [ms("createdAtMs"), ms("updatedAtMs")],
   goalEvents: [ms("createdAtMs")],
+  groupFunds: [ms("createdAtMs")],
+  groupFundEvents: [ms("createdAtMs")],
   goalFundingPlans: [ms("createdAtMs"), ms("updatedAtMs")],
   decisions: [ms("createdAtMs"), ms("updatedAtMs")],
   calendarReminders: [ms("createdAtMs"), ms("updatedAtMs")],
@@ -875,6 +877,33 @@ export const READ_MODEL_TABLES: TableSpec[] = [
       f("sort_order", "order", "decimal"),
       f("created_at", "createdAt", "timestamp"),
       f("updated_at", "updatedAt", "timestamp"),
+    ],
+  },
+  // SPENDLY-685 Group Funds (migration 20261106000000). The fund's stored
+  // totals stay in `doc` as an exact copy (R4.1); SQL never sums the events.
+  {
+    table: "group_funds",
+    collection: "groupFunds",
+    fields: [
+      f("name", "name", "text"),
+      f("status", "status", "text"),
+      f("version", "version", "integer"),
+      f("created_at", "createdAtMs", "timestamp"),
+    ],
+  },
+  {
+    table: "group_fund_events",
+    collection: "groupFundEvents",
+    fields: [
+      f("fund_id", "fundId", "text"),
+      f("kind", "kind", "text"),
+      f("amount", "amount", "money"),
+      f("purpose_id", "purposeId", "text"),
+      f("member_id", "memberId", "text"),
+      f("date", "date", "date"),
+      f("period", "period", "text"),
+      f("reversal_of", "reversalOf", "text"),
+      f("created_at", "createdAtMs", "timestamp"),
     ],
   },
   // SPENDLY-224 (migration 20261107000000): one row per signed-in install,

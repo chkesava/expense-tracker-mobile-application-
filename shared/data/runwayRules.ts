@@ -39,6 +39,9 @@ export const DEFAULT_RESOURCE_LIQUIDITY: Record<RunwayResourceKind, RunwayLiquid
   epf: "restricted",
   receivable: "expected_inflow",
   borrowing: "obligation",
+  // SPENDLY-686: money owed to the group. The generic classifier never counts
+  // it; runwaySources adds it as one locked, negative counted line instead.
+  group_funds_held: "obligation",
 };
 
 /** Which liquidity levels are counted by default. Only `liquid`. */
@@ -222,6 +225,16 @@ export const RUNWAY_ASSUMPTIONS: Record<RunwayAssumptionCode, RunwayAssumption> 
     impact: "high",
   },
   overdrawn_counted: { code: "overdrawn_counted", text: "An overdrawn balance reduces your liquid money.", impact: "medium" },
+  held_for_others_unknown: {
+    code: "held_for_others_unknown",
+    text: "Your group funds couldn't be loaded, so money you hold for others may be counted as yours.",
+    impact: "high",
+  },
+  held_for_others_deducted: {
+    code: "held_for_others_deducted",
+    text: "Money you hold for a group sits in your accounts but isn't yours to spend, so it is taken out.",
+    impact: "medium",
+  },
   user_included: { code: "user_included", text: "You chose to count this toward runway.", impact: "medium" },
   user_excluded: { code: "user_excluded", text: "You chose not to count this toward runway.", impact: "medium" },
   category_mapped_from_legacy: {

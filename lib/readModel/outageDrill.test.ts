@@ -33,6 +33,7 @@ import { readModelFreshness, READ_MODEL_FALLBACK_LABEL } from "@/shared/utils/re
 
 import { readAuditPage, readCashbackLinkedExpenses, readCashFlowHistory, readInsightsMonth } from "./analyticsReadPath";
 import { readGoalEventsInRange } from "./goalsReadPath";
+import { readGroupFundHistoryPage } from "./groupFundsReadPath";
 import { readJournalMatches, readJournalMonth, readJournalPage } from "./journalReadPath";
 import { createReadPath, type ReadPath } from "./readPath";
 import { readModelPath, setReadModelPathForTests } from "./screenReadPath";
@@ -77,6 +78,8 @@ describe("drill D3: the read model is down, every screen in supabase mode (SPEND
     ).toMatchObject({ servedBy: "firestore", events: [] });
     expect(firestoreGoals).toHaveBeenCalledTimes(1);
     expect(recentGoals).not.toHaveBeenCalled();
+    // groupFundHistory (SPENDLY-685): null = the hook keeps paging by its Firestore cursor.
+    expect(await readGroupFundHistoryPage({ ...base, fundId: "f1", cursor: null, pageSize: 25 })).toBeNull();
 
     for (const screen of READ_MODEL_SCREENS) {
       expect(readModelPath().fellBack(screen)).toBe(true);

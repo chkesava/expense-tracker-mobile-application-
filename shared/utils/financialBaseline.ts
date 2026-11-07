@@ -4,6 +4,7 @@ import type { Receivable, ReceivableRepayment } from "../types/receivable";
 import { summarizeBorrowings } from "./borrowingMath";
 import { isActiveLedgerRow } from "./ledgerRow";
 import { roundMoney } from "./money";
+import { summarizeGroupFundsHeld } from "./groupFundMath";
 import { composeNetWorth } from "./netWorth";
 import { summarizeReceivables } from "./receivableMath";
 import { recomputeFinancialState, type FinancialStateInput } from "./reconciliation";
@@ -45,6 +46,8 @@ export const BASELINE_COLLECTIONS = [
   "epfTransfers",
   "epfInterestEntries",
   "epfReconciliations",
+  // SPENDLY-686: money held for others is a net-worth liability.
+  "groupFunds",
 ] as const;
 
 export type BaselineCollection = (typeof BASELINE_COLLECTIONS)[number];
@@ -230,6 +233,7 @@ export function buildUserBaseline(rows: BaselineRows, today: string): UserBaseli
       investmentCashBalance,
       epfValue: state.epf.currentBalance ?? 0,
       epfUnreconciledCount: 0,
+      groupFundHeld: summarizeGroupFundsHeld(rows.groupFunds ?? []).held,
       today,
     });
     return {

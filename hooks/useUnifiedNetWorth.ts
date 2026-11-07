@@ -8,6 +8,7 @@ import { useBorrowings } from "@/hooks/useBorrowings";
 import { useCreditCardBills } from "@/hooks/useCreditCardBills";
 import { useEpfNetWorth } from "@/hooks/useEpfNetWorth";
 import { useExpenses } from "@/hooks/useExpenses";
+import { useGroupFunds } from "@/hooks/useGroupFunds";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useInvestments } from "@/hooks/useInvestments";
 import { useMarketQuotes } from "@/hooks/useMarketQuotes";
@@ -15,6 +16,7 @@ import { usePortfolio } from "@/hooks/usePortfolio";
 import { useReceivables } from "@/hooks/useReceivables";
 import { useSettings } from "@/providers/SettingsProvider";
 import { todayDateKey } from "@/shared/utils/dates";
+import { summarizeGroupFundsHeld } from "@/shared/utils/groupFundMath";
 import { composeNetWorth, holdingsMissingQuote, netWorthLoading } from "@/shared/utils/netWorth";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 
@@ -49,7 +51,14 @@ export interface UnifiedNetWorthSummary {
   borrowingLiabilities: number;
   /** Outstanding money lent to others (non-cash asset) */
   receivableAssets: number;
-  /** Total sum of all financial liabilities (Credit cards + Overdrafts + Borrowings) */
+  /**
+   * SPENDLY-686: money held for others in Group Funds. It sits inside the bank
+   * and cash balances above, so it is subtracted as a liability.
+   */
+  groupFundLiabilities: number;
+  /** SPENDLY-686: Group Funds couldn't be loaded, so net worth may be overstated. */
+  groupFundsHeldUnknown: boolean;
+  /** Total sum of all financial liabilities (Credit cards + Overdrafts + Borrowings + Group funds held) */
   totalLiabilities: number;
   /** Net Worth = Total Assets - Total Liabilities */
   totalNetWorth: number;
@@ -128,6 +137,14 @@ export function useUnifiedNetWorth(
     portfolio: receivablePortfolio,
     loading: receivablesLoading,
   } = useReceivables({ enabled: secondaryReady });
+  // SPENDLY-686: one small listener (members and purposes are embedded, no
+  // events), loaded with the accounts: the held money is inside those
+  // balances, so the headline must never show without it.
+  const { funds: groupFunds, loading: groupFundsLoading, error: groupFundsError } = useGroupFunds();
+  const groupFundHeld = useMemo(
+    () => (groupFundsError ? null : summarizeGroupFundsHeld(groupFunds).held),
+    [groupFunds, groupFundsError]
+  );
   const { settings } = useSettings();
   const today = todayDateKey(settings.timezone);
   const { investments, loading: investmentsLoading } = useInvestments({
@@ -188,6 +205,7 @@ export function useUnifiedNetWorth(
         investmentCashBalance,
         epfValue,
         epfUnreconciledCount,
+        groupFundHeld,
         today,
         expensesComplete,
         incomesComplete,
@@ -213,6 +231,7 @@ export function useUnifiedNetWorth(
       investmentCashBalance,
       epfValue,
       epfUnreconciledCount,
+      groupFundHeld,
       today,
       expensesComplete,
       incomesComplete,
@@ -241,7 +260,7 @@ export function useUnifiedNetWorth(
 
   const loading = netWorthLoading({
     progressive: isProgressive,
-    accountsLoading: accountsLoading || typesLoading,
+    accountsLoading: accountsLoading || typesLoading || groupFundsLoading,
     ledgerLoading,
     secondaryLoading,
   });

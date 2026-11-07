@@ -20,6 +20,8 @@ export default defineConfig({
       "scripts/**/*.test.ts",
       // SPENDLY-522: Netlify function handlers (market quotes).
       "netlify/**/*.test.ts",
+      // SPENDLY-703: the Cloudflare Pages backup's Worker.
+      "cloudflare/**/*.test.ts",
       "theme/**/*.test.ts",
     ],
     environment: "node",

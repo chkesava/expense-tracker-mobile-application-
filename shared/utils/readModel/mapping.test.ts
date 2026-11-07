@@ -18,7 +18,8 @@ const CONTRACT = new Set([
 ]);
 
 function tableColumns(table: string): string[] {
-  const body = new RegExp(`create table public\\.${table} \\(([\\s\\S]*?)\\n\\);`).exec(sql)?.[1] ?? "";
+  // R2.4: a re-runnable migration may say `create table if not exists`.
+  const body = new RegExp(`create table (?:if not exists )?public\\.${table} \\(([\\s\\S]*?)\\n\\);`).exec(sql)?.[1] ?? "";
   return body
     .split("\n")
     .map((line) => /^\s+([a-z_]+)\s+[a-z]/.exec(line)?.[1])
@@ -245,6 +246,42 @@ describe("read-model mapping (SPENDLY-506)", () => {
     const bad = mapDocument(events, "u1", { id: "ev2", updateTime: UPDATE_TIME, data: { goalId: "g1", type: "contribution", amountDelta: "lots" } });
     expect(bad).toMatchObject({ mapping_status: "unmapped", amount_delta: null, goal_id: null });
     expect(bad.doc).toMatchObject({ amountDelta: "lots" });
+  });
+
+  it("SPENDLY-685: maps a group fund; its totals stay in doc as an exact copy", () => {
+    const funds = SPEC_BY_COLLECTION.get("groupFunds")!;
+    const totals = { opening: 0, contributions: 6100, payouts: 0, transfersIn: 0, transfersOut: 0, held: 6100 };
+    const row = mapDocument(funds, "u1", {
+      id: "f1",
+      updateTime: UPDATE_TIME,
+      data: { name: "Dokra", status: "active", version: 3, createdAtMs: 1_790_000_000_000, totals, byPurpose: {}, heldByAccount: { hdfc: 6100 } },
+    });
+    expect(row).toMatchObject({
+      source_path: "users/u1/groupFunds/f1", mapping_status: "mapped", name: "Dokra", status: "active", version: 3,
+      created_at: new Date(1_790_000_000_000).toISOString(),
+    });
+    expect(row.doc).toMatchObject({ totals, heldByAccount: { hdfc: 6100 } });
+    expect(row).not.toHaveProperty("held");
+  });
+
+  it("SPENDLY-685: maps a group fund event; a bad amount makes the row unmapped, never dropped", () => {
+    const events = SPEC_BY_COLLECTION.get("groupFundEvents")!;
+    const ok = mapDocument(events, "u1", {
+      id: "rev_c1",
+      updateTime: UPDATE_TIME,
+      data: {
+        fundId: "f1", kind: "reversal", amount: 6000, purposeId: "appu", memberId: "m1", date: "2026-11-05",
+        period: "2026-11", reversalOf: "c1", reversedKind: "contribution", createdAtMs: 1_790_000_000_000,
+      },
+    });
+    expect(ok).toMatchObject({
+      fund_id: "f1", kind: "reversal", amount: 6000, purpose_id: "appu", member_id: "m1", date: "2026-11-05",
+      period: "2026-11", reversal_of: "c1", created_at: new Date(1_790_000_000_000).toISOString(), mapping_status: "mapped",
+    });
+    expect(ok.doc).toMatchObject({ reversedKind: "contribution" });
+    const bad = mapDocument(events, "u1", { id: "c2", updateTime: UPDATE_TIME, data: { fundId: "f1", kind: "contribution", amount: "lots" } });
+    expect(bad).toMatchObject({ mapping_status: "unmapped", amount: null, fund_id: null });
+    expect(bad.doc).toMatchObject({ amount: "lots" });
   });
 
   it("derives month from the date when the row has none", () => {

@@ -45,7 +45,7 @@ The server sender (SPENDLY-227) reads these documents to reach every device a us
   - the write-hook guard's known writers;
   - `READ_MODEL_RULES.md` (54 tables).
 
-> **Merge note:** the Group Funds epic (SPENDLY-678, migration `20261106000000`, not on main) restates the same SQL lists. Whichever epic reaches main second must restate them again with both sets of tables. Otherwise the later migration silently drops the other's tables from the allowlists and the purge.
+> **Resolved 2026-11-07:** Group Funds (SPENDLY-678, `20261106000000`) reached main first. `20261107` and `20261108` are rebuilt on its lists (all three features' tables), and each adds its realtime ping triggers. Apply in order: `20261106` (if not yet applied), then `20261107`, then `20261108`.
 
 ## Rules
 

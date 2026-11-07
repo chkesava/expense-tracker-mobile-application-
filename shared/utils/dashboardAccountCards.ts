@@ -8,6 +8,7 @@ export type DashboardAccountCardKey =
   | "epf"
   | "lent"
   | "loans"
+  | "groupFunds"
   | "overdraft";
 
 export type DashboardAccountCard = {
@@ -31,6 +32,7 @@ type CardInputs = Pick<
   | "epfValue"
   | "epfUnreconciledCount"
   | "borrowingLiabilities"
+  | "groupFundLiabilities"
   | "receivableAssets"
   | "bankOverdraftLiabilities"
 >;
@@ -101,6 +103,15 @@ export function dashboardAccountCards(
       value: netWorth.borrowingLiabilities,
       owed: true,
       route: "/ledger?tab=borrowings",
+    },
+    {
+      // SPENDLY-686: money held for others sits in Bank & cash but isn't yours.
+      key: "groupFunds",
+      label: "Held for others",
+      value: netWorth.groupFundLiabilities,
+      owed: true,
+      caption: "Group funds",
+      route: "/ledger?tab=groupFunds",
     },
     {
       key: "overdraft",

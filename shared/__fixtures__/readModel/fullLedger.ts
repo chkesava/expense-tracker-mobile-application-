@@ -213,5 +213,6 @@ export function fullLedgerFixture(): BaselineRows {
     epfTransfers: [],
     epfInterestEntries,
     epfReconciliations: [],
+    groupFunds: [],
   } as unknown as BaselineRows;
 }

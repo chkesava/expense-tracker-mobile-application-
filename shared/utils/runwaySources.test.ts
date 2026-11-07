@@ -120,9 +120,9 @@ describe("runway sources", () => {
 });
 
 describe("override rules", () => {
-  it("locks EPF, stocks, receivables, cards and loans", () => {
+  it("locks EPF, stocks, receivables, cards, loans and money held for others", () => {
     const locked = RUNWAY_RESOURCE_KINDS.filter((k) => !isOverridableKind(k)).sort();
-    expect(locked).toEqual(["borrowing", "credit_card", "epf", "receivable", "stocks"]);
+    expect(locked).toEqual(["borrowing", "credit_card", "epf", "group_funds_held", "receivable", "stocks"]);
   });
 
   it("ignores an override that matches the default", () => {

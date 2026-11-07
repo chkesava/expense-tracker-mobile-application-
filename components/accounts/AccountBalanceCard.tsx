@@ -4,6 +4,8 @@ import { ArrowLeftRight, Calendar, SlidersHorizontal } from "lucide-react-native
 
 import { AccountSafeIllustration } from "@/components/accounts/AccountSafeIllustration";
 import { Amount } from "@/components/common/Amount";
+import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { splitAccountBalance } from "@/shared/utils/groupFundMath";
 import { useSettings } from "@/providers/SettingsProvider";
 import { currencySymbol, formatAmountNumber } from "@/shared/utils/formatCurrency";
 import { haptic } from "@/lib/haptics";
@@ -92,6 +94,7 @@ export function AccountBalanceCard({
   baselineLabel,
   onTransfer,
   onAdjust,
+  heldForOthers = 0,
 }: {
   availableBalance: number;
   currency: string;
@@ -99,9 +102,16 @@ export function AccountBalanceCard({
   baselineLabel: string;
   onTransfer: () => void;
   onAdjust: () => void;
+  /**
+   * SPENDLY-687: Group Funds money sitting in this account. The balance stays
+   * the real one; this only shows how much of it is held for others.
+   */
+  heldForOthers?: number;
 }) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
+  // Formatted and masked like the visible amounts (ghost mode), never raw numbers.
+  const money = useGhostMoney(currency);
   // SPENDLY-537: the theme accent and its own foreground, on the same deep
   // surface as the dashboard hero, instead of a fixed green palette.
   const accent = theme.colors.primary;
@@ -147,6 +157,34 @@ export function AccountBalanceCard({
             AVAILABLE BALANCE
           </Text>
           <HeroCurrencyAmount value={availableBalance} currency={currency} />
+          {heldForOthers > 0 ? (
+            <View
+              style={[styles.heldRow, { borderColor: withAlpha(theme.colors.warning, 0.35), backgroundColor: withAlpha(theme.colors.warning, 0.1) }]}
+              accessible
+              accessibilityLabel={`Includes ${money(heldForOthers)} held for others. Yours: ${money(splitAccountBalance(availableBalance, heldForOthers).yours)}`}
+            >
+              <View style={styles.heldCol}>
+                <Text style={[styles.metaLabel, { color: theme.colors.warning }]}>HELD FOR OTHERS</Text>
+                <Amount
+                  value={heldForOthers}
+                  currency={currency}
+                  ghostable
+                  fractionDigits={2}
+                  style={[styles.heldValue, { color: theme.colors.warning, fontFamily: theme.fontFamily.semibold }]}
+                />
+              </View>
+              <View style={styles.heldCol}>
+                <Text style={[styles.metaLabel, { color: theme.colors.mutedForeground }]}>YOURS</Text>
+                <Amount
+                  value={splitAccountBalance(availableBalance, heldForOthers).yours}
+                  currency={currency}
+                  ghostable
+                  fractionDigits={2}
+                  style={[styles.heldValue, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
+                />
+              </View>
+            </View>
+          ) : null}
         </View>
 
         <View
@@ -260,6 +298,19 @@ export function AccountBalanceCard({
 }
 
 const styles = StyleSheet.create({
+  heldRow: {
+    flexDirection: "row",
+    gap: 16,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    alignSelf: "flex-start",
+  },
+  heldCol: { gap: 2 },
+  heldValue: { fontSize: 14 },
   card: {
     borderRadius: 24,
     borderCurve: "continuous",

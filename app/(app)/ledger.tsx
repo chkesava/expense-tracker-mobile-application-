@@ -12,6 +12,7 @@ import { CardsList } from "@/components/accounts/CardsList";
 import { CreditCardBillsList } from "@/components/creditCardBills/CreditCardBillsList";
 import { BorrowingsList } from "@/components/borrowings/BorrowingsList";
 import { ReceivablesList } from "@/components/receivables/ReceivablesList";
+import { GroupFundsList } from "@/components/groupFunds/GroupFundsList";
 import { SubscriptionsList } from "@/components/subscriptions/SubscriptionsList";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -1005,6 +1006,9 @@ export default function LedgerScreen() {
 
       {/* Tab: Receivables */}
       {ledgerTab === "receivables" && <ReceivablesList />}
+
+      {/* Tab: Group Funds (SPENDLY-687) */}
+      {ledgerTab === "groupFunds" && <GroupFundsList />}
 
       {/* Tab: Subscriptions */}
       {ledgerTab === "subscriptions" && <SubscriptionsList />}

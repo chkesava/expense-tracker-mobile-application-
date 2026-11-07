@@ -98,6 +98,7 @@ function isTransferLike(
 ): boolean {
   return Boolean(
     activity.isTransfer ||
+      activity.isGroupFund ||
       activity.isBillPayment ||
       activity.isBorrowing ||
       activity.isLoanRepayment ||
