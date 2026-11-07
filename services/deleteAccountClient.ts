@@ -144,6 +144,7 @@ export async function runAccountDeletion(
           totals.deleted.userCollections + (payload.deleted?.userCollections ?? 0),
         memberships: totals.deleted.memberships + (payload.deleted?.memberships ?? 0),
         readModelRows: totals.deleted.readModelRows + (payload.deleted?.readModelRows ?? 0),
+        files: totals.deleted.files + (payload.deleted?.files ?? 0),
       },
       orphanedPandals: [
         ...totals.orphanedPandals,
