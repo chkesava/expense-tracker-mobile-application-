@@ -15,7 +15,7 @@
  *                                        now (SPENDLY-680); without them the nightly sync does
  *
  * Sources: credit card bills (231), calendar reminders (694), dues (695),
- * savings goals (696).
+ * savings goals (696). Events, hourly: SIP and EPF (229).
  */
 
 import { applicationDefault, cert, initializeApp } from "firebase-admin/app";
@@ -29,6 +29,8 @@ import { createBillSource } from "../shared/utils/push/sources/billSource";
 import { createCalendarReminderSource } from "../shared/utils/push/sources/calendarReminderSource";
 import { createDuesSource } from "../shared/utils/push/sources/duesSource";
 import { createGoalSource } from "../shared/utils/push/sources/goalSource";
+import { createEpfEventSource, createSipEventSource } from "../shared/utils/push/sources/sipEpfEvents";
+import type { EventSource } from "../shared/utils/push/events";
 import { runPushReminders } from "./lib/pushRunCore";
 
 export function buildSources(db: AdminFirestoreLike): ReminderSource[] {
@@ -38,6 +40,10 @@ export function buildSources(db: AdminFirestoreLike): ReminderSource[] {
     createDuesSource(db) as ReminderSource,
     createGoalSource(db) as ReminderSource,
   ];
+}
+
+export function buildEventSources(db: AdminFirestoreLike): EventSource[] {
+  return [createSipEventSource(db), createEpfEventSource(db)];
 }
 
 function positive(value: string | undefined, fallback: number): number {
@@ -61,6 +67,7 @@ async function main() {
   const summary = await runPushReminders({
     db: adminDb,
     sources: buildSources(adminDb),
+    eventSources: buildEventSources(adminDb),
     now: new Date(),
     dryRun,
     maxReadsPerRun: positive(process.env.PUSH_MAX_READS_PER_RUN, 400),

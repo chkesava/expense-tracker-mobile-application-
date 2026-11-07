@@ -9,20 +9,30 @@ import type { DeviceRecord, ExpoMessage, PushPorts } from "../pushSender";
 
 type Filter = [string, string, unknown];
 
-function matches(value: unknown, op: string, x: unknown): boolean {
+/** Dates, Timestamps and numbers compare as milliseconds; everything else as text. */
+function comparable(v: unknown): string | number {
+  if (v instanceof Date) return v.getTime();
+  if (v && typeof v === "object" && typeof (v as { toMillis?: unknown }).toMillis === "function") return (v as { toMillis(): number }).toMillis();
+  return typeof v === "number" ? v : String(v);
+}
+
+function matches(raw: unknown, op: string, rawX: unknown): boolean {
+  if (op === "in") return (rawX as unknown[]).includes(raw);
+  if (op === "==") return raw === rawX;
+  if (raw === undefined) return false;
+  const value = comparable(raw);
+  const x = comparable(rawX);
   switch (op) {
-    case "in":
-      return (x as unknown[]).includes(value);
     case ">=":
-      return String(value) >= String(x);
+      return value >= x;
     case "<=":
-      return String(value) <= String(x);
+      return value <= x;
     case "<":
-      return String(value) < String(x);
+      return value < x;
     case ">":
-      return String(value) > String(x);
+      return value > x;
     default:
-      return value === x;
+      return false;
   }
 }
 

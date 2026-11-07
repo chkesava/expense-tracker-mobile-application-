@@ -55,7 +55,8 @@ Everything that has to **run or be done outside the code** before Spendly push n
 | 695 Dues | **Indexes, with B1/B2:** field overrides (collection group) `borrowings.dueDate`, `receivables.dueDate` and `subscriptions.isActive`. The source is already in `buildSources`. Dues only notify users who turned on "Loans, money owed and recurring payments" (off by default). **Check after C4:** a settled loan or an already-posted subscription gets no push. |
 | 696 Savings goals | **Indexes, with B1/B2:** field overrides (collection group) `financialGoals.reminders.frequency` and `financialGoals.reminders.inactivityEnabled`. The source is already in `buildSources`, which completes the four reminder sources (bills, calendar, dues, goals). Goal pushes follow the Save Goals rollout flag. **Check after C4:** a goal marked reached or paused gets no nudge. |
 | 693 Local to push handover | **No deploy.** The new flag `system_settings/global.pushRemindersLive` is set in step C4 (after a good run) and cleared in the emergency stop. **Check after C4:** on a registered phone, the scheduled local `ccbill:`/`cal:`/`goal:` notifications are gone and the pushes arrive. On a phone without push (or with permission off), local reminders still fire. |
-| 229, 697, 698, 225, 233 | *(pending)* |
+| 229 SIP and EPF events | **Indexes, with B1/B2:** field overrides (collection group) `epfContributions.statusUpdatedAt` and `epfContributions.expectedCreditTo`. The SIP poll uses `notifications.createdAt`, from 230. Events are polled **hourly** (first quarter of each UTC hour) by the same workflow. **Check after C4:** a SIP run on one phone arrives as a push on the other. After the EPF cron's run on the 3rd, "EPF contribution expected" arrives and appears in the inbox. |
+| 697, 698, 225, 233 | *(pending)* |
 
 ## E. After everything is live
 
