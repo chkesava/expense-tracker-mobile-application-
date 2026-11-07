@@ -67,6 +67,21 @@ Never weaken a guard to make a feature pass. If something truly can't be dual-wr
 
 Operations: `docs/READMODEL_RUNBOOK.md`.
 
+## Push notifications (SPENDLY-222)
+Before adding or changing a push notification, **read [docs/PUSH_DEVELOPER_GUIDE.md](docs/PUSH_DEVELOPER_GUIDE.md)**. It lists what Spendly sends today, how it works, and the steps for a new one.
+
+The rules in short:
+- **Pick the kind:** a reminder source (about a date) or an event source (something happened).
+- **Same rules as the app:** use the app's own planners, and re-check at send time (resolved means no push).
+- **Stable keys:** idempotency keys include the date.
+- **Privacy:** no amounts unless `showAmounts` is on, and never notify the actor.
+- **Spark limits:** narrow, indexed queries within the read budget.
+- **Taps:** the target path must be on the route allow-list.
+- **No duplicates:** local reminders stand down in push mode.
+- **Tests:** cover every "stops when" case.
+
+Operations: `docs/PUSH_RUNBOOK.md`.
+
 ## Token/context efficiency
 - Work only on the requested Jira issue and its direct dependencies.
 - Do not reread large docs, lockfiles, generated files, or the entire repository unless necessary.
