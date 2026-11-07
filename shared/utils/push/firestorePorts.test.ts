@@ -50,6 +50,18 @@ describe("createFirestorePushPorts", () => {
     expect(await createFirestorePushPorts(on.db, { readModel: null }).killSwitchOn()).toBe(true);
   });
 
+  it("reads the rollout list from the same config document, once per run (SPENDLY-233)", async () => {
+    const f = fakeDb({ "pushConfig/global": { sendsDisabled: false, allowUids: ["u1", 7, ""] } });
+    let reads = 0;
+    const get = f.db.doc;
+    const db = { ...f.db, doc: (path: string) => { const ref = get(path); return { ...ref, get: async () => (reads++, ref.get()) }; } };
+    const ports = createFirestorePushPorts(db, { readModel: null });
+    expect(await ports.killSwitchOn()).toBe(false);
+    expect(await ports.rolloutUids!()).toEqual(["u1"]);
+    expect(reads).toBe(1);
+    expect(await createFirestorePushPorts(fakeDb({}).db, { readModel: null }).rolloutUids!()).toBeNull();
+  });
+
   it("claims a key once, with a 30-day expiry for the TTL policy", async () => {
     const f = fakeDb({});
     const ports = createFirestorePushPorts(f.db, { readModel: null, now: () => new Date("2026-11-06T00:00:00Z") });

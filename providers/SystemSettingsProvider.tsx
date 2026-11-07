@@ -42,6 +42,8 @@ export type SystemSettings = {
    * off with the kill switch; while off, phones schedule their own reminders.
    */
   pushRemindersLive?: boolean;
+  /** SPENDLY-233: staged rollout, the uids that switch to push before everyone. */
+  pushRemindersLiveFor?: string[];
 };
 
 const DEFAULT_SETTINGS: SystemSettings = {

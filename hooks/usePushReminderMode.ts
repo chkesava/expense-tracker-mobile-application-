@@ -48,7 +48,13 @@ export function usePushReminderMode(): { mode: ReminderMode; loading: boolean } 
   }, [uid]);
 
   return {
-    mode: reminderMode({ pushRemindersLive: settings.pushRemindersLive, registeredForUser: state.registered, permissionGranted: state.permission }),
+    mode: reminderMode({
+      pushRemindersLive: settings.pushRemindersLive,
+      pushRemindersLiveFor: settings.pushRemindersLiveFor,
+      uid,
+      registeredForUser: state.registered,
+      permissionGranted: state.permission,
+    }),
     loading: settingsLoading || !state.known,
   };
 }

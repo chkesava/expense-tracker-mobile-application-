@@ -4,7 +4,8 @@
  * Typed structurally so `shared/` takes no dependency on firebase-admin: pass
  * the Admin `Firestore` from any server runtime. Server-only paths (clients
  * are denied by firestore.rules):
- *   pushConfig/global      { sendsDisabled: boolean }  — the kill switch, no deploy needed
+ *   pushConfig/global      { sendsDisabled: boolean, allowUids?: string[] }
+ *                          — the kill switch and the staged rollout (233), no deploy needed
  *   pushSendLogs/{key}     one per idempotency key; `expireAt` drives a 30-day TTL
  *
  * Pruning a dead token deletes `users/{uid}/devices/{installId}`, a synced
@@ -102,10 +103,22 @@ export function createFirestorePushPorts(db: AdminFirestoreLike, opts: Firestore
     ...(opts.expoAccessToken ? { Authorization: `Bearer ${opts.expoAccessToken}` } : {}),
   };
 
+  // pushConfig/global, read once per run (kill switch + rollout list).
+  let config: Promise<Record<string, unknown>> | null = null;
+  const readConfig = () =>
+    (config ??= db
+      .doc(PUSH_CONFIG_DOC)
+      .get()
+      .then((snap) => (snap.exists ? snap.data() ?? {} : {})));
+
   return {
     async killSwitchOn() {
-      const snap = await db.doc(PUSH_CONFIG_DOC).get();
-      return snap.exists && snap.data()?.sendsDisabled === true;
+      return (await readConfig()).sendsDisabled === true;
+    },
+
+    async rolloutUids() {
+      const list = (await readConfig()).allowUids;
+      return Array.isArray(list) ? list.filter((u): u is string => typeof u === "string" && u.length > 0) : null;
     },
 
     async claim(key, meta) {

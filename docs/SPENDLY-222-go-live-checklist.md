@@ -37,12 +37,13 @@ Everything that has to **run or be done outside the code** before Spendly push n
 | C1 | **Your device registers** | 224 | Install the B5 build on your phone, sign in and allow notifications. Your `users/{uid}/devices/{installId}` document appears in Firestore, and a `devices` row appears in Supabase. | ☐ |
 | C2 | **Test push to your own token only** | 223, 224 | Copy the token from your device document and send one push from https://expo.dev/notifications. Dev and prod share Firebase, so **never send to anyone else's token**. | ☐ |
 | C3 | **Dry run of the job** | 692 | Actions → *Push reminders* → Run workflow, `dry_run = true`. Check the summary: `reads` and `readsToday` are well under the budget, and `engine.due` and `sent` look right. The log should show "[DRY RUN] would send …" lines only. | ☐ |
-| C4 | **Turn it on** | 692, 693 | In this order:<br>1. Set `pushConfig/global.sendsDisabled = false`.<br>2. Set the repository variable `PUSH_REMINDERS_ENABLED = true` (the job then runs every 15 minutes).<br>3. **Once a scheduled run has succeeded**, set `system_settings/global.pushRemindersLive = true`. Registered phones then stop their own bill, calendar and goal reminders, because the server now sends them (693). Phones without push keep their local reminders. | ☐ |
+| C4 | **Turn it on: testers first** | 692, 693, 233 | In this order:<br>1. Set `pushConfig/global.allowUids` and `system_settings/global.pushRemindersLiveFor` to the **internal testers'** uids.<br>2. Set `pushConfig/global.sendsDisabled = false`.<br>3. Set the repository variable `PUSH_REMINDERS_ENABLED = true` (the job runs every 15 minutes).<br><br>Only testers get pushes, and only testers' phones stop their own reminders. Work through the [device QA matrix](SPENDLY-233-qa-rollout.md#device-qa-matrix) and run **Push delivery report**. | ☐ |
+| C4b | **Everyone** | 233 | After the testers' QA passes:<br>1. Set `system_settings/global.pushRemindersLive = true`.<br>2. Empty `pushConfig/global.allowUids`.<br><br>Every registered phone then relies on push (693), and phones without push keep their own reminders. | ☐ |
 | C5 | **Watch the first day** | 692, 227 | Check Actions run summaries for `reads` (the allowance is 6,000/day by default; tune `PUSH_MAX_READS_PER_DAY` and `PUSH_MAX_READS_PER_RUN`) and `stoppedForBudget`. In Firestore, `pushSendLogs` shows `errors` and `pruned`. Use the Firebase usage dashboard for total daily reads (the 50K Spark cap). | ☐ |
 
 **Emergency stop**, any time:
 1. Set `pushConfig/global.sendsDisabled = true`. This works immediately, no deploy needed.
-2. **Also set `system_settings/global.pushRemindersLive = false`.** Phones then go back to scheduling their own reminders the next time they open Spendly. Without this, registered phones would get no reminders while sends are stopped.
+2. **Also set `system_settings/global.pushRemindersLive = false` and clear `pushRemindersLiveFor`.** Phones then go back to scheduling their own reminders the next time they open Spendly. Without this, registered phones (including testers') would get no reminders while sends are stopped.
 3. Optionally also set `PUSH_REMINDERS_ENABLED = false`.
 
 ## D. Added by later stories (fill in as they merge)
@@ -59,7 +60,7 @@ Everything that has to **run or be done outside the code** before Spendly push n
 | 697 Shared splits and vaults | **No deploy.** No new indexes or rules; the source is already in `buildEventSources` (hourly). The "split settled" notice needs the app release (B5), which stamps `settledAt`. **Check after C4:** a new split notifies the other participants but not you. An "I paid" from the public page notifies only the organiser. A vault deposit notifies the other members. |
 | 225 Permission prompt | **No deploy.** Ships with the app release (B5). **Check on a phone:** no system prompt at launch. Turning on bill reminders shows Spendly's explanation, then the system dialog. After two "Don't allow" taps, the switch offers "Open settings". The Notifications card shows the state and any muted categories. |
 | 698 Price alerts | **Not live: blocked by SPENDLY-625.** The "Price alerts" switch is hidden (`PRICE_ALERT_PUSH_AVAILABLE = false`) until 625 and 698 ship. Nothing to deploy for it now. |
-| 233 | *(pending)* |
+| 233 QA, monitoring, rollout | **Index, with B1/B2:** `devices.lastSeenAt` field override (collection group), for the report. **Switch-on is now staged:** C4 (testers), then C4b (everyone). Day to day: [PUSH_RUNBOOK.md](PUSH_RUNBOOK.md). Health: Actions → **Push delivery report**. Device checks: [QA matrix](SPENDLY-233-qa-rollout.md#device-qa-matrix). |
 
 ## E. After everything is live
 

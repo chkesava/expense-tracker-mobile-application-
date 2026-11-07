@@ -4,9 +4,11 @@
  * the server isn't sending (no silent gap).
  *
  * Push only when BOTH:
- * - push reminders are live: `system_settings/global.pushRemindersLive`, set
- *   by the owner at switch-on (go-live checklist C4) and turned off again
- *   with the kill switch, so phones fall back to their own reminders; and
+ * - push reminders are live for this user: `system_settings/global.pushRemindersLive`
+ *   (everyone), or the user is in `pushRemindersLiveFor` (the staged rollout's
+ *   testers, SPENDLY-233). Set by the owner at switch-on (go-live checklist
+ *   C4) and turned off again with the kill switch, so phones fall back to
+ *   their own reminders; and
  * - this install is registered for the signed-in user with notification
  *   permission (SPENDLY-224).
  * Otherwise the phone keeps scheduling its own reminders, as before.
@@ -14,6 +16,18 @@
 
 export type ReminderMode = "push" | "local";
 
-export function reminderMode(input: { pushRemindersLive: unknown; registeredForUser: boolean; permissionGranted: boolean }): ReminderMode {
-  return input.pushRemindersLive === true && input.registeredForUser && input.permissionGranted ? "push" : "local";
+export function pushRemindersLiveForUser(input: { pushRemindersLive: unknown; pushRemindersLiveFor?: unknown; uid: string | null | undefined }): boolean {
+  if (input.pushRemindersLive === true) return true;
+  return Boolean(input.uid) && Array.isArray(input.pushRemindersLiveFor) && input.pushRemindersLiveFor.includes(input.uid);
+}
+
+export function reminderMode(input: {
+  pushRemindersLive: unknown;
+  pushRemindersLiveFor?: unknown;
+  uid?: string | null;
+  registeredForUser: boolean;
+  permissionGranted: boolean;
+}): ReminderMode {
+  const live = pushRemindersLiveForUser({ pushRemindersLive: input.pushRemindersLive, pushRemindersLiveFor: input.pushRemindersLiveFor, uid: input.uid });
+  return live && input.registeredForUser && input.permissionGranted ? "push" : "local";
 }

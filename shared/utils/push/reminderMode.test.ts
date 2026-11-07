@@ -18,4 +18,12 @@ describe("reminderMode", () => {
   ])("keeps local reminders when %s", (_label, patch) => {
     expect(reminderMode({ ...ok, ...patch })).toBe("local");
   });
+
+  it("staged rollout: testers listed in pushRemindersLiveFor switch before everyone (SPENDLY-233)", () => {
+    const staged = { ...ok, pushRemindersLive: false, pushRemindersLiveFor: ["tester"] };
+    expect(reminderMode({ ...staged, uid: "tester" })).toBe("push");
+    expect(reminderMode({ ...staged, uid: "someone" })).toBe("local");
+    expect(reminderMode({ ...staged, uid: null })).toBe("local");
+    expect(reminderMode({ ...staged, pushRemindersLiveFor: "tester", uid: "tester" })).toBe("local");
+  });
 });
