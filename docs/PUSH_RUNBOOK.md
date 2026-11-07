@@ -1,6 +1,7 @@
 # Spendly push notifications: runbook
 
 **Built by:** SPENDLY-222 (Spendly only).
+**Adding a push to a feature:** see [PUSH_DEVELOPER_GUIDE.md](PUSH_DEVELOPER_GUIDE.md), which covers what's sent today, how it works, and the steps.
 **Going live:** the first-time setup and switch-on steps are in [SPENDLY-222-go-live-checklist.md](SPENDLY-222-go-live-checklist.md). This page covers running it afterwards.
 **Firebase project:** `expenseapp-27f94`. It is shared by dev and prod, it is on the Spark plan (no Cloud Functions), and reads are capped at 50K/day for everything together.
 
