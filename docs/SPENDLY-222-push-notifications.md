@@ -27,6 +27,7 @@
 | [225](https://kesavach.atlassian.net/browse/SPENDLY-225) | Contextual permission prompt + recovery | — | Merged to epic ([doc](SPENDLY-225-permission-prompt.md)) |
 | [233](https://kesavach.atlassian.net/browse/SPENDLY-233) | QA, monitoring, rollout | all | Merged to epic; device QA and staged rollout are the owner's ([doc](SPENDLY-233-qa-rollout.md)) |
 | [713](https://kesavach.atlassian.net/browse/SPENDLY-713) | Bug: send-log TTL needs Blaze | 227 | The index deploy failed on the `pushSendLogs.expireAt` TTL (Spark: billing disabled). TTL removed; the job's hourly pass deletes expired logs (≤ 200 a run) |
+| [716](https://kesavach.atlassian.net/browse/SPENDLY-716) | Reliable 15-minute trigger | 692 | GitHub schedules run hours late; a Cloudflare Worker cron dispatches the job with `trigger: cron` (gated by `PUSH_REMINDERS_ENABLED`) ([doc](SPENDLY-716-push-trigger-worker.md)) |
 
 ## Decisions
 

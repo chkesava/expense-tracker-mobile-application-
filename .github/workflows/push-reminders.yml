@@ -9,12 +9,15 @@ name: Push reminders
 #
 # Firestore reads count against Spark's 50K/day, shared by dev and prod. The
 # job keeps its own allowance (pushConfig/usage-{date}) and stops early.
-# GitHub may start a scheduled run late; slots are re-checked and sent once
-# per day, so a late run still sends the day's notice (never yesterday's).
+# GitHub starts scheduled runs hours late here, or drops them, so the
+# Cloudflare Worker `spendly-push-trigger` (cloudflare/push-trigger, SPENDLY-716)
+# dispatches this workflow every 15 minutes with `trigger: cron`. The schedule
+# below stays as a fallback. Slots are re-checked and sent once per day, so a
+# double or late run still sends each notice once (never yesterday's).
 #
-# Scheduled runs do nothing until the repository variable
-# PUSH_REMINDERS_ENABLED is "true" (set it after a manual dry run is reviewed).
-# Manual runs work regardless and default to a dry run.
+# Scheduled runs and Worker runs (`trigger: cron`) do nothing until the
+# repository variable PUSH_REMINDERS_ENABLED is "true"; setting it to anything
+# else stops both. Manual runs work regardless and default to a dry run.
 #
 # Kill switch without a deploy: set pushConfig/global { sendsDisabled: true }.
 #
@@ -23,7 +26,7 @@ name: Push reminders
 #   EXPO_ACCESS_TOKEN                    optional (Expo enhanced push security)
 #   READMODEL_SUPABASE_SERVICE_ROLE_KEY  optional; copies pruned device deletes to the read model
 # Variables:
-#   PUSH_REMINDERS_ENABLED               "true" to enable the schedule
+#   PUSH_REMINDERS_ENABLED               "true" to enable the schedule and the Worker's runs
 #   PUSH_MAX_READS_PER_RUN               optional, default 400
 #   PUSH_MAX_READS_PER_DAY               optional, default 6000
 #   READMODEL_SUPABASE_URL               optional (as above)
@@ -38,6 +41,14 @@ on:
         required: true
         default: true
         type: boolean
+      trigger:
+        description: "Who started the run. The Cloudflare Worker sends cron, which obeys PUSH_REMINDERS_ENABLED like the schedule."
+        required: false
+        default: manual
+        type: choice
+        options:
+          - manual
+          - cron
 
 concurrency:
   group: push-reminders
@@ -49,7 +60,8 @@ permissions:
 jobs:
   remind:
     name: Send due reminders
-    if: github.event_name == 'workflow_dispatch' || vars.PUSH_REMINDERS_ENABLED == 'true'
+    # SPENDLY-716: a dispatch marked `cron` (the Worker) is gated like the schedule.
+    if: vars.PUSH_REMINDERS_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.trigger != 'cron')
     runs-on: ubuntu-latest
     timeout-minutes: 10
 

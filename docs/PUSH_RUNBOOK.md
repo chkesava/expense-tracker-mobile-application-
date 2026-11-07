@@ -23,7 +23,7 @@
 | **Phones' own reminders** | `system_settings/global.pushRemindersLive` | `true`: registered phones rely on push. `false`: every phone schedules its own reminders again (at its next app open). |
 | **Staged rollout: phones** | `system_settings/global.pushRemindersLiveFor: [uid, …]` | Only these users' phones switch to push while `pushRemindersLive` is off |
 | **Staged rollout: server** | `pushConfig/global.allowUids: [uid, …]` | Only these users are sent to. Empty or absent means everyone. Others' notices aren't used up. |
-| **Schedule** | Repository variable `PUSH_REMINDERS_ENABLED` | `true`: the job runs every 15 min. Anything else: manual runs only. |
+| **Schedule** | Repository variable `PUSH_REMINDERS_ENABLED` | `true`: the job runs every 15 min (started by the Cloudflare Worker, with GitHub's schedule as a fallback). Anything else stops both; manual runs still work. |
 | **Read budget** | Variables `PUSH_MAX_READS_PER_RUN` (default 400), `PUSH_MAX_READS_PER_DAY` (default 6000) | The job stops early once spent (`stoppedForBudget` in the run summary); the next run carries on |
 
 ### Emergency stop
@@ -32,6 +32,36 @@
 3. Optionally set `PUSH_REMINDERS_ENABLED = false`.
 
 **To resume:** reverse the steps. Set `pushRemindersLive` back only after a manual run of the job succeeds.
+
+## Reliable trigger (SPENDLY-716)
+
+GitHub starts scheduled runs in this repository hours late, or drops them; in one test, the 15-minute schedule ran once in 11 hours. So a Cloudflare Worker, `spendly-push-trigger` (`cloudflare/push-trigger/`), calls GitHub's run-workflow API every 15 minutes.
+- **What it sends:** `dry_run: false, trigger: cron`.
+- **The on/off switch still applies:** those runs obey `PUSH_REMINDERS_ENABLED` like the schedule.
+- **Fallback:** the GitHub schedule stays. A double run is harmless, because each notice is claimed once.
+
+**One-time setup:**
+1. **Create the GitHub token.** Go to GitHub → Settings → Developer settings → **Fine-grained personal access tokens** → Generate.
+   - Repository access: **Only select repositories** → this repository.
+   - Permissions: **Actions: Read and write** only.
+   - Expiry: up to 1 year. Note the date and rotate before it.
+2. **Deploy the Worker** from the repository root, logged in to the Cloudflare account that holds the web backup:
+   ```
+   npx wrangler@4.158.0 login
+   npx wrangler@4.158.0 deploy -c cloudflare/push-trigger/wrangler.toml
+   npx wrangler@4.158.0 secret put GITHUB_DISPATCH_TOKEN -c cloudflare/push-trigger/wrangler.toml
+   ```
+   Paste the token when asked. It's stored only as a Worker secret.
+3. **Check it.** Within 15 minutes, Actions → *Push reminders* shows a `workflow_dispatch` run every quarter hour. To see the Worker's own log, use Cloudflare → Workers → `spendly-push-trigger` → Logs, or `npx wrangler@4.158.0 tail -c cloudflare/push-trigger/wrangler.toml`.
+
+**Pause or remove:**
+- **Pause:** set `PUSH_REMINDERS_ENABLED` to `false`. The Worker's runs then start and skip at once, costing no reads.
+- **Remove for good:** run `npx wrangler@4.158.0 delete -c cloudflare/push-trigger/wrangler.toml`.
+
+**Rotate the token:**
+- Generate a new one, then run `wrangler secret put GITHUB_DISPATCH_TOKEN` again.
+- Then revoke the old token.
+- An expired or revoked token shows as `GitHub answered 401` in the Worker log, and runs stop until it's replaced.
 
 ## Staged rollout (SPENDLY-233)
 
