@@ -27,7 +27,7 @@ The order below is the proposed working order (plan §4).
 | Story | Scope | State |
 |---|---|---|
 | SPENDLY-289 | FY/AY model and tax data contract (pure) | Merged to the epic branch (`97c0a32b`) |
-| SPENDLY-709 | Tax persistence, dual write and read model | Merged to the epic branch (`7c81a35e`); rules, indexes and Supabase migration 20261110000000 pending deploy |
+| SPENDLY-709 | Tax persistence, dual write and read model | Merged to the epic branch (`7c81a35e`); main synced and migration restated over 222's 20261108 (`df6a5edf`); rules, indexes and Supabase migration 20261110000000 pending deploy |
 | SPENDLY-290 | Income aggregation and tax center shell | Merged to the epic branch (`1e263979`); UI approved by the user |
 | SPENDLY-298 | Tax document center (vault and attach) | Planned (moved earlier, D4); blocked by SPENDLY-711 |
 | SPENDLY-291 | TDS, Form 16/16A and AIS/TIS/26AS reconciliation | Planned |
