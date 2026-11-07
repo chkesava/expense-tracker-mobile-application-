@@ -4,10 +4,11 @@ import { StyleSheet, Text, View } from "react-native";
 import { DateField } from "@/components/common/DateField";
 import { Modal } from "@/components/common/Modal";
 import { SheetActions } from "@/components/common/SheetActions";
+import { TaxDocumentAttachField } from "@/components/tax/TaxDocumentAttachField";
 import { TaxNotice } from "@/components/tax/TaxNotice";
 import { Chip } from "@/components/ui/Chip";
 import { Input } from "@/components/ui/Input";
-import type { FinancialYearKey, TaxEntry, TaxEntryOf, TaxIncomeFields } from "@/shared/features/tax/types";
+import type { FinancialYearKey, TaxDocument, TaxEntry, TaxEntryOf, TaxIncomeFields } from "@/shared/features/tax/types";
 import { categoryLabel } from "@/shared/features/tax/utils/incomePresentation";
 import {
   duplicateIncomeEntry,
@@ -32,6 +33,8 @@ export function TaxIncomeEntrySheet({
   todayKey,
   editing,
   entries,
+  documents,
+  documentsLoading,
   saving,
   onSave,
   onClose,
@@ -42,17 +45,28 @@ export function TaxIncomeEntrySheet({
   /** The entry being corrected; `null` to add a new one. */
   editing: TaxEntryOf<"income"> | null;
   entries: readonly TaxEntry[];
+  /** The year's stored documents, to attach as proof (SPENDLY-298). */
+  documents: readonly TaxDocument[];
+  documentsLoading?: boolean;
   saving: boolean;
-  onSave: (input: { id?: string; fields: TaxIncomeFields; note?: string; duplicateConfirmed?: boolean }) => Promise<boolean>;
+  onSave: (input: {
+    id?: string;
+    fields: TaxIncomeFields;
+    note?: string;
+    documentIds?: string[];
+    duplicateConfirmed?: boolean;
+  }) => Promise<boolean>;
   onClose: () => void;
 }) {
   const { theme } = useTheme();
   const [form, setForm] = useState<IncomeEntryForm>(EMPTY_INCOME_ENTRY_FORM);
   const [showErrors, setShowErrors] = useState(false);
+  const [documentIds, setDocumentIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!isOpen) return;
     setForm(editing ? incomeFormFromEntry(editing) : EMPTY_INCOME_ENTRY_FORM);
+    setDocumentIds(editing?.documentIds ? [...editing.documentIds] : []);
     setShowErrors(false);
   }, [isOpen, editing]);
 
@@ -68,6 +82,7 @@ export function TaxIncomeEntrySheet({
       id: editing?.id,
       fields: parsed.fields,
       note: form.note.trim() || undefined,
+      documentIds,
       duplicateConfirmed: duplicate ? true : undefined,
     });
     if (ok) onClose();
@@ -148,6 +163,12 @@ export function TaxIncomeEntrySheet({
           value={form.note}
           onChangeText={(note) => setForm({ ...form, note })}
           maxLength={500}
+        />
+        <TaxDocumentAttachField
+          documents={documents}
+          value={documentIds}
+          onChange={setDocumentIds}
+          loading={documentsLoading}
         />
 
         {showErrors && parsed.issues.length > 0 ? (

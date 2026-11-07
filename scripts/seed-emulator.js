@@ -252,6 +252,34 @@ function buildDemoData(today = new Date()) {
     },
   ];
 
+  // SPENDLY-298: two tax documents for that year, one finished and one whose
+  // upload never landed, so the Documents screen shows both states. There is
+  // no file behind them: local test mode never reaches Supabase Storage.
+  const fyKey = `${lastFyStart}-${String((lastFyStart + 1) % 100).padStart(2, '0')}`;
+  const taxDocument = (id, category, name, fileName, status, sizeBytes, at) => ({
+    id,
+    data: {
+      fy: fyKey,
+      category,
+      name,
+      storagePath: `users/${DEMO_UID}/tax/${id}/${fileName}`,
+      fileName,
+      mimeType: 'application/pdf',
+      sizeBytes,
+      status,
+      schemaVersion: 1,
+      createdAtMs: at.getTime(),
+      updatedAtMs: at.getTime(),
+      ...(status === 'ready' ? { uploadedAtMs: at.getTime() } : {}),
+      createdAt: at,
+      updatedAt: at,
+    },
+  });
+  const taxDocuments = [
+    taxDocument('taxdoc-form16', 'form16', 'Form 16 – Employer', 'Form16.pdf', 'ready', 184000, new Date(lastFyStart + 1, 5, 12)),
+    taxDocument('taxdoc-ais', 'ais', 'AIS download', 'AIS.pdf', 'pending', 96000, new Date(lastFyStart + 1, 5, 20)),
+  ];
+
   const currentMonth = ym(today);
   const categoryBudgets = BUDGETS.map(([category, amount], i) => ({
     id: `budget-${i + 1}`,
@@ -373,6 +401,7 @@ function buildDemoData(today = new Date()) {
       financialGoals,
       holdings,
       investments,
+      taxDocuments,
     },
     portfolioSettings,
   };

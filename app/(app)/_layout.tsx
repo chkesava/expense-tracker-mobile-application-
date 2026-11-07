@@ -196,6 +196,13 @@ function AppShellInner() {
                 animation: "slide_from_right",
               }}
             />
+            {/* SPENDLY-298: the year's tax documents. */}
+            <Stack.Screen
+              name="tax/[fy]/documents"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
             <Stack.Screen
               name="app-selector"
               options={{

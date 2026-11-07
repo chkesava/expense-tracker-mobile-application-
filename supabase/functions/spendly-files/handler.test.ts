@@ -188,6 +188,60 @@ describe("goal images (SPENDLY-614)", () => {
   });
 });
 
+describe("tax documents (SPENDLY-298)", () => {
+  const TAX_DOC = `users/${OWNER}/tax/td1/form16.pdf`;
+  const taxDeps = () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const match = /documents\/users\/([^/]+)\/taxDocuments\/([^/?]+)/.exec(url);
+      const authorization = (init?.headers as Record<string, string> | undefined)?.Authorization;
+      if (!match || !authorization) return new Response("{}", { status: 404 });
+      const [, uid, id] = match;
+      if (uid !== OWNER || id !== "td1") return new Response("{}", { status: 404 });
+      return new Response(JSON.stringify({ name: `projects/p/databases/(default)/documents/users/${uid}/taxDocuments/${id}` }), { status: 200 });
+    });
+    const { deps } = makeDeps(ONE_ACCOUNT);
+    return { deps: { ...deps, fetch: fetchMock as unknown as typeof fetch }, fetchMock };
+  };
+
+  it("reads the uid and document out of a tax document path, strictly", () => {
+    expect(ownerForPath(TAX_DOC)).toEqual({ uid: OWNER, taxDocumentId: "td1" });
+    for (const bad of [
+      `users/${OWNER}/tax/form16.pdf`,
+      `users/${OWNER}/tax/td1/x/form16.pdf`,
+      `users/${OWNER}/tax/../td1/f.pdf`,
+      `users/${OWNER}/tax/td1/form 16.pdf`,
+      `users/${OWNER}/taxes/td1/f.pdf`,
+      `users/a/b/tax/td1/f.pdf`,
+    ]) {
+      expect(ownerForPath(bad), bad).toBeNull();
+    }
+  });
+
+  it("proves ownership by reading the document's own metadata row as the caller", async () => {
+    const { deps, fetchMock } = taxDeps();
+    const res = await handleSpendlyFiles(request({ operation: "upload", path: TAX_DOC, contentType: "application/pdf", declaredSize: 2000 }), deps);
+    expect(res.status).toBe(200);
+    expect(String(fetchMock.mock.calls[0][0])).toContain(`/documents/users/${OWNER}/taxDocuments/td1`);
+  });
+
+  it("refuses another user's tax document and one with no metadata row", async () => {
+    const { deps, fetchMock } = taxDeps();
+    expect((await handleSpendlyFiles(request({ operation: "download", path: `users/${OTHER}/tax/td1/form16.pdf` }), deps)).status).toBe(403);
+    // A foreign uid is refused before any Firestore read.
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect((await handleSpendlyFiles(request({ operation: "download", path: `users/${OWNER}/tax/td2/form16.pdf` }), deps)).status).toBe(403);
+    expect((await handleSpendlyFiles(request({ operation: "upload", path: TAX_DOC, contentType: "text/html" }), deps)).status).toBe(415);
+  });
+
+  it("downloads and deletes the caller's own tax document", async () => {
+    const { deps } = taxDeps();
+    expect((await handleSpendlyFiles(request({ operation: "download", path: TAX_DOC }), deps)).status).toBe(200);
+    expect((await handleSpendlyFiles(request({ operation: "delete", path: TAX_DOC }), deps)).status).toBe(200);
+    expect(deps.storage.remove).toHaveBeenCalledWith([TAX_DOC]);
+  });
+});
+
 describe("uidFromToken", () => {
   it("reads user_id", () => {
     expect(uidFromToken(tokenFor(OWNER))).toBe(OWNER);

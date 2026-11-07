@@ -30,7 +30,15 @@ export const TaxLineRow = memo(function TaxLineRow({
   const status = taxLineStatus(line);
   const hint = taxLineHint(line);
   const date = line.provenance.periodFrom ? formatDisplayDate(line.provenance.periodFrom, settings?.dateFormat) : null;
-  const meta = [categoryLabel(line.category), taxLineOrigin(line), date].filter(Boolean).join(" · ");
+  const proofs = line.provenance.documentIds?.length ?? 0;
+  const meta = [
+    categoryLabel(line.category),
+    taxLineOrigin(line),
+    date,
+    proofs > 0 ? `${proofs} proof${proofs === 1 ? "" : "s"}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const color = toneColor(status.tone, theme.colors);
 
   return (
