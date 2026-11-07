@@ -25,7 +25,7 @@
 | [697](https://kesavach.atlassian.net/browse/SPENDLY-697) | Shared splits and vaults activity | 227 | Merged to epic ([doc](SPENDLY-697-shared-push.md)) |
 | [698](https://kesavach.atlassian.net/browse/SPENDLY-698) | Price alert push | 227, SPENDLY-625 | Blocked by 625. Switch hidden (`PRICE_ALERT_PUSH_AVAILABLE = false`), merged to epic |
 | [225](https://kesavach.atlassian.net/browse/SPENDLY-225) | Contextual permission prompt + recovery | — | Merged to epic ([doc](SPENDLY-225-permission-prompt.md)) |
-| [233](https://kesavach.atlassian.net/browse/SPENDLY-233) | QA, monitoring, rollout | all | In Progress: built (staged rollout, report, runbook, QA matrix), awaiting review and merge; the device QA is the owner's ([doc](SPENDLY-233-qa-rollout.md)) |
+| [233](https://kesavach.atlassian.net/browse/SPENDLY-233) | QA, monitoring, rollout | all | Merged to epic; device QA and staged rollout are the owner's ([doc](SPENDLY-233-qa-rollout.md)) |
 
 ## Decisions
 
