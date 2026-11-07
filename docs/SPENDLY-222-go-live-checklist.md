@@ -58,7 +58,8 @@ Everything that has to **run or be done outside the code** before Spendly push n
 | 229 SIP and EPF events | **Indexes, with B1/B2:** field overrides (collection group) `epfContributions.statusUpdatedAt` and `epfContributions.expectedCreditTo`. The SIP poll uses `notifications.createdAt`, from 230. Events are polled **hourly** (first quarter of each UTC hour) by the same workflow. **Check after C4:** a SIP run on one phone arrives as a push on the other. After the EPF cron's run on the 3rd, "EPF contribution expected" arrives and appears in the inbox. |
 | 697 Shared splits and vaults | **No deploy.** No new indexes or rules; the source is already in `buildEventSources` (hourly). The "split settled" notice needs the app release (B5), which stamps `settledAt`. **Check after C4:** a new split notifies the other participants but not you. An "I paid" from the public page notifies only the organiser. A vault deposit notifies the other members. |
 | 225 Permission prompt | **No deploy.** Ships with the app release (B5). **Check on a phone:** no system prompt at launch. Turning on bill reminders shows Spendly's explanation, then the system dialog. After two "Don't allow" taps, the switch offers "Open settings". The Notifications card shows the state and any muted categories. |
-| 698, 233 | *(pending)* |
+| 698 Price alerts | **Not live: blocked by SPENDLY-625.** The "Price alerts" switch is hidden (`PRICE_ALERT_PUSH_AVAILABLE = false`) until 625 and 698 ship. Nothing to deploy for it now. |
+| 233 | *(pending)* |
 
 ## E. After everything is live
 

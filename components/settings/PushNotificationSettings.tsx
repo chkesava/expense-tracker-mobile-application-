@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { useNotificationPermission } from "@/hooks/useNotificationPermission";
 import { askForNotifications, openNotificationSettings } from "@/lib/notificationPermission";
 import { useSettings } from "@/providers/SettingsProvider";
-import { resolveDeliveryWindow } from "@/shared/utils/pushPreferences";
+import { PRICE_ALERT_PUSH_AVAILABLE, resolveDeliveryWindow } from "@/shared/utils/pushPreferences";
 import { useTheme } from "@/theme/ThemeProvider";
 
 const WINDOW_START = ["06:00", "07:00", "08:00", "09:00", "10:00"] as const;
@@ -105,12 +105,15 @@ export function PushNotificationSettings() {
           value={prefs.categories.shared}
           onValueChange={(v) => setCategory("shared", v)}
         />
-        <RowSwitch
-          label="Price alerts"
-          description="When a stock or fund crosses a price you set."
-          value={prefs.categories.priceAlerts}
-          onValueChange={(v) => setCategory("priceAlerts", v)}
-        />
+        {/* Hidden until price alerts can be sent (SPENDLY-625 + 698). */}
+        {PRICE_ALERT_PUSH_AVAILABLE ? (
+          <RowSwitch
+            label="Price alerts"
+            description="When a stock or fund crosses a price you set."
+            value={prefs.categories.priceAlerts}
+            onValueChange={(v) => setCategory("priceAlerts", v)}
+          />
+        ) : null}
         <RowSwitch
           label="Show amounts on the lock screen"
           description="Off: notifications name the card or item but hide amounts and card digits until you open Spendly."
