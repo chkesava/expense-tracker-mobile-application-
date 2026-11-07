@@ -1,0 +1,12 @@
+# SPENDLY-716: the push reminders trigger. A standalone Worker with only a cron
+# trigger: no routes, no workers.dev URL, so nothing can call it from outside.
+# Deploy and the token secret: docs/PUSH_RUNBOOK.md ("Reliable trigger").
+name = "spendly-push-trigger"
+main = "worker.ts"
+compatibility_date = "2026-10-01"
+workers_dev = false
+preview_urls = false
+
+[triggers]
+# UTC, every 15 minutes. The job's hourly event pass runs in minutes 0-14.
+crons = ["*/15 * * * *"]
