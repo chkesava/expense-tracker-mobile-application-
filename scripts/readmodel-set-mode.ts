@@ -27,6 +27,7 @@
  *
  * SPENDLY-690: every collection the app reads through the switch, at once:
  *   npx tsx scripts/readmodel-set-mode.ts --all-collections --mode=shadow --apply
+ *   npx tsx scripts/readmodel-set-mode.ts --all-collections --mode=supabase --except=categories,groupFunds --apply
  *
  * `--switch=localCopy --value=false` is the one-write rollback: every
  * collection reads Firestore again on every device (no release), and the
@@ -51,7 +52,13 @@ export type CollectionModeArgs = { collection: string; mode: CollectionMode; app
 export const READ_MODEL_SWITCHES = ["localCopy", "realtime", "clientWrites"] as const;
 export type SwitchArgs = { switchName: (typeof READ_MODEL_SWITCHES)[number]; value: boolean; apply: boolean };
 /** SPENDLY-690: every collection in SWITCHED_COLLECTIONS. */
-export type AllCollectionsArgs = { allCollections: true; mode: CollectionMode; apply: boolean };
+export type AllCollectionsArgs = { allCollections: true; mode: CollectionMode; apply: boolean; except?: string[] };
+
+/** The collections an --all-collections run sets (SWITCHED_COLLECTIONS minus --except). */
+export function allCollectionsTargets(args: Pick<AllCollectionsArgs, "except">): string[] {
+  const skip = new Set(args.except ?? []);
+  return SWITCHED_COLLECTIONS.filter((c) => !skip.has(c));
+}
 export type SetModeArgs = ScreenModeArgs | CollectionModeArgs | SwitchArgs | AllCollectionsArgs;
 
 export function parseSetModeArgs(argv: string[], emulator = false): SetModeArgs {
@@ -60,7 +67,11 @@ export function parseSetModeArgs(argv: string[], emulator = false): SetModeArgs 
   if (argv.includes("--all-collections")) {
     const m = value("mode");
     if (!(COLLECTION_MODES as readonly string[]).includes(m ?? "")) throw new Error(`--mode must be one of: ${COLLECTION_MODES.join(", ")}`);
-    return { allCollections: true, mode: m as CollectionMode, apply };
+    // SPENDLY-690: --except=a,b keeps those collections as they are.
+    const except = (value("except") ?? "").split(",").map((c) => c.trim()).filter(Boolean);
+    const unknown = except.filter((c) => !SWITCHED_COLLECTIONS.includes(c));
+    if (unknown.length) throw new Error(`--except names unknown collections: ${unknown.join(", ")}`);
+    return { allCollections: true, mode: m as CollectionMode, apply, ...(except.length ? { except } : {}) };
   }
   const switchName = value("switch");
   if (switchName !== undefined) {
@@ -104,7 +115,7 @@ export function parseSetModeArgs(argv: string[], emulator = false): SetModeArgs 
 
 /** The field this write changes, e.g. `journal`, `expenses` or `localCopy`. */
 export function setModeField(args: SetModeArgs): string {
-  if ("allCollections" in args) return `${SWITCHED_COLLECTIONS.length} collections`;
+  if ("allCollections" in args) return `${allCollectionsTargets(args).length} collections`;
   if ("switchName" in args) return args.switchName;
   if ("collection" in args) return args.collection;
   return args.screen;
@@ -112,7 +123,7 @@ export function setModeField(args: SetModeArgs): string {
 
 /** The merge write: only `readModel.<screen|collection|switch>` changes. */
 export function setModePatch(args: SetModeArgs | Pick<ScreenModeArgs, "screen" | "mode" | "loopbackFail" | "loopbackLagMinutes">) {
-  if ("allCollections" in args) return { readModel: Object.fromEntries(SWITCHED_COLLECTIONS.map((c) => [c, args.mode])) };
+  if ("allCollections" in args) return { readModel: Object.fromEntries(allCollectionsTargets(args).map((c) => [c, args.mode])) };
   if ("switchName" in args) return { readModel: { [args.switchName]: args.value } };
   if ("collection" in args) return { readModel: { [args.collection]: args.mode } };
   return {
@@ -129,7 +140,8 @@ async function main() {
   const args = parseSetModeArgs(process.argv.slice(2), emulator);
   const field = setModeField(args);
   const next = "switchName" in args ? String(args.value) : args.mode;
-  const keys = "allCollections" in args ? [...SWITCHED_COLLECTIONS] : [field];
+  const keys = "allCollections" in args ? allCollectionsTargets(args) : [field];
+  if ("allCollections" in args && args.except?.length) console.log(`Kept as they are: ${args.except.join(", ")}`);
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
   const db = getFirestore(
     emulator
