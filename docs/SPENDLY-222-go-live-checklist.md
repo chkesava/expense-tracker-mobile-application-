@@ -56,7 +56,8 @@ Everything that has to **run or be done outside the code** before Spendly push n
 | 696 Savings goals | **Indexes, with B1/B2:** field overrides (collection group) `financialGoals.reminders.frequency` and `financialGoals.reminders.inactivityEnabled`. The source is already in `buildSources`, which completes the four reminder sources (bills, calendar, dues, goals). Goal pushes follow the Save Goals rollout flag. **Check after C4:** a goal marked reached or paused gets no nudge. |
 | 693 Local to push handover | **No deploy.** The new flag `system_settings/global.pushRemindersLive` is set in step C4 (after a good run) and cleared in the emergency stop. **Check after C4:** on a registered phone, the scheduled local `ccbill:`/`cal:`/`goal:` notifications are gone and the pushes arrive. On a phone without push (or with permission off), local reminders still fire. |
 | 229 SIP and EPF events | **Indexes, with B1/B2:** field overrides (collection group) `epfContributions.statusUpdatedAt` and `epfContributions.expectedCreditTo`. The SIP poll uses `notifications.createdAt`, from 230. Events are polled **hourly** (first quarter of each UTC hour) by the same workflow. **Check after C4:** a SIP run on one phone arrives as a push on the other. After the EPF cron's run on the 3rd, "EPF contribution expected" arrives and appears in the inbox. |
-| 697, 698, 225, 233 | *(pending)* |
+| 697 Shared splits and vaults | **No deploy.** No new indexes or rules; the source is already in `buildEventSources` (hourly). The "split settled" notice needs the app release (B5), which stamps `settledAt`. **Check after C4:** a new split notifies the other participants but not you. An "I paid" from the public page notifies only the organiser. A vault deposit notifies the other members. |
+| 698, 225, 233 | *(pending)* |
 
 ## E. After everything is live
 
