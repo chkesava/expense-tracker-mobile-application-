@@ -30,7 +30,7 @@ The order below is the proposed working order (plan §4).
 | SPENDLY-709 | Tax persistence, dual write and read model | Merged to the epic branch (`7c81a35e`); main synced and migration restated over 222's 20261108 (`df6a5edf`); rules, indexes and Supabase migration 20261110000000 pending deploy |
 | SPENDLY-290 | Income aggregation and tax center shell | Merged to the epic branch (`1e263979`); UI approved by the user |
 | SPENDLY-298 | Tax document center (vault and attach) | Merged to the epic branch (`266fbc08`); `spendly-files` Edge Function deploy pending (SPENDLY-711 is on main) |
-| SPENDLY-291 | TDS, Form 16/16A and AIS/TIS/26AS reconciliation | In progress on `feature/SPENDLY-291-tds-reconciliation` |
+| SPENDLY-291 | TDS, Form 16/16A and AIS/TIS/26AS reconciliation | Built on `feature/SPENDLY-291-tds-reconciliation`; awaiting UI review and merge approval; adds the `reconciliation` review kind to the pending tax rules deploy |
 | SPENDLY-292 | Deductions tracker | Planned |
 | SPENDLY-294 | Advance-tax and self-assessment payments | Planned |
 | SPENDLY-293 | Capital-gains lots and classification | Planned |

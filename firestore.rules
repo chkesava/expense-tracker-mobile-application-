@@ -1692,7 +1692,8 @@ service cloud.firestore {
 
       function taxSourceKinds() {
         return ['income', 'expense', 'epf_contribution', 'epf_interest', 'investment',
-                'portfolio_transaction', 'sip_transaction', 'tax_entry', 'checklist'];
+                'portfolio_transaction', 'sip_transaction', 'tax_entry', 'checklist',
+                'reconciliation'];
       }
 
       function taxIncomeCategories() {
@@ -1912,6 +1913,8 @@ service cloud.firestore {
           && reviewId == d.fy + '__' + d.sourceKind + '__' + d.sourceId
           && d.decision in taxReviewDecisions()
           && (!checklist || (d.decision in ['confirm', 'defer', 'resolve'] && d.sourceAmount == null))
+          // SPENDLY-291: a reconciliation row can only have its difference accepted.
+          && (d.sourceKind != 'reconciliation' || d.decision == 'confirm')
           && (checklist || (!(d.decision in ['defer', 'resolve'])
                             && (d.sourceAmount == null || taxMoney(d.sourceAmount))))
           && (d.decision == 'recategorize'

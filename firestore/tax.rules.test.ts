@@ -193,6 +193,17 @@ describe("taxReviews", () => {
     await assertSucceeds(commit(dbOf(OWNER), taxReviewDeleteOps(OWNER, first.id)));
   });
 
+  it("accepts an accepted TDS difference, and nothing else on a reconciliation row (SPENDLY-291)", async () => {
+    const accepted = review({ source: { kind: "reconciliation", id: "MUMS98765C--194a" }, decision: "confirm", sourceAmount: 340 });
+    await assertSucceeds(commit(dbOf(OWNER), taxReviewWriteOps(OWNER, accepted, null, S)));
+    const data = setData(taxReviewWriteOps(OWNER, accepted, null, S));
+    await assertFails(setDoc(doc(dbOf(OWNER), "users", OWNER, "taxReviews", "2025-26__reconciliation__AAAA11111A--192"), {
+      ...data,
+      sourceId: "AAAA11111A--192",
+      decision: "exclude",
+    }));
+  });
+
   it("accepts a deferred checklist item", async () => {
     const r = review({ source: { kind: "checklist", id: "form16-missing" }, decision: "defer", sourceAmount: null });
     await assertSucceeds(commit(dbOf(OWNER), taxReviewWriteOps(OWNER, r, null, S)));

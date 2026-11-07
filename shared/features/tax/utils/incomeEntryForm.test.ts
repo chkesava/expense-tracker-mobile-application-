@@ -36,13 +36,13 @@ describe("incomeFormToFields", () => {
   it("says what is missing or wrong, in words", () => {
     const empty = incomeFormToFields(EMPTY_INCOME_ENTRY_FORM, FY, TODAY);
     expect(empty.fields).toBeNull();
-    expect(empty.issues.map(taxIssueMessage)).toEqual(
+    expect(empty.issues.map((i) => taxIssueMessage(i))).toEqual(
       expect.arrayContaining(["Amount is needed.", "Category is needed."])
     );
     const outside = incomeFormToFields({ ...form, date: "2026-04-01" }, FY, TODAY);
-    expect(outside.issues.map(taxIssueMessage)).toContain("Date must be inside this financial year.");
+    expect(outside.issues.map((i) => taxIssueMessage(i))).toContain("Date must be inside this financial year.");
     const zero = incomeFormToFields({ ...form, amount: "0" }, FY, TODAY);
-    expect(zero.issues.map(taxIssueMessage)).toContain("Amount must be more than zero.");
+    expect(zero.issues.map((i) => taxIssueMessage(i))).toContain("Amount must be more than zero.");
   });
 
   it("round-trips an existing entry", () => {
