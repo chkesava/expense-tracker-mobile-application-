@@ -49,6 +49,7 @@ export function resolveDerivedLine(
     state: item.value === null ? "missing" : "pending",
     provenance: item.provenance,
     label: item.label,
+    ...(item.attention ? { attention: item.attention } : {}),
     reasons: item.value === null ? ["value_missing"] : [],
   };
   if (!review || review.decision === "defer" || review.decision === "resolve") return base;
@@ -72,6 +73,8 @@ export function resolveDerivedLine(
 
   switch (review.decision) {
     case "confirm":
+      // Confirming counts the item, including one Spendly leaves out by default.
+      included = true;
       break;
     case "exclude":
       included = false;
@@ -79,6 +82,7 @@ export function resolveDerivedLine(
       reasons.push("user_excluded");
       break;
     case "recategorize":
+      included = true;
       category = review.category ?? category;
       reasons.push("user_recategorized");
       break;

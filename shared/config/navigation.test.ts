@@ -47,6 +47,9 @@ describe("resolveAndroidBackAction", () => {
     expect(resolveAndroidBackAction("/goals")).toBe("pop");
     expect(resolveAndroidBackAction("/goals/abc")).toBe("pop");
     expect(resolveAndroidBackAction("/group-funds/f1")).toBe("pop");
+    // SPENDLY-290: the tax center and a year's section.
+    expect(resolveAndroidBackAction("/tax")).toBe("pop");
+    expect(resolveAndroidBackAction("/tax/2025-26/income")).toBe("pop");
     expect(resolveAndroidBackAction("/goals/analytics")).toBe("pop");
     // SPENDLY-574 spending drill-downs.
     expect(resolveAndroidBackAction("/spending?month=2026-10")).toBe("pop");

@@ -212,6 +212,46 @@ function buildDemoData(today = new Date()) {
     },
   });
 
+  // SPENDLY-290: tax-relevant income in the financial year that ended last
+  // (April–March), the year the Tax center opens on. One of each kind the
+  // income screen treats differently: counted, confirm-to-count, an older label.
+  const lastFyStart = (today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1) - 1;
+  for (const [key, source, amount, monthIndex, day, note] of [
+    ['dividend', 'Dividend', 3120, 7, 12, 'Infosys final dividend'],
+    ['interest', 'Interest', 1840.5, 8, 30, 'Savings account interest'],
+    ['rent', 'Rental Income', 18000, 10, 5, 'Flat rent'],
+    ['gift', 'Gift Received', 25000, 11, 25, 'From uncle'],
+    ['legacy', 'Cashback / Refund', 450, 12, 10, 'Older label'],
+  ]) {
+    const date = new Date(lastFyStart, monthIndex, day);
+    incomes.push({
+      id: `inc-tax-${key}`,
+      // No account: these predate the demo accounts' balance baseline, and the
+      // stored balances must stay what an in-app Rebuild computes (SPENDLY-620).
+      data: { amount, source, date: ymd(date), month: ym(date), note, createdAt: date },
+    });
+  }
+
+  // SPENDLY-290: a fixed deposit open through that year, so the Tax center
+  // lists its credited interest as "calculated by Spendly".
+  const investments = [
+    {
+      id: 'inv-tax-fd',
+      data: {
+        name: 'SBI FD',
+        kind: 'fixed_deposit',
+        principal: 100000,
+        startDate: ymd(new Date(lastFyStart, 5, 1)),
+        annualInterestRate: 7.1,
+        interestMethod: 'simple',
+        creditFrequency: 'monthly',
+        maturityDate: ymd(new Date(lastFyStart + 2, 5, 1)),
+        status: 'active',
+        createdAt: new Date(lastFyStart, 5, 1),
+      },
+    },
+  ];
+
   const currentMonth = ym(today);
   const categoryBudgets = BUDGETS.map(([category, amount], i) => ({
     id: `budget-${i + 1}`,
@@ -332,6 +372,7 @@ function buildDemoData(today = new Date()) {
       subscriptions,
       financialGoals,
       holdings,
+      investments,
     },
     portfolioSettings,
   };
@@ -395,7 +436,8 @@ async function seed() {
   // SPENDLY-608: Spendly Test (a release build) shows the Save Goals screens
   // only when the admin flag is on. The seeded goals stay in the legacy shape
   // on purpose, so the first edit exercises the upgrade path.
-  writer.set(db.collection('system_settings').doc('global'), { enableSaveGoals: true }, { merge: true });
+  // SPENDLY-290: the Tax center is flagged the same way (dev builds always show it).
+  writer.set(db.collection('system_settings').doc('global'), { enableSaveGoals: true, enableTaxCenter: true }, { merge: true });
   await writer.close();
 
   const counts = Object.entries(data.collections).map(([name, docs]) => `${name}: ${docs.length}`);

@@ -32,6 +32,9 @@ const RESTORABLE_ROUTES = [
   "/goals/",
   // SPENDLY-687: a Group Fund's detail screen.
   "/group-funds/",
+  // SPENDLY-290: the Tax & ITR Readiness Center and its year sections.
+  "/tax",
+  "/tax/",
   "/what-if",
   "/what-if/",
   "/inbox",
