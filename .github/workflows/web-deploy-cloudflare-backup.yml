@@ -156,23 +156,14 @@ jobs:
             exit 1
           fi
 
+      # Browser files: no secret value and no private-key header. _worker.js
+      # (server code, never served): no secret value and no actual key; its
+      # jose library legitimately contains the PEM header text.
       - name: Check no server secret reached the bundle
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: |
-          leaked=""
-          if [ -n "$GEMINI_API_KEY" ] && grep -rqF "$GEMINI_API_KEY" dist-cloudflare; then leaked="$leaked GEMINI_API_KEY"; fi
-          if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then
-            KEY_ID=$(python3 -c 'import json,os; print(json.loads(os.environ["FIREBASE_SERVICE_ACCOUNT"]).get("private_key_id",""))')
-            if [ -n "$KEY_ID" ] && grep -rqF "$KEY_ID" dist-cloudflare; then leaked="$leaked FIREBASE_SERVICE_ACCOUNT"; fi
-          fi
-          if grep -rqE "BEGIN (RSA )?PRIVATE KEY" dist-cloudflare; then leaked="$leaked a-private-key"; fi
-          if [ -n "$leaked" ]; then
-            echo "::error::Server secrets found in dist-cloudflare:$leaked. Not deploying."
-            exit 1
-          fi
-          echo "No server secret in dist-cloudflare."
+        run: node scripts/check-backup-secrets.js dist-cloudflare
 
       # Function runtime secrets. Only the served functions need any
       # (cloudflare/functions.ts): readmodel-claims and nutrition-ai.

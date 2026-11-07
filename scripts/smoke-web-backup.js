@@ -130,6 +130,10 @@ function smokeChecks(mode) {
       ),
       check('missing bundle file', '/expense/_expo/smoke-missing.js', undefined, (res) =>
         res.status === 404 ? null : `expected 404, got ${res.status}`
+      ),
+      // The Worker's own code is server-side; Pages must never serve it.
+      check('Worker code not served', '/_worker.js', undefined, (res) =>
+        res.status === 404 ? null : `expected 404, got ${res.status}`
       )
     );
   }

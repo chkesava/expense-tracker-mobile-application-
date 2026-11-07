@@ -188,6 +188,11 @@ describe("the backup workflow", () => {
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 
+  it("checks for leaked secrets with the tested scanner, not ad-hoc greps", () => {
+    expect(commands).toContain("run: node scripts/check-backup-secrets.js dist-cloudflare");
+    expect(commands).not.toMatch(/grep -rqE "BEGIN/);
+  });
+
   it("lets Pages re-bundle the Worker", () => {
     expect(commands).not.toContain("--no-bundle");
   });
