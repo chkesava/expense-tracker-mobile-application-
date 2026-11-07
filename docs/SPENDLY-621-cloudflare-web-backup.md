@@ -20,7 +20,7 @@ site, and the app's default URLs don't change.
 | SPENDLY-703 | S3 Worker, request adapter, the functions that run on Cloudflare | Merged into epic (ba09b17e) ([doc](SPENDLY-703-cloudflare-worker.md)) |
 | SPENDLY-704 | S4 The 6 firebase-admin functions | Won't do (D5) |
 | SPENDLY-705 | S5 Manual-only backup workflow and smoke tests | Merged into epic (f4577758) ([doc](SPENDLY-705-cloudflare-backup-workflow.md)) |
-| SPENDLY-706 | S6 Runbook, secrets checklist, operator setup, first end-to-end run | Runbook built on `feature/SPENDLY-706-cloudflare-backup-runbook`; owner setup + first run pending ([doc](SPENDLY-706-cloudflare-backup-runbook.md), [runbook](WEB_BACKUP_CLOUDFLARE_RUNBOOK.md)) |
+| SPENDLY-706 | S6 Runbook, secrets checklist, operator setup, first end-to-end run | Runbook merged into epic (d54352bd); owner setup + first run pending, after the epic reaches `main` ([doc](SPENDLY-706-cloudflare-backup-runbook.md), [runbook](WEB_BACKUP_CLOUDFLARE_RUNBOOK.md)) |
 
 Follow-up, not in this epic: SPENDLY-707 native app failover.
 
