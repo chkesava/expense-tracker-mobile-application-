@@ -537,6 +537,8 @@ export interface TaxDerivedItem {
 export type TaxAttention = "confirm_to_count" | "legacy_label" | "calculated";
 
 export type TaxLineReason =
+  /** A claim whose eligibility only the user can confirm (SPENDLY-292). */
+  | "confirm_eligibility"
   | "source_changed"
   | "value_missing"
   | "user_excluded"

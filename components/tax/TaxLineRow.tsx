@@ -19,19 +19,26 @@ export const TaxLineRow = memo(function TaxLineRow({
   line,
   currency,
   onPress,
+  status: statusOverride,
+  hint: hintOverride,
+  meta: metaOverride,
 }: {
   line: TaxLine;
   currency: string;
   onPress: (line: TaxLine) => void;
+  /** Other screens' own wording (deductions, SPENDLY-292); income's by default. */
+  status?: { label: string; tone: TaxTone };
+  hint?: string | null;
+  meta?: string;
 }) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const { settings } = useSettings();
-  const status = taxLineStatus(line);
-  const hint = taxLineHint(line);
+  const status = statusOverride ?? taxLineStatus(line);
+  const hint = hintOverride !== undefined ? hintOverride : taxLineHint(line);
   const date = line.provenance.periodFrom ? formatDisplayDate(line.provenance.periodFrom, settings?.dateFormat) : null;
   const proofs = line.provenance.documentIds?.length ?? 0;
-  const meta = [
+  const meta = metaOverride ?? [
     categoryLabel(line.category),
     taxLineOrigin(line),
     date,

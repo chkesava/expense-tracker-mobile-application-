@@ -7,12 +7,27 @@
  * amount the form calls "unknown" is stored as `null`, never 0 (SPENDLY-289).
  */
 
-import { TAX_AIS_CATEGORIES, TAX_QUARTERS, TAX_STATEMENTS, TAX_TDS_FORMS, type FinancialYearKey, type TaxEntry, type TaxEntryKind } from "../types";
+import { DEDUCTION_CATEGORIES } from "../data/deductionCategories";
+import {
+  TAX_AIS_CATEGORIES,
+  TAX_PROOF_STATUSES,
+  TAX_QUARTERS,
+  TAX_STATEMENTS,
+  TAX_TDS_FORMS,
+  type FinancialYearKey,
+  type TaxEntry,
+  type TaxEntryKind,
+} from "../types";
+import { isTaxSourceKind, isValidTaxIdSegment } from "./ids";
 import { taxEntryDedupeKey } from "./dedupe";
 import { parseTaxAmount } from "./incomeEntryForm";
 import { validateTaxEntry, type TaxEntryDraft, type TaxIssue } from "./validation";
 
-export type FormFieldType = "text" | "money" | "date" | "tan" | "section" | "option";
+/**
+ * `sourceRef` links an existing Spendly record (SPENDLY-292): its options are
+ * supplied at runtime (`"{kind}:{id}"`) and it is stored as `{ kind, id }`.
+ */
+export type FormFieldType = "text" | "money" | "date" | "tan" | "section" | "option" | "sourceRef";
 
 export interface FormField {
   key: string;
@@ -30,6 +45,8 @@ export interface EntryFormSpec {
   kind: TaxEntryKind;
   title: string;
   fields: readonly FormField[];
+  /** Fills fields the user may leave to the form (after parsing, before validation). */
+  complete?: (fields: Record<string, unknown>, extra: { documentIds?: string[] }) => void;
 }
 
 const opt = (ids: readonly string[], label: (id: string) => string = (id) => id) => ids.map((id) => ({ id, label: label(id) }));
@@ -79,6 +96,20 @@ export const ENTRY_FORMS: Partial<Record<TaxEntryKind, EntryFormSpec>> = {
       { key: "tdsAmount", label: "Tax deducted", type: "money", required: true },
     ],
   },
+  deduction: {
+    kind: "deduction",
+    title: "Deduction",
+    fields: [
+      { key: "category", label: "What you're claiming", type: "option", required: true, options: DEDUCTION_CATEGORIES.map((cat) => ({ id: cat.id, label: cat.label })) },
+      { key: "amount", label: "Amount for this year", type: "money", required: true, helper: "What you paid or invested in this year, as on the proof." },
+      { key: "sourceRef", label: "Based on a Spendly record (optional)", type: "sourceRef", required: false, helper: "Linked, not copied: the amount stays what you enter." },
+      { key: "proofStatus", label: "Proof (optional)", type: "option", required: false, options: opt(TAX_PROOF_STATUSES, (id) => ({ attached: "Attached", missing: "Still to get", not_needed: "Not needed" })[id] ?? id) },
+    ],
+    // Proof status follows the attachments unless the user picked one.
+    complete: (fields, extra) => {
+      if (!fields.proofStatus) fields.proofStatus = extra.documentIds?.length ? "attached" : "missing";
+    },
+  },
   ais_value: {
     kind: "ais_value",
     title: "AIS / 26AS line",
@@ -105,6 +136,10 @@ export function entryToForm(spec: EntryFormSpec, entry: TaxEntry): EntryFormValu
   return Object.fromEntries(
     spec.fields.map((f) => {
       const v = fields[f.key];
+      if (f.type === "sourceRef" && v && typeof v === "object") {
+        const ref = v as { kind?: string; id?: string };
+        return [f.key, `${ref.kind}:${ref.id}`];
+      }
       return [f.key, v === null || v === undefined ? "" : String(v)];
     })
   );
@@ -137,8 +172,17 @@ export function entryFormToDraft(
       continue;
     }
     if (!raw) continue;
+    if (f.type === "sourceRef") {
+      const at = raw.indexOf(":");
+      const kind = raw.slice(0, at);
+      const id = raw.slice(at + 1);
+      if (at <= 0 || !isTaxSourceKind(kind) || !isValidTaxIdSegment(id)) issues.push({ field: `fields.${f.key}`, code: "invalid_format" });
+      else fields[f.key] = { kind, id };
+      continue;
+    }
     fields[f.key] = f.type === "tan" || f.type === "section" ? raw.replace(/\s+/g, "").toUpperCase() : raw;
   }
+  spec.complete?.(fields, extra);
   const draft: TaxEntryDraft = {
     fy,
     kind: spec.kind,

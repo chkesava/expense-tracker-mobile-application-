@@ -6,8 +6,14 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { TaxSourceChangedError } from "@/services/tax/taxIncomeStore";
 import { deleteTaxEntry, newTaxDocId, saveTaxEntry, TaxWriteInvalidError } from "@/services/tax/taxStore";
+import {
+  confirmDeductionEligibility,
+  saveEpfDeductionDecision,
+  undoDeductionEligibility,
+  undoEpfDeductionDecision,
+} from "@/services/tax/taxDeductionStore";
 import { acceptTdsDifference, undoTdsAcceptance } from "@/services/tax/taxTdsStore";
-import type { FinancialYearKey } from "@/shared/features/tax/types";
+import type { FinancialYearKey, TaxEntry, TaxLine } from "@/shared/features/tax/types";
 import { taxIssueMessage } from "@/shared/features/tax/utils/issueMessages";
 import type { TdsMatchRow } from "@/shared/features/tax/utils/tdsReconcile";
 import type { TaxEntryDraft } from "@/shared/features/tax/utils/validation";
@@ -84,5 +90,44 @@ export function useTaxRecordActions(fy: FinancialYearKey, todayKey: string) {
     [fy, run]
   );
 
-  return { saving, saveRecord, removeRecord, acceptDifference, undoAcceptance };
+  // SPENDLY-292: the EPF share and eligibility confirmations.
+  const epfDecision = useCallback(
+    (line: TaxLine, choice: { decision: "confirm" | "exclude" } | { decision: "replace"; replacedBy: string }) =>
+      run("tax.deductions.epf", "Couldn't save your decision.", async (u) =>
+        writeSavedMessage(
+          await saveEpfDeductionDecision(u, { line, ...choice }),
+          choice.decision === "confirm" ? "EPF claimed" : choice.decision === "exclude" ? "EPF not claimed" : "EPF replaced"
+        )
+      ),
+    [run]
+  );
+
+  const undoEpf = useCallback(
+    () => run("tax.deductions.epfUndo", "Couldn't undo this.", async (u) => writeSavedMessage(await undoEpfDeductionDecision(u, fy), "Back to Spendly's figure")),
+    [fy, run]
+  );
+
+  const confirmEligibility = useCallback(
+    (entry: TaxEntry) =>
+      run("tax.deductions.eligible", "Couldn't save this.", async (u) => writeSavedMessage(await confirmDeductionEligibility(u, entry), "Eligibility confirmed")),
+    [run]
+  );
+
+  const undoEligibility = useCallback(
+    (entry: TaxEntry) =>
+      run("tax.deductions.eligibleUndo", "Couldn't undo this.", async (u) => writeSavedMessage(await undoDeductionEligibility(u, entry), "Confirmation undone")),
+    [run]
+  );
+
+  return {
+    saving,
+    saveRecord,
+    removeRecord,
+    acceptDifference,
+    undoAcceptance,
+    epfDecision,
+    undoEpf,
+    confirmEligibility,
+    undoEligibility,
+  };
 }
