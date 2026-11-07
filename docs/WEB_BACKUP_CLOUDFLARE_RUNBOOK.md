@@ -36,6 +36,14 @@ The four Firestore functions can't run on Cloudflare (Firestore Admin is blocked
 there), and the screener needs about 200 ms of CPU against the Free plan's 10 ms.
 The owner decided not to rewrite any of them (decision D5).
 
+**Known gap: crypto prices.** CoinGecko's free API answers 429 to Cloudflare's
+shared addresses, so crypto holdings show "rate-limited" on the backup. Stocks
+and mutual funds are fine.
+
+**The backup doesn't update itself.** It serves the code from its last run of
+the workflow. Run it again after significant web changes, and before relying on
+it.
+
 ---
 
 ## 2. One-time setup (owner)
