@@ -74,4 +74,6 @@ export interface Split {
   claimsEnabled?: boolean;
   /** Soft-delete (SPENDLY-39). Live splits omit this; bank credits stay posted. */
   deletedAt?: string;
+  /** SPENDLY-697: ms when the split first became settled (push to the other participants). */
+  settledAt?: number;
 }

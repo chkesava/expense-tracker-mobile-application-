@@ -76,6 +76,8 @@ function applyOp(
       body: `Skipped execution for ${op.assetName}`,
       read: false,
       createdAt: serverTimestamp(),
+      // SPENDLY-230: synced to the read model (R1.2).
+      updatedAt: serverTimestamp(),
       meta: { sipId: op.planId },
     });
     return;
@@ -106,6 +108,8 @@ function applyOp(
       body: `Could not price ${op.assetName}. No units were recorded.`,
       read: false,
       createdAt: serverTimestamp(),
+      // SPENDLY-230: synced to the read model (R1.2).
+      updatedAt: serverTimestamp(),
       meta: { sipId: op.planId, symbol: op.symbol },
     });
     return;
@@ -153,6 +157,8 @@ function applyOp(
     body: `Successfully invested ${op.currency} ${op.amount} in ${op.assetName}`,
     read: false,
     createdAt: serverTimestamp(),
+    // SPENDLY-230: synced to the read model (R1.2).
+    updatedAt: serverTimestamp(),
     meta: {
       sipId: op.planId,
       amount: op.amount,

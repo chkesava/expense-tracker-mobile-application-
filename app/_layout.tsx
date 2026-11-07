@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { Stack, useNavigationContainerRef } from "expo-router";
 import * as Notifications from "expo-notifications";
+import { spendlyNotificationHandler } from "@/lib/notificationHandler";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -137,14 +138,8 @@ if (ACTIVE_PRODUCT === "ganesh") {
 }
 
 if (Platform.OS !== "web") {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldPlaySound: false,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
+  // SPENDLY-230: one handler for the app; no banner for the screen already open.
+  Notifications.setNotificationHandler(spendlyNotificationHandler);
 }
 
 function AppInitializer({ children }: { children: React.ReactNode }) {

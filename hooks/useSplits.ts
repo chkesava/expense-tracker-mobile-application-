@@ -26,6 +26,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import type { Participant, Split } from "@/shared/types/split";
 import type { QrStyleId } from "@/shared/utils/qrStyles";
+import { settledAtPatch } from "@/shared/utils/splitSettled";
 import { getStoredQrStyleId } from "@/shared/utils/qrStyles";
 import { currentMonthKey, todayDateKey } from "@/shared/utils/dates";
 import { omitUndefined } from "@/shared/utils/firestorePayload";
@@ -177,6 +178,9 @@ function applyShareSideEffects(
       publicSlug,
       publicShareId: shareRef.id,
       ...extraSplitFields,
+      // SPENDLY-697: when a split first becomes settled, so the push job can
+      // tell the other participants (it polls; there are no triggers on Spark).
+      ...settledAtPatch(split.settled, settled, Date.now()),
     })
   );
 

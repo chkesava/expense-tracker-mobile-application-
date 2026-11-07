@@ -5,9 +5,9 @@ import { Modal } from "@/components/common/Modal";
 import { SheetActions } from "@/components/common/SheetActions";
 import { ChipRow, RowSwitch } from "@/components/settings/SettingsControls";
 import { Button } from "@/components/ui/Button";
+import { askForNotifications } from "@/lib/notificationPermission";
 import {
   goalNotificationPermission,
-  requestGoalNotificationPermission,
   type GoalNotificationPermission,
 } from "@/services/goals/goalReminderScheduler";
 import type { FinancialGoal } from "@/shared/types/expense";
@@ -70,7 +70,8 @@ export function GoalRemindersSheet({
     try {
       // Ask only now, and only if a notification is actually on.
       if (wantsNotifications(r) && permission !== "granted" && permission !== "unavailable") {
-        setPermission(await requestGoalNotificationPermission());
+        // SPENDLY-225: explained first; "Open settings" if the phone won't ask again.
+        setPermission((await askForNotifications("goals")) ? "granted" : "denied");
       }
       if (await onSave(r)) onClose();
     } finally {

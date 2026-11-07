@@ -40,6 +40,8 @@ export const SWITCHED_COLLECTIONS: readonly string[] = [
   "borrowings", "borrowingRepayments", "receivables", "receivableRepayments",
   // SPENDLY-685: Group Funds (the fund list; history uses the groupFundHistory screen switch).
   "groupFunds",
+  // SPENDLY-230: the unified inbox's notification rows.
+  "notifications",
 ];
 
 export function configuredCollectionMode(readModelSetting: unknown, collection: string): CollectionMode {

@@ -20,7 +20,7 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events'
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications'
   ] loop
     perform public.readmodel_upsert(t, jsonb_build_array(
       jsonb_build_object('uid', 'user-a', 'doc_id', 'd1', 'doc', '{}'::jsonb, 'source_path', 'p',
@@ -49,9 +49,9 @@ declare
   left_over integer;
 begin
   result := public.readmodel_purge_user('user-a');
-  -- 55 tables (Wave 1 + SPENDLY-609 goals + Waves 2 and 3 + SPENDLY-591 + SPENDLY-592 + SPENDLY-685) × 2 uids
+  -- 57 tables (Wave 1 + SPENDLY-609 goals + Waves 2 and 3 + SPENDLY-591 + SPENDLY-592 + SPENDLY-685 + SPENDLY-224 devices + SPENDLY-230 notifications) × 2 uids
   -- + a nested watchlist item + status + checkpoint + failure
-  if (result ->> 'rows')::int <> 114 then raise exception 'purge removed % rows, expected 114', result ->> 'rows'; end if;
+  if (result ->> 'rows')::int <> 118 then raise exception 'purge removed % rows, expected 118', result ->> 'rows'; end if;
 
   foreach t in array array[
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
@@ -64,7 +64,7 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'sync_status', 'sync_checkpoints', 'sync_failures'
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications', 'sync_status', 'sync_checkpoints', 'sync_failures'
   ] loop
     execute format('select count(*) from public.%I where uid in (''user-a'', ''user-a_duress'')', t) into left_over;
     if left_over <> 0 then raise exception '% still holds % row(s) for the purged account', t, left_over; end if;

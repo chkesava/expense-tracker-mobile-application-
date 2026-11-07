@@ -51,21 +51,6 @@ export async function goalNotificationPermission(): Promise<GoalNotificationPerm
   }
 }
 
-/** Ask for permission (from the reminder sheet, when the user turns a reminder on). */
-export async function requestGoalNotificationPermission(): Promise<GoalNotificationPermission> {
-  try {
-    const { Platform } = await import("react-native");
-    if (Platform.OS === "web") return "unavailable";
-    await ensureBillNotificationHandler();
-    await ensureChannel();
-    const Notifications = await loadNotifications();
-    if ((await Notifications.getPermissionsAsync()).status === "granted") return "granted";
-    return (await Notifications.requestPermissionsAsync()).status === "granted" ? "granted" : "denied";
-  } catch {
-    return "unavailable";
-  }
-}
-
 export async function cancelGoalNotifications(): Promise<void> {
   try {
     const { Platform } = await import("react-native");

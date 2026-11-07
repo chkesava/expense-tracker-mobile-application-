@@ -133,15 +133,36 @@ export function describeDaysUntilDue(today: string, dueDate: string): number {
   return daysBetweenDateKeys(today, dueDate);
 }
 
+export const BILL_REMINDER_NOTIFICATION_PREFIX = "ccbill:";
+
 export function stableReminderNotificationId(
   billId: string,
   slot: ReminderSlot
 ): string {
+  const base = `${BILL_REMINDER_NOTIFICATION_PREFIX}${billId}`;
   if (slot.kind === "days_before") {
-    return `ccbill:${billId}:before:${slot.daysBefore}`;
+    return `${base}:before:${slot.daysBefore}`;
   }
   if (slot.kind === "due_date") {
-    return `ccbill:${billId}:due`;
+    return `${base}:due`;
   }
-  return `ccbill:${billId}:overdue:${slot.dateKey}`;
+  return `${base}:overdue:${slot.dateKey}`;
+}
+
+/** A bill's own reminder cadence, falling back to the global defaults (local reminders and push alike). */
+export function resolveBillReminderFrequency(
+  bill: Pick<CreditCardBill, "reminderFrequency">,
+  prefs: Pick<CreditCardBillRemindersSettings, "daysBefore" | "onDueDate" | "overdueEveryDays">
+): CreditCardBillReminderFrequency {
+  return {
+    daysBefore: bill.reminderFrequency?.daysBefore?.length ? bill.reminderFrequency.daysBefore : prefs.daysBefore,
+    onDueDate: bill.reminderFrequency?.onDueDate ?? prefs.onDueDate,
+    overdueEveryDays: bill.reminderFrequency?.overdueEveryDays ?? prefs.overdueEveryDays,
+  };
+}
+
+/** Snoozed (SPENDLY-231): no reminder before `nextReminderAt`'s date. */
+export function isBillSnoozed(bill: Pick<CreditCardBill, "nextReminderAt">, today: string): boolean {
+  const until = typeof bill.nextReminderAt === "string" ? bill.nextReminderAt.slice(0, 10) : "";
+  return /^\d{4}-\d{2}-\d{2}$/.test(until) && until > today;
 }

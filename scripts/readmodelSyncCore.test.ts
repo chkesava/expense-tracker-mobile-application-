@@ -553,17 +553,17 @@ describe("account lifecycle (SPENDLY-508)", () => {
     expect([...collections].sort()).toEqual([
       "accountEntries", "accountPayments", "accountTransfers", "accountTypes", "accounts",
       "borrowingRepayments", "borrowings", "calendarReminders", "categories",
-      "categorizationRules", "categoryBudgets", "creditCardBills", "decisions",
+      "categorizationRules", "categoryBudgets", "creditCardBills", "decisions", "devices",
       "epfContributionEvents", "epfContributions", "epfEstablishments", "epfInterestEntries",
       "epfProfile", "epfReconciliations", "epfTransferEvents", "epfTransfers", "epfWageHistory",
       "expenses", "feeReviews", "feeSignalDismissals", "financialGoals", "financialSummaries", "goalEvents",
       "goalFundingPlans", "groupFundEvents", "groupFunds", "holdings", "incomes", "investmentCashTransactions", "investments",
-      "ledgerEvents", "merchantOverrides", "netWorthHistory", "portfolioSettings",
+      "ledgerEvents", "merchantOverrides", "netWorthHistory", "notifications", "portfolioSettings",
       "portfolioTransactions", "receivableRepayments", "receivables", "recurringDismissals",
       "runwayOverrides", "runwaySettings", "sipPlans", "sipTransactions", "spaces",
       "subscriptions", "trips", "userSettings", "virtualPositions", "watchlists", "watchlists/items", "whatIfScenarios",
     ]);
-    for (const excluded of ["meta", "stats", "notifications", "daily_logs", "weight_history", "pandalMemberships", "goalNames"]) {
+    for (const excluded of ["meta", "stats", "daily_logs", "weight_history", "pandalMemberships", "goalNames"]) {
       expect(collections.has(excluded)).toBe(false);
     }
     expect(requested.some((r) => r.startsWith("alice_duress/"))).toBe(false);

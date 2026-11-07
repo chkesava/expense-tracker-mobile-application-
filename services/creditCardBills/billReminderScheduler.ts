@@ -11,9 +11,12 @@ import type {
 import {
   buildReminderSlots,
   applyQuietHours,
+  isBillSnoozed,
+  resolveBillReminderFrequency,
   stableReminderNotificationId,
   type ReminderSlot,
 } from "@/shared/utils/creditCardBillReminders";
+import { billReminderAmount } from "@/shared/utils/billReminderCopy";
 import { shouldSendBillReminder } from "@/shared/utils/creditCardBillStatus";
 import { todayDateKey } from "@/shared/utils/dates";
 import { buildBillReminderCopy } from "./billNotificationCopy";
@@ -31,14 +34,9 @@ export async function ensureBillNotificationHandler(): Promise<void> {
   if (handlerReady) return;
   try {
     const Notifications = await loadNotifications();
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldPlaySound: false,
-        shouldSetBadge: false,
-        shouldShowBanner: true,
-        shouldShowList: true,
-      }),
-    });
+    // SPENDLY-230: the app's one handler (no banner for the screen already open).
+    const { spendlyNotificationHandler } = await import("@/lib/notificationHandler");
+    Notifications.setNotificationHandler(spendlyNotificationHandler);
     handlerReady = true;
   } catch {
     // soft-fail
@@ -66,17 +64,18 @@ async function ensureAndroidChannel(): Promise<void> {
   }
 }
 
-export async function requestBillNotificationPermission(): Promise<boolean> {
+/**
+ * SPENDLY-225: background reconcile only reads the permission. It never asks
+ * (asking happens from the settings switch, with an explanation first).
+ */
+export async function billNotificationsAllowed(): Promise<boolean> {
   try {
     const { Platform } = await import("react-native");
     if (Platform.OS === "web") return false;
     await ensureBillNotificationHandler();
     await ensureAndroidChannel();
     const Notifications = await loadNotifications();
-    const existing = await Notifications.getPermissionsAsync();
-    if (existing.status === "granted") return true;
-    const asked = await Notifications.requestPermissionsAsync();
-    return asked.status === "granted";
+    return (await Notifications.getPermissionsAsync()).status === "granted";
   } catch {
     return false;
   }
@@ -90,6 +89,21 @@ export async function cancelBillReminders(billId: string): Promise<void> {
     await Promise.all(
       scheduled
         .filter((n) => String(n.identifier || "").startsWith(prefix))
+        .map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier))
+    );
+  } catch {
+    // soft-fail
+  }
+}
+
+/** SPENDLY-693: every local bill reminder (push delivers them instead). */
+export async function cancelAllBillReminders(): Promise<void> {
+  try {
+    const Notifications = await loadNotifications();
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    await Promise.all(
+      scheduled
+        .filter((n) => String(n.identifier || "").startsWith("ccbill:"))
         .map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier))
     );
   } catch {
@@ -165,6 +179,8 @@ export async function reconcileBillReminders(opts: {
   accountsById: Map<string, Account>;
   globalPrefs: CreditCardBillRemindersSettings;
   timezone?: string;
+  /** SPENDLY-231: lock-screen amounts and card digits (settings.pushNotifications.showAmounts). */
+  showAmounts?: boolean;
   onLog?: (entry: {
     billId: string;
     notificationType: "days_before" | "due_date" | "overdue" | "skipped";
@@ -174,7 +190,7 @@ export async function reconcileBillReminders(opts: {
   }) => Promise<void> | void;
 }): Promise<void> {
   const today = todayDateKey(opts.timezone);
-  const granted = await requestBillNotificationPermission();
+  const granted = await billNotificationsAllowed();
 
   for (const bill of opts.bills) {
     await cancelBillReminders(bill.id);
@@ -209,18 +225,13 @@ export async function reconcileBillReminders(opts: {
     const account = opts.accountsById.get(bill.accountId);
     if (!account) continue;
 
-    const frequency = {
-      daysBefore: bill.reminderFrequency?.daysBefore?.length
-        ? bill.reminderFrequency.daysBefore
-        : opts.globalPrefs.daysBefore,
-      onDueDate:
-        bill.reminderFrequency?.onDueDate ?? opts.globalPrefs.onDueDate,
-      overdueEveryDays:
-        bill.reminderFrequency?.overdueEveryDays ??
-        opts.globalPrefs.overdueEveryDays,
-    };
+    const frequency = resolveBillReminderFrequency(bill, opts.globalPrefs);
 
-    const slots = buildReminderSlots(bill.dueDate, frequency, today, 60);
+    // SPENDLY-231: a snoozed bill stays quiet until its snooze date.
+    const snoozedUntil = isBillSnoozed(bill, today) ? bill.nextReminderAt!.slice(0, 10) : null;
+    const slots = buildReminderSlots(bill.dueDate, frequency, today, 60).filter(
+      (slot) => !snoozedUntil || slot.dateKey >= snoozedUntil
+    );
     // Cap scheduled local notifications to avoid OS limits
     const upcoming = slots.slice(0, 12);
 
@@ -232,6 +243,7 @@ export async function reconcileBillReminders(opts: {
         quietStart: opts.globalPrefs.quietHoursStart,
         quietEnd: opts.globalPrefs.quietHoursEnd,
         timezone: opts.timezone,
+        showAmounts: opts.showAmounts,
         onLog: opts.onLog,
       });
     }
@@ -245,6 +257,7 @@ async function scheduleSlot(opts: {
   quietStart: string;
   quietEnd: string;
   timezone?: string;
+  showAmounts?: boolean;
   onLog?: (entry: {
     billId: string;
     notificationType: "days_before" | "due_date" | "overdue" | "skipped";
@@ -279,10 +292,12 @@ async function scheduleSlot(opts: {
     const copy = buildBillReminderCopy({
       billId: opts.bill.id,
       account: opts.account,
-      statementAmount: opts.bill.statementAmount,
+      // SPENDLY-231: what is still owed, not the statement total.
+      amount: billReminderAmount(opts.bill),
       currency: opts.bill.currency,
       dueDate: opts.bill.dueDate,
       slot: opts.slot,
+      showAmounts: opts.showAmounts,
     });
 
     const identifier = stableReminderNotificationId(opts.bill.id, opts.slot);

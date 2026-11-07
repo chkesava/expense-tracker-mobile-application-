@@ -5,7 +5,7 @@ import {
   collectAutoCreditCardBillDrafts,
   collectAutoCreditCardBillRefreshPatches,
 } from "@/shared/utils/autoCreditCardBills";
-import { computeCreditCardBillStatus, computeRemainingAmount } from "@/shared/utils/creditCardBillStatus";
+import { parseStoredBill } from "@/shared/utils/creditCardBillStatus";
 import { collectCreditBillAllocationPatches, collectCreditBillDuplicateResolutions } from "@/shared/utils/creditCardLedger";
 import { isActiveLedgerRow } from "@/shared/utils/ledgerRow";
 import { sortLedgerByDateDesc } from "@/shared/utils/ledgerSnapshot";
@@ -38,22 +38,7 @@ export type BillPassInputs = {
 
 /** A stored bill as the app uses it (CreditCardBillsProvider's listener mapping). */
 export function toCreditCardBill(d: SourceDoc, today: string): CreditCardBill {
-  const data = d.data as Partial<CreditCardBill>;
-  const statementAmount = Number(data.statementAmount) || 0;
-  const amountPaid = Number(data.amountPaid) || 0;
-  return {
-    ...data,
-    id: d.id,
-    statementAmount,
-    amountPaid,
-    remainingAmount: data.remainingAmount == null ? computeRemainingAmount(statementAmount, amountPaid) : Number(data.remainingAmount),
-    paymentIds: data.paymentIds ?? [],
-    // CANCELLED is a manual override; every other status is recomputed on read (SPENDLY-417).
-    status:
-      data.status === "CANCELLED"
-        ? "CANCELLED"
-        : computeCreditCardBillStatus({ today, dueDate: data.dueDate || "", amountPaid, statementAmount }),
-  } as CreditCardBill;
+  return parseStoredBill(d.id, d.data as Record<string, unknown>, today);
 }
 
 type Derived = (bill: CreditCardBill) => { status: CreditCardBill["status"]; remainingAmount: number };

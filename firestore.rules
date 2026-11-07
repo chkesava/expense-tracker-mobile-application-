@@ -1152,6 +1152,36 @@ service cloud.firestore {
                 || request.resource.data.createdAt == request.time);
         }
       }
+      // SPENDLY-224: one document per signed-in install, holding its Expo push
+      // token for the server sender (shared/utils/pushDevice.ts). Owner only.
+      function deviceWellFormed(installId) {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['token', 'tokenType', 'platform', 'product', 'appVersion', 'locale',
+                                 'createdAt', 'updatedAt', 'lastSeenAt'])
+          && d.keys().hasAll(['token', 'tokenType', 'platform', 'product', 'appVersion', 'locale',
+                              'createdAt', 'updatedAt', 'lastSeenAt'])
+          && installId.matches('^[A-Za-z0-9_-]{16,64}$')
+          && d.token is string && d.token.matches('^Expo(nent)?PushToken\\[[A-Za-z0-9_-]{8,200}\\]$')
+          && d.tokenType == 'expo'
+          && d.platform in ['android', 'ios']
+          && d.product == 'expense'
+          && d.appVersion is string && d.appVersion.size() > 0 && d.appVersion.size() <= 32
+          && d.locale is string && d.locale.size() > 0 && d.locale.size() <= 35
+          && d.createdAt is timestamp
+          && d.updatedAt == request.time
+          && d.lastSeenAt == request.time;
+      }
+
+      match /devices/{installId} {
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && deviceWellFormed(installId)
+          && request.resource.data.createdAt == request.time;
+        allow update: if isOwner(uid)
+          && deviceWellFormed(installId)
+          && (request.resource.data.createdAt == resource.data.createdAt
+              || request.resource.data.createdAt == request.time);
+      }
       match /calendarReminders/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && calendarReminderWellFormed();
@@ -1903,6 +1933,15 @@ service cloud.firestore {
     // Clients cannot write any doc here: `global` is a project-wide kill switch
     // (maintenance, signup gate, banner, feature flags). Onboarding currency
     // lives on `users/{uid}`. Product docs are written by the Admin SDK in CI.
+    // SPENDLY-227: the push sender's kill switch and send log. Server only (the
+    // Admin SDK bypasses rules); no client may read or write them.
+    match /pushConfig/{docId} {
+      allow read, write: if false;
+    }
+    match /pushSendLogs/{logId} {
+      allow read, write: if false;
+    }
+
     match /system_settings/{docId} {
       // Must live INSIDE the match: `docId` is bound by the match, so a
       // top-level function referencing it compiles with "Invalid variable

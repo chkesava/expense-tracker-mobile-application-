@@ -3,6 +3,7 @@
  * Privacy fields are seeded for doc parity; UI arrives in Phase 4.
  */
 
+import { parsePushNotificationSettings, type PushNotificationSettings } from "../utils/pushPreferences";
 import {
   DEFAULT_CREDIT_CARD_BILL_REMINDERS,
   type CreditCardBillRemindersSettings,
@@ -85,6 +86,8 @@ export type UserSettings = {
   creditCardBillReminders: CreditCardBillRemindersSettings;
   /** SPENDLY-184: Financial Calendar on-device notifications. */
   calendarNotifications: CalendarNotificationSettings;
+  /** SPENDLY-226: push categories without an older switch, the delivery window, lock-screen amounts. */
+  pushNotifications: PushNotificationSettings;
 };
 
 export type CalendarNotificationSettings = {
@@ -240,6 +243,7 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   themeMode: "system",
   creditCardBillReminders: { ...DEFAULT_CREDIT_CARD_BILL_REMINDERS },
   calendarNotifications: { ...DEFAULT_CALENDAR_NOTIFICATIONS },
+  pushNotifications: parsePushNotificationSettings(undefined),
 };
 
 /**
@@ -278,6 +282,7 @@ const USER_SETTINGS_KEYS: (keyof UserSettings)[] = [
   "themeMode",
   "creditCardBillReminders",
   "calendarNotifications",
+  "pushNotifications",
 ];
 
 function pickKnownSettings(
@@ -389,6 +394,7 @@ export function mergeSettingsFromDoc(
         : SETTINGS_DEFAULTS.creditCardBillReminders.daysBefore,
     },
     calendarNotifications: normalizeCalendarNotifications(calendarNotificationsSource),
+    pushNotifications: parsePushNotificationSettings(source.pushNotifications ?? data.pushNotifications),
   };
 }
 
