@@ -15,7 +15,8 @@ describe("push refs (SPENDLY-583)", () => {
       "ledgerEvents", "merchantOverrides", "netWorthHistory", "portfolioSettings",
       "portfolioTransactions", "receivableRepayments", "receivables", "recurringDismissals",
       "runwayOverrides", "runwaySettings", "sipPlans", "sipTransactions", "spaces",
-      "subscriptions", "trips", "userSettings", "virtualPositions", "watchlists", "watchlists/items", "whatIfScenarios",
+      "subscriptions", "taxDocuments", "taxEntries", "taxProfiles", "taxReviews", "taxSnapshots",
+      "trips", "userSettings", "virtualPositions", "watchlists", "watchlists/items", "whatIfScenarios",
     ]);
     // The name lock is not data and is never pushed.
     expect(pushRefFromPath("users/u1/goalNames/n_car", "u1")).toBeNull();

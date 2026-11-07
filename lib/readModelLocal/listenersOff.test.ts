@@ -26,6 +26,7 @@ const MIGRATED = new Set([
   "financialGoals", "financialSummaries", "netWorthHistory",
   "calendarReminders", "categories", "categorizationRules", "spaces",
   "groupFunds",
+  "taxProfiles", "taxEntries", "taxReviews", "taxDocuments", "taxSnapshots",
 ]);
 
 /** `file:collection` listeners that stay on Firestore on purpose. */
@@ -106,6 +107,8 @@ describe("no Firestore listener in supabase mode (SPENDLY-600)", () => {
     for (const c of [
       "expenses", "incomes", "accounts", "holdings", "investments", "categories", "financialSummaries",
       "sipPlans", "calendarReminders", "epfContributions", "epfEstablishments", "watchlists/items",
+      // SPENDLY-709: the five tax listeners (hooks/useTaxData.ts).
+      "taxProfiles", "taxEntries", "taxReviews", "taxDocuments", "taxSnapshots",
     ]) {
       expect(found).toContain(c);
     }

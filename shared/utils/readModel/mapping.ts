@@ -81,6 +81,11 @@ export const EXTRA_CHANGE_FIELDS: Readonly<Record<string, readonly ChangeField[]
   goalEvents: [ms("createdAtMs")],
   groupFunds: [ms("createdAtMs")],
   groupFundEvents: [ms("createdAtMs")],
+  taxProfiles: [ms("createdAtMs"), ms("updatedAtMs")],
+  taxEntries: [ms("createdAtMs"), ms("updatedAtMs")],
+  taxReviews: [ms("createdAtMs"), ms("updatedAtMs")],
+  taxDocuments: [ms("createdAtMs"), ms("updatedAtMs")],
+  taxSnapshots: [ms("createdAtMs")],
   goalFundingPlans: [ms("createdAtMs"), ms("updatedAtMs")],
   decisions: [ms("createdAtMs"), ms("updatedAtMs")],
   calendarReminders: [ms("createdAtMs"), ms("updatedAtMs")],
@@ -903,6 +908,63 @@ export const READ_MODEL_TABLES: TableSpec[] = [
       f("date", "date", "date"),
       f("period", "period", "text"),
       f("reversal_of", "reversalOf", "text"),
+      f("created_at", "createdAtMs", "timestamp"),
+    ],
+  },
+  // SPENDLY-709 Tax & ITR Readiness (epic SPENDLY-288, migration 20261110000000).
+  // Typed columns are the year and the identifiers reads filter on; every
+  // amount stays in `doc` (R2.2): SQL never sums tax figures, the TypeScript
+  // lines do (R3.6, shared/features/tax/utils/lines.ts).
+  {
+    table: "tax_profiles",
+    collection: "taxProfiles",
+    fields: [
+      f("fy", "fy", "text"),
+      f("created_at", "createdAtMs", "timestamp"),
+      f("updated_at", "updatedAtMs", "timestamp"),
+    ],
+  },
+  {
+    table: "tax_entries",
+    collection: "taxEntries",
+    fields: [
+      f("fy", "fy", "text"),
+      f("kind", "kind", "text"),
+      f("soft_deleted_at", "deletedAt", "timestamp"),
+      f("created_at", "createdAtMs", "timestamp"),
+      f("updated_at", "updatedAtMs", "timestamp"),
+    ],
+  },
+  {
+    table: "tax_reviews",
+    collection: "taxReviews",
+    fields: [
+      f("fy", "fy", "text"),
+      f("source_kind", "sourceKind", "text"),
+      f("source_id", "sourceId", "text"),
+      f("decision", "decision", "text"),
+      f("created_at", "createdAtMs", "timestamp"),
+      f("updated_at", "updatedAtMs", "timestamp"),
+    ],
+  },
+  {
+    table: "tax_documents",
+    collection: "taxDocuments",
+    fields: [
+      f("fy", "fy", "text"),
+      f("category", "category", "text"),
+      f("status", "status", "text"),
+      f("created_at", "createdAtMs", "timestamp"),
+      f("updated_at", "updatedAtMs", "timestamp"),
+    ],
+  },
+  {
+    table: "tax_snapshots",
+    collection: "taxSnapshots",
+    fields: [
+      f("fy", "fy", "text"),
+      f("rule_version", "ruleVersion", "text"),
+      f("reason", "reason", "text"),
       f("created_at", "createdAtMs", "timestamp"),
     ],
   },

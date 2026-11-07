@@ -40,6 +40,8 @@ export const SWITCHED_COLLECTIONS: readonly string[] = [
   "borrowings", "borrowingRepayments", "receivables", "receivableRepayments",
   // SPENDLY-685: Group Funds (the fund list; history uses the groupFundHistory screen switch).
   "groupFunds",
+  // SPENDLY-709: Tax & ITR Readiness (display only; writers load from Firestore).
+  "taxProfiles", "taxEntries", "taxReviews", "taxDocuments", "taxSnapshots",
 ];
 
 export function configuredCollectionMode(readModelSetting: unknown, collection: string): CollectionMode {
