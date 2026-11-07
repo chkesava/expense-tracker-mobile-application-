@@ -206,9 +206,31 @@ needs no change. The order:
 
 ---
 
+## Account deletion (SPENDLY-711)
+
+Deleting an account removes every object under `users/{uid}/` and
+`users/{uid}_duress/` in this bucket. It runs as the `files` phase of
+`netlify/functions/delete-account.ts` (`_spendlyFilesPurge.ts`), after both
+Firestore trees and before the read-model purge and the Auth user:
+
+- It lists through the Storage API with the read-model service-role key (the
+  same `READMODEL_SUPABASE_URL` / `READMODEL_SUPABASE_SERVICE_ROLE_KEY` as the
+  read-model purge), one folder level at a time, and deletes in batches of up
+  to 1000.
+- Every path is checked against the account's two folders before it is
+  deleted, so no other user's object is touched.
+- It stops inside the 7-second phase budget and simply runs again; the phase
+  finishes only when a full listing finds nothing left.
+- It fails closed: missing settings or a failed request fail the phase, and the
+  still-signed-in user retries. The `auth` phase checks again before deleting
+  the login, so a client that skips `files` can't orphan objects.
+
+Deleting one bank account or goal still removes only that document's or
+photo's object (as above); there is no background sweeper.
+
 ## What is deliberately not here
 
-- **No orphan sweeper.** A failed upload leaves a `pending` metadata row, which
+- **No orphan sweeper** (account deletion aside, see above). A failed upload leaves a `pending` metadata row, which
   the UI shows and offers to retry or remove. That is a visible, user-resolvable
   state rather than a background job reconciling two systems. If pending rows
   accumulate in practice, that is the signal to write one — not before.

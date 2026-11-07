@@ -78,9 +78,6 @@ describe("every direct writer of a synced collection calls a read-model hook", (
   const SKIP = /(\.test\.tsx?$)|ganesh|nutrition|\/readModel\/|lib\/firestore(\.native)?\.ts$|lib\/commitMutations\.ts$|lib\/stageMutationOps\.ts$|lib\/readModelWriteHooks\.ts$|lib\/readModelClientWrites\.ts$/i;
   // Writers that announce their writes another way, with the reason.
   const ALLOWED: Record<string, string> = {
-    // A rare bulk taxonomy migration (hundreds of documents): its stamp asks
-    // the push for a changed-only sync of the user (notifyReadModelChanged).
-    "lib/ensureCategoryHierarchy.ts": "bulk migration: push user sync",
     // It writes only meta/categories and is itself the categories hook.
     "lib/categoryRevision.ts": "the categories hook",
   };
@@ -151,6 +148,8 @@ describe("every direct writer of a synced collection calls a read-model hook", (
       "hooks/useSips.ts",
       "hooks/useCategoryBudgets.ts",
       "services/sip/executeSips.ts",
+      // SPENDLY-712: the taxonomy upgrade names what it wrote (no allowlist entry).
+      "lib/ensureCategoryHierarchy.ts",
     ]) {
       expect(writers).toContain(known);
     }
@@ -205,7 +204,6 @@ describe("every direct writer of a synced collection calls a read-model hook", (
     "providers/PrivacyPinProvider.tsx": "clears the legacy PIN fields (never copied)",
     "components/onboarding/SetupWizardModal.tsx": "username and avatar (identity, never copied)",
     "components/settings/sections/ProfileSection.tsx": "profile identity fields (never copied)",
-    "lib/ensureCategoryHierarchy.ts": "bulk migration: push user sync",
   };
   const ROOT_REF = `doc\\(\\s*\\w+\\s*,\\s*"users"\\s*,\\s*[\\w.]+\\s*\\)`;
 

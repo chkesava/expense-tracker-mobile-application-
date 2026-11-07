@@ -1313,3 +1313,46 @@ describe("cashback in current cycle (SPENDLY-432)", () => {
     expect(ledger.totalOutstanding).toBe(462);
   });
 });
+
+describe("cashback-settled statement stays settled after a cash payment (SPENDLY-719)", () => {
+  // The reported Roar shape: ₹505 billed for 2 Oct → 1 Nov, ₹236.29 cashback
+  // inside the cycle, ₹268.71 paid from the bank on 2 Nov. The payment stamp
+  // (increment) left the stored bill at ₹268.71, PARTIALLY_PAID, ₹236.29 left.
+  const card: Account = { id: "cc-roar", name: "Roar", typeId: "t-credit", billGenerationDay: 1, creditLimit: 35000 };
+  const spend = [expense("2026-10-10", 300, card.id), expense("2026-10-25", 205, card.id)];
+  const cashback = { ...payment("cb-roar", "2026-10-20", 236.29, card.id), sourceType: "cashback" as const };
+  const cash = payment("pay-hdfc", "2026-11-02", 268.71, card.id);
+  const stale = {
+    ...statement("2026-11-01", "2026-10-02", 505, { amountPaid: 268.71, paymentIds: ["pay-hdfc"], status: "PARTIALLY_PAID" }),
+    accountId: card.id,
+  };
+
+  it("the allocation settles the statement in full: cash + cashback = statement", () => {
+    const patches = collectCreditBillAllocationPatches({
+      accounts: [card],
+      isCreditAccount: () => true,
+      expenses: spend,
+      payments: [cash, cashback],
+      bills: [stale],
+      today: "2026-11-08",
+    });
+    expect(patches).toHaveLength(1);
+    expect(patches[0].billId).toBe(stale.id);
+    expect(patches[0].amountPaid).toBe(505);
+    expect([...patches[0].paymentIds].sort()).toEqual(["cb-roar", "pay-hdfc"]);
+  });
+
+  it("counts cashback exactly once: nothing left, nothing over-settled", () => {
+    const ledger = buildCreditCardLedger({
+      account: card,
+      expenses: spend,
+      payments: [cash, cashback],
+      bills: [stale],
+      today: "2026-11-08",
+    });
+    const st = ledger.statements.find((s) => s.billId === stale.id);
+    expect(st?.paid).toBe(505);
+    expect(st?.remaining).toBe(0);
+    expect(ledger.totalOutstanding).toBe(0);
+  });
+});

@@ -78,7 +78,7 @@ export function RecordCashbackModal({
   const { settings } = useSettings();
   const { payments, addCashback } = useAccountPayments();
   const { expenses } = useExpenses();
-  const { bills } = useCreditCardBills();
+  const { bills, requestBillPass } = useCreditCardBills();
 
   const typeMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -247,6 +247,8 @@ export function RecordCashbackModal({
       });
       if (!cashbackId) return;
       if (onRecorded) await onRecorded(cashbackId);
+      // SPENDLY-719: cashback settles statements; update the stored bills now.
+      requestBillPass();
       onClose();
     } catch (err) {
       logError("creditCard.recordCashback", err);

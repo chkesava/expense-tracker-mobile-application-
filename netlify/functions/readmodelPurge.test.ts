@@ -54,7 +54,9 @@ describe("read-model purge on account deletion (SPENDLY-508)", () => {
   });
 
   it("runs after both Firestore trees and before Auth is deleted", () => {
-    expect(nextDeletePhase("duress-tree")).toBe("readmodel");
+    // SPENDLY-711: the stored files go between the Firestore trees and the read model.
+    expect(nextDeletePhase("duress-tree")).toBe("files");
+    expect(nextDeletePhase("files")).toBe("readmodel");
     expect(nextDeletePhase("readmodel")).toBe("auth");
     expect(DELETE_PHASES.indexOf("readmodel")).toBeLessThan(DELETE_PHASES.indexOf("auth"));
   });

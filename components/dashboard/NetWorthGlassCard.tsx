@@ -1,5 +1,5 @@
 import { memo, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { ArrowDownRight, ArrowUpRight, ChevronDown, Eye, EyeOff, Info, Minus } from "lucide-react-native";
 
@@ -20,6 +20,7 @@ import {
   type NetWorthPeriod,
   type NetWorthRecorderStatus,
   type NetWorthPoint,
+  type NetWorthTrend,
 } from "@/shared/utils/netWorthHistory";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces, withAlpha } from "@/theme/surfaces";
@@ -40,6 +41,17 @@ const PERIOD_WORDS: Record<NetWorthPeriod, string> = {
   "1Y": "over the year",
 };
 
+/** "over the past month", or "since 12 Oct" when history starts inside the period. */
+export function trendWhen(
+  trend: Pick<NetWorthTrend, "coversFullPeriod" | "baseline">,
+  period: NetWorthPeriod,
+  dateFormat: Parameters<typeof formatDisplayDate>[1]
+): string {
+  return trend.coversFullPeriod || !trend.baseline
+    ? PERIOD_WORDS[period]
+    : `since ${formatDisplayDate(trend.baseline.date, dateFormat)}`;
+}
+
 /**
  * SPENDLY-572 — the Visual First net-worth card: an emerald glass surface
  * (gradient, lit edge and soft glow — no blur layer), net worth in whole
@@ -50,6 +62,11 @@ const PERIOD_WORDS: Record<NetWorthPeriod, string> = {
  * change, line and Gain/Loss come only from stored snapshots
  * (`netWorthTrend`, SPENDLY-568). Rounding to whole rupees and the compact
  * footer are display only. Ghost mode hides every amount and percentage.
+ *
+ * SPENDLY-718: the `desktop` variant is the wide dashboard's hero. The period
+ * is a segmented control, the chart grows to fill the card, and the
+ * Assets | Liabilities footer moves out to their own cards beside it, which
+ * share this card's period through `period` / `onPeriodChange`.
  */
 export const NetWorthGlassCard = memo(function NetWorthGlassCard({
   netWorth,
@@ -59,6 +76,10 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
   historyLoading,
   historyFailed,
   recorder,
+  variant = "stack",
+  period: controlledPeriod,
+  onPeriodChange,
+  style,
 }: {
   netWorth: UnifiedNetWorthSummary;
   currency: string;
@@ -68,12 +89,20 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
   historyFailed: boolean;
   /** SPENDLY-620: whether today's point is saved, and why not. */
   recorder: NetWorthRecorderStatus;
+  variant?: "stack" | "desktop";
+  /** Controlled period (SPENDLY-718); uncontrolled when omitted. */
+  period?: NetWorthPeriod;
+  onPeriodChange?: (period: NetWorthPeriod) => void;
+  style?: StyleProp<ViewStyle>;
 }) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const { settings, setGhostMode } = useSettings();
   const ghost = Boolean(settings.ghostMode);
-  const [period, setPeriod] = useState<NetWorthPeriod>("1M");
+  const [ownPeriod, setOwnPeriod] = useState<NetWorthPeriod>("1M");
+  const period = controlledPeriod ?? ownPeriod;
+  const setPeriod = onPeriodChange ?? setOwnPeriod;
+  const desktop = variant === "desktop";
   const [menuOpen, setMenuOpen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
 
@@ -91,10 +120,7 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
     direction === "up" ? theme.colors.success : direction === "down" ? theme.colors.destructive : theme.colors.mutedForeground;
   const Arrow = direction === "up" ? ArrowUpRight : direction === "down" ? ArrowDownRight : Minus;
   const pct = enoughHistory ? trend.changePct : null;
-  const when =
-    trend.coversFullPeriod || !trend.baseline
-      ? PERIOD_WORDS[period]
-      : `since ${formatDisplayDate(trend.baseline.date, settings.dateFormat)}`;
+  const when = trendWhen(trend, period, settings.dateFormat);
 
   const surfaceTop = mixColors(theme.colors.card, theme.colors.primary, 0.2);
   const surfaceBottom = mixColors(theme.colors.card, theme.colors.background, 0.35);
@@ -107,6 +133,7 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
           borderColor: withAlpha(theme.colors.primary, 0.38),
           boxShadow: `0 12px 32px ${withAlpha(theme.colors.primary, 0.14)}`,
         },
+        style,
       ]}
       testID="dashboard-net-worth"
     >
@@ -118,7 +145,7 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
         pointerEvents="none"
       />
 
-      <View style={styles.body}>
+      <View style={[styles.body, desktop && styles.bodyDesktop]}>
         <View style={styles.header}>
           <View style={styles.titleRow}>
             <Text style={[styles.title, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}>
@@ -154,63 +181,113 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
             ) : null}
           </View>
 
-          <View>
-            <Pressable
-              onPress={() => {
-                void haptic.selection();
-                setMenuOpen((v) => !v);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={`Trend period, ${PERIOD_LABELS[period]}. Change`}
-              style={({ pressed }) => [
-                styles.periodChip,
+          {desktop ? (
+            <View
+              style={[
+                styles.segments,
                 {
-                  backgroundColor: surfaces.isDark ? withAlpha("#000000", 0.22) : withAlpha(theme.colors.foreground, 0.06),
-                  borderColor: withAlpha(theme.colors.foreground, 0.12),
+                  backgroundColor: surfaces.isDark ? withAlpha("#000000", 0.22) : withAlpha(theme.colors.foreground, 0.05),
+                  borderColor: withAlpha(theme.colors.foreground, 0.1),
                 },
-                pressed && styles.pressed,
               ]}
+              accessibilityRole="radiogroup"
+              accessibilityLabel="Trend period"
             >
-              <Text style={[styles.periodText, { color: theme.colors.foreground, fontFamily: theme.fontFamily.medium }]}>
-                {PERIOD_LABELS[period]}
-              </Text>
-              <ChevronDown size={14} color={theme.colors.mutedForeground} strokeWidth={2.2} />
-            </Pressable>
-            {menuOpen ? (
-              <View
-                style={[styles.menu, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
-                accessibilityRole="menu"
-              >
-                {NET_WORTH_PERIODS.map((p) => (
+              {NET_WORTH_PERIODS.map((p) => {
+                const selected = p === period;
+                return (
                   <Pressable
                     key={p}
                     onPress={() => {
                       void haptic.selection();
                       setPeriod(p);
-                      setMenuOpen(false);
                     }}
-                    accessibilityRole="menuitem"
-                    accessibilityState={{ selected: p === period }}
-                    style={({ pressed }) => [
-                      styles.menuItem,
-                      p === period && { backgroundColor: surfaces.wash(theme.colors.primary) },
-                      pressed && styles.pressed,
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selected }}
+                    // Web reads only aria-checked; accessibilityState covers native.
+                    aria-checked={selected}
+                    accessibilityLabel={PERIOD_LABELS[p]}
+                    style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+                      styles.segment,
+                      selected
+                        ? { backgroundColor: theme.colors.primary }
+                        : (pressed || hovered) && { backgroundColor: withAlpha(theme.colors.foreground, 0.06) },
                     ]}
                   >
                     <Text
-                      style={{
-                        color: p === period ? theme.colors.primary : theme.colors.foreground,
-                        fontFamily: theme.fontFamily.medium,
-                        fontSize: 13.5,
-                      }}
+                      style={[
+                        styles.segmentText,
+                        {
+                          color: selected ? theme.colors.primaryForeground : theme.colors.mutedForeground,
+                          fontFamily: selected ? theme.fontFamily.semibold : theme.fontFamily.medium,
+                        },
+                      ]}
                     >
-                      {PERIOD_LABELS[p]}
+                      {p}
                     </Text>
                   </Pressable>
-                ))}
-              </View>
-            ) : null}
-          </View>
+                );
+              })}
+            </View>
+          ) : (
+            <View>
+              <Pressable
+                onPress={() => {
+                  void haptic.selection();
+                  setMenuOpen((v) => !v);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Trend period, ${PERIOD_LABELS[period]}. Change`}
+                style={({ pressed }) => [
+                  styles.periodChip,
+                  {
+                    backgroundColor: surfaces.isDark ? withAlpha("#000000", 0.22) : withAlpha(theme.colors.foreground, 0.06),
+                    borderColor: withAlpha(theme.colors.foreground, 0.12),
+                  },
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={[styles.periodText, { color: theme.colors.foreground, fontFamily: theme.fontFamily.medium }]}>
+                  {PERIOD_LABELS[period]}
+                </Text>
+                <ChevronDown size={14} color={theme.colors.mutedForeground} strokeWidth={2.2} />
+              </Pressable>
+              {menuOpen ? (
+                <View
+                  style={[styles.menu, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+                  accessibilityRole="menu"
+                >
+                  {NET_WORTH_PERIODS.map((p) => (
+                    <Pressable
+                      key={p}
+                      onPress={() => {
+                        void haptic.selection();
+                        setPeriod(p);
+                        setMenuOpen(false);
+                      }}
+                      accessibilityRole="menuitem"
+                      accessibilityState={{ selected: p === period }}
+                      style={({ pressed }) => [
+                        styles.menuItem,
+                        p === period && { backgroundColor: surfaces.wash(theme.colors.primary) },
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: p === period ? theme.colors.primary : theme.colors.foreground,
+                          fontFamily: theme.fontFamily.medium,
+                          fontSize: 13.5,
+                        }}
+                      >
+                        {PERIOD_LABELS[p]}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          )}
         </View>
 
         {noteOpen ? (
@@ -231,8 +308,8 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
           adjustsFontSizeToFit
           minimumFontScale={0.6}
           style={{
-            fontSize: 40,
-            lineHeight: 48,
+            fontSize: desktop ? 44 : 40,
+            lineHeight: desktop ? 52 : 48,
             letterSpacing: -1.2,
             fontFamily: theme.fontFamily.bold,
             color: negative ? theme.colors.destructive : theme.colors.foreground,
@@ -268,11 +345,11 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
           </View>
         ) : null}
 
-        <View style={styles.chartSlot}>
+        <View style={[styles.chartSlot, desktop && styles.chartSlotDesktop]}>
           {historyLoading ? null : enoughHistory && chartPoints.length >= 2 ? (
             <SpendingCurveChart
               points={chartPoints}
-              height={112}
+              height={desktop ? 168 : 112}
               currency={currency}
               lineColor={theme.colors.primary}
               autoDomain
@@ -281,7 +358,10 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
               showXAxis={false}
             />
           ) : (
-            <Text style={[styles.note, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]} testID="net-worth-trend-empty">
+            <Text
+              style={[styles.note, desktop && styles.noteDesktop, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+              testID="net-worth-trend-empty"
+            >
               {historyFailed
                 ? "Couldn't load your net-worth history."
                 : points.length < MIN_POINTS_FOR_TREND
@@ -306,18 +386,20 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
           </Text>
         )}
 
-        <View style={[styles.footer, { borderTopColor: withAlpha(theme.colors.foreground, 0.1) }]}>
-          <FooterFigure label="Assets" ghost={ghost} value={compactAmount(netWorth.totalAssets, currency)} />
-          <View style={[styles.footerDivider, { backgroundColor: withAlpha(theme.colors.foreground, 0.12) }]} />
-          <FooterFigure label="Liabilities" ghost={ghost} value={compactAmount(netWorth.totalLiabilities, currency)} />
-          <View style={[styles.footerDivider, { backgroundColor: withAlpha(theme.colors.foreground, 0.12) }]} />
-          <FooterFigure
-            label="Gain/Loss"
-            ghost={ghost}
-            value={pct === null ? "—" : `${pct >= 0 ? "↑" : "↓"} ${Math.abs(pct).toFixed(1)}%`}
-            color={pct === null ? theme.colors.mutedForeground : pct >= 0 ? theme.colors.success : theme.colors.destructive}
-          />
-        </View>
+        {desktop ? null : (
+          <View style={[styles.footer, { borderTopColor: withAlpha(theme.colors.foreground, 0.1) }]}>
+            <FooterFigure label="Assets" ghost={ghost} value={compactAmount(netWorth.totalAssets, currency)} />
+            <View style={[styles.footerDivider, { backgroundColor: withAlpha(theme.colors.foreground, 0.12) }]} />
+            <FooterFigure label="Liabilities" ghost={ghost} value={compactAmount(netWorth.totalLiabilities, currency)} />
+            <View style={[styles.footerDivider, { backgroundColor: withAlpha(theme.colors.foreground, 0.12) }]} />
+            <FooterFigure
+              label="Gain/Loss"
+              ghost={ghost}
+              value={pct === null ? "—" : `${pct >= 0 ? "↑" : "↓"} ${Math.abs(pct).toFixed(1)}%`}
+              color={pct === null ? theme.colors.mutedForeground : pct >= 0 ? theme.colors.success : theme.colors.destructive}
+            />
+          </View>
+        )}
       </View>
     </View>
   );
@@ -359,6 +441,31 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 16,
     gap: 4,
+  },
+  bodyDesktop: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 18,
+  },
+  segments: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    padding: 3,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  segment: {
+    minWidth: 40,
+    minHeight: 30,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  segmentText: {
+    fontSize: 13,
   },
   header: {
     flexDirection: "row",
@@ -434,6 +541,16 @@ const styles = StyleSheet.create({
     minHeight: 40,
     marginHorizontal: -10,
     marginTop: 2,
+  },
+  chartSlotDesktop: {
+    flex: 1,
+    justifyContent: "center",
+    marginTop: 8,
+  },
+  noteDesktop: {
+    textAlign: "center",
+    fontSize: 13.5,
+    paddingHorizontal: 24,
   },
   footer: {
     flexDirection: "row",

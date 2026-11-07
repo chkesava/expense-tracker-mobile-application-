@@ -22,11 +22,11 @@ Part of epic [SPENDLY-621](SPENDLY-621-cloudflare-web-backup.md).
 ## Owner steps (runbook §2)
 | Step | State |
 |---|---|
-| a. Create the Pages project `spendly-web-backup` (Direct Upload, production branch `main`) | Pending |
-| b. API token (Account → Cloudflare Pages → Edit only) and Account ID | Pending |
-| c. GitHub secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; variables `CLOUDFLARE_BACKUP_ORIGIN` (+ optional `CLOUDFLARE_PAGES_PROJECT`) | Pending |
-| d. Run "Deploy Web Backup (Cloudflare Pages)" once. The workflow file must be on `main` first: `workflow_dispatch` only appears for workflows on the default branch. | Pending |
-| e. Firebase Auth authorized domain (+ App Check key domain if web App Check is on) | Pending |
+| a. Create the Pages project `spendly-web-backup` (Direct Upload, production branch `main`) | Done (owner, 2026-11-07) |
+| b. API token (Account → Cloudflare Pages → Edit only) and Account ID | Done (owner, 2026-11-07) |
+| c. GitHub secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; variables `CLOUDFLARE_BACKUP_ORIGIN` (+ optional `CLOUDFLARE_PAGES_PROJECT`) | Done (owner, 2026-11-07) |
+| d. Run "Deploy Web Backup (Cloudflare Pages)" once. The workflow file must be on `main` first: `workflow_dispatch` only appears for workflows on the default branch. | Done (owner, 2026-11-07) |
+| e. Firebase Auth authorized domain (+ App Check key domain if web App Check is on) | Done (owner, 2026-11-07) |
 
 ## First end-to-end run
 **Run 42341897313 (2026-11-07, `main` a54adea8): stopped before deploying, so
@@ -58,9 +58,25 @@ deploying.**
   - the settings check now asks Cloudflare for the project first, so a bad
     token fails in seconds.
 
-Still to record after the next run:
-- the run number;
-- the smoke result;
-- a manual sign-in on the backup;
-- the CPU per request from the Cloudflare dashboard (especially market-overview);
-- confirmation that `spendly-share.netlify.app` was untouched.
+**Run 42354808510 (2026-11-07, `main` 6443f385, after the owner replaced the
+token): succeeded.** The backup is live at https://spendly-web-backup.pages.dev
+(deployment 7cfd8dd3).
+- **Run:**
+  - access check OK; `.env` with 12 `EXPO_PUBLIC_*` keys, with the backup as
+    `EXPO_PUBLIC_SHARE_URL`;
+  - `_worker.js` 0.27 MB gzipped; no server secret in the output;
+  - `FIREBASE_SERVICE_ACCOUNT` and `GEMINI_API_KEY` set as Pages secrets;
+    90 files uploaded.
+- **Smoke test** (in the run, and again against the live site): **0 failed,
+  1 warning**.
+  - All four apps, deep links, the share routes, manifests, icons, security
+    headers and immutable bundles pass.
+  - Every served API passes, the Netlify-only paths give 503, and
+    `/_worker.js` isn't served.
+- **Warning:** `/api/crypto` gets 429 from CoinGecko on every call.
+  - CoinGecko's free API limits Cloudflare's shared addresses, so crypto
+    prices don't load on the backup.
+  - Follow-up: a CoinGecko demo API key.
+- **Owner check:** sign-in on the backup works, and the dashboard checks were fine.
+- **Netlify:** `spendly-share.netlify.app` untouched. The workflow has no Netlify
+  credentials.

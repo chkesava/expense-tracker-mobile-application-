@@ -1,5 +1,5 @@
 import { memo, useMemo, type ComponentType } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { useRouter, type Href } from "expo-router";
 import {
   ArrowDownToLine,
@@ -10,11 +10,12 @@ import {
   Repeat,
   SquarePen,
   Users,
+  Zap,
 } from "lucide-react-native";
 
 import { Chip } from "@/components/ui/Chip";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
-import { mixColors, Section, withAlpha } from "@/components/dashboard/primitives";
+import { mixColors, Section, SectionAction, useSurfaces, withAlpha } from "@/components/dashboard/primitives";
 import { haptic } from "@/lib/haptics";
 import { useModalActions } from "@/providers/ModalProvider";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -40,10 +41,24 @@ const BUDGET_ORB = "#B07CFF";
  * Quick actions (SPENDLY-532; round orbs since SPENDLY-566). Each orb opens
  * the same form the add sheet does — no new write path. Budget opens the
  * money settings, where the monthly and category budgets are set.
+ *
+ * SPENDLY-718: the `panel` variant is the desktop dashboard's titled card,
+ * with smaller orbs and a "View all" that opens the full add sheet.
  */
-export const QuickAddWidget = memo(function QuickAddWidget() {
+export const QuickAddWidget = memo(function QuickAddWidget({
+  variant = "orbs",
+  onViewAll,
+  style,
+}: {
+  variant?: "orbs" | "panel";
+  /** Opens the full add sheet; the panel's "View all". */
+  onViewAll?: () => void;
+  style?: StyleProp<ViewStyle>;
+} = {}) {
   const router = useRouter();
   const { theme } = useTheme();
+  const surfaces = useSurfaces();
+  const panel = variant === "panel";
   const { setAddTransactionKind, setIsAddExpenseOpen, setIsTransferOpen } = useModalActions();
 
   const actions = useMemo<Action[]>(
@@ -90,8 +105,8 @@ export const QuickAddWidget = memo(function QuickAddWidget() {
     [theme.colors, router, setAddTransactionKind, setIsAddExpenseOpen, setIsTransferOpen]
   );
 
-  return (
-    <View style={styles.grid}>
+  const orbs = (
+    <View style={[styles.grid, panel && styles.gridPanel]}>
       {actions.map((action) => {
         const Icon = action.icon;
         return (
@@ -101,13 +116,19 @@ export const QuickAddWidget = memo(function QuickAddWidget() {
               void (action.id === "expense" ? haptic.impact() : haptic.selection());
               action.onPress();
             }}
-            style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+            style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+              styles.action,
+              panel && styles.actionPanel,
+              panel && hovered && { backgroundColor: surfaces.control },
+              pressed && styles.pressed,
+            ]}
             accessibilityRole="button"
             accessibilityLabel={action.accessibilityLabel}
           >
             <View
               style={[
                 styles.orb,
+                panel && styles.orbPanel,
                 {
                   // SPENDLY-572: a deep, opaque tint of the hue with a bright
                   // ring, as in the reference — not a pale wash.
@@ -117,7 +138,7 @@ export const QuickAddWidget = memo(function QuickAddWidget() {
                 },
               ]}
             >
-              <Icon size={27} color={action.color} strokeWidth={2.4} />
+              <Icon size={panel ? 22 : 27} color={action.color} strokeWidth={2.4} />
             </View>
             <Text
               style={[styles.label, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
@@ -129,6 +150,23 @@ export const QuickAddWidget = memo(function QuickAddWidget() {
         );
       })}
     </View>
+  );
+
+  if (!panel) return orbs;
+
+  return (
+    <Section
+      title="Quick actions"
+      icon={<Zap size={16} color={theme.colors.primary} strokeWidth={2.3} />}
+      iconTint={surfaces.wash(theme.colors.primary)}
+      action={onViewAll ? <SectionAction label="View all" onPress={onViewAll} /> : undefined}
+      fill
+      style={style}
+      contentStyle={styles.panelBody}
+      testID="dash-quick-actions"
+    >
+      {orbs}
+    </Section>
   );
 });
 
@@ -208,6 +246,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     paddingVertical: 4,
+  },
+  gridPanel: {
+    paddingHorizontal: 0,
+    gap: 8,
+  },
+  actionPanel: {
+    paddingVertical: 8,
+    borderRadius: 14,
+  },
+  orbPanel: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+  },
+  panelBody: {
+    justifyContent: "center",
   },
   pressed: {
     opacity: 0.82,

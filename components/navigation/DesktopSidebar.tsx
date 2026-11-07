@@ -1,10 +1,13 @@
+import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { usePathname, useRouter } from "expo-router";
 import {
   BarChart3,
   CalendarDays,
+  ChevronRight,
   FlaskConical,
   Home,
+  Palette,
   Plus,
   Receipt,
   Settings,
@@ -12,7 +15,10 @@ import {
   TrendingUp,
 } from "lucide-react-native";
 
+import { SideDrawer } from "@/components/SideDrawer";
+import { AppBarBrand } from "@/components/layout/AppBarBrand";
 import { useInvestmentsEnabled } from "@/hooks/useInvestmentsEnabled";
+import { useAuth } from "@/providers/AuthProvider";
 import { useUserRole } from "@/hooks/useUserRole";
 import { haptic } from "@/lib/haptics";
 import { useModals } from "@/providers/ModalProvider";
@@ -26,6 +32,7 @@ import {
 import { SPENDLY_SIDEBAR_WIDTH } from "@/shared/utils/responsiveLayout";
 import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
+import { EXPENSE_PALETTE_SWATCHES, THEME_LABELS } from "@/theme/tokens";
 
 const ICON_MAP: Record<NavSectionId, React.ComponentType<{ size: number; color: string; strokeWidth?: number }>> = {
   home: Home,
@@ -46,11 +53,17 @@ const ICON_MAP: Record<NavSectionId, React.ComponentType<{ size: number; color: 
  * Same destinations and visibility rules as the side drawer, so a feature or
  * role never shows here but not there. Profile, ghost mode, switch app and
  * sign out stay in the drawer, opened from the header as before.
+ *
+ * SPENDLY-718: the brand sits on top, and a footer holds the current palette
+ * (opening Settings › Appearance, the existing picker) and the profile row,
+ * which opens that same drawer.
  */
 export function DesktopSidebar() {
   const { navigate, dismissTo } = useRouter();
   const pathname = usePathname();
-  const { theme } = useTheme();
+  const { theme, themeName, expensePalette } = useTheme();
+  const { user } = useAuth();
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const surfaces = useSurfaces();
   const { t } = useTranslation();
   const { isAdmin } = useUserRole();
@@ -77,6 +90,12 @@ export function DesktopSidebar() {
     }
   };
 
+  const paletteLabel = THEME_LABELS[themeName] ?? THEME_LABELS[expensePalette];
+  const swatches = EXPENSE_PALETTE_SWATCHES[expensePalette] ?? [];
+  const displayName = user?.displayName?.trim() || user?.email?.split("@")[0] || "Profile";
+  const initial = (user?.displayName?.[0] || user?.email?.[0] || "U").toUpperCase();
+  const appearanceActive = pathname.startsWith("/settings/appearance");
+
   return (
     <View
       style={[
@@ -85,7 +104,10 @@ export function DesktopSidebar() {
       ]}
       role="navigation"
     >
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <View style={styles.brand}>
+        <AppBarBrand />
+      </View>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Pressable
           onPress={() => setIsAddSheetOpen(true)}
           accessibilityRole="button"
@@ -145,6 +167,75 @@ export function DesktopSidebar() {
           })}
         </View>
       </ScrollView>
+
+      <View style={[styles.footer, { borderTopColor: theme.colors.outlineVariant }]}>
+        <Pressable
+          onPress={() => {
+            if (appearanceActive) return;
+            void haptic.navigation();
+            navigate("/settings/appearance" as never);
+          }}
+          accessibilityRole="link"
+          accessibilityLabel={`Appearance, ${paletteLabel} palette. Change`}
+          style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+            styles.footerRow,
+            { borderColor: theme.colors.border },
+            (pressed || hovered || appearanceActive) && { backgroundColor: surfaces.control },
+          ]}
+        >
+          <Palette size={18} color={theme.colors.mutedForeground} strokeWidth={2} />
+          <Text
+            numberOfLines={1}
+            style={[styles.footerLabel, { color: theme.colors.foreground, fontFamily: theme.fontFamily.medium }]}
+          >
+            {paletteLabel}
+          </Text>
+          <View style={styles.swatches} accessible={false}>
+            {swatches.slice(0, 3).map((hex) => (
+              <View
+                key={hex}
+                style={[styles.swatch, { backgroundColor: hex, borderColor: theme.colors.outlineVariant }]}
+              />
+            ))}
+          </View>
+        </Pressable>
+
+        <Pressable
+          onPress={() => {
+            void haptic.navigation();
+            setIsProfileOpen(true);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Open profile and settings"
+          style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+            styles.profileRow,
+            (pressed || hovered) && { backgroundColor: surfaces.control },
+          ]}
+        >
+          <View style={[styles.avatar, { backgroundColor: theme.colors.primary }]}>
+            <Text style={[styles.avatarText, { color: theme.colors.primaryForeground, fontFamily: theme.fontFamily.bold }]}>
+              {initial}
+            </Text>
+          </View>
+          <View style={styles.profileText}>
+            <Text
+              numberOfLines={1}
+              style={[styles.profileName, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
+            >
+              {displayName}
+            </Text>
+            <Text
+              numberOfLines={1}
+              style={[styles.profileHint, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+            >
+              Profile & settings
+            </Text>
+          </View>
+          <ChevronRight size={16} color={theme.colors.mutedForeground} strokeWidth={2.2} />
+        </Pressable>
+      </View>
+
+      <SideDrawer isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
     </View>
   );
 }
@@ -154,10 +245,75 @@ const styles = StyleSheet.create({
     width: SPENDLY_SIDEBAR_WIDTH,
     borderRightWidth: StyleSheet.hairlineWidth,
   },
+  brand: {
+    paddingHorizontal: 14,
+    paddingTop: 14,
+  },
+  scroll: {
+    flex: 1,
+  },
   content: {
     paddingHorizontal: 12,
     paddingVertical: 16,
     gap: 16,
+  },
+  footer: {
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 14,
+    gap: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  footerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minHeight: 42,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  footerLabel: {
+    flex: 1,
+    fontSize: 13.5,
+  },
+  swatches: {
+    flexDirection: "row",
+  },
+  swatch: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    marginLeft: -4,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  profileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minHeight: 52,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  avatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: {
+    fontSize: 14,
+  },
+  profileText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  profileName: {
+    fontSize: 14,
+  },
+  profileHint: {
+    fontSize: 12,
   },
   addButton: {
     flexDirection: "row",

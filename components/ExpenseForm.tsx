@@ -78,6 +78,7 @@ import {
   previewBalanceAfterTransaction,
 } from "@/shared/utils/accountBalance";
 import { pushRecentCategoryPair } from "@/shared/utils/categoryPreferences";
+import { defaultAccountId } from "@/shared/utils/categorySelection";
 import { merchantCategorySuggestion } from "@/shared/utils/merchantCategory";
 import { resolveMerchant } from "@/shared/utils/merchantResolve";
 import {
@@ -207,7 +208,11 @@ export function ExpenseForm({
     setCategoryTouched(true);
   };
 
-  // Initialize or reset form values
+  // Initialize or reset form values when the form opens or its target
+  // changes. SPENDLY-722: not on an accounts refresh. With `accounts` in the
+  // deps every refresh (a sync pull, a realtime update) re-ran the reset and
+  // wiped the draft mid-edit: category, amount, note. The default account is
+  // filled by the effect below instead.
   useEffect(() => {
     if (editingExpense) {
       setType("expense");
@@ -237,7 +242,7 @@ export function ExpenseForm({
       setCategory(settings.defaultCategory || DEFAULT_EXPENSE_CATEGORY);
       setSubcategory(DEFAULT_EXPENSE_SUBCATEGORY);
       setSource("Salary");
-      setAccountId(accounts.length > 0 ? accounts[0].id : "");
+      setAccountId("");
       setNote("");
       setTags([]);
       setSpaceId("");
@@ -249,7 +254,23 @@ export function ExpenseForm({
     initialType,
     settings.defaultCategory,
     settings.timezone,
+  ]);
+
+  // A new transaction defaults to the first account once accounts load, and
+  // keeps the user's choice across refreshes (SPENDLY-722). It also re-runs
+  // with the reset's inputs: the reset clears the account, and this refills
+  // it, so a reset never leaves the form without one.
+  useEffect(() => {
+    if (editingExpense || editingIncome) return;
+    const ids = accounts.map((a) => a.id);
+    setAccountId((current) => defaultAccountId(current, ids));
+  }, [
     accounts,
+    editingExpense,
+    editingIncome,
+    initialType,
+    settings.defaultCategory,
+    settings.timezone,
   ]);
 
   // Must mirror the hydration above so an untouched edit never reads as dirty.

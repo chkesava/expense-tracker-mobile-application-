@@ -40,8 +40,11 @@ import { useGlobalMonth, useModalActions } from "@/providers/ModalProvider";
 import { useInvestmentsEnabled } from "@/hooks/useInvestmentsEnabled";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
 import {
+  computeActiveCategoryBudgets,
   getMoreDashboardWidgets,
+  splitCompactMoreCards,
   type DashboardWidgetId,
 } from "@/shared/utils/dashboardWidgets";
 import { currentMonthKey, formatDateKey } from "@/shared/utils/dates";
@@ -58,6 +61,17 @@ import { SideDrawer } from "@/components/SideDrawer";
 import { dashboardMonthLabel } from "@/shared/utils/dashboardLabels";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { GridItem, ResponsiveGrid } from "@/components/layout/ResponsiveGrid";
+import { Button } from "@/components/ui/Button";
+import { DesktopDashboardLayout } from "@/components/dashboard/desktop/DesktopDashboardLayout";
+import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
+import {
+  desktopAnalyticsSplit,
+  desktopDashboardGap,
+  planDesktopDashboard,
+} from "@/shared/utils/dashboardDesktop";
+
+/** SPENDLY-718: page gutter of the desktop composition (PageShell's 12 + 12). */
+const DESKTOP_GUTTER = 24;
 
 /**
  * SPENDLY-566 — the Visual First dashboard draws the hero, net worth, quick
@@ -65,7 +79,13 @@ import { GridItem, ResponsiveGrid } from "@/components/layout/ResponsiveGrid";
  * `PINNED_DASHBOARD_WIDGETS`). The "More" cards below them keep the user's
  * saved order and toggles; these extra ids slot in around them.
  */
-type MoreCardId = DashboardWidgetId | "cashFlow" | "accounts" | "shortcuts";
+type MoreCardId =
+  | DashboardWidgetId
+  | "cashFlow"
+  | "accounts"
+  | "shortcuts"
+  // SPENDLY-718: Budget's Category Budgets as their own desktop grid card.
+  | "budgetCategories";
 
 function getPreviousMonthKey(month: string): string {
   const [yearRaw, monthRaw] = month.split("-");
@@ -91,6 +111,11 @@ export default function DashboardScreen() {
   const { globalMonth, setIsMonthDrawerOpen } = useGlobalMonth();
   const { setIsAddSheetOpen } =
     useModalActions();
+  // SPENDLY-718: web ≥ 1280 gets the desktop composition; everything below
+  // (and all native) keeps the SPENDLY-559/566/717 layout.
+  const { isCompact, width: viewportWidth, desktopDashboard } = useResponsiveLayout();
+  // SPENDLY-717: on one column the lower-priority cards wait behind "Show more".
+  const [showAllCards, setShowAllCards] = useState(false);
 
   const activeMonth = globalMonth || currentMonthKey(settings.timezone);
   const previousMonth = getPreviousMonthKey(activeMonth);
@@ -120,6 +145,16 @@ export default function DashboardScreen() {
   const previousSummary = useMemo(
     () => cashFlowSummaries.find((s) => s.period === previousMonth) ?? null,
     [cashFlowSummaries, previousMonth]
+  );
+  // SPENDLY-718: the desktop grid gives Category Budgets their own card only
+  // when the month has some, so it never reserves an empty slot. Shared,
+  // ref-counted reference data (the Budget card reads the same), desktop only.
+  const { budgets: categoryBudgets } = useCategoryBudgets({ enabled: desktopDashboard });
+  const hasActiveCategoryBudgets = useMemo(
+    () =>
+      desktopDashboard &&
+      computeActiveCategoryBudgets(categoryBudgets ?? [], activeSummary?.categoryTotals ?? {}, activeMonth).length > 0,
+    [desktopDashboard, categoryBudgets, activeSummary, activeMonth]
   );
   // SPENDLY-501: expenses and incomes are already loaded app-wide by
   // FinanceDataProvider, so the recent feed is derived from them instead of a
@@ -238,6 +273,15 @@ export default function DashboardScreen() {
     return ["cashFlow", ...more, "accounts", "shortcuts"];
   }, [settings.dashboardOrder, settings.dashboardWidgets, investmentsEnabled]);
 
+  // SPENDLY-717: one column (phones, native included) leads with the account
+  // cards, Safe to Spend and Income & expenses; the rest wait behind "Show
+  // more" instead of a several-screen feed. Wider layouts keep every card.
+  const compactSplit = useMemo(() => splitCompactMoreCards(moreCardIds), [moreCardIds]);
+  const renderedCardIds = useMemo<MoreCardId[]>(() => {
+    if (!isCompact) return moreCardIds;
+    return showAllCards ? [...compactSplit.lead, ...compactSplit.rest] : compactSplit.lead;
+  }, [isCompact, showAllCards, moreCardIds, compactSplit]);
+
   const accountNames = useMemo(
     () => new Map(accounts.map((account) => [account.id, account.name])),
     [accounts]
@@ -278,7 +322,11 @@ export default function DashboardScreen() {
       ? ("missing" as const)
       : null;
 
-  const renderMoreCard = (id: MoreCardId) => {
+  /**
+   * `desktop`: the card sits in a desktop row (SPENDLY-718), stretched to it;
+   * `wide` also lays it out for a half-width-or-more cell.
+   */
+  const renderMoreCard = (id: MoreCardId, desktop = false, wide = desktop) => {
     switch (id) {
       case "cashFlow":
         return (
@@ -296,6 +344,8 @@ export default function DashboardScreen() {
             unavailable={summaryUnavailable}
             monthLabel={activeMonthChipLabel}
             onOpenMonthPicker={handleOpenMonthPicker}
+            wide={wide}
+            fill={desktop}
           />
           </>
         );
@@ -309,6 +359,21 @@ export default function DashboardScreen() {
             categoryTotals={activeSummary?.categoryTotals || {}}
             activeMonth={activeMonth}
             budget={monthBudget}
+            fill={desktop}
+            part={desktop ? "primary" : "all"}
+          />
+        );
+
+      case "budgetCategories":
+        return (
+          <BudgetAlertsWidget
+            monthlyBudget={settings.monthlyBudget}
+            monthlySpent={monthlySpent}
+            currency={displayCurrency}
+            categoryTotals={activeSummary?.categoryTotals || {}}
+            activeMonth={activeMonth}
+            budget={monthBudget}
+            part="rest"
           />
         );
 
@@ -316,7 +381,7 @@ export default function DashboardScreen() {
         return <FinancialGoalsWidget currency={displayCurrency} />;
 
       case "subscriptions":
-        return <SubscriptionsWidget currency={displayCurrency} />;
+        return <SubscriptionsWidget currency={displayCurrency} fill={desktop} />;
 
       case "focus":
         return (
@@ -353,29 +418,87 @@ export default function DashboardScreen() {
       </LazyMount>
     </GridItem>
   );
-  const insertInsightsAfter = Math.max(0, moreCardIds.indexOf("budgetAlerts"));
+  // Smart Insights follows Monthly Budget. On one column it waits with the
+  // "Show more" cards, so it never sits among the lead cards.
+  const insertInsightsAfter =
+    isCompact && !showAllCards
+      ? -1
+      : Math.max(isCompact ? compactSplit.lead.length - 1 : 0, renderedCardIds.indexOf("budgetAlerts"));
 
-  // SPENDLY-572/604: the dark Midnight Emerald scene now comes from the
-  // Expense shell (`app/(app)/_layout.tsx`), so every screen matches it.
-  return (
+  /**
+   * The "More" cards as grid items: each deferred and staggered (SPENDLY-402),
+   * Smart Insights after the card at `insightsAfter` (-1: not shown), and the
+   * hydration mark on the last.
+   */
+  const renderMoreItems = (ids: readonly MoreCardId[], entranceBase: number, insightsAfter: number) => {
+    return ids.flatMap((id, index) => {
+      const node = renderMoreCard(id);
+      if (!node) return [];
+      const isLast = index === ids.length - 1;
+      const items = [
+        <GridItem key={id}>
+          <LazyMount
+            delayMs={40 + index * 40}
+            minHeight={120}
+            onMount={
+              isLast
+                ? () => {
+                    if (!hydratedEmittedRef.current) {
+                      hydratedEmittedRef.current = true;
+                      perfMark("dashboard_hydrated");
+                    }
+                  }
+                : undefined
+            }
+          >
+            {/* SPENDLY-533: one short entrance per card, on mount only. */}
+            <DashboardEntrance index={entranceBase + index}>{node}</DashboardEntrance>
+          </LazyMount>
+        </GridItem>,
+      ];
+      if (index === insightsAfter) items.push(smartInsights);
+      return items;
+    });
+  };
+
+  const dashboardError =
+    financeError && recentExpenses.length === 0 && accounts.length === 0 ? (
+      <ErrorState
+        title="Couldn't load your dashboard"
+        description={financeError.message}
+      />
+    ) : null;
+
+  const spendingOverview = (wide: boolean) => (
+    <SpendingOverviewCard
+      categoryTotals={activeSummary?.categoryTotals || null}
+      currency={displayCurrency}
+      activeMonth={activeMonth}
+      monthLabel={activeMonthChipLabel}
+      onOpenMonthPicker={handleOpenMonthPicker}
+      loading={activeLoading && !activeSummary && !financeError}
+      unavailable={summaryUnavailable}
+      monthlyBudget={settings.monthlyBudget}
+      budget={monthBudget}
+      wide={wide}
+      fill={wide}
+    />
+  );
+
+  const recentActivityCard = (fill: boolean) => (
+    <RecentActivityWidget
+      items={recentActivity}
+      currency={displayCurrency}
+      loading={recentLoading && recentActivity.length === 0}
+      accountNames={accountNames}
+      onOpen={handleOpenActivity}
+      onViewAll={handleViewLedger}
+      fill={fill}
+    />
+  );
+
+  const notices = (
     <>
-    <PageShell
-      refreshing={refreshing}
-      onRefresh={handleRefresh}
-      contentContainerStyle={styles.container}
-      onScrollBeginDrag={() => sampleScrollFps("dashboard")}
-      // SPENDLY-566: the hero carries the app bar and runs under the status bar.
-      hideHeaderOffset
-      // SPENDLY-572: the scene is the backdrop; no decorative aura blobs.
-      withAura={false}
-    >
-      <DashboardHero onOpenProfile={openProfile} />
-
-      {/* Rides up over the hero's fade (DASHBOARD_HERO_OVERLAP). */}
-      <DashboardEntrance index={0}>
-        <NetWorthWidget netWorth={netWorth} currency={displayCurrency} />
-      </DashboardEntrance>
-
       {isDuress ? (
         <View
           style={[
@@ -436,13 +559,123 @@ export default function DashboardScreen() {
 
       <WelcomeScreen />
       <SetupChecklistWidget />
+    </>
+  );
 
-      {financeError && recentExpenses.length === 0 && accounts.length === 0 ? (
-        <ErrorState
-          title="Couldn't load your dashboard"
-          description={financeError.message}
+  if (desktopDashboard) {
+    const gap = desktopDashboardGap(viewportWidth);
+    const plan = planDesktopDashboard(moreCardIds);
+    const split = desktopAnalyticsSplit(viewportWidth);
+    /** A lower-row card, deferred like the More card it came from. */
+    const lazyCell = (id: MoreCardId, delayMs: number, index: number) => (
+      <LazyMount key={id} delayMs={delayMs} minHeight={120}>
+        <DashboardEntrance index={index} style={styles.fill}>
+          {renderMoreCard(id, true)}
+        </DashboardEntrance>
+      </LazyMount>
+    );
+
+    return (
+      <>
+      <PageShell
+        refreshing={refreshing}
+        onRefresh={handleRefresh}
+        contentContainerStyle={[styles.container, styles.desktopContent]}
+        onScrollBeginDrag={() => sampleScrollFps("dashboard")}
+        hideHeaderOffset
+        withAura={false}
+        layout="dashboard"
+      >
+        <DashboardHero onOpenProfile={openProfile} variant="desktop" bleed={DESKTOP_GUTTER} />
+        <DesktopDashboardLayout
+          gap={gap}
+          overview={
+            <DashboardEntrance index={0}>
+              <NetWorthWidget
+                variant="desktop"
+                gap={gap}
+                netWorth={netWorth}
+                currency={displayCurrency}
+                aside={<QuickAddWidget variant="panel" onViewAll={handleOpenAddSheet} style={styles.fill} />}
+              />
+            </DashboardEntrance>
+          }
+          notices={notices}
+          analyticsWeights={split.weights}
+          analytics={
+            dashboardError
+              ? [<View key="error">{dashboardError}</View>]
+              : [
+                  <DashboardEntrance key="spending" index={1} style={styles.fill}>
+                    {spendingOverview(true)}
+                  </DashboardEntrance>,
+                  plan.cashFlow ? (
+                    <DashboardEntrance key="cashFlow" index={2} style={styles.fill}>
+                      {renderMoreCard("cashFlow", true, split.cashFlowWide)}
+                    </DashboardEntrance>
+                  ) : null,
+                ]
+          }
+          lower={
+            dashboardError
+              ? []
+              : [
+                  plan.bills ? lazyCell("subscriptions", 40, 3) : null,
+                  <DashboardEntrance key="recent" index={4} style={styles.fill}>
+                    {recentActivityCard(true)}
+                  </DashboardEntrance>,
+                  plan.budget ? lazyCell("budgetAlerts", 80, 5) : null,
+                ]
+          }
+          more={
+            dashboardError ? null : (
+              <ResponsiveGrid gap={gap}>
+                {renderMoreItems(
+                  // Category Budgets only split out when Monthly Budget holds
+                  // the lower-row slot (otherwise they are that slot) and the
+                  // month has some; an empty card would leave a blank cell.
+                  plan.rest.filter(
+                    (id) => id !== "budgetCategories" || (settings.monthlyBudget > 0 && hasActiveCategoryBudgets)
+                  ),
+                  6,
+                  // Smart Insights after the first grid card (Category Budgets
+                  // when they split out), as close to Budget as the grid allows.
+                  0
+                )}
+              </ResponsiveGrid>
+            )
+          }
         />
-      ) : (
+      </PageShell>
+      <SideDrawer isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
+      </>
+    );
+  }
+
+  // SPENDLY-572/604: the dark Midnight Emerald scene now comes from the
+  // Expense shell (`app/(app)/_layout.tsx`), so every screen matches it.
+  return (
+    <>
+    <PageShell
+      refreshing={refreshing}
+      onRefresh={handleRefresh}
+      contentContainerStyle={styles.container}
+      onScrollBeginDrag={() => sampleScrollFps("dashboard")}
+      // SPENDLY-566: the hero carries the app bar and runs under the status bar.
+      hideHeaderOffset
+      // SPENDLY-572: the scene is the backdrop; no decorative aura blobs.
+      withAura={false}
+    >
+      <DashboardHero onOpenProfile={openProfile} />
+
+      {/* Rides up over the hero's fade (DASHBOARD_HERO_OVERLAP). */}
+      <DashboardEntrance index={0}>
+        <NetWorthWidget netWorth={netWorth} currency={displayCurrency} />
+      </DashboardEntrance>
+
+      {notices}
+
+      {dashboardError ?? (
         // SPENDLY-559: one column on phones, two on tablet web, three on
         // desktop web. The Visual First sections keep a full row; the "More"
         // cards share columns.
@@ -454,62 +687,27 @@ export default function DashboardScreen() {
           </GridItem>
 
           <GridItem key="spendingOverview" span="full">
-            <DashboardEntrance index={2}>
-              <SpendingOverviewCard
-                categoryTotals={activeSummary?.categoryTotals || null}
-                currency={displayCurrency}
-                activeMonth={activeMonth}
-                monthLabel={activeMonthChipLabel}
-                onOpenMonthPicker={handleOpenMonthPicker}
-                loading={activeLoading && !activeSummary && !financeError}
-                unavailable={summaryUnavailable}
-                monthlyBudget={settings.monthlyBudget}
-                budget={monthBudget}
-              />
-            </DashboardEntrance>
+            <DashboardEntrance index={2}>{spendingOverview(false)}</DashboardEntrance>
           </GridItem>
 
           <GridItem key="recentActivity" span="full">
-            <DashboardEntrance index={3}>
-              <RecentActivityWidget
-                items={recentActivity}
-                currency={displayCurrency}
-                loading={recentLoading && recentActivity.length === 0}
-                accountNames={accountNames}
-                onOpen={handleOpenActivity}
-                onViewAll={handleViewLedger}
-              />
-            </DashboardEntrance>
+            <DashboardEntrance index={3}>{recentActivityCard(false)}</DashboardEntrance>
           </GridItem>
 
-          {moreCardIds.flatMap((id, index) => {
-            const node = renderMoreCard(id);
-            if (!node) return [];
-            const isLast = index === moreCardIds.length - 1;
-            const items = [
-              <GridItem key={id}>
-                <LazyMount
-                  delayMs={40 + index * 40}
-                  minHeight={120}
-                  onMount={
-                    isLast
-                      ? () => {
-                          if (!hydratedEmittedRef.current) {
-                            hydratedEmittedRef.current = true;
-                            perfMark("dashboard_hydrated");
-                          }
-                        }
-                      : undefined
-                  }
-                >
-                  {/* SPENDLY-533: one short entrance per card, on mount only. */}
-                  <DashboardEntrance index={4 + index}>{node}</DashboardEntrance>
-                </LazyMount>
-              </GridItem>,
-            ];
-            if (index === insertInsightsAfter) items.push(smartInsights);
-            return items;
-          })}
+          {renderMoreItems(renderedCardIds, 4, insertInsightsAfter)}
+
+          {isCompact ? (
+            <GridItem key="showMoreCards" span="full">
+              <Button
+                variant="secondary"
+                size="md"
+                onPress={() => setShowAllCards((v) => !v)}
+                accessibilityLabel={showAllCards ? "Show fewer dashboard cards" : "Show more dashboard cards"}
+              >
+                {showAllCards ? "Show less" : "Show more"}
+              </Button>
+            </GridItem>
+          ) : null}
         </ResponsiveGrid>
       )}
     </PageShell>
@@ -521,6 +719,13 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     paddingBottom: 24,
+  },
+  desktopContent: {
+    paddingHorizontal: DESKTOP_GUTTER,
+    paddingBottom: 32,
+  },
+  fill: {
+    flex: 1,
   },
   grid: {
     marginTop: 18,

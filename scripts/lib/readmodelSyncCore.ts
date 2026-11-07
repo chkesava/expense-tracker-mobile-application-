@@ -44,6 +44,13 @@ export const ALWAYS_FULL = new Set(["accounts", "accountTypes", "accountTransfer
 export const OVERLAP_MS = 10 * 60 * 1000;
 export const PAGE_SIZE = 500;
 export const MASS_TOMBSTONE_MIN = 20;
+/**
+ * SPENDLY-712: a run still "running" this long after it started was stopped
+ * from outside (a Netlify time limit, a cancelled job) and never finished; the
+ * next run marks it failed. Longer than any real run (the nightly job's
+ * timeout is 30 minutes).
+ */
+export const ABANDONED_RUN_MS = 2 * 3600 * 1000;
 
 export type PageRequest =
   | { kind: "all"; limit: number; after?: unknown }
@@ -94,9 +101,17 @@ export type OpenFailure = { uid: string; collection: string; docId: string; erro
 
 export type SinkPort = {
   readsUsedSince(isoTime: string): Promise<number>;
-  lastRunNotes(mode: SyncMode): Promise<Record<string, unknown> | null>;
+  /**
+   * The notes of the latest run of this mode and trigger (SPENDLY-712: a push
+   * run's resume point is never the nightly's, and the reverse), if it stopped
+   * partway; else null. No trigger means scheduled or manual runs.
+   */
+  lastRunNotes(mode: SyncMode, trigger?: string): Promise<Record<string, unknown> | null>;
   checkpoints(): Promise<Checkpoint[]>;
-  startRun(mode: RunRecord["mode"], readBudget: number): Promise<number | null>;
+  /** `trigger` is stored with the run from the start (SPENDLY-712), so even a run that never finishes says what started it. */
+  startRun(mode: RunRecord["mode"], readBudget: number, trigger?: string): Promise<number | null>;
+  /** SPENDLY-712: marks runs still "running" that started before this time failed, keeping their notes; returns how many. */
+  closeAbandonedRuns?(startedBeforeIso: string): Promise<number>;
   upsert(table: string, rows: ReadModelRow[]): Promise<number>;
   liveIds(table: string, uid: string): Promise<string[]>;
   tombstone(table: string, uid: string, docIds: string[]): Promise<number>;
@@ -133,6 +148,13 @@ export type SyncOptions = {
   /** What started the run, recorded in its notes (SPENDLY-583: "push"). Scheduled/manual runs leave it unset. */
   trigger?: string;
   /**
+   * SPENDLY-712: stop once the run has taken this long, as partial with a
+   * resume point, like the read budget. A per-user push sync runs inside a
+   * Netlify function, which is killed at its time limit with the run left
+   * "running" forever.
+   */
+  timeLimitMs?: number;
+  /**
    * SPENDLY-672: on an incremental run, find changes with one collection-group
    * query per collection instead of two queries per (user, collection). The
    * always-full collections and the users/{uid} document still go per user.
@@ -142,7 +164,12 @@ export type SyncOptions = {
 
 export const hashUid = (uid: string) => `u#${createHash("sha256").update(uid).digest("hex").slice(0, 10)}`;
 
-class BudgetExhausted extends Error {}
+/** The read budget, or (`byTime`) the run's time limit, is used up. */
+class BudgetExhausted extends Error {
+  constructor(readonly byTime = false) {
+    super(byTime ? "time limit" : "read budget");
+  }
+}
 
 export async function runSync(source: SourcePort, sink: SinkPort, options: SyncOptions): Promise<RunRecord> {
   const log = options.log ?? (() => {});
@@ -163,7 +190,18 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
     failures: 0,
     notes: { syncMode: options.mode, usedLast24h: usedToday, ...(options.trigger ? { trigger: options.trigger } : {}) },
   };
-  const runId = await sink.startRun(runMode, budget);
+  if (!options.dryRun && sink.closeAbandonedRuns) {
+    try {
+      const closed = await sink.closeAbandonedRuns(new Date(startedMs - ABANDONED_RUN_MS).toISOString());
+      if (closed > 0) {
+        record.notes.abandonedRunsClosed = closed;
+        log(`[ABANDONED] marked ${closed} run(s) that never finished as failed`);
+      }
+    } catch (error) {
+      log(`[ABANDONED] couldn't close abandoned runs: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  const runId = await sink.startRun(runMode, budget, options.trigger);
 
   if (budget <= 0) {
     record.status = "partial";
@@ -177,6 +215,15 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
     record.readsUsed += n;
   };
   const remaining = () => budget - record.readsUsed;
+  const outOfTime = () => options.timeLimitMs !== undefined && options.now() - startedMs >= options.timeLimitMs;
+  /** Before each page: stop when the reads or the time are used up. */
+  const checkBudget = () => {
+    if (remaining() < 1) throw new BudgetExhausted();
+    if (outOfTime()) throw new BudgetExhausted(true);
+  };
+  const noteStop = (error: BudgetExhausted) => {
+    if (error.byTime) record.notes.stoppedBy = "time limit";
+  };
   let highWater = new Map<string, number | null>();
   const open: Record<string, Set<string>> = {};
 
@@ -233,7 +280,8 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
         } catch (error) {
           if (error instanceof BudgetExhausted) {
             record.status = "partial";
-            log(`[BUDGET] cross-user pass stopped at ${spec.collection} after ${record.readsUsed} reads (budget ${budget})`);
+            noteStop(error);
+            log(`[BUDGET] cross-user pass stopped at ${spec.collection} (${error.message}) after ${record.readsUsed} reads (budget ${budget})`);
             break;
           }
           record.failures += 1;
@@ -247,12 +295,12 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
       }
       record.notes.crossUserCollections = crossed.size;
       perUserTables = tables.filter((spec) => !crossed.has(spec.collection));
-      if (record.status === "partial" && remaining() < 1) perUserTables = [];
+      if (record.status === "partial" && (remaining() < 1 || outOfTime())) perUserTables = [];
     }
 
     // Fairness: resume where the last stopped run of this mode stopped.
     const pairs = uids.flatMap((uid) => perUserTables.map((spec) => ({ uid, spec })));
-    const resume = (await sink.lastRunNotes(options.mode))?.resumeFrom as { uid: string; collection: string } | undefined;
+    const resume = (await sink.lastRunNotes(options.mode, options.trigger))?.resumeFrom as { uid: string; collection: string } | undefined;
     const startAt = resume ? Math.max(0, pairs.findIndex((p) => p.uid === resume.uid && p.spec.collection === resume.collection)) : 0;
     const ordered = [...pairs.slice(startAt), ...pairs.slice(0, startAt)];
 
@@ -263,7 +311,8 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
         if (error instanceof BudgetExhausted) {
           record.status = "partial";
           record.notes.resumeFrom = { uid, collection: spec.collection };
-          log(`[BUDGET] stopped at ${hashUid(uid)}/${spec.collection} after ${record.readsUsed} reads (budget ${budget})`);
+          noteStop(error);
+          log(`[BUDGET] stopped at ${hashUid(uid)}/${spec.collection} (${error.message}) after ${record.readsUsed} reads (budget ${budget})`);
           break;
         }
         record.failures += 1;
@@ -308,7 +357,7 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
     for (const { field, type: fieldType } of changeFieldsOf(spec)) {
       let after: unknown;
       for (;;) {
-        if (remaining() < 1) throw new BudgetExhausted();
+        checkBudget();
         const limit = Math.min(PAGE_SIZE, remaining());
         const page = await source.readChangedAcrossUsers!(spec.collection, { field, fieldType, sinceMs, limit, after });
         spend(page.reads);
@@ -363,7 +412,7 @@ export async function runSync(source: SourcePort, sink: SinkPort, options: SyncO
     const openHere = open[`${uid}/${spec.collection}`];
     let after: unknown;
     for (;;) {
-      if (remaining() < 1) throw new BudgetExhausted();
+      checkBudget();
       const limit = Math.min(PAGE_SIZE, remaining());
       const page = await source.readPage(uid, spec.collection, { ...request, limit, after } as PageRequest);
       spend(page.reads ?? Math.max(1, page.docs.length));

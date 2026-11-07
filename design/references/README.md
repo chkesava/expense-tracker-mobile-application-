@@ -26,6 +26,7 @@ design/references/
 | `spendly-budget-progress-drilldown.png` | 1536 × 1024 |
 | `spendly-dashboard-moodboard.png` | 1536 × 1024 |
 | `spendly-dashboard-reference.png` | 887 × 1774 |
+| `spendly-desktop-dashboard-reference.png` | 1672 × 941 (SPENDLY-718 desktop web dashboard) |
 | `spendly-highest-spending-categories.png` | 1536 × 1024 |
 | `spendly-individual-transaction-details.png` | 1536 × 1024 |
 | `spendly-recent-transactions-drilldown.png` | 1536 × 1024 |

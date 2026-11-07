@@ -36,7 +36,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useReadModelMode, useReadModelSource } from "@/hooks/useReadModelSource";
-import { billPassHasWork, billPassReadsCopy, loadAuthoritativeBillInputs, toCreditCardBill, type AuthoritativeReader, type BillPassInputs } from "@/lib/readModelLocal/billPass";
+import { billPassFingerprint, billPassHasWork, billPassReadsCopy, loadAuthoritativeBillInputs, toCreditCardBill, type AuthoritativeReader, type BillPassInputs } from "@/lib/readModelLocal/billPass";
 import { toSourceDocs } from "@/lib/readModelLocal/readSource";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useExpenses } from "@/hooks/useExpenses";
@@ -124,6 +124,11 @@ type CreditCardBillsContextType = {
     }
   ) => Promise<boolean>;
   cancelBill: (billId: string) => Promise<boolean>;
+  /**
+   * SPENDLY-719: settle stored bills against the ledger soon. Call after a
+   * write that moves a card's settlement outside this provider (cashback).
+   */
+  requestBillPass: () => void;
   /**
    * SPENDLY-99: what a settled auto statement would become if recomputed
    * against full history, or null when there is nothing to correct. Pure —
@@ -238,6 +243,26 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   const autoGenerateToastShown = useRef(false);
   const lastAutoBillFingerprintRef = useRef("");
   const didInitialAutoGenerate = useRef(false);
+  // SPENDLY-719: a pass asked for while one is running runs right after it,
+  // instead of being dropped (the bill stamp it would correct lands mid-pass).
+  const autoGenerateRerun = useRef(false);
+  // An unfinished pass (a skipped compare-and-set, or offline) retries a few
+  // times, then waits for the next trigger rather than looping.
+  const autoGenerateRetries = useRef(0);
+  const generateAutoBillsRef = useRef<(() => Promise<void>) | null>(null);
+
+  /**
+   * SPENDLY-719: run the bill pass soon. Money actions call this so the
+   * stored bill (`amountPaid`, `status`, `remainingAmount`, which the bills
+   * list and the server's reminders read) matches the ledger at once,
+   * cashback included, instead of waiting for the next app focus.
+   */
+  const requestBillPass = useCallback((delayMs = 400) => {
+    if (autoGenerateTimer.current) clearTimeout(autoGenerateTimer.current);
+    autoGenerateTimer.current = setTimeout(() => {
+      void generateAutoBillsRef.current?.();
+    }, delayMs);
+  }, []);
 
   const globalPrefs = settings.creditCardBillReminders;
   const timezone = settings.timezone;
@@ -503,7 +528,10 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     }
     const db = getFirestoreDb();
     if (!db) return;
-    if (autoGenerateInFlight.current) return;
+    if (autoGenerateInFlight.current) {
+      autoGenerateRerun.current = true;
+      return;
+    }
     autoGenerateInFlight.current = true;
     passSeenBillIds.current = new Set(bills.map((bill) => bill.id));
 
@@ -563,35 +591,19 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         [...patchedPreview.values()],
         todayDateKey(timezone)
       );
-      const fingerprint = JSON.stringify({
-        drafts: drafts
-          .map(
-            (draft) =>
-              `${draft.accountId}:${draft.billingPeriodStart}:${draft.statementAmount}`
-          )
-          .sort(),
-        patches: patches
-          .map(
-            (patch) =>
-              `${patch.billId}:${patch.statementAmount}:${patch.dueDate}:${patch.billingPeriodStart}:${patch.billingPeriodEnd}`
-          )
-          .sort(),
-        allocations: previewAllocations
-          .map(
-            (allocation) =>
-              `${allocation.billId}:${allocation.amountPaid}:${allocation.paymentIds.join(",")}`
-          )
-          .sort(),
-        duplicates: previewDuplicateResolutions
-          .map(
-            (resolution) =>
-              `${resolution.canonicalId}:${resolution.canonicalPatch?.amountPaid ?? ""}:${resolution.canonicalPatch?.status ?? ""}:${resolution.cancelIds.join(",")}`
-          )
-          .sort(),
+      const fingerprint = billPassFingerprint({
+        drafts,
+        patches,
+        allocations: previewAllocations,
+        duplicates: previewDuplicateResolutions,
+        bills,
       });
       if (fingerprint === lastAutoBillFingerprintRef.current) {
         return;
       }
+      // SPENDLY-719: a skipped or failed write leaves this pass unfinished, so
+      // its fingerprint is not recorded and the next pass tries again.
+      let incomplete = false;
 
       let created = 0;
       for (const draft of drafts) {
@@ -739,9 +751,11 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           else {
             // Keep the in-memory view on the stored doc, not the skipped patch.
             patchedBills.set(allocation.billId, existing);
+            incomplete = true;
           }
         } catch (err) {
           patchedBills.set(allocation.billId, existing);
+          incomplete = true;
           logWarning("creditCardBills.allocatePayments", err);
         }
       }
@@ -796,7 +810,13 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      lastAutoBillFingerprintRef.current = fingerprint;
+      lastAutoBillFingerprintRef.current = incomplete ? "" : fingerprint;
+      if (!incomplete) {
+        autoGenerateRetries.current = 0;
+      } else if (autoGenerateRetries.current < 3) {
+        autoGenerateRetries.current += 1;
+        requestBillPass(1500);
+      }
     };
 
     try {
@@ -816,6 +836,10 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       logError("creditCardBills.autoPass", err);
     } finally {
       autoGenerateInFlight.current = false;
+      if (autoGenerateRerun.current) {
+        autoGenerateRerun.current = false;
+        requestBillPass();
+      }
     }
   }, [
     user,
@@ -831,7 +855,12 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     timezone,
     globalPrefs.enabled,
     settings.currency,
+    requestBillPass,
   ]);
+
+  useEffect(() => {
+    generateAutoBillsRef.current = generateAutoBills;
+  }, [generateAutoBills]);
 
   const scheduleAutoGenerate = useCallback(() => {
     if (autoGenerateTimer.current) clearTimeout(autoGenerateTimer.current);
@@ -1047,9 +1076,11 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       if (derived.status === "PAID") {
         await cancelBillReminders(billId);
       }
+      // The stamp above counts cash only; the ledger also counts cashback.
+      requestBillPass();
       return true;
     },
-    [user, bills, timezone, globalPrefs.enabled]
+    [user, bills, timezone, globalPrefs.enabled, requestBillPass]
   );
 
   const recordBillPayment = useCallback(
@@ -1066,6 +1097,9 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           await cancelBillReminders(input.bill.id);
         }
         toast.success(writeSavedMessage(result.outcome, "Bill payment recorded"));
+        // SPENDLY-719: the stamp counts this payment only; settle the stored
+        // bill against the ledger (cashback included) now.
+        requestBillPass();
         return result.paymentId;
       } catch (err) {
         logError("creditCardBills.recordBillPayment", err);
@@ -1073,7 +1107,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         return null;
       }
     },
-    [user, timezone]
+    [user, timezone, requestBillPass]
   );
 
   const editBillPayment = useCallback(
@@ -1103,6 +1137,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           }
         }
         toast.success(writeSavedMessage(result.outcome, "Payment updated"));
+        requestBillPass();
         return true;
       } catch (err) {
         logError("creditCardBills.editBillPayment", err);
@@ -1110,7 +1145,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         return false;
       }
     },
-    [user, timezone, refreshReminderSchedules]
+    [user, timezone, refreshReminderSchedules, requestBillPass]
   );
 
   const markBillPaid = useCallback(
@@ -1131,13 +1166,15 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         : existing.paymentIds;
 
       void opts.recordPaymentOnlyOnBill;
-      return updateBill(billId, {
+      const ok = await updateBill(billId, {
         amountPaid: Math.max(amountPaid, existing.statementAmount),
         paymentDate: opts.paymentDate,
         paymentIds,
       });
+      if (ok) requestBillPass();
+      return ok;
     },
-    [bills, updateBill]
+    [bills, updateBill, requestBillPass]
   );
 
   const cancelBill = useCallback(
@@ -1172,6 +1209,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       createBill,
       updateBill,
       applyPaymentToBill,
+      requestBillPass,
       recordBillPayment,
       editBillPayment,
       markBillPaid,
@@ -1188,6 +1226,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       createBill,
       updateBill,
       applyPaymentToBill,
+      requestBillPass,
       recordBillPayment,
       editBillPayment,
       markBillPaid,

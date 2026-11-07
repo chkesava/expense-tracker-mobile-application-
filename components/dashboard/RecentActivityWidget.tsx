@@ -33,6 +33,8 @@ export interface RecentActivityWidgetProps {
   /** SPENDLY-576: opens the row's transaction detail (edit lives there). */
   onOpen: (item: RecentActivityItem) => void;
   onViewAll: () => void;
+  /** SPENDLY-718: stretch to the desktop dashboard row's height. */
+  fill?: boolean;
 }
 
 /**
@@ -47,6 +49,7 @@ export const RecentActivityWidget = memo(function RecentActivityWidget({
   accountNames,
   onOpen,
   onViewAll,
+  fill = false,
 }: RecentActivityWidgetProps) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
@@ -75,6 +78,7 @@ export const RecentActivityWidget = memo(function RecentActivityWidget({
 
   return (
     <Section
+      fill={fill}
       // SPENDLY-566: Visual First header. SPENDLY-413 still holds: the feed is
       // a recent-first page, not the lifetime ledger, so nothing asserts a count.
       title="Recent Transactions"

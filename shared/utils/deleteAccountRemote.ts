@@ -39,6 +39,10 @@ export const DELETE_PHASES = [
   "ganesh",
   "user-tree",
   "duress-tree",
+  // SPENDLY-711: the account's stored files (documents, goal photos, tax
+  // documents) in the private `spendly-files` bucket. Before `auth` for the
+  // same reason as the read model: a failure is retried, never orphaned.
+  "files",
   // SPENDLY-508: the Supabase read-model copy. Before `auth`, so a failed
   // purge is retried by a still-signed-in user rather than orphaned.
   "readmodel",
@@ -78,6 +82,8 @@ export type DeleteCounts = {
   memberships: number;
   /** Rows erased from the Supabase read model (SPENDLY-508). */
   readModelRows: number;
+  /** Stored files erased from `spendly-files` (SPENDLY-711). */
+  files: number;
 };
 
 export type DeleteAccountResponse = {
@@ -103,6 +109,7 @@ export const EMPTY_DELETE_COUNTS: DeleteCounts = {
   userCollections: 0,
   memberships: 0,
   readModelRows: 0,
+  files: 0,
 };
 
 export function deleteAccountFunctionUrl(origin: string): string {
@@ -183,6 +190,8 @@ export function deletePhaseLabel(phase: DeletePhase): string {
       return "Deleting your data…";
     case "duress-tree":
       return "Deleting hidden data…";
+    case "files":
+      return "Deleting your documents and photos…";
     case "readmodel":
       return "Deleting your reporting copy…";
     case "auth":

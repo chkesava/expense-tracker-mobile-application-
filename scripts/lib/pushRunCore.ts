@@ -194,8 +194,11 @@ export async function runPushReminders(opts: RunOptions): Promise<RunSummary> {
   };
 
   const receipts = await processPendingReceipts(db, ports, opts.now, opts.dryRun);
+  // SPENDLY-715: a dry run writes nothing, so the sources' onSent hooks (the
+  // bill source writes a reminder log) are left out.
+  const sources = opts.dryRun ? opts.sources.map(({ onSent: _onSent, ...source }) => source) : opts.sources;
   const engine = await runReminderTick(
-    opts.sources,
+    sources,
     {
       loadSettings,
       push: ports,
