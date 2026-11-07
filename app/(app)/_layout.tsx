@@ -179,6 +179,19 @@ function AppShellInner() {
                 animation: "slide_from_right",
               }}
             />
+            {/* SPENDLY-290: Tax & ITR Readiness Center (flagged; the screens redirect when off). */}
+            <Stack.Screen
+              name="tax/index"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="tax/[fy]/income"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
             <Stack.Screen
               name="app-selector"
               options={{

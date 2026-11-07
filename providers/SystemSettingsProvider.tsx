@@ -32,6 +32,10 @@ export type SystemSettings = {
   enableSaveGoals?: boolean;
   /** SPENDLY-615: staged rollout — uids that see Save Goals before everyone. */
   enableSaveGoalsFor?: string[];
+  /** SPENDLY-288 Tax & ITR Readiness Center screens; see hooks/useTaxCenterEnabled.ts. */
+  enableTaxCenter?: boolean;
+  /** SPENDLY-288: staged rollout — uids that see the Tax center before everyone. */
+  enableTaxCenterFor?: string[];
   /**
    * SPENDLY-511: per-screen read source, e.g. `{ journal: "supabase" }`.
    * Missing or unknown values mean `firestore` (shared/utils/readModelMode.ts).

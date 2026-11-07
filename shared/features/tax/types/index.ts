@@ -518,7 +518,17 @@ export interface TaxDerivedItem {
   defaultIncluded: boolean;
   provenance: TaxProvenance;
   label: string;
+  /** Why the user should look at it before it counts (SPENDLY-290). */
+  attention?: TaxAttention;
 }
+
+/**
+ * Why a derived item needs the user's eye:
+ *   - `confirm_to_count`: plausible but not certain income; left out until confirmed.
+ *   - `legacy_label`: an older Spendly label that may hide interest or dividends.
+ *   - `calculated`: Spendly worked the amount out (FD interest); check it against a certificate.
+ */
+export type TaxAttention = "confirm_to_count" | "legacy_label" | "calculated";
 
 export type TaxLineReason =
   | "source_changed"
@@ -537,6 +547,7 @@ export interface TaxLine {
   state: TaxItemState;
   provenance: TaxProvenance;
   label: string;
+  attention?: TaxAttention;
   /** Set when the user's decision changed what Spendly derived. */
   override?: {
     reviewId: string;

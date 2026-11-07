@@ -55,6 +55,15 @@ describe("resolveDerivedLine", () => {
     expect(line.override).toMatchObject({ decision: "confirm", derivedValue: 1200 });
   });
 
+  it("counts an item Spendly leaves out by default once the user confirms it", () => {
+    const item = { ...derived("i1", 1200), defaultIncluded: false, attention: "calculated" as const };
+    expect(resolveDerivedLine(item, undefined, ctx)).toMatchObject({ included: false, attention: "calculated" });
+    expect(resolveDerivedLine(item, review("i1", {}), ctx)).toMatchObject({ included: true, state: "user_confirmed" });
+    expect(
+      resolveDerivedLine(item, review("i1", { decision: "recategorize", category: "interest_deposit" }), ctx)
+    ).toMatchObject({ included: true, category: "interest_deposit" });
+  });
+
   it("keeps an exclusion and shows what Spendly had derived", () => {
     const line = resolveDerivedLine(derived("i1", 1200), review("i1", { decision: "exclude" }), ctx);
     expect(line).toMatchObject({ included: false, state: "user_confirmed" });
