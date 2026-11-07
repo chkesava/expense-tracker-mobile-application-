@@ -280,6 +280,34 @@ function buildDemoData(today = new Date()) {
     taxDocument('taxdoc-ais', 'ais', 'AIS download', 'AIS.pdf', 'pending', 96000, new Date(lastFyStart + 1, 5, 20)),
   ];
 
+  // SPENDLY-291: TDS records for that year, so the comparison shows each state:
+  // a Form 16 whose 26AS line differs by ₹340, an interest certificate that
+  // matches, and a 26AS line with no certificate. The dedupe keys follow
+  // shared/features/tax/utils/dedupe.ts.
+  const taxAt = new Date(lastFyStart + 1, 5, 15);
+  const taxEntry = (id, kind, fields, dedupeKey) => ({
+    id,
+    data: {
+      fy: fyKey,
+      kind,
+      fields,
+      dedupeKey: `${fyKey}|${kind}|${dedupeKey}`,
+      revision: 1,
+      schemaVersion: 1,
+      createdAtMs: taxAt.getTime(),
+      updatedAtMs: taxAt.getTime(),
+      createdAt: taxAt,
+      updatedAt: taxAt,
+    },
+  });
+  const taxEntries = [
+    taxEntry('taxentry-form16', 'form16', { employerName: 'Acme Software Pvt Ltd', tan: 'BLRA12345B', grossSalary: 1176000, standardDeduction: 75000, tdsDeducted: 92340 }, 'BLRA12345B||'),
+    taxEntry('taxentry-26as-salary', 'ais_value', { statement: '26AS', infoCategory: 'salary', sourceName: 'ACME SOFTWARE PVT LTD', tan: 'BLRA12345B', section: '192', reportedAmount: 1176000, tdsAmount: 92000 }, '26AS|salary|BLRA12345B|192|1176000.00'),
+    taxEntry('taxentry-16a-sbi', 'tds', { deductorName: 'State Bank of India', tan: 'MUMS98765C', section: '194A', form: '16A', quarter: 'Q3', amountPaid: 18405, tdsAmount: 1840.5 }, 'MUMS98765C|194a|Q3|1840.50'),
+    taxEntry('taxentry-26as-sbi', 'ais_value', { statement: '26AS', infoCategory: 'interest', sourceName: 'STATE BANK OF INDIA', tan: 'MUMS98765C', section: '194A', reportedAmount: 18405, tdsAmount: 1840.5 }, '26AS|interest|MUMS98765C|194a|18405.00'),
+    taxEntry('taxentry-26as-other', 'ais_value', { statement: '26AS', infoCategory: 'dividend', sourceName: 'INFOSYS LTD', tan: 'BLRI11111I', section: '194', reportedAmount: 3120, tdsAmount: 312 }, '26AS|dividend|BLRI11111I|194|3120.00'),
+  ];
+
   const currentMonth = ym(today);
   const categoryBudgets = BUDGETS.map(([category, amount], i) => ({
     id: `budget-${i + 1}`,
@@ -402,6 +430,7 @@ function buildDemoData(today = new Date()) {
       holdings,
       investments,
       taxDocuments,
+      taxEntries,
     },
     portfolioSettings,
   };

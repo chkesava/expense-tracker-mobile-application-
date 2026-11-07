@@ -70,6 +70,12 @@ export const TAX_SOURCE_KINDS = [
   "tax_entry",
   /** A readiness checklist item (SPENDLY-296); `id` is the item id. */
   "checklist",
+  /**
+   * A TDS reconciliation row (SPENDLY-291); `id` is its match key. Only
+   * `confirm` ("accept this difference"), with the difference accepted as
+   * `sourceAmount`, so a different difference re-opens it.
+   */
+  "reconciliation",
 ] as const;
 export type TaxSourceKind = (typeof TAX_SOURCE_KINDS)[number];
 

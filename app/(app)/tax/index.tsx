@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Redirect, useLocalSearchParams, useRouter, type Href } from "expo-router";
-import { ChevronRight, FolderLock, IndianRupee, Landmark } from "lucide-react-native";
+import { ChevronRight, FolderLock, IndianRupee, Landmark, Scale } from "lucide-react-native";
 import type { ReactNode } from "react";
 
 import { LoadingState } from "@/components/common/LoadingState";
@@ -62,6 +62,13 @@ export default function TaxCenterScreen() {
             icon={<IndianRupee size={20} color={theme.colors.primary} />}
             accessibilityLabel={`Income for ${taxYearLabel(fy)}`}
             onPress={() => router.push(`/tax/${fy}/income` as Href)}
+          />
+          <SectionRow
+            title="TDS & Form 16"
+            subtitle="Form 16, TDS certificates and your AIS or 26AS, compared"
+            icon={<Scale size={20} color={theme.colors.primary} />}
+            accessibilityLabel={`TDS and Form 16 for ${taxYearLabel(fy)}`}
+            onPress={() => router.push(`/tax/${fy}/tds` as Href)}
           />
           <SectionRow
             title="Documents"

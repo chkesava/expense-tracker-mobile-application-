@@ -196,6 +196,13 @@ function AppShellInner() {
                 animation: "slide_from_right",
               }}
             />
+            {/* SPENDLY-291: TDS, Form 16 and the AIS/26AS comparison. */}
+            <Stack.Screen
+              name="tax/[fy]/tds"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
             {/* SPENDLY-298: the year's tax documents. */}
             <Stack.Screen
               name="tax/[fy]/documents"

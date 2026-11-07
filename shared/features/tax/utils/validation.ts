@@ -374,6 +374,8 @@ export function validateTaxReview(review: Omit<TaxReview, "id">): TaxIssue[] {
 
   const isChecklist = review.sourceKind === "checklist";
   if (isChecklist && !CHECKLIST_DECISIONS.has(review.decision)) issues.add("decision", "not_allowed");
+  // SPENDLY-291: a reconciliation row can only have its difference accepted.
+  if (review.sourceKind === "reconciliation" && review.decision !== "confirm") issues.add("decision", "not_allowed");
   if (!isChecklist && (review.decision === "defer" || review.decision === "resolve")) {
     issues.add("decision", "not_allowed");
   }

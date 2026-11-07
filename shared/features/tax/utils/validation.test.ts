@@ -204,6 +204,12 @@ describe("reviews", () => {
     });
   });
 
+  it("lets a reconciliation row only have its difference accepted (SPENDLY-291)", () => {
+    const rec = { ...base, sourceKind: "reconciliation" as const, sourceId: "MUMS98765C--194a", sourceAmount: 340 };
+    expect(validateTaxReview(rec)).toEqual([]);
+    expect(validateTaxReview({ ...rec, decision: "exclude" })).toContainEqual({ field: "decision", code: "not_allowed" });
+  });
+
   it("allows defer and resolve only on checklist items, which carry no amount", () => {
     expect(validateTaxReview({ ...base, decision: "defer" })).toContainEqual({
       field: "decision",

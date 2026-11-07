@@ -34,8 +34,9 @@ const CODE_TEXT: Record<TaxIssueCode, string> = {
   not_owner: "doesn't belong to you",
 };
 
-export function taxIssueMessage(issue: TaxIssue | undefined): string {
+/** `labels` names a form's own fields (e.g. `entryFormLabels`); they win over the defaults. */
+export function taxIssueMessage(issue: TaxIssue | undefined, labels: Record<string, string> = {}): string {
   if (!issue) return "Check the details and try again.";
-  const field = FIELD_NAMES[issue.field] ?? "This value";
+  const field = labels[issue.field] ?? FIELD_NAMES[issue.field] ?? "This value";
   return `${field} ${CODE_TEXT[issue.code]}.`;
 }
