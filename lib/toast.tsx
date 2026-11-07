@@ -2,6 +2,8 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -22,6 +24,7 @@ import { ShellThemeScope, useTheme } from "@/theme/ThemeProvider";
 import { haptic } from "@/lib/haptics";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { SPENDLY_DIALOG_MAX_WIDTH } from "@/shared/utils/responsiveLayout";
+import { activeToastHost, addToastHost, removeToastHost, ROOT_TOAST_HOST } from "@/lib/toastHosts";
 
 export type ToastKind = "success" | "error" | "info" | "warning" | "message";
 
@@ -43,6 +46,16 @@ type ToastApi = {
 
 const ToastContext = createContext<ToastApi | undefined>(undefined);
 
+/** SPENDLY-708: what an open sheet needs to draw the toasts itself. */
+type ToastHostState = {
+  items: ToastItem[];
+  dismiss: (id: string) => void;
+  active: string;
+  register: (id: string) => () => void;
+};
+
+const ToastHostContext = createContext<ToastHostState | undefined>(undefined);
+
 let externalApi: ToastApi | null = null;
 
 /** Imperative toast API (mirrors web `lib/toast.ts` surface for Phase 1). */
@@ -58,6 +71,7 @@ export const toast: ToastApi = {
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
+  const [hosts, setHosts] = useState<string[]>([]);
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const dismiss = useCallback((id?: string) => {
@@ -104,14 +118,47 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   externalApi = api;
 
+  const register = useCallback((id: string) => {
+    setHosts((prev) => addToastHost(prev, id));
+    return () => setHosts((prev) => removeToastHost(prev, id));
+  }, []);
+  const active = activeToastHost(hosts);
+  const hostState = useMemo<ToastHostState>(
+    () => ({ items, dismiss, active, register }),
+    [items, dismiss, active, register]
+  );
+
   return (
     <ToastContext.Provider value={api}>
-      {children}
-      {/* SPENDLY-604: toasts match a shell that pins its palette. */}
-      <ShellThemeScope>
-        <ToastViewport items={items} onDismiss={dismiss} />
-      </ShellThemeScope>
+      <ToastHostContext.Provider value={hostState}>
+        {children}
+        {/* SPENDLY-604: toasts match a shell that pins its palette. */}
+        {active === ROOT_TOAST_HOST ? (
+          <ShellThemeScope>
+            <ToastViewport items={items} onDismiss={dismiss} />
+          </ShellThemeScope>
+        ) : null}
+      </ToastHostContext.Provider>
     </ToastContext.Provider>
+  );
+}
+
+/**
+ * SPENDLY-708: draws the toasts inside an open sheet's own window, which sits
+ * above the app's main view on web and native. Rendered by
+ * `components/common/Modal` while it is open; only the newest open sheet draws
+ * them, and the main view takes them back when it closes.
+ */
+export function ToastSheetHost() {
+  const state = useContext(ToastHostContext);
+  const id = useId();
+  const register = state?.register;
+  useEffect(() => (register ? register(id) : undefined), [register, id]);
+  if (!state || state.active !== id) return null;
+  return (
+    <ShellThemeScope>
+      <ToastViewport items={state.items} onDismiss={state.dismiss} />
+    </ShellThemeScope>
   );
 }
 
