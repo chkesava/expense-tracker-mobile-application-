@@ -122,6 +122,7 @@ key, the service account's key id or any private key is found in the output.
 | `CLOUDFLARE_BACKUP_ORIGIN` | GitHub variable | the workflow: becomes `EXPO_PUBLIC_SHARE_URL`; the smoke test | Client (public address) |
 | `FIREBASE_SERVICE_ACCOUNT` | GitHub secret → **Pages secret** (set by the workflow) | readmodel-claims, nutrition-ai (verify sign-ins, set the read-model claim) | **Server** |
 | `GEMINI_API_KEY` (falls back to the older `EXPO_PUBLIC_GEMINI_API_KEY` secret, as the Netlify deploy does) | GitHub secret → **Pages secret** | nutrition-ai | **Server**. Never in the app; the workflow strips `EXPO_PUBLIC_GEMINI_API_KEY` from `.env`. |
+| `COINGECKO_API_KEY` (optional; a free CoinGecko **Demo** key, SPENDLY-714) | GitHub secret → **Pages secret** | crypto, which sends it as `x-cg-demo-api-key` | **Server**. Without it, crypto prices on the backup get 429 (CoinGecko refuses Cloudflare's shared addresses). Netlify doesn't need it. |
 | `MOBILE_ENV_FILE` *or* the individual `EXPO_PUBLIC_FIREBASE_*`, `EXPO_PUBLIC_SUPABASE_*`, `EXPO_PUBLIC_READMODEL_SUPABASE_PUBLISHABLE_KEY`, `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, `EXPO_PUBLIC_APP_URL` secrets | GitHub secrets (shared with the Netlify workflow) | the web build | Client (public config) |
 | `READMODEL_SUPABASE_URL` | GitHub variable (shared) | the web build, as `EXPO_PUBLIC_READMODEL_SUPABASE_URL` | Client |
 | `EXPO_PUBLIC_SHARE_URL` | **Not used** by this workflow | replaced by `CLOUDFLARE_BACKUP_ORIGIN` | Client |
