@@ -1,7 +1,12 @@
 # SPENDLY-621 — Cloudflare Pages backup for the Spendly web deployment
 
-Epic branch: `feature/SPENDLY-621-cloudflare-web-backup` (from `main` 363e4e6a).
-Worktree: `C:\dev\worktrees\spendly-621`.
+**Done 2026-11-07.** Live at https://spendly-web-backup.pages.dev. Merged to
+`main` in PR #266 (a54adea8), with fixes in PR #268 and PR #270.
+
+**Left over:**
+- Crypto prices don't load on the backup: CoinGecko answers 429 to Cloudflare's
+  addresses.
+- SPENDLY-707 (native failover).
 
 ## Why
 The web apps and all 14 serverless functions run only on Netlify
@@ -15,12 +20,12 @@ site, and the app's default URLs don't change.
 
 | Key | Story | State |
 |---|---|---|
-| SPENDLY-701 | S1 Test on Cloudflare, compatibility matrix | Merged into epic ([matrix](SPENDLY-621-compatibility.md)) |
-| SPENDLY-702 | S2 Static site and routing for Cloudflare Pages | Merged into epic (34d469a7) ([doc](SPENDLY-702-cloudflare-routing.md)) |
-| SPENDLY-703 | S3 Worker, request adapter, the functions that run on Cloudflare | Merged into epic (ba09b17e) ([doc](SPENDLY-703-cloudflare-worker.md)) |
+| SPENDLY-701 | S1 Test on Cloudflare, compatibility matrix | Done, on main (PR #266) ([matrix](SPENDLY-621-compatibility.md)) |
+| SPENDLY-702 | S2 Static site and routing for Cloudflare Pages | Done, on main (PR #266) ([doc](SPENDLY-702-cloudflare-routing.md)) |
+| SPENDLY-703 | S3 Worker, request adapter, the functions that run on Cloudflare | Done, on main (PR #266) ([doc](SPENDLY-703-cloudflare-worker.md)) |
 | SPENDLY-704 | S4 The 6 firebase-admin functions | Won't do (D5) |
-| SPENDLY-705 | S5 Manual-only backup workflow and smoke tests | Merged into epic (f4577758) ([doc](SPENDLY-705-cloudflare-backup-workflow.md)) |
-| SPENDLY-706 | S6 Runbook, secrets checklist, operator setup, first end-to-end run | Runbook merged into epic (d54352bd); owner setup + first run pending, after the epic reaches `main` ([doc](SPENDLY-706-cloudflare-backup-runbook.md), [runbook](WEB_BACKUP_CLOUDFLARE_RUNBOOK.md)) |
+| SPENDLY-705 | S5 Manual-only backup workflow and smoke tests | Done, on main (PR #266; fixes #268, #270) ([doc](SPENDLY-705-cloudflare-backup-workflow.md)) |
+| SPENDLY-706 | S6 Runbook, secrets checklist, operator setup, first end-to-end run | Done: first successful run 42354808510, owner sign-in confirmed ([doc](SPENDLY-706-cloudflare-backup-runbook.md), [runbook](WEB_BACKUP_CLOUDFLARE_RUNBOOK.md)) |
 
 Follow-up, not in this epic: SPENDLY-707 native app failover.
 
