@@ -4,7 +4,7 @@
 
 **Worktree:** `C:\dev\worktrees\spendly-288`.
 
-**Plan:** [SPENDLY-288-plan.md](SPENDLY-288-plan.md), a draft awaiting the user's approval.
+**Plan:** [SPENDLY-288-plan.md](SPENDLY-288-plan.md), approved by the user on 2026-11-07 with D1–D9 as recommended.
 
 ## The problem
 Spendly users get no help preparing for their Indian income-tax return. Income, TDS, deductions, capital gains, tax payments, documents and deadlines are scattered.
@@ -26,10 +26,10 @@ The order below is the proposed working order (plan §4).
 
 | Story | Scope | State |
 |---|---|---|
-| SPENDLY-289 | FY/AY model and tax data contract (pure) | Planned |
-| NEW-T1 | Tax persistence, dual write and read model | Proposed (D1) |
+| SPENDLY-289 | FY/AY model and tax data contract (pure) | Built on `feature/SPENDLY-289-tax-model`; awaiting merge approval |
+| SPENDLY-709 | Tax persistence, dual write and read model | Planned (D1) |
 | SPENDLY-290 | Income aggregation and tax center shell | Planned |
-| SPENDLY-298 | Tax document center (vault and attach) | Planned (moved earlier, D4) |
+| SPENDLY-298 | Tax document center (vault and attach) | Planned (moved earlier, D4); blocked by SPENDLY-711 |
 | SPENDLY-291 | TDS, Form 16/16A and AIS/TIS/26AS reconciliation | Planned |
 | SPENDLY-292 | Deductions tracker | Planned |
 | SPENDLY-294 | Advance-tax and self-assessment payments | Planned |
@@ -37,8 +37,19 @@ The order below is the proposed working order (plan §4).
 | SPENDLY-295 | Calculation engine and regime comparison | Planned |
 | SPENDLY-296 | Readiness dashboard and checklist | Planned |
 | SPENDLY-297 | Calendar deadlines and reminders | Planned |
-| NEW-T2 | Exportable readiness summary | Proposed (D4) |
+| SPENDLY-710 | Exportable readiness summary | Planned (D4) |
 | SPENDLY-299 | QA, privacy, accuracy and rollout | Planned |
 
 ## Decisions
-Pending: D1–D9 in the plan, §6.
+All of D1–D9 (plan §6) were approved as recommended on 2026-11-07:
+- **D1:** persistence and the read model are split into SPENDLY-709.
+- **D2:** the calculation engine fully supports FY 2025-26 first.
+- **D3:** five synced collections.
+- **D4:** the document center (298) moves earlier; the export is SPENDLY-710.
+- **D5:** the user's PAN is never stored; the deductor's TAN is stored and masked.
+- **D6:** SPENDLY-711 makes account deletion remove `spendly-files` objects. It blocks 298.
+- **D7:** missing cost basis is shown as missing, and a statement total replaces the derived rows for its class.
+- **D8:** the tax center asks for the PIN once per session.
+- **D9:** feature flag `taxCenterEnabled`.
+
+**Year terms (SPENDLY-289):** FY ≤ 2025-26 is labelled FY/AY under the 1961 Act. From 2026-27 the label is "Tax year" under the Income-tax Act, 2025. Details: [SPENDLY-289-tax-model.md](SPENDLY-289-tax-model.md).

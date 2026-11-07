@@ -1,6 +1,9 @@
 # SPENDLY-288 plan: Tax & ITR Readiness Center
 
-**Status:** draft for the user's approval. No code has been written.
+**Status:** approved by the user on 2026-11-07 with D1–D9 as recommended. New Jira issues:
+- **NEW-T1** = SPENDLY-709;
+- **NEW-T2** = SPENDLY-710;
+- **D6** = SPENDLY-711, which blocks 298.
 
 **Epic branch:** `feature/SPENDLY-288-tax-itr-readiness`, cut from `main` at `b5837d18`.
 
