@@ -21,7 +21,7 @@ const hosting = req(path.join(root, "scripts", "lib", "webHosting.js")) as {
   spaIndexFor(pathname: string): string | null;
 };
 const { buildCloudflarePages } = req(path.join(root, "scripts", "build-cloudflare-pages.js")) as {
-  buildCloudflarePages(from: string, to: string): void;
+  buildCloudflarePages(from: string, to: string, limits?: { maxFiles: number; maxFileBytes: number }): void;
 };
 
 const NETLIFY_REDIRECTS_BEFORE = [
@@ -189,6 +189,14 @@ describe("build-cloudflare-pages", () => {
     buildCloudflarePages(from, path.join(dir, "dist-cloudflare"));
     expect(readFileSync(path.join(from, "_redirects"), "utf8")).toBe(hosting.netlifyRedirects());
     expect(readFileSync(path.join(from, "_headers"), "utf8")).toBe(hosting.netlifyHeaders());
+  });
+
+  it("refuses output over the Pages per-deployment limits", () => {
+    const from = fakeWebExport();
+    const to = path.join(dir, "dist-cloudflare");
+    expect(() => buildCloudflarePages(from, to, { maxFiles: 5, maxFileBytes: 1 << 20 })).toThrow(/10 files is over the Cloudflare Pages limit of 5 per deployment/);
+    expect(() => buildCloudflarePages(from, to, { maxFiles: 1000, maxFileBytes: 10 })).toThrow(/MiB per file: .*index\.html/);
+    expect(() => buildCloudflarePages(from, to)).not.toThrow();
   });
 
   it("refuses an incomplete web export", () => {
