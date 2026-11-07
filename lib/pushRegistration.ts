@@ -54,8 +54,36 @@ export async function getInstallId(): Promise<string> {
   return id;
 }
 
+// SPENDLY-693: who delivers reminders depends on whether this install is
+// registered, so the reminder schedulers listen for changes.
+const listeners = new Set<() => void>();
+
+/** Called whenever this install's registration is written or removed. */
+export function onPushRegistrationChange(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function emitChange(): void {
+  for (const l of listeners) {
+    try {
+      l();
+    } catch {
+      // a listener must never break registration
+    }
+  }
+}
+
 async function clearRecord(): Promise<void> {
   await AsyncStorage.removeItem(RECORD_KEY).catch(() => undefined);
+  emitChange();
+}
+
+/** Whether this install is registered for push for `uid` (its last write was for that user). */
+export async function isRegisteredForUser(uid: string | null | undefined): Promise<boolean> {
+  if (!uid) return false;
+  const record = parseRegistrationRecord(await AsyncStorage.getItem(RECORD_KEY).catch(() => null));
+  return record?.uid === uid;
 }
 
 export type PushRegistrationResult =
@@ -135,6 +163,7 @@ export async function registerPushDevice(uid: string | null | undefined, opts: {
       RECORD_KEY,
       JSON.stringify({ uid, token, appVersion: fields.appVersion, locale: fields.locale, writtenOn: today })
     ).catch(() => undefined);
+    emitChange();
     return { status: need === "create" ? "created" : "refreshed" };
   } catch (error) {
     // e.g. the document was removed elsewhere, so the refresh found nothing:

@@ -3,6 +3,7 @@ import { useEffect, useMemo } from "react";
 import { useBorrowings } from "@/hooks/useBorrowings";
 import { useCalendarReminders } from "@/hooks/useCalendarReminders";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { usePushReminderMode } from "@/hooks/usePushReminderMode";
 import { useReceivables } from "@/hooks/useReceivables";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -23,6 +24,8 @@ export function CalendarNotificationSync() {
   const { settings } = useSettings();
   const prefs = settings.calendarNotifications;
   const active = prefs.remindersEnabled || prefs.duesEnabled;
+  // SPENDLY-693: when the server delivers reminders as push, this phone doesn't.
+  const { mode, loading: modeLoading } = usePushReminderMode();
   const currency = useDisplayCurrency();
   const today = todayDateKey(settings.timezone);
   const { reminders } = useCalendarReminders({ enabled: prefs.remindersEnabled });
@@ -43,14 +46,15 @@ export function CalendarNotificationSync() {
   const planKey = useMemo(() => JSON.stringify(plan.map((n) => [n.id, n.fireDate, n.body])), [plan]);
 
   useEffect(() => {
+    if (modeLoading) return;
     // Debounced so a burst of snapshot updates schedules once.
     const t = setTimeout(() => {
-      if (!active) void cancelCalendarNotifications();
+      if (!active || mode === "push") void cancelCalendarNotifications();
       else void reconcileCalendarNotifications(plan, { quietHoursStart: prefs.quietHoursStart, quietHoursEnd: prefs.quietHoursEnd, timezone: settings.timezone });
     }, 1000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [planKey, active, prefs.quietHoursStart, prefs.quietHoursEnd, settings.timezone]);
+  }, [planKey, active, mode, modeLoading, prefs.quietHoursStart, prefs.quietHoursEnd, settings.timezone]);
 
   return null;
 }
