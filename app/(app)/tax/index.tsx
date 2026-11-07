@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Redirect, useLocalSearchParams, useRouter, type Href } from "expo-router";
-import { ChartCandlestick, ChevronRight, FolderLock, IndianRupee, Landmark, PiggyBank, ReceiptIndianRupee, Scale } from "lucide-react-native";
+import { Calculator, ChartCandlestick, ChevronRight, FolderLock, IndianRupee, Landmark, PiggyBank, ReceiptIndianRupee, Scale } from "lucide-react-native";
 import type { ReactNode } from "react";
 
 import { LoadingState } from "@/components/common/LoadingState";
@@ -90,6 +90,13 @@ export default function TaxCenterScreen() {
             icon={<ReceiptIndianRupee size={20} color={theme.colors.primary} />}
             accessibilityLabel={`Tax payments for ${taxYearLabel(fy)}`}
             onPress={() => router.push(`/tax/${fy}/payments` as Href)}
+          />
+          <SectionRow
+            title="Tax estimate"
+            subtitle="Old and new regime side by side, from your figures. Informational only"
+            icon={<Calculator size={20} color={theme.colors.primary} />}
+            accessibilityLabel={`Tax estimate for ${taxYearLabel(fy)}`}
+            onPress={() => router.push(`/tax/${fy}/estimate` as Href)}
           />
           <SectionRow
             title="Documents"
