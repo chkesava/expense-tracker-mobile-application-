@@ -152,7 +152,13 @@ describe("capital gain totals", () => {
     expect(codes(total)).toEqual(
       expect.arrayContaining(["fields.quantity:not_allowed", "fields.acquiredDate:not_allowed"])
     );
-    expect(codes(withFields(total, { quantity: null, acquiredDate: null }))).toEqual([]);
+    // SPENDLY-293: a total names which part of the statement it is.
+    expect(codes(withFields(total, { quantity: null, acquiredDate: null }))).toEqual(["fields.term:required"]);
+    expect(codes(withFields(total, { quantity: null, acquiredDate: null, term: "long_term" }))).toEqual([]);
+  });
+
+  it("never stores a term on a single sale: it is calculated", () => {
+    expect(codes(withFields(EQUITY_SALE, { term: "long_term" }))).toContain("fields.term:not_allowed");
   });
 });
 

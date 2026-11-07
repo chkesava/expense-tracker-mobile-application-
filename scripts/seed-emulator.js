@@ -318,6 +318,28 @@ function buildDemoData(today = new Date()) {
     taxEntry('taxentry-pay-sat', 'tax_payment', { paymentType: 'self_assessment', date: ymd(new Date(lastFyStart + 1, 6, 20)), amount: 3460 }, `self_assessment|${ymd(new Date(lastFyStart + 1, 6, 20))}|3460.00`),
     taxEntry('taxentry-26as-paid', 'ais_value', { statement: '26AS', infoCategory: 'tax_paid', sourceName: 'Advance tax (challan 00412)', reportedAmount: 15000 }, '26AS|tax_paid|advance tax challan 00412||15000.00'),
     taxEntry('taxentry-26as-paid2', 'ais_value', { statement: '26AS', infoCategory: 'tax_paid', sourceName: 'Advance tax (challan 01123)', reportedAmount: 12000 }, '26AS|tax_paid|advance tax challan 01123||12000.00'),
+    // SPENDLY-293: a sale the user added (gold, long-term) and a fund
+    // house's statement total, which stands in for any fund sales Spendly finds.
+    taxEntry('taxentry-cg-gold', 'capital_gain', { mode: 'row', assetClass: 'gold', assetName: 'Gold coins', quantity: 20, acquiredDate: ymd(new Date(lastFyStart - 4, 2, 1)), soldDate: ymd(new Date(lastFyStart, 9, 2)), costOfAcquisition: 48000, saleValue: 71500 }, `row|gold coins|${ymd(new Date(lastFyStart, 9, 2))}|20|71500.00`),
+    taxEntry('taxentry-cg-cams', 'capital_gain', { mode: 'statement_total', term: 'long_term', assetClass: 'equity_mutual_fund', assetName: 'CAMS capital gains statement', soldDate: ymd(new Date(lastFyStart + 1, 2, 31)), costOfAcquisition: 48000, saleValue: 60000 }, 'total|equity_mutual_fund|long_term'),
+  ];
+
+  // SPENDLY-293: trades behind the holdings, with sales in the year that ended
+  // last. What's left of each matches its holding's quantity and average cost.
+  // INFY: one sale from a lot held over 12 months (long-term). NIFTYBEES: a
+  // sale held under 12 months (short-term). TATAMOTORS: a sale with no
+  // recorded buy, so its cost is unknown.
+  const trade = (id, holdingId, symbol, type, quantity, price, fees, date) => ({
+    id,
+    data: { holdingId, symbol, type, quantity, price, fees, broker: 'Zerodha', date, orderStatus: 'executed', createdAt: baselineDate },
+  });
+  const portfolioTransactions = [
+    trade('ptx-infy-buy1', 'hold-infy', 'INFY', 'BUY', 20, 1300, 0, ymd(new Date(lastFyStart - 2, 5, 10))),
+    trade('ptx-infy-buy2', 'hold-infy', 'INFY', 'BUY', 20, 1525, 0, ymd(new Date(lastFyStart, 4, 5))),
+    trade('ptx-infy-sell', 'hold-infy', 'INFY', 'SELL', 15, 1700, 25, ymd(new Date(lastFyStart, 10, 20))),
+    trade('ptx-nifty-buy', 'hold-niftybees', 'NIFTYBEES', 'BUY', 200, 238, 0, ymd(new Date(lastFyStart, 3, 15))),
+    trade('ptx-nifty-sell', 'hold-niftybees', 'NIFTYBEES', 'SELL', 50, 255, 10, ymd(new Date(lastFyStart, 11, 26))),
+    trade('ptx-tatamotors-sell', 'hold-tatamotors', 'TATAMOTORS', 'SELL', 10, 950, 15, ymd(new Date(lastFyStart + 1, 1, 10))),
   ];
 
   const currentMonth = ym(today);
@@ -440,6 +462,7 @@ function buildDemoData(today = new Date()) {
       subscriptions,
       financialGoals,
       holdings,
+      portfolioTransactions,
       investments,
       taxDocuments,
       taxEntries,

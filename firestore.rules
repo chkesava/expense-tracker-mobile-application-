@@ -1830,7 +1830,7 @@ service cloud.firestore {
 
       function taxCapitalGainFields(f) {
         return f.keys().hasOnly(['mode', 'assetClass', 'assetName', 'isin', 'quantity', 'acquiredDate',
-                                 'soldDate', 'costOfAcquisition', 'saleValue', 'transferExpenses'])
+                                 'soldDate', 'costOfAcquisition', 'saleValue', 'transferExpenses', 'term'])
           && f.keys().hasAll(['mode', 'assetClass', 'assetName', 'soldDate', 'costOfAcquisition', 'saleValue'])
           && f.mode in ['row', 'statement_total']
           && f.assetClass in ['listed_equity', 'equity_mutual_fund', 'debt_mutual_fund', 'other_securities',
@@ -1843,7 +1843,11 @@ service cloud.firestore {
           && taxYmd(f.soldDate)
           && taxNullableMoney(f, 'costOfAcquisition')
           && taxMoney(f.saleValue)
-          && taxOptMoney(f, 'transferExpenses');
+          && taxOptMoney(f, 'transferExpenses')
+          // SPENDLY-293: a statement total names its term; a sale's term is calculated, never stored.
+          && (f.mode == 'statement_total'
+              ? f.get('term', '') in ['short_term', 'long_term']
+              : !f.keys().hasAny(['term']));
       }
 
       function taxPaymentFields(f) {

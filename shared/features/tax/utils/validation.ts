@@ -14,6 +14,7 @@ import {
   TAX_AIS_CATEGORIES,
   TAX_ASSET_CLASSES,
   TAX_CAPITAL_GAIN_MODES,
+  TAX_CG_TERMS,
   TAX_DOCUMENT_CATEGORIES,
   TAX_DOCUMENT_STATUSES,
   TAX_ENTRY_KINDS,
@@ -290,8 +291,11 @@ const FIELD_VALIDATORS: { [K in TaxEntryKind]: FieldValidator<K> } = {
       // A total has no single lot: per-sale fields would be invented.
       if (f.quantity != null) issues.add("fields.quantity", "not_allowed");
       if (f.acquiredDate != null) issues.add("fields.acquiredDate", "not_allowed");
+      issues.option("fields.term", TAX_CG_TERMS, f.term);
       return;
     }
+    // A sale's term is worked out from its dates, never typed in.
+    if (f.term !== undefined) issues.add("fields.term", "not_allowed");
     if (f.quantity != null) {
       const ok = typeof f.quantity === "number" && Number.isFinite(f.quantity) && f.quantity > 0;
       if (!ok || (f.quantity as number) >= 1e12) issues.add("fields.quantity", "invalid_quantity");

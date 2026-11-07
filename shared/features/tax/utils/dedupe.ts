@@ -49,7 +49,7 @@ const KEY_PARTS: { [K in TaxEntryKind]: (f: TaxEntryFieldsByKind[K]) => string[]
       : [f.category, money(f.amount)],
   capital_gain: (f) =>
     f.mode === "statement_total"
-      ? ["total", f.assetClass]
+      ? ["total", f.assetClass, f.term ?? ""]
       : [
           "row",
           f.isin || normalizeTaxText(f.assetName),

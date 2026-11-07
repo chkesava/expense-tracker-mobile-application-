@@ -203,6 +203,13 @@ function AppShellInner() {
                 animation: "slide_from_right",
               }}
             />
+            {/* SPENDLY-293: capital gains from portfolio sales and statements. */}
+            <Stack.Screen
+              name="tax/[fy]/capital-gains"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
             {/* SPENDLY-292: deductions and tax-saving investments. */}
             <Stack.Screen
               name="tax/[fy]/deductions"
