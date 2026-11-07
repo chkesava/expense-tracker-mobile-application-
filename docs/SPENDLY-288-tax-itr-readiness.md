@@ -33,8 +33,8 @@ The order below is the proposed working order (plan §4).
 | SPENDLY-291 | TDS, Form 16/16A and AIS/TIS/26AS reconciliation | Merged to the epic branch (`f25c5fa6`); adds the `reconciliation` review kind to the pending tax rules deploy |
 | SPENDLY-292 | Deductions tracker | Merged to the epic branch (`b981f18f`) |
 | SPENDLY-294 | Advance-tax and self-assessment payments | Merged to the epic branch (`35b28ce6`) |
-| SPENDLY-293 | Capital-gains lots and classification | Built on `feature/SPENDLY-293-capital-gains`, awaiting UI review and merge ([doc](SPENDLY-293-capital-gains.md)) |
-| SPENDLY-295 | Calculation engine and regime comparison | Planned |
+| SPENDLY-293 | Capital-gains lots and classification | Merged to the epic branch (`48c861e4`, [doc](SPENDLY-293-capital-gains.md)) |
+| SPENDLY-295 | Calculation engine and regime comparison | In progress on `feature/SPENDLY-295-tax-calculation` |
 | SPENDLY-296 | Readiness dashboard and checklist | Planned |
 | SPENDLY-297 | Calendar deadlines and reminders | Planned |
 | SPENDLY-710 | Exportable readiness summary | Planned (D4) |
