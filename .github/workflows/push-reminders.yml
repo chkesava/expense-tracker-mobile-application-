@@ -1,0 +1,86 @@
+name: Push reminders
+
+# SPENDLY-692 (epic SPENDLY-222): sends Spendly reminders (card bills, the
+# Financial Calendar, dues, goals) as push notifications, re-checked against
+# Firestore at send time, through the shared sender (SPENDLY-227).
+# Runs here, not on Cloud Functions or Netlify: the Firebase project is on
+# Spark (no Cloud Functions) and Netlify credits are low (decision D3). The
+# repository is public, so Actions minutes are free.
+#
+# Firestore reads count against Spark's 50K/day, shared by dev and prod. The
+# job keeps its own allowance (pushConfig/usage-{date}) and stops early.
+# GitHub may start a scheduled run late; slots are re-checked and sent once
+# per day, so a late run still sends the day's notice (never yesterday's).
+#
+# Scheduled runs do nothing until the repository variable
+# PUSH_REMINDERS_ENABLED is "true" (set it after a manual dry run is reviewed).
+# Manual runs work regardless and default to a dry run.
+#
+# Kill switch without a deploy: set pushConfig/global { sendsDisabled: true }.
+#
+# Secrets:
+#   PUSH_FIREBASE_SERVICE_ACCOUNT        optional; falls back to FIREBASE_SERVICE_ACCOUNT
+#   EXPO_ACCESS_TOKEN                    optional (Expo enhanced push security)
+#   READMODEL_SUPABASE_SERVICE_ROLE_KEY  optional; copies pruned device deletes to the read model
+# Variables:
+#   PUSH_REMINDERS_ENABLED               "true" to enable the schedule
+#   PUSH_MAX_READS_PER_RUN               optional, default 400
+#   PUSH_MAX_READS_PER_DAY               optional, default 6000
+#   READMODEL_SUPABASE_URL               optional (as above)
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Decide everything but send, claim, prune and write nothing"
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: push-reminders
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  remind:
+    name: Send due reminders
+    if: github.event_name == 'workflow_dispatch' || vars.PUSH_REMINDERS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run
+        env:
+          PUSH_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.PUSH_FIREBASE_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          EXPO_ACCESS_TOKEN: ${{ secrets.EXPO_ACCESS_TOKEN }}
+          READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
+          READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+          PUSH_MAX_READS_PER_RUN: ${{ vars.PUSH_MAX_READS_PER_RUN || '400' }}
+          PUSH_MAX_READS_PER_DAY: ${{ vars.PUSH_MAX_READS_PER_DAY || '6000' }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+        run: |
+          set -euo pipefail
+          if [ -z "$PUSH_FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT (or PUSH_FIREBASE_SERVICE_ACCOUNT) is not set."
+            exit 1
+          fi
+          args=""
+          if [ "$DRY_RUN" = "true" ]; then args="--dry-run"; fi
+          npx --no-install tsx scripts/push-reminders.ts $args

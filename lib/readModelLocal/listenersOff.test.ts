@@ -26,6 +26,7 @@ const MIGRATED = new Set([
   "financialGoals", "financialSummaries", "netWorthHistory",
   "calendarReminders", "categories", "categorizationRules", "spaces",
   "groupFunds",
+  "notifications",
   "taxProfiles", "taxEntries", "taxReviews", "taxDocuments", "taxSnapshots",
 ]);
 

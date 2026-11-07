@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { useFinancialGoals } from "@/hooks/useFinancialGoals";
+import { usePushReminderMode } from "@/hooks/usePushReminderMode";
 import { useSaveGoalsFlag } from "@/hooks/useSaveGoalsEnabled";
 import { useSettings } from "@/providers/SettingsProvider";
 import { cancelGoalNotifications, reconcileGoalNotifications } from "@/services/goals/goalReminderScheduler";
@@ -18,6 +19,8 @@ import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
  */
 export function GoalReminderSync() {
   const { enabled: saveGoals, loading: flagLoading } = useSaveGoalsFlag();
+  // SPENDLY-693: when the server delivers reminders as push, this phone doesn't.
+  const { mode, loading: modeLoading } = usePushReminderMode();
   const [ready, setReady] = useState(false);
   useEffect(() => scheduleIdleWork(() => setReady(true)), []);
   const { settings } = useSettings();
@@ -31,15 +34,15 @@ export function GoalReminderSync() {
   useEffect(() => {
     // Until system_settings loads the flag reads "off"; acting on that would
     // cancel every goal reminder on each launch.
-    if (!ready || flagLoading) return;
+    if (!ready || flagLoading || modeLoading) return;
     // Debounced so a burst of snapshot updates schedules once.
     const t = setTimeout(() => {
-      if (!saveGoals || !anyWanted) void cancelGoalNotifications();
+      if (!saveGoals || !anyWanted || mode === "push") void cancelGoalNotifications();
       else void reconcileGoalNotifications(plan, { timezone: settings.timezone });
     }, 1000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, flagLoading, planKey, saveGoals, anyWanted, settings.timezone]);
+  }, [ready, flagLoading, modeLoading, mode, planKey, saveGoals, anyWanted, settings.timezone]);
 
   return null;
 }

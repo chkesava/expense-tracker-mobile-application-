@@ -69,7 +69,13 @@
   - RLS: deny by default, owner-only SELECT, tombstones hidden;
   - realtime ping triggers;
   - restated in full from `20261106000000`, with the tax tables added: `readmodel_sync_table_ok`, `readmodel_client_table_ok` (the `rm_client_apply` allowlist), `readmodel_purge_user`, `readmodel_live_counts`, `v_data_quality` ("missing year").
-- **Clash with SPENDLY-222:** that epic's branch restates the same functions in `20261107000000`/`20261108000000`. Whichever epic reaches main second must restate both sets of tables in a new migration.
+- **Restated over SPENDLY-222 (2026-11-07):** 222 reached main with `20261107000000` (devices) and `20261108000000` (notifications). The first version of this migration restated the shared functions from `20261106000000`, and so would have **dropped** `devices` and `notifications` from both allowlists, the purge, the counts and the data-quality view. Main was merged into the epic, and the restatement is now built from `20261108000000` with the tax tables added. The SQL test counts became:
+  - owner policies 58 → 63;
+  - visible rows 114 → 124;
+  - user B rows 57 → 62;
+  - purged rows 118 → 128;
+  - verify recorded pairs 114 → 124.
+- **Guard (new):** `shared/utils/readModel/mapping.test.ts`, "the latest migration restates every synced table". The *last* restatement of `readmodel_sync_table_ok`, `readmodel_client_table_ok` (all but server-only tables), `readmodel_purge_user`, `readmodel_live_counts` and `v_data_quality` must name every table in `READ_MODEL_TABLES`. Against the old migration, all four checks fail; against the fix, they pass.
 
 ## Reading
 

@@ -47,6 +47,8 @@ import {
 import { enforceGoogleSignupGate } from "@/lib/googleSignupGate";
 import { perfMark, perfStart, perfEnd } from "@/lib/perf";
 import { privacySession } from "@/lib/privacySession";
+import { clearUserReminderNotifications } from "@/lib/userReminderNotifications";
+import { unregisterPushDevice } from "@/lib/pushRegistration";
 import { duressUid } from "@/shared/utils/duress";
 import { getGlobalPendingSyncCount } from "@/lib/syncStatusStore";
 import { ganeshSessionStorageKey } from "@/shared/utils/ganeshSessionStorage";
@@ -150,6 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let cancelHierarchy: (() => void) | undefined;
     let observedUid: string | null | undefined;
+    let authEventSeq = 0;
 
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       const nextUid = currentUser?.uid ?? null;
@@ -159,8 +162,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
         return;
       }
+      const previousUid = observedUid;
       observedUid = nextUid;
+      const seq = ++authEventSeq;
 
+      // SPENDLY-691: a user's bill, calendar and goal reminders must not outlive
+      // their session on this device. logout() clears them too; this also covers
+      // sessions ended elsewhere (revoked, account deleted). When another user
+      // signs straight in, wait for the clear so it can't remove their reminders.
+      if (typeof previousUid === "string") {
+        const cleared = clearUserReminderNotifications();
+        if (nextUid) {
+          void cleared.then(() => {
+            if (seq === authEventSeq) applyAuthUser(currentUser);
+          });
+          return;
+        }
+      }
+      applyAuthUser(currentUser);
+    });
+
+    function applyAuthUser(currentUser: User | null) {
       if (!currentUser) {
         privacySession.clearAll();
       }
@@ -184,9 +206,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           { fallbackDelayMs: 600, timeoutMs: 2500 }
         );
       }
-    });
+    }
 
     return () => {
+      authEventSeq++; // drop a user still waiting on the reminder clear
       cancelHierarchy?.();
       unsubscribe();
     };
@@ -317,6 +340,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           () => undefined
         );
       }
+      // SPENDLY-691: the next person on this device must not get this user's
+      // bill, calendar or goal reminders. Never throws.
+      await clearUserReminderNotifications();
+      // SPENDLY-224: stop this account's pushes reaching this device. Runs while
+      // still signed in (the rules need the owner). Never throws.
+      await unregisterPushDevice(signedOutUid);
       await GoogleSignin.signOut().catch(() => {});
       await signOut(auth);
       await recycleFirestoreAfterLogout();

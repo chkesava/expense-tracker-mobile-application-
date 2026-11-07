@@ -167,6 +167,17 @@ describe("reconcileBillReminders orchestration", () => {
     expect(failEntry.reason).toBe("permission_denied");
   });
 
+  it("never asks for permission from the background reconcile (SPENDLY-225)", async () => {
+    mockGetPermissions.mockResolvedValue({ status: "undetermined" });
+    await reconcileBillReminders({
+      bills: [makeBill()],
+      accountsById: new Map([["card-1", account]]),
+      globalPrefs,
+    });
+    expect(mockRequestPermissions).not.toHaveBeenCalled();
+    expect(mockScheduleNotification).not.toHaveBeenCalled();
+  });
+
   it("schedules notifications when bill is eligible and permission is granted", async () => {
     await reconcileBillReminders({
       bills: [

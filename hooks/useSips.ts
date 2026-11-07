@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   collection,
   doc,
@@ -7,11 +7,10 @@ import {
   deleteDoc,
   updateDoc,
   serverTimestamp,
-  getDocs,
-  writeBatch,
 } from "@/lib/firestore";
 import { logError, friendlyErrorMessage } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
+import { useNotificationRows } from "@/hooks/useNotificationRows";
 import { useReadModelSource } from "@/hooks/useReadModelSource";
 import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
 import { noteDirectWrites } from "@/lib/readModelWriteHooks";
@@ -40,7 +39,6 @@ export function useSips(options?: { enabled?: boolean }) {
   const [plans, setPlans] = useState<SipPlan[]>([]);
   const [transactions, setTransactions] = useState<SipTransaction[]>([]);
   const [virtualPositions, setVirtualPositions] = useState<VirtualPosition[]>([]);
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const executingRef = useRef(false);
 
@@ -50,7 +48,6 @@ export function useSips(options?: { enabled?: boolean }) {
       setPlans([]);
       setTransactions([]);
       setVirtualPositions([]);
-      setNotifications([]);
       setLoading(false);
       return;
     }
@@ -89,7 +86,6 @@ export function useSips(options?: { enabled?: boolean }) {
     });
 
     let unsubTx: (() => void) | undefined;
-    let unsubNotif: (() => void) | undefined;
 
     const cancelIdle = scheduleIdleWork(
       () => {
@@ -100,9 +96,6 @@ export function useSips(options?: { enabled?: boolean }) {
           applyTx(docs);
           if (sipTxSource.mode === "shadow") void sipTxSource.shadow(docs);
         });
-        unsubNotif = onSnapshot(collection(db, `users/${uid}/notifications`), (snap) => {
-          setNotifications(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AppNotification)));
-        });
       },
       { fallbackDelayMs: 900, timeoutMs: 2500 }
     );
@@ -112,7 +105,6 @@ export function useSips(options?: { enabled?: boolean }) {
       unsubPlans();
       unsubVP();
       unsubTx?.();
-      unsubNotif?.();
     };
   }, [uid, enabled, plansSource.mode, positionsSource.mode, sipTxSource.mode]);
 
@@ -204,37 +196,30 @@ export function useSips(options?: { enabled?: boolean }) {
     [uid]
   );
 
-  const markNotificationAsRead = useCallback(
-    async (id: string) => {
-      const db = getFirestoreDb();
-      if (!uid || !db) return;
-      try {
-        await updateDoc(doc(db, `users/${uid}/notifications`, id), {
-          read: true,
-        });
-      } catch (err) {
-        logError("sips.markNotificationAsRead", err);
-      }
-    },
-    [uid]
+  // SPENDLY-230: the rows come from the shared, read-switched hook (one
+  // listener with the inbox); marking read and clearing reach the read model.
+  const notificationRows = useNotificationRows({ enabled });
+  const notifications: AppNotification[] = useMemo(
+    () =>
+      notificationRows.rows.map((r) => ({
+        id: r.id,
+        type: (["sip_executed", "sip_failed", "sip_skipped"].includes(r.type) ? r.type : "info") as AppNotification["type"],
+        title: r.title,
+        body: r.body,
+        read: r.read,
+        createdAt: r.createdAtMs,
+        meta: (r.meta ?? undefined) as AppNotification["meta"],
+      })),
+    [notificationRows.rows]
   );
+  const { markRead, clearAll } = notificationRows;
+
+  const markNotificationAsRead = useCallback((id: string) => markRead([id]), [markRead]);
 
   const clearAllNotifications = useCallback(async () => {
-    const db = getFirestoreDb();
-    if (!uid || !db) return;
-    try {
-      const snapshot = await getDocs(collection(db, `users/${uid}/notifications`));
-      const batch = writeBatch(db);
-      snapshot.forEach((d) => {
-        batch.delete(d.ref);
-      });
-      await batch.commit();
-      toast.success("Cleared all notifications");
-    } catch (err) {
-      logError("sips.clearNotifications", err);
-      toast.error("Failed to clear notifications");
-    }
-  }, [uid]);
+    if (await clearAll()) toast.success("Cleared all notifications");
+    else toast.error("Failed to clear notifications");
+  }, [clearAll]);
 
   const triggerManualExecute = useCallback(async () => {
     const db = getFirestoreDb();

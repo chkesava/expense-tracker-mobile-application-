@@ -2,7 +2,8 @@
 # (SPENDLY-586 checklist §4 steps 6–9) without editing the Firebase console by hand.
 #
 #   target = all-collections  every collection the app reads through the switch
-#                             (SWITCHED_COLLECTIONS), to `mode`, in one merge write
+#                             (SWITCHED_COLLECTIONS), to `mode`, in one merge write;
+#                             `except` (comma-separated) leaves those as they are
 #   target = collection       one collection (`collection`), to `mode`
 #   target = screen           one screen's history/report read (`screen`, from
 #                             READ_MODEL_SCREENS, e.g. groupFundHistory), to `mode`
@@ -35,6 +36,10 @@ on:
         default: shadow
         type: choice
         options: [firestore, shadow, supabase]
+      except:
+        description: "Leave these as they are (target = all-collections), comma-separated, e.g. categories,groupFunds"
+        required: false
+        type: string
       collection:
         description: "Collection name (target = collection), e.g. expenses"
         required: false
@@ -95,6 +100,7 @@ jobs:
           TARGET: ${{ inputs.target }}
           MODE: ${{ inputs.mode }}
           COLLECTION: ${{ inputs.collection }}
+          EXCEPT: ${{ inputs.except }}
           SCREEN: ${{ inputs.screen }}
           SWITCH_NAME: ${{ inputs.switch_name }}
           SWITCH_VALUE: ${{ inputs.switch_value }}
@@ -106,7 +112,9 @@ jobs:
             exit 1
           fi
           case "$TARGET" in
-            all-collections) args=(--all-collections "--mode=$MODE") ;;
+            all-collections)
+              args=(--all-collections "--mode=$MODE")
+              if [ -n "$EXCEPT" ]; then args+=("--except=$EXCEPT"); fi ;;
             collection)
               if [ -z "$COLLECTION" ]; then echo "::error::Set 'collection' for target = collection."; exit 1; fi
               args=("--collection=$COLLECTION" "--mode=$MODE") ;;

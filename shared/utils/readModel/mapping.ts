@@ -849,7 +849,7 @@ export const READ_MODEL_TABLES: TableSpec[] = [
         "theme", "themeMode", "expensePalette", "accentColor", "navigationStyle",
         "defaultCategory", "defaultView", "compactListMode", "hapticFeedback", "enableInvestments",
         "monthlyBudget", "monthly_budget", "exportYear",
-        "dashboardWidgets", "dashboardOrder", "onboarding", "creditCardBillReminders", "calendarNotifications",
+        "dashboardWidgets", "dashboardOrder", "onboarding", "creditCardBillReminders", "calendarNotifications", "pushNotifications",
       ],
     },
     fields: [
@@ -909,6 +909,41 @@ export const READ_MODEL_TABLES: TableSpec[] = [
       f("period", "period", "text"),
       f("reversal_of", "reversalOf", "text"),
       f("created_at", "createdAtMs", "timestamp"),
+    ],
+  },
+  // SPENDLY-224 (migration 20261107000000): one row per signed-in install,
+  // holding its Expo push token for the server sender. The token stays in
+  // `doc` only; owner-only RLS as every table. Dual-written by
+  // lib/pushRegistration (noteDirectWrites), purged with the account.
+  {
+    table: "devices",
+    collection: "devices",
+    fields: [
+      f("platform", "platform", "text"),
+      f("product", "product", "text"),
+      f("token_type", "tokenType", "text"),
+      f("app_version", "appVersion", "text"),
+      f("locale", "locale", "text"),
+      f("created_at", "createdAt", "timestamp"),
+      f("updated_at", "updatedAt", "timestamp"),
+      f("last_seen_at", "lastSeenAt", "timestamp"),
+    ],
+  },
+  // SPENDLY-230 (migration 20261108000000): the in-app notification rows the
+  // unified inbox shows (SIP execution today; server events later). `read`
+  // is the cross-device read state; the body and meta stay in `doc`.
+  {
+    table: "notifications",
+    collection: "notifications",
+    fields: [
+      f("type", "type", "text"),
+      f("category", "category", "text"),
+      f("title", "title", "text"),
+      f("url", "url", "text"),
+      f("entity_id", "entityId", "text"),
+      f("read", "read", "boolean"),
+      f("created_at", "createdAt", "timestamp"),
+      f("updated_at", "updatedAt", "timestamp"),
     ],
   },
   // SPENDLY-709 Tax & ITR Readiness (epic SPENDLY-288, migration 20261110000000).
