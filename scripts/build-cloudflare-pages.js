@@ -39,16 +39,40 @@ function assertWebExport(fromDir) {
   }
 }
 
-function buildCloudflarePages(fromDir, toDir) {
+/** Cloudflare Pages Free limits per deployment (SPENDLY-706). Over them, the upload fails late and vaguely. */
+const PAGES_LIMITS = { maxFiles: 20000, maxFileBytes: 25 * 1024 * 1024 };
+
+function listFiles(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    return entry.isDirectory() ? listFiles(full) : [full];
+  });
+}
+
+function assertWithinPagesLimits(dir, limits = PAGES_LIMITS) {
+  const files = listFiles(dir);
+  if (files.length > limits.maxFiles) {
+    throw new Error(`${files.length} files is over the Cloudflare Pages limit of ${limits.maxFiles} per deployment.`);
+  }
+  const tooBig = files.filter((file) => fs.statSync(file).size > limits.maxFileBytes);
+  if (tooBig.length > 0) {
+    throw new Error(
+      `Over the Cloudflare Pages limit of ${limits.maxFileBytes / 1048576} MiB per file: ${tooBig.map((f) => path.relative(dir, f)).join(', ')}`
+    );
+  }
+}
+
+function buildCloudflarePages(fromDir, toDir, limits = PAGES_LIMITS) {
   assertWebExport(fromDir);
   fs.rmSync(toDir, { recursive: true, force: true });
   fs.cpSync(fromDir, toDir, { recursive: true });
   for (const name of NETLIFY_ONLY_FILES) fs.rmSync(path.join(toDir, name), { force: true });
   fs.writeFileSync(path.join(toDir, '_headers'), cloudflareHeaders());
   fs.writeFileSync(path.join(toDir, '_routes.json'), `${JSON.stringify(cloudflareRoutes(), null, 2)}\n`);
+  assertWithinPagesLimits(toDir, limits);
 }
 
-module.exports = { buildCloudflarePages };
+module.exports = { buildCloudflarePages, PAGES_LIMITS };
 
 if (require.main === module) {
   const arg = (name, fallback) => {
