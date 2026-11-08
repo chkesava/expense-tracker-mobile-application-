@@ -74,7 +74,9 @@ jobs:
     name: Sync Firestore → Supabase read model
     if: github.event_name == 'workflow_dispatch' || vars.READMODEL_SYNC_ENABLED == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # SPENDLY-724: a full pass took ~25 min on 2026-11-08 and verify needs a few
+    # more; 30 min cut verify off. Public repo: Actions minutes are free.
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
