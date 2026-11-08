@@ -26,6 +26,13 @@ import { firestorePathOf, SPEC_BY_COLLECTION } from "../../shared/utils/readMode
  */
 export const PUSH_WINDOW_SECONDS = 600;
 const USER_SYNC_READ_BUDGET = 200;
+/**
+ * SPENDLY-712: a synchronous Netlify function is killed at 10 seconds, which
+ * left a per-user sync "running" forever. It stops in time instead (partial,
+ * with a resume point the next push run continues from), leaving room for the
+ * page in flight and the run record.
+ */
+export const USER_SYNC_TIME_LIMIT_MS = 6000;
 
 export function livePushPorts(input: {
   db: Firestore;
@@ -65,6 +72,7 @@ export function livePushPorts(input: {
         maxReadsPerDay: input.maxReadsPerDay,
         now: () => Date.now(),
         trigger: "push",
+        timeLimitMs: USER_SYNC_TIME_LIMIT_MS,
       });
       return { readsUsed: record.readsUsed, ok: record.status !== "failed" && record.failures === 0 };
     },

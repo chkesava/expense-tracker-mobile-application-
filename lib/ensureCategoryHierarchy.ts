@@ -8,10 +8,9 @@ import {
   writeBatch,
   serverTimestamp,
   type Firestore,
-  type WriteBatch,
 } from "@/lib/firestore";
 import { logDirectRead } from "@/lib/firestoreReadDebug";
-import { notifyReadModelChanged } from "@/lib/readModelPush";
+import { noteDirectWrites, trackedBatch, type TrackedBatch } from "@/lib/readModelWriteHooks";
 import { CATEGORIES_REVISION_FIELD } from "@/shared/utils/categoryRevision";
 import {
   CATEGORY_TAXONOMY,
@@ -66,6 +65,9 @@ async function ensureCategoryHierarchyOnce(
   db: Firestore,
   uid: string
 ): Promise<void> {
+  // SPENDLY-712: every document this run commits, announced to the read model
+  // by stampVersion once all of them are saved.
+  const written = new Set<string>();
   const metaRef = doc(db, "users", uid, "meta", "categories");
   const metaSnap = await getDoc(metaRef);
   const meta = metaSnap.exists() ? metaSnap.data() : undefined;
@@ -104,42 +106,44 @@ async function ensureCategoryHierarchyOnce(
   if (version >= CATEGORY_HIERARCHY_VERSION && !needsDocs) {
     // Already correct, but stamped before fingerprints existed: stamp it so
     // the next login takes the early exit above.
-    await stampVersion(db, uid);
+    await stampVersion(db, uid, written);
     return;
   }
 
   if (version === 0 && existing.length === 0) {
-    await upsertDefaultTaxonomy(db, uid, []);
-    await stampVersion(db, uid);
+    await upsertDefaultTaxonomy(db, uid, [], written);
+    await stampVersion(db, uid, written);
     return;
   }
 
   if (version < 2 && !hasHierarchy) {
-    const writer = createBatchWriter(db);
+    const writer = createBatchWriter(db, written);
     for (const old of existing) {
       writer.delete(doc(db, "users", uid, "categories", old.id));
       await writer.maybeFlush();
     }
     await writer.flush();
-    await upsertDefaultTaxonomy(db, uid, []);
-    await remapAllNamedPairsToV4(db, uid);
-    await stampVersion(db, uid);
+    await upsertDefaultTaxonomy(db, uid, [], written);
+    await remapAllNamedPairsToV4(db, uid, written);
+    await stampVersion(db, uid, written);
     return;
   }
 
-  await upsertDefaultTaxonomy(db, uid, existing);
-  await reparentCustomSubsOntoMappedParents(db, uid);
-  await remapAllNamedPairsToV4(db, uid);
-  await stampVersion(db, uid);
+  await upsertDefaultTaxonomy(db, uid, existing, written);
+  await reparentCustomSubsOntoMappedParents(db, uid, written);
+  await remapAllNamedPairsToV4(db, uid, written);
+  await stampVersion(db, uid, written);
 }
 
 /**
  * Every path that writes categories ends here, after its batches committed.
  * SPENDLY-660: the same write bumps the categories revision, so devices
- * loading categories by revision reload them; the read-model push gets a
- * changed-only sync (the batches can touch hundreds of documents).
+ * loading categories by revision reload them.
+ * SPENDLY-712: the read model gets exactly the documents written (the client
+ * outbox, and the server push in chunks), not a per-user sync: that sync
+ * timed out on Netlify for a 417-document taxonomy upgrade.
  */
-async function stampVersion(db: Firestore, uid: string) {
+async function stampVersion(db: Firestore, uid: string, written: Set<string>) {
   await setDoc(
     doc(db, "users", uid, "meta", "categories"),
     {
@@ -151,17 +155,19 @@ async function stampVersion(db: Firestore, uid: string) {
     },
     { merge: true }
   );
-  notifyReadModelChanged(uid);
+  noteDirectWrites(uid, [...written]);
 }
 
-function createBatchWriter(db: Firestore) {
-  let batch: WriteBatch = writeBatch(db);
+/** Batches writes; each committed batch's paths are added to `written`. */
+function createBatchWriter(db: Firestore, written: Set<string>) {
+  let batch: TrackedBatch = trackedBatch(writeBatch(db));
   let ops = 0;
 
   const flush = async () => {
     if (ops === 0) return;
     await batch.commit();
-    batch = writeBatch(db);
+    for (const path of batch.writtenPaths()) written.add(path);
+    batch = trackedBatch(writeBatch(db));
     ops = 0;
   };
 
@@ -201,11 +207,12 @@ type BatchWriter = ReturnType<typeof createBatchWriter>;
 async function upsertDefaultTaxonomy(
   db: Firestore,
   uid: string,
-  existing: CategoryDoc[]
+  existing: CategoryDoc[],
+  written: Set<string>
 ): Promise<void> {
   const plan = planDefaultTaxonomyUpsert(existing, CATEGORY_TAXONOMY);
   const allocated = new Map<string, string>();
-  const writer = createBatchWriter(db);
+  const writer = createBatchWriter(db, written);
 
   const resolveId = (id: string) => {
     if (!id.startsWith("new:")) return id;
@@ -265,7 +272,7 @@ async function upsertDefaultTaxonomy(
   await writer.flush();
 }
 
-async function reparentCustomSubsOntoMappedParents(db: Firestore, uid: string) {
+async function reparentCustomSubsOntoMappedParents(db: Firestore, uid: string, written: Set<string>) {
   const snap = await getDocs(collection(db, "users", uid, "categories"));
   logDirectRead(
     `users/${uid}/categories`,
@@ -287,7 +294,7 @@ async function reparentCustomSubsOntoMappedParents(db: Firestore, uid: string) {
     if (item.name) defaultParentsByName.set(item.name, item.id);
   }
 
-  const writer = createBatchWriter(db);
+  const writer = createBatchWriter(db, written);
   for (const item of docs) {
     if (item.isDefault !== false || item.kind !== "subcategory" || !item.parentId) continue;
     const parent = byId.get(item.parentId);
@@ -309,18 +316,18 @@ async function reparentCustomSubsOntoMappedParents(db: Firestore, uid: string) {
   await writer.flush();
 }
 
-async function remapAllNamedPairsToV4(db: Firestore, uid: string) {
-  await remapExpenses(db, uid);
-  await remapNamedPairs(db, uid, "categoryBudgets");
-  await remapNamedPairs(db, uid, "categorizationRules");
-  await remapSubscriptions(db, uid);
-  await remapTripCategoryBudgets(db, uid);
-  await remapDefaultCategorySetting(db, uid);
+async function remapAllNamedPairsToV4(db: Firestore, uid: string, written: Set<string>) {
+  await remapExpenses(db, uid, written);
+  await remapNamedPairs(db, uid, "categoryBudgets", written);
+  await remapNamedPairs(db, uid, "categorizationRules", written);
+  await remapSubscriptions(db, uid, written);
+  await remapTripCategoryBudgets(db, uid, written);
+  await remapDefaultCategorySetting(db, uid, written);
 }
 
-async function remapExpenses(db: Firestore, uid: string) {
+async function remapExpenses(db: Firestore, uid: string, written: Set<string>) {
   const expensesSnap = await getDocs(collection(db, "users", uid, "expenses"));
-  const writer = createBatchWriter(db);
+  const writer = createBatchWriter(db, written);
 
   for (const expenseDoc of expensesSnap.docs) {
     const data = expenseDoc.data();
@@ -347,7 +354,8 @@ async function remapExpenses(db: Firestore, uid: string) {
 async function remapNamedPairs(
   db: Firestore,
   uid: string,
-  subcollection: "categoryBudgets" | "categorizationRules"
+  subcollection: "categoryBudgets" | "categorizationRules",
+  written: Set<string>
 ) {
   const snap = await getDocs(collection(db, "users", uid, subcollection));
   logDirectRead(
@@ -356,7 +364,7 @@ async function remapNamedPairs(
     snap.metadata.fromCache ? "cache" : "server",
     { feature: "categoryHierarchy", queryShape: subcollection }
   );
-  const writer = createBatchWriter(db);
+  const writer = createBatchWriter(db, written);
 
   for (const row of snap.docs) {
     const data = row.data();
@@ -378,7 +386,7 @@ async function remapNamedPairs(
   await writer.flush();
 }
 
-async function remapSubscriptions(db: Firestore, uid: string) {
+async function remapSubscriptions(db: Firestore, uid: string, written: Set<string>) {
   const snap = await getDocs(collection(db, "users", uid, "subscriptions"));
   logDirectRead(
     `users/${uid}/subscriptions`,
@@ -386,7 +394,7 @@ async function remapSubscriptions(db: Firestore, uid: string) {
     snap.metadata.fromCache ? "cache" : "server",
     { feature: "categoryHierarchy", queryShape: "subscriptions" }
   );
-  const writer = createBatchWriter(db);
+  const writer = createBatchWriter(db, written);
 
   for (const row of snap.docs) {
     const data = row.data();
@@ -402,9 +410,9 @@ async function remapSubscriptions(db: Firestore, uid: string) {
   await writer.flush();
 }
 
-async function remapTripCategoryBudgets(db: Firestore, uid: string) {
+async function remapTripCategoryBudgets(db: Firestore, uid: string, written: Set<string>) {
   const snap = await getDocs(collection(db, "users", uid, "trips"));
-  const writer = createBatchWriter(db);
+  const writer = createBatchWriter(db, written);
 
   for (const row of snap.docs) {
     const data = row.data();
@@ -428,7 +436,7 @@ async function remapTripCategoryBudgets(db: Firestore, uid: string) {
   await writer.flush();
 }
 
-async function remapDefaultCategorySetting(db: Firestore, uid: string) {
+async function remapDefaultCategorySetting(db: Firestore, uid: string, written: Set<string>) {
   const userRef = doc(db, "users", uid);
   const userSnap = await getDoc(userRef);
   if (!userSnap.exists()) return;
@@ -440,4 +448,5 @@ async function remapDefaultCategorySetting(db: Firestore, uid: string) {
   if (!mapped || mapped.category === current) return;
 
   await setDoc(userRef, { defaultCategory: mapped.category }, { merge: true });
+  written.add(userRef.path);
 }

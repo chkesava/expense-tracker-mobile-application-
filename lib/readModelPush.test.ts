@@ -3,11 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   configureReadModelPush,
   createReadModelPusher,
+  MAX_PENDING_PUSH_REFS,
   notifyReadModelSnapshot,
   notifyReadModelWrites,
   resetReadModelPushForTests,
+  PUSH_RATE_LIMIT_WAIT_MS,
   type PusherDeps,
 } from "./readModelPush";
+import { MAX_PUSH_REFS } from "@/shared/utils/readModel/pushRefs";
 
 /** SPENDLY-583 — the app side of the per-write push. */
 const user = { uid: "u1", getIdToken: async () => "tok" };
@@ -55,13 +58,53 @@ describe("read-model pusher (SPENDLY-583)", () => {
     }]);
   });
 
-  it("asks for a per-user sync instead of naming more than 50 documents", async () => {
+  const refsOf = (n: number, prefix = "c") => Array.from({ length: n }, (_, i) => ({ collection: "categories", docId: `${prefix}${i}` }));
+
+  it("names a large write in requests of at most 50 documents, every one of them (SPENDLY-712)", async () => {
     const { deps, posts, release } = setup();
     release();
     const pusher = createReadModelPusher(deps);
-    pusher.note("u1", Array.from({ length: 51 }, (_, i) => ({ collection: "expenses", docId: `e${i}` })));
-    await vi.advanceTimersByTimeAsync(1000);
+    pusher.note("u1", refsOf(417));
+    await vi.advanceTimersByTimeAsync(20_000);
+    const bodies = posts.map((p) => p.body as { refs?: { docId: string }[]; mode?: string });
+    expect(bodies).toHaveLength(9);
+    expect(bodies.every((b) => !b.mode && b.refs!.length <= MAX_PUSH_REFS)).toBe(true);
+    expect(new Set(bodies.flatMap((b) => b.refs!.map((r) => r.docId)))).toEqual(new Set(refsOf(417).map((r) => r.docId)));
+  });
+
+  it("falls back to one per-user sync only for a backlog too large to name", async () => {
+    const { deps, posts, release } = setup();
+    release();
+    const pusher = createReadModelPusher(deps);
+    pusher.note("u1", refsOf(MAX_PENDING_PUSH_REFS + 1));
+    pusher.note("u1", refsOf(3, "x"));
+    await vi.advanceTimersByTimeAsync(5000);
     expect(posts.map((p) => p.body)).toEqual([{ mode: "user" }]);
+  });
+
+  it("when rate limited, keeps the unsent documents and sends them after the window", async () => {
+    let status = 200;
+    const sent: string[][] = [];
+    const { deps, release } = setup({
+      fetch: async (_url, init) => {
+        const body = JSON.parse(init.body) as { refs: { docId: string }[] };
+        if (status === 429) return { ok: false, status };
+        sent.push(body.refs.map((r) => r.docId));
+        if (sent.length === 2) status = 429;
+        return { ok: true, status: 200 };
+      },
+    });
+    release();
+    const pusher = createReadModelPusher(deps);
+    pusher.note("u1", refsOf(150));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(sent).toHaveLength(2); // the third request was refused and is held
+    expect(deps.log).toHaveBeenCalledTimes(1);
+
+    status = 200;
+    await vi.advanceTimersByTimeAsync(PUSH_RATE_LIMIT_WAIT_MS);
+    expect(new Set(sent.flat())).toEqual(new Set(refsOf(150).map((r) => r.docId)));
+    expect(sent).toHaveLength(3);
   });
 
   it("never pushes when not allowed (Spendly Test, duress, no read model)", async () => {
