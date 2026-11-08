@@ -20,11 +20,12 @@ The emulator is quiet, so an untouched session never shows it. On the deployed w
 2. **`components/categories/CategoryPicker.tsx`.** The "auto-validate subcategory" effect validated against the picker's *draft* parent (`selectedParentName`), which updates one render after the `category` prop. After any outside category change it re-sent `(draft parent, first subcategory)`, while the prop-sync effect moved the draft to the new prop. The two then corrected each other indefinitely.
 
 ## Fix
+
 | File | Change |
 |---|---|
 | `shared/utils/categorySelection.ts` | `reconcileSubcategory(sub, names)` fixes only the subcategory of the committed parent. `defaultAccountId(current, ids)` keeps a valid choice, otherwise falls back to the first account |
 | `components/categories/CategoryPicker.tsx` | Validates against the **committed** `category` prop and never changes the parent. The draft parent stays display-only |
-| `components/ExpenseForm.tsx` | The reset runs only when the form opens or its target changes (`editingExpense`, `editingIncome`, `initialType`, default category, timezone). A separate effect fills the default account and keeps the user's choice across refreshes |
+| `components/ExpenseForm.tsx` | The reset runs only when the form opens or its target changes (`editingExpense`, `editingIncome`, `initialType`, default category, timezone). A separate effect fills the default account and keeps the user's choice across refreshes. It also re-runs with the reset's inputs, so a reset never leaves the form without an account |
 | `shared/utils/categorySelection.test.ts` | 8 tests, including "settles after one correction" and "keeps the choice on refresh" |
 
 There is no data, write-path, schema or read-model change.

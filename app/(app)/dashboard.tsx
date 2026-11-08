@@ -40,7 +40,9 @@ import { useGlobalMonth, useModalActions } from "@/providers/ModalProvider";
 import { useInvestmentsEnabled } from "@/hooks/useInvestmentsEnabled";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
+import { useCategoryBudgets } from "@/hooks/useCategoryBudgets";
 import {
+  computeActiveCategoryBudgets,
   getMoreDashboardWidgets,
   splitCompactMoreCards,
   type DashboardWidgetId,
@@ -143,6 +145,16 @@ export default function DashboardScreen() {
   const previousSummary = useMemo(
     () => cashFlowSummaries.find((s) => s.period === previousMonth) ?? null,
     [cashFlowSummaries, previousMonth]
+  );
+  // SPENDLY-718: the desktop grid gives Category Budgets their own card only
+  // when the month has some, so it never reserves an empty slot. Shared,
+  // ref-counted reference data (the Budget card reads the same), desktop only.
+  const { budgets: categoryBudgets } = useCategoryBudgets({ enabled: desktopDashboard });
+  const hasActiveCategoryBudgets = useMemo(
+    () =>
+      desktopDashboard &&
+      computeActiveCategoryBudgets(categoryBudgets ?? [], activeSummary?.categoryTotals ?? {}, activeMonth).length > 0,
+    [desktopDashboard, categoryBudgets, activeSummary, activeMonth]
   );
   // SPENDLY-501: expenses and incomes are already loaded app-wide by
   // FinanceDataProvider, so the recent feed is derived from them instead of a
@@ -620,8 +632,11 @@ export default function DashboardScreen() {
               <ResponsiveGrid gap={gap}>
                 {renderMoreItems(
                   // Category Budgets only split out when Monthly Budget holds
-                  // the lower-row slot; otherwise they are that slot.
-                  plan.rest.filter((id) => id !== "budgetCategories" || settings.monthlyBudget > 0),
+                  // the lower-row slot (otherwise they are that slot) and the
+                  // month has some; an empty card would leave a blank cell.
+                  plan.rest.filter(
+                    (id) => id !== "budgetCategories" || (settings.monthlyBudget > 0 && hasActiveCategoryBudgets)
+                  ),
                   6,
                   // Smart Insights after the first grid card (Category Budgets
                   // when they split out), as close to Budget as the grid allows.
