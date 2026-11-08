@@ -4,6 +4,7 @@ import { Redirect, useLocalSearchParams, useRouter, type Href } from "expo-route
 import { Calculator, ChartCandlestick, FolderLock, IndianRupee, Landmark, PiggyBank, ReceiptIndianRupee, Scale, UserRound } from "lucide-react-native";
 import type { ReactNode } from "react";
 
+import { ActionMenuSheet } from "@/components/common/ActionMenuSheet";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
 import { ProgressIndicator } from "@/components/dashboard/ProgressIndicator";
@@ -14,10 +15,12 @@ import { ReadinessSectionRow } from "@/components/tax/ReadinessSectionRow";
 import { TaxNotice } from "@/components/tax/TaxNotice";
 import { AGE_BAND_LABELS, RESIDENTIAL_STATUS_LABELS, TaxProfileSheet } from "@/components/tax/TaxProfileSheet";
 import { TaxYearChips } from "@/components/tax/TaxYearChips";
+import { Button } from "@/components/ui/Button";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useTaxCenterFlag } from "@/hooks/useTaxCenterEnabled";
 import { useTaxReadiness } from "@/hooks/useTaxReadiness";
 import { useTaxRecordActions } from "@/hooks/useTaxRecordActions";
+import { useTaxSummaryExport } from "@/hooks/useTaxSummaryExport";
 import { useNetwork } from "@/providers/NetworkProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import type { ReadinessSection } from "@/shared/features/tax/utils/readiness";
@@ -56,7 +59,9 @@ export default function TaxCenterScreen() {
   const [fy, setFy] = useState(() => (params.fy && years.includes(params.fy) ? params.fy : defaultTaxYear(todayKey)));
   const currency = useDisplayCurrency();
   const { isOnline } = useNetwork();
-  const { readiness, profile, loading, error, retry } = useTaxReadiness(fy, { enabled });
+  const { readiness, input, comparison, profile, loading, error, retry } = useTaxReadiness(fy, { enabled });
+  const { exporting, exportSummary } = useTaxSummaryExport(fy);
+  const [exportOpen, setExportOpen] = useState(false);
   const actions = useTaxRecordActions(fy, todayKey);
   const [profileOpen, setProfileOpen] = useState(false);
 
@@ -118,6 +123,16 @@ export default function TaxCenterScreen() {
           />
           <Text style={muted}>{top.detail}</Text>
         </View>
+        <Button
+          variant="tonal"
+          size="sm"
+          onPress={() => setExportOpen(true)}
+          loading={exporting !== null}
+          disabled={exporting !== null}
+          accessibilityLabel={`Export a summary of ${taxYearLabel(fy)}`}
+        >
+          Export summary (PDF or CSV)
+        </Button>
 
         {rows.map((r) => (
           <ReadinessSectionRow
@@ -169,6 +184,15 @@ export default function TaxCenterScreen() {
           {body}
         </View>
       </View>
+      <ActionMenuSheet
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        title={`Summary of ${taxYearLabel(fy)}`}
+        actions={[
+          { label: "PDF, to read or share", onPress: () => void exportSummary("pdf", { input, comparison, readiness }) },
+          { label: "CSV, for a spreadsheet", onPress: () => void exportSummary("csv", { input, comparison, readiness }) },
+        ]}
+      />
       <TaxProfileSheet
         open={profileOpen}
         fy={fy}

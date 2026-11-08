@@ -27,5 +27,5 @@ export function useTaxReadiness(fy: FinancialYearKey, options?: { enabled?: bool
       }),
     [fy, estimate.profile, estimate.input, estimate.comparison, estimate.income, estimate.deductions, estimate.capitalGains, estimate.entries, estimate.reviews]
   );
-  return { readiness, profile: estimate.profile, comparison: estimate.comparison, loading: estimate.loading, error: estimate.error, retry: estimate.retry };
+  return { readiness, input: estimate.input, profile: estimate.profile, comparison: estimate.comparison, loading: estimate.loading, error: estimate.error, retry: estimate.retry };
 }
