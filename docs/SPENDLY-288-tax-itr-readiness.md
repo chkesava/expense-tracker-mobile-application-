@@ -35,7 +35,7 @@ The order below is the proposed working order (plan §4).
 | SPENDLY-294 | Advance-tax and self-assessment payments | Merged to the epic branch (`35b28ce6`) |
 | SPENDLY-293 | Capital-gains lots and classification | Merged to the epic branch (`48c861e4`, [doc](SPENDLY-293-capital-gains.md)) |
 | SPENDLY-295 | Calculation engine and regime comparison | Merged to the epic branch (`dcbec881`, [doc](SPENDLY-295-tax-estimate.md)) |
-| SPENDLY-296 | Readiness dashboard and checklist | In progress on `feature/SPENDLY-296-readiness-dashboard` |
+| SPENDLY-296 | Readiness dashboard and checklist | Built on `feature/SPENDLY-296-readiness-dashboard`, awaiting UI review and merge ([doc](SPENDLY-296-readiness-dashboard.md)) |
 | SPENDLY-297 | Calendar deadlines and reminders | Planned |
 | SPENDLY-710 | Exportable readiness summary | Planned (D4) |
 | SPENDLY-299 | QA, privacy, accuracy and rollout | Planned |
