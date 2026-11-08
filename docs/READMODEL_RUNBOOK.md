@@ -61,7 +61,7 @@ The **Read-model sync health** workflow goes red. GitHub emails the repository o
 | `* (orphan_uid)` | A full sync found read-model data for an account that no longer exists in Firestore: it was deleted without its read-model purge (SPENDLY-508), for example, before account deletion failed closed on missing settings (PR #234) | Erase it. In the SQL editor, as service role, run `select public.readmodel_purge_user('<uid>');`. The uid is in `sync_failures`. The purge also clears the failure. Then check `READMODEL_SUPABASE_URL` and `READMODEL_SUPABASE_SERVICE_ROLE_KEY` are set on the Netlify site |
 | `<collection> (mass_tombstone_guard)` | A full pass found more than half of a user's rows in a table missing, so it refused to mark them deleted | Check Firestore. If the user really deleted them, tombstone them by hand (below). If it was a bad read, the next clean full pass resolves it |
 | p95 copy age over 4 h | Copies are going stale | Usually a symptom of one of the problems above; check the runs list in the summary |
-| Warning: runs skipped for the daily read budget | The sync used its 12K Firestore reads per day | Expected only in a backlog. If it repeats, check `reads_used` per run in `sync_runs` |
+| Warning: runs skipped for the daily read budget | The sync used its 16K Firestore reads per day (SPENDLY-723) | Expected only in a backlog. If it repeats, check `reads_used` per run in `sync_runs` |
 
 ## Backfill (first copy) and verification (SPENDLY-509)
 
@@ -423,7 +423,7 @@ POSTGREST_BIN=<path to postgrest> bash supabase-readmodel/drills/run_drills.sh
 ## Monthly check (first Monday)
 
 - [ ] Actions → **Read-model sync** and **Read-model sync health** are enabled and green. GitHub disables schedules after 60 days without repository activity.
-- [ ] `sync_runs`: Firestore `reads_used` per day is well under the 12K budget.
+- [ ] `sync_runs`: Firestore `reads_used` per day is well under the 16K budget.
 - [ ] `sync_failures`: nothing open older than a day.
 - [ ] Supabase dashboard: the project isn't near a Free-plan limit (500 MB database, egress).
 
@@ -435,7 +435,8 @@ POSTGREST_BIN=<path to postgrest> bash supabase-readmodel/drills/run_drills.sh
 | `READMODEL_SUPABASE_SERVICE_ROLE_KEY` | Actions secret | sync, health |
 | `READMODEL_SUPABASE_URL` | Actions variable | sync, health |
 | `READMODEL_SYNC_ENABLED` | Actions variable, `true` to schedule | sync, health |
-| `READMODEL_MAX_READS_PER_DAY` | Actions variable, optional (default 12000) | sync, health |
+| `READMODEL_MAX_READS_PER_DAY` | Actions variable, optional (default 16000, SPENDLY-723) | sync, health |
+| `READMODEL_MAX_READS_PER_RUN` | Actions variable, optional (default 8000 in the workflow; the script's own default is 6000 for full, 1500 for incremental) | sync |
 | `READMODEL_SUPABASE_URL`, `READMODEL_SUPABASE_SERVICE_ROLE_KEY` | **Netlify site** environment variables | `delete-account`: the `readmodel` purge phase (SPENDLY-508) |
 
 None of these may appear in app code or as an `EXPO_PUBLIC_` variable. `scripts/readmodelSecrets.test.ts` enforces that.
