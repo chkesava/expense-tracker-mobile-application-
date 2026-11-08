@@ -40,7 +40,13 @@ export interface CalendarNotificationPrefs {
   duesEnabled: boolean;
   /** Days before a due item to notify (0 = only on the day). */
   duesDaysBefore: 0 | 1 | 3;
+  /** SPENDLY-297: tax deadlines (advance tax, Form 16, filing dates). */
+  taxEnabled?: boolean;
+  taxDaysBefore?: TaxDaysBefore;
 }
+
+export const TAX_DAYS_BEFORE = [1, 3, 7] as const;
+export type TaxDaysBefore = (typeof TAX_DAYS_BEFORE)[number];
 
 export type CalendarNotificationKind = "before" | "due" | "overdue";
 
@@ -73,6 +79,9 @@ function copy(e: CalendarEvent, kind: CalendarNotificationKind, lead: number, fo
       return { title: e.title, body: kind === "overdue" ? `Expected yesterday${money}` : `Expected ${when}${money}` };
     case "borrowing":
       return { title: e.title, body: kind === "overdue" ? `Repayment ${when}${money}` : `Repayment due ${when}${money}` };
+    case "tax":
+      // No amounts in tax notices.
+      return { title: e.title, body: kind === "overdue" ? "Still open in your tax center" : kind === "due" ? "Today" : `In ${lead} days` };
     default:
       return { title: e.title, body: kind === "overdue" ? `Payment ${when}${money}` : `Due ${when}${money}` };
   }
@@ -104,6 +113,18 @@ export function planCalendarNotifications(input: {
 
   for (const e of input.events) {
     if (!OPEN.has(e.state)) continue; // done, cancelled or recorded: nothing to remind about
+    if (e.source === "tax") {
+      // SPENDLY-297: own switch; informational past dates ("expected") never notify.
+      if (!prefs.taxEnabled) continue;
+      if (e.state === "overdue") {
+        add(e, "overdue", shiftDateKey(e.date, 1), 0);
+      } else if (e.state === "scheduled") {
+        const lead = prefs.taxDaysBefore ?? 3;
+        add(e, "before", shiftDateKey(e.date, -lead), lead);
+        add(e, "due", e.date, 0);
+      }
+      continue;
+    }
     const isReminder = e.source === "reminder";
     if (isReminder ? !prefs.remindersEnabled : !prefs.duesEnabled || !DUE_NOTIFY_SOURCES.includes(e.source)) continue;
     const lead = isReminder ? leadByReminder.get(e.refId) ?? 0 : prefs.duesDaysBefore;

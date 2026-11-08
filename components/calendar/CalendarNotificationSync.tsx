@@ -6,12 +6,15 @@ import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { usePushReminderMode } from "@/hooks/usePushReminderMode";
 import { useReceivables } from "@/hooks/useReceivables";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
+import { useTaxCalendarFacts } from "@/hooks/useTaxCalendarFacts";
+import { useTaxCenterFlag } from "@/hooks/useTaxCenterEnabled";
 import { useSettings } from "@/providers/SettingsProvider";
 import { cancelCalendarNotifications, reconcileCalendarNotifications } from "@/services/calendar/calendarNotificationScheduler";
 import { planCalendarNotifications, CALENDAR_NOTIFICATION_HORIZON_DAYS } from "@/shared/utils/calendarNotifications";
 import { reminderEvents } from "@/shared/utils/calendarReminders";
 import { borrowingEvents, receivableEvents, subscriptionEvents, type CalendarContext } from "@/shared/utils/calendarSources";
 import { shiftDateKey, todayDateKey } from "@/shared/utils/dates";
+import { taxEvents } from "@/shared/features/tax/utils/taxCalendar";
 import { formatAmount } from "@/shared/utils/formatCurrency";
 
 /**
@@ -23,7 +26,10 @@ import { formatAmount } from "@/shared/utils/formatCurrency";
 export function CalendarNotificationSync() {
   const { settings } = useSettings();
   const prefs = settings.calendarNotifications;
-  const active = prefs.remindersEnabled || prefs.duesEnabled;
+  // SPENDLY-297: tax deadlines notify only with the tax center on and their own switch.
+  const { enabled: taxCenter } = useTaxCenterFlag();
+  const taxOn = taxCenter && prefs.taxEnabled;
+  const active = prefs.remindersEnabled || prefs.duesEnabled || taxOn;
   // SPENDLY-693: when the server delivers reminders as push, this phone doesn't.
   const { mode, loading: modeLoading } = usePushReminderMode();
   const currency = useDisplayCurrency();
@@ -32,6 +38,7 @@ export function CalendarNotificationSync() {
   const { subscriptions } = useSubscriptions();
   const { borrowings } = useBorrowings({ enabled: Boolean(prefs.duesEnabled) });
   const { receivables } = useReceivables({ enabled: Boolean(prefs.duesEnabled) });
+  const { facts: taxFacts } = useTaxCalendarFacts({ enabled: taxOn });
 
   const plan = useMemo(() => {
     if (!active) return [];
@@ -39,9 +46,10 @@ export function CalendarNotificationSync() {
     const events = [
       ...(prefs.remindersEnabled ? reminderEvents(reminders, ctx) : []),
       ...(prefs.duesEnabled ? [...subscriptionEvents(subscriptions, ctx), ...borrowingEvents(borrowings, ctx), ...receivableEvents(receivables, ctx)] : []),
+      ...(taxOn && taxFacts ? taxEvents(taxFacts, ctx) : []),
     ];
-    return planCalendarNotifications({ events, reminders, today, prefs, format: (n) => formatAmount(n, currency) });
-  }, [active, today, currency, prefs, reminders, subscriptions, borrowings, receivables]);
+    return planCalendarNotifications({ events, reminders, today, prefs: { ...prefs, taxEnabled: taxOn }, format: (n) => formatAmount(n, currency) });
+  }, [active, today, currency, prefs, reminders, subscriptions, borrowings, receivables, taxOn, taxFacts]);
 
   const planKey = useMemo(() => JSON.stringify(plan.map((n) => [n.id, n.fireDate, n.body])), [plan]);
 
