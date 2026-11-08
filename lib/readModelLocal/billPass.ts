@@ -125,6 +125,53 @@ export async function loadAuthoritativeBillInputs(read: AuthoritativeReader, tod
   };
 }
 
+/**
+ * SPENDLY-719 — what a finished bill pass covered. The provider skips a pass
+ * whose fingerprint matches the last finished one.
+ *
+ * It has to include each bill's **stored** settlement (`amountPaid`,
+ * `paymentIds`, `status`, `remainingAmount`), not only what the pass would
+ * write. Otherwise, when a payment stamp (`increment`) lands between the
+ * pass's read and its compare-and-set, the pass skips the write ("let the
+ * next pass recompute") but records a fingerprint the next pass matches, so
+ * the stale stamp stays: a bill the ledger settles with cashback keeps
+ * showing PARTIALLY_PAID, and the server sends an overdue reminder for it.
+ */
+export function billPassFingerprint(input: {
+  drafts: readonly { accountId: string; billingPeriodStart?: string | null; statementAmount: number }[];
+  patches: readonly {
+    billId: string;
+    statementAmount: number;
+    dueDate: string;
+    billingPeriodStart?: string | null;
+    billingPeriodEnd?: string | null;
+  }[];
+  allocations: readonly { billId: string; amountPaid: number; paymentIds: readonly string[] }[];
+  duplicates: readonly {
+    canonicalId: string;
+    canonicalPatch?: { amountPaid?: number; status?: string } | null;
+    cancelIds: readonly string[];
+  }[];
+  bills: readonly Pick<CreditCardBill, "id" | "amountPaid" | "paymentIds" | "status" | "remainingAmount">[];
+}): string {
+  return JSON.stringify({
+    drafts: input.drafts.map((d) => `${d.accountId}:${d.billingPeriodStart}:${d.statementAmount}`).sort(),
+    patches: input.patches
+      .map((p) => `${p.billId}:${p.statementAmount}:${p.dueDate}:${p.billingPeriodStart}:${p.billingPeriodEnd}`)
+      .sort(),
+    allocations: input.allocations.map((a) => `${a.billId}:${a.amountPaid}:${a.paymentIds.join(",")}`).sort(),
+    duplicates: input.duplicates
+      .map(
+        (r) =>
+          `${r.canonicalId}:${r.canonicalPatch?.amountPaid ?? ""}:${r.canonicalPatch?.status ?? ""}:${r.cancelIds.join(",")}`
+      )
+      .sort(),
+    stored: input.bills
+      .map((b) => `${b.id}:${b.amountPaid}:${(b.paymentIds ?? []).join(",")}:${b.status}:${b.remainingAmount}`)
+      .sort(),
+  });
+}
+
 /** True when any of the pass's inputs is served by the on-device copy. */
 export function billPassReadsCopy(modes: string[]): boolean {
   return modes.includes("supabase");
