@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { CreditCardBill } from "@/shared/types/creditCardBill";
 import { computeRemainingAmount } from "@/shared/utils/creditCardBillStatus";
 
-import { billPassHasWork, billPassReadsCopy, loadAuthoritativeBillInputs, toCreditCardBill, type AuthoritativeReader, type BillPassInputs } from "./billPass";
+import { billPassFingerprint, billPassHasWork, billPassReadsCopy, loadAuthoritativeBillInputs, toCreditCardBill, type AuthoritativeReader, type BillPassInputs } from "./billPass";
 
 const TODAY = "2026-11-04";
 const derived = (bill: CreditCardBill) => ({ status: bill.status, remainingAmount: computeRemainingAmount(bill.statementAmount, bill.amountPaid) });
@@ -73,5 +73,54 @@ describe("the credit card bill pass never writes from the copy (SPENDLY-597, R4.
   it("the copy is involved only when an input is served by it (shadow still serves Firestore)", () => {
     expect(billPassReadsCopy(["firestore", "shadow", "firestore"])).toBe(false);
     expect(billPassReadsCopy(["firestore", "supabase"])).toBe(true);
+  });
+});
+
+describe("the bill pass retries a stale stored settlement (SPENDLY-719)", () => {
+  const card = { id: "card", name: "Roar", typeId: "t-card", billGenerationDay: 1, creditLimit: 35000 };
+  const inputs = (stored: Record<string, unknown>): BillPassInputs => ({
+    accounts: [card],
+    accountTypes: [{ id: "t-card", name: "Credit Card" }],
+    expenses: [
+      { id: "e1", accountId: "card", amount: 300, date: "2026-10-10", month: "2026-10", category: "Food", note: "", createdAt: null },
+      { id: "e2", accountId: "card", amount: 205, date: "2026-10-25", month: "2026-10", category: "Food", note: "", createdAt: null },
+    ],
+    payments: [
+      { id: "pay-hdfc", fromAccountId: "bank", toAccountId: "card", amount: 268.71, date: "2026-11-02" },
+      { id: "cb-roar", fromAccountId: "bank", toAccountId: "card", amount: 236.29, date: "2026-10-20", sourceType: "cashback" },
+    ],
+    bills: [
+      toCreditCardBill(
+        billDoc("roar-nov", {
+          statementDate: "2026-11-01",
+          billingPeriodStart: "2026-10-02",
+          billingPeriodEnd: "2026-11-01",
+          dueDate: "2026-11-06",
+          statementAmount: 505,
+          ...stored,
+        }),
+        "2026-11-08"
+      ),
+    ],
+  }) as unknown as BillPassInputs;
+
+  it("a bill stamped with the cash payment only (268.71 of 505) is work: the ledger settles it with cashback", () => {
+    expect(billPassHasWork(inputs({ amountPaid: 268.71, paymentIds: ["pay-hdfc"] }), "2026-11-08", derived)).toBe(true);
+  });
+
+  const base = { drafts: [], patches: [], duplicates: [], allocations: [{ billId: "roar-nov", amountPaid: 505, paymentIds: ["cb-roar", "pay-hdfc"] }] };
+  const bill = (amountPaid: number, status: CreditCardBill["status"]) =>
+    ({ id: "roar-nov", amountPaid, paymentIds: ["pay-hdfc"], status, remainingAmount: computeRemainingAmount(505, amountPaid) });
+
+  it("the fingerprint changes when the stored settlement changes, so a skipped write is not mistaken for done", () => {
+    const before = billPassFingerprint({ ...base, bills: [bill(0, "OVERDUE")] });
+    const afterStamp = billPassFingerprint({ ...base, bills: [bill(268.71, "PARTIALLY_PAID")] });
+    expect(afterStamp).not.toBe(before);
+  });
+
+  it("the fingerprint is stable for identical inputs, whatever the order", () => {
+    const a = billPassFingerprint({ ...base, bills: [bill(268.71, "PARTIALLY_PAID"), { ...bill(0, "UPCOMING"), id: "other" }] });
+    const b = billPassFingerprint({ ...base, bills: [{ ...bill(0, "UPCOMING"), id: "other" }, bill(268.71, "PARTIALLY_PAID")] });
+    expect(a).toBe(b);
   });
 });
