@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { Redirect, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { Calculator, ChartCandlestick, FolderLock, IndianRupee, Landmark, PiggyBank, ReceiptIndianRupee, Scale, UserRound } from "lucide-react-native";
 import type { ReactNode } from "react";
@@ -23,6 +23,7 @@ import { useTaxRecordActions } from "@/hooks/useTaxRecordActions";
 import { useTaxSummaryExport } from "@/hooks/useTaxSummaryExport";
 import { useNetwork } from "@/providers/NetworkProvider";
 import { useSettings } from "@/providers/SettingsProvider";
+import { TAX_LIMITATIONS } from "@/shared/features/tax/utils/estimatePresentation";
 import type { ReadinessSection } from "@/shared/features/tax/utils/readiness";
 import { defaultTaxYear, selectableTaxYears, taxYearLabel } from "@/shared/features/tax/utils/taxYear";
 import { todayDateKey } from "@/shared/utils/dates";
@@ -64,6 +65,7 @@ export default function TaxCenterScreen() {
   const [exportOpen, setExportOpen] = useState(false);
   const actions = useTaxRecordActions(fy, todayKey);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [limitsOpen, setLimitsOpen] = useState(false);
 
   // Wait for system_settings before acting on "off", so a deep link isn't
   // redirected by the default (flag off) before the first snapshot.
@@ -165,6 +167,27 @@ export default function TaxCenterScreen() {
             onDecide={(item, decision) => void actions.checklistDecision(item.id, decision)}
             onUndo={(item) => void actions.undoChecklist(item.id)}
           />
+        </View>
+
+        {/* SPENDLY-299: known limitations, visible in the app. */}
+        <View style={{ gap: theme.space.xs }}>
+          <Pressable
+            onPress={() => setLimitsOpen((v) => !v)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: limitsOpen }}
+            style={{ minHeight: 48, justifyContent: "center" }}
+          >
+            <Text style={{ color: theme.colors.primary, fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm }}>
+              {limitsOpen ? "Hide" : "What Spendly doesn't cover"}
+            </Text>
+          </Pressable>
+          {limitsOpen
+            ? TAX_LIMITATIONS.map((line) => (
+                <Text key={line} style={muted}>
+                  • {line}
+                </Text>
+              ))
+            : null}
         </View>
       </>
     );

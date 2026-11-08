@@ -98,3 +98,19 @@ export function comparisonSentence(c: TaxRegimeComparison, format: (n: number) =
   const name = c.lower === "new" ? "new" : "old";
   return `On these figures, the ${name} regime gives ${format(c.difference)} less estimated tax. Whether you can choose it, and which suits you, depends on your situation.`;
 }
+
+/**
+ * SPENDLY-299 — what the tax center doesn't cover, shown in the app (and in
+ * docs/SPENDLY-288-rollout.md). Plain words; each line matches a case the
+ * engine refuses or a feature that doesn't exist yet.
+ */
+export const TAX_LIMITATIONS: readonly string[] = [
+  "Spendly doesn't file your return, and nothing here is tax advice.",
+  "Estimates are only for residents, and only for years whose rules are in Spendly (FY 2025-26 today).",
+  "Business or professional income, crypto and other virtual assets aren't estimated.",
+  "Land or buildings bought before 23 July 2024 (the 20%-with-indexation choice) aren't estimated.",
+  "Setting capital losses against other kinds of gain, and losses carried forward, aren't covered.",
+  "Surcharge with capital gains above ₹50 lakh, and on dividends above ₹2 crore, isn't estimated.",
+  "Interest for late or short advance tax (s.234A/B/C) isn't included.",
+  "Spendly doesn't know whether you've filed, so filing dates stay as reminders.",
+];
