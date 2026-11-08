@@ -37,7 +37,7 @@ The order below is the proposed working order (plan §4).
 | SPENDLY-295 | Calculation engine and regime comparison | Merged to the epic branch (`dcbec881`, [doc](SPENDLY-295-tax-estimate.md)) |
 | SPENDLY-296 | Readiness dashboard and checklist | Merged to the epic branch (`ab680638`, [doc](SPENDLY-296-readiness-dashboard.md)) |
 | SPENDLY-297 | Calendar deadlines and reminders | Merged to the epic branch (`1e7e1736`, [doc](SPENDLY-297-tax-deadlines.md)) |
-| SPENDLY-710 | Exportable readiness summary | In progress on `feature/SPENDLY-710-readiness-export` |
+| SPENDLY-710 | Exportable readiness summary | Built on `feature/SPENDLY-710-readiness-export`, awaiting review and merge ([doc](SPENDLY-710-readiness-export.md)) |
 | SPENDLY-299 | QA, privacy, accuracy and rollout | Planned |
 
 ## Decisions

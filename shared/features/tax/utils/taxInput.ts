@@ -25,6 +25,7 @@ import type { TaxCapitalGainsSummary } from "./capitalGains";
 import type { TaxDeductionSummary } from "./deductions";
 import type { TaxIncomeSummary } from "./income";
 import { summarizeTaxPayments } from "./payments";
+import { maskTan } from "./tdsReconcile";
 
 export type TaxGapCode =
   // unsupported
@@ -187,7 +188,9 @@ export function assembleTaxInput(args: {
   const form16s = live.filter((e): e is TaxEntryOf<"form16"> => e.kind === "form16");
   for (const f16 of form16s) {
     const f = f16.fields;
-    const name = f16.label || f.employerName;
+    // SPENDLY-710: traces are exported, so a TAN only ever appears masked.
+    const tan = maskTan(f.tan);
+    const name = `${f16.label || f.employerName}${tan ? ` · TAN ${tan}` : ""}`;
     salary.gross += f.grossSalary;
     add(traces, "salary.gross", { label: `Form 16: ${name}`, amount: f.grossSalary, origin: "form16" });
     if (f.exemptAllowances == null || f.professionalTax == null) push(notes, "form16_blank_as_zero");
@@ -207,7 +210,8 @@ export function assembleTaxInput(args: {
 
   for (const tds of live.filter((e): e is TaxEntryOf<"tds"> => e.kind === "tds")) {
     taxesPaid.tds += tds.fields.tdsAmount;
-    add(traces, "taxesPaid.tds", { label: `${tds.fields.deductorName} (${tds.fields.section})`, amount: tds.fields.tdsAmount, origin: "certificate" });
+    const tan = maskTan(tds.fields.tan);
+    add(traces, "taxesPaid.tds", { label: `${tds.fields.deductorName} (${tds.fields.section})${tan ? ` · TAN ${tan}` : ""}`, amount: tds.fields.tdsAmount, origin: "certificate" });
   }
   if (taxesPaid.tds > 0) push(notes, "tds_from_certificates");
 
