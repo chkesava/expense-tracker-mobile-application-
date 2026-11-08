@@ -10,6 +10,8 @@ Related work:
 
 Reference: `design/references/spendly-desktop-dashboard-reference.png` (1672 × 941). Its warm cream and orange are the existing **Sunset Orange** palette; the implementation only uses theme tokens.
 
+Also in this PR: **SPENDLY-722**, fixing web category changes that snapped back to the previous category (`docs/SPENDLY-722-category-snap-back.md`).
+
 ## Root cause (measured)
 Playwright on `main` against the emulator demo user (`docs/SPENDLY-718/before-*.jpg`):
 
