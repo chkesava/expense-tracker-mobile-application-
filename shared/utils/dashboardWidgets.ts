@@ -280,6 +280,28 @@ export function getMoreDashboardWidgets(
 }
 
 /**
+ * SPENDLY-717 — "More" cards that lead the one-column phone dashboard, in
+ * this order: the account cards, Safe to Spend, then Income & expenses.
+ */
+export const COMPACT_LEAD_CARDS = ["accounts", "focus", "cashFlow"] as const;
+
+/**
+ * SPENDLY-717 — splits the "More" cards for the one-column layout. The lead
+ * cards the user has (toggles already applied) come first, in
+ * `COMPACT_LEAD_CARDS` order; every other card keeps the user's order behind
+ * "Show more". Nothing is added or dropped: `lead` + `rest` is a permutation
+ * of `ids`.
+ */
+export function splitCompactMoreCards<T extends string>(ids: readonly T[]): { lead: T[]; rest: T[] } {
+  const leadSet = new Set<string>(COMPACT_LEAD_CARDS);
+  const lead = ids
+    .filter((id) => leadSet.has(id))
+    .sort((a, b) => COMPACT_LEAD_CARDS.indexOf(a as never) - COMPACT_LEAD_CARDS.indexOf(b as never));
+  const rest = ids.filter((id) => !leadSet.has(id));
+  return { lead, rest };
+}
+
+/**
  * Derives progress and alert thresholds for category/subcategory budgets in a given month.
  */
 export function computeActiveCategoryBudgets(

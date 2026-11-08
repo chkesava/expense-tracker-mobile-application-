@@ -42,6 +42,7 @@ import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import {
   getMoreDashboardWidgets,
+  splitCompactMoreCards,
   type DashboardWidgetId,
 } from "@/shared/utils/dashboardWidgets";
 import { currentMonthKey, formatDateKey } from "@/shared/utils/dates";
@@ -58,6 +59,8 @@ import { SideDrawer } from "@/components/SideDrawer";
 import { dashboardMonthLabel } from "@/shared/utils/dashboardLabels";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { GridItem, ResponsiveGrid } from "@/components/layout/ResponsiveGrid";
+import { Button } from "@/components/ui/Button";
+import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 
 /**
  * SPENDLY-566 — the Visual First dashboard draws the hero, net worth, quick
@@ -91,6 +94,9 @@ export default function DashboardScreen() {
   const { globalMonth, setIsMonthDrawerOpen } = useGlobalMonth();
   const { setIsAddSheetOpen } =
     useModalActions();
+  const { isCompact } = useResponsiveLayout();
+  // SPENDLY-717: on one column the lower-priority cards wait behind "Show more".
+  const [showAllCards, setShowAllCards] = useState(false);
 
   const activeMonth = globalMonth || currentMonthKey(settings.timezone);
   const previousMonth = getPreviousMonthKey(activeMonth);
@@ -238,6 +244,15 @@ export default function DashboardScreen() {
     return ["cashFlow", ...more, "accounts", "shortcuts"];
   }, [settings.dashboardOrder, settings.dashboardWidgets, investmentsEnabled]);
 
+  // SPENDLY-717: one column (phones, native included) leads with the account
+  // cards, Safe to Spend and Income & expenses; the rest wait behind "Show
+  // more" instead of a several-screen feed. Wider layouts keep every card.
+  const compactSplit = useMemo(() => splitCompactMoreCards(moreCardIds), [moreCardIds]);
+  const renderedCardIds = useMemo<MoreCardId[]>(() => {
+    if (!isCompact) return moreCardIds;
+    return showAllCards ? [...compactSplit.lead, ...compactSplit.rest] : compactSplit.lead;
+  }, [isCompact, showAllCards, moreCardIds, compactSplit]);
+
   const accountNames = useMemo(
     () => new Map(accounts.map((account) => [account.id, account.name])),
     [accounts]
@@ -353,7 +368,12 @@ export default function DashboardScreen() {
       </LazyMount>
     </GridItem>
   );
-  const insertInsightsAfter = Math.max(0, moreCardIds.indexOf("budgetAlerts"));
+  // Smart Insights follows Monthly Budget. On one column it waits with the
+  // "Show more" cards, so it never sits among the lead cards.
+  const insertInsightsAfter =
+    isCompact && !showAllCards
+      ? -1
+      : Math.max(isCompact ? compactSplit.lead.length - 1 : 0, renderedCardIds.indexOf("budgetAlerts"));
 
   // SPENDLY-572/604: the dark Midnight Emerald scene now comes from the
   // Expense shell (`app/(app)/_layout.tsx`), so every screen matches it.
@@ -482,10 +502,10 @@ export default function DashboardScreen() {
             </DashboardEntrance>
           </GridItem>
 
-          {moreCardIds.flatMap((id, index) => {
+          {renderedCardIds.flatMap((id, index) => {
             const node = renderMoreCard(id);
             if (!node) return [];
-            const isLast = index === moreCardIds.length - 1;
+            const isLast = index === renderedCardIds.length - 1;
             const items = [
               <GridItem key={id}>
                 <LazyMount
@@ -510,6 +530,19 @@ export default function DashboardScreen() {
             if (index === insertInsightsAfter) items.push(smartInsights);
             return items;
           })}
+
+          {isCompact ? (
+            <GridItem key="showMoreCards" span="full">
+              <Button
+                variant="secondary"
+                size="md"
+                onPress={() => setShowAllCards((v) => !v)}
+                accessibilityLabel={showAllCards ? "Show fewer dashboard cards" : "Show more dashboard cards"}
+              >
+                {showAllCards ? "Show less" : "Show more"}
+              </Button>
+            </GridItem>
+          ) : null}
         </ResponsiveGrid>
       )}
     </PageShell>
