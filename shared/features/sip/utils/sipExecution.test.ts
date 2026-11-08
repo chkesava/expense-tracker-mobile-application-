@@ -8,7 +8,9 @@ import {
   isSipDue,
   isSipEnded,
   localDateKey,
+  sipScheduledKey,
   sipTransactionId,
+  startOfLocalDay,
   writesForSipOp,
 } from "./sipExecution";
 import type { SipPlanForRun } from "./sipExecution";
@@ -119,5 +121,64 @@ describe("calculateNextExecutionDate", () => {
   it("moves a monthly plan to the next execution day", () => {
     const next = calculateNextExecutionDate("monthly", 10, new Date(2026, 8, 18));
     expect(localDateKey(next)).toBe("2026-10-10");
+  });
+});
+
+describe("timezone-aware keys for server jobs (SPENDLY-725)", () => {
+  const IST = "Asia/Kolkata";
+  // A plan created on an IST phone for 11 Nov 2026 stores IST midnight.
+  const istMidnight = "2026-11-10T18:30:00.000Z";
+
+  it("without a zone, behaves exactly as before (device local)", () => {
+    const from = new Date(2026, 0, 31);
+    for (const f of ["daily", "weekly", "monthly", "quarterly", "yearly"] as const) {
+      const expected = calculateNextExecutionDate(f, 31, from).toISOString();
+      expect(calculateNextExecutionDate(f, 31, from, undefined).toISOString()).toBe(expected);
+    }
+    expect(localDateKey(TODAY, undefined)).toBe(localDateKey(TODAY));
+    expect(decideSipRun(plan(), { today: TODAY, price: 50 })).toEqual(
+      decideSipRun(plan(), { today: TODAY, price: 50, timeZone: undefined })
+    );
+  });
+
+  it("the scheduled key and due check use the user zone, not the runner zone", () => {
+    expect(sipScheduledKey(istMidnight, IST)).toBe("2026-11-11");
+    expect(sipScheduledKey(istMidnight, "UTC")).toBe("2026-11-10");
+    // 03:30 IST on 11 Nov = 22:00 UTC on 10 Nov: due in IST.
+    expect(isSipDue(istMidnight, new Date("2026-11-10T22:00:00.000Z"), IST)).toBe(true);
+    // 23:00 IST on 10 Nov: not due yet in IST.
+    expect(isSipDue(istMidnight, new Date("2026-11-10T17:30:00.000Z"), IST)).toBe(false);
+  });
+
+  it("startOfLocalDay in a zone is midnight in that zone", () => {
+    expect(startOfLocalDay(new Date("2026-11-10T22:00:00.000Z"), IST).toISOString()).toBe(istMidnight);
+  });
+
+  it("the next execution date is midnight of the next calendar day in the zone (monthly, short months)", () => {
+    const next = calculateNextExecutionDate("monthly", 11, new Date(istMidnight), IST);
+    expect(next.toISOString()).toBe("2026-12-10T18:30:00.000Z");
+    // Same calendar rule as the phone for every frequency, from a month end.
+    // (Note: from 31 Jan, monthly day 31 gives 31 Mar on a phone too. That is
+    // the existing rule's own behaviour, tracked separately; this story only
+    // guarantees the server matches the phone.)
+    const fromKey = "2027-01-31";
+    const phone = (f: "daily" | "weekly" | "monthly" | "quarterly" | "yearly") =>
+      localDateKey(calculateNextExecutionDate(f, 31, new Date(2027, 0, 31)));
+    for (const f of ["daily", "weekly", "monthly", "quarterly", "yearly"] as const) {
+      const server = calculateNextExecutionDate(f, 31, new Date(`${fromKey}T00:00:00.000Z`), IST);
+      expect(localDateKey(server, IST)).toBe(phone(f));
+    }
+  });
+
+  it("decideSipRun on a UTC runner produces the ids an IST phone would (idempotent with the app)", () => {
+    const op = decideSipRun(
+      plan({ nextExecutionDate: istMidnight, executionDay: 11 }),
+      { today: new Date("2026-11-10T22:00:00.000Z"), price: 50, timeZone: IST }
+    );
+    expect(op?.kind).toBe("execute");
+    if (op?.kind !== "execute") return;
+    expect(op.txId).toBe(sipTransactionId("sip1", "2026-11-11"));
+    expect(op.scheduledKey).toBe("2026-11-11");
+    expect(op.nextExecutionDate).toBe("2026-12-10T18:30:00.000Z");
   });
 });

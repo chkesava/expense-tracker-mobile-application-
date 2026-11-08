@@ -46,19 +46,12 @@ import { perfEvent } from "@/lib/perf";
 import {
   AUTO_CREDIT_CARD_BILL_REMINDER_FREQUENCY,
   DEFAULT_BILL_REMINDER_FREQUENCY,
-  DEFAULT_CREDIT_CARD_BILL_REMINDERS,
   type CreateCreditCardBillInput,
   type CreditCardBill,
   type CreditCardBillReminderLog,
 } from "@/shared/types/creditCardBill";
-import {
-  computeNextReminderAt,
-} from "@/shared/utils/creditCardBillReminders";
-import {
-  computeCreditCardBillStatus,
-  computeRemainingAmount,
-} from "@/shared/utils/creditCardBillStatus";
 import { validateCreateCreditCardBillInput } from "@/shared/utils/creditCardBillValidate";
+import { refreshCreditCardBillDerivedFields } from "@/shared/utils/creditCardBillDerived";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import {
   canRunAutoCreditCardBillGeneration,
@@ -167,51 +160,8 @@ function firestoreBillReader(db: NonNullable<ReturnType<typeof getFirestoreDb>>,
   };
 }
 
-function refreshDerivedFields(
-  bill: Pick<
-    CreditCardBill,
-    | "dueDate"
-    | "statementAmount"
-    | "amountPaid"
-    | "status"
-    | "reminderEnabled"
-    | "reminderFrequency"
-    | "lastReminderSentAt"
-  >,
-  timezone: string,
-  globalEnabled: boolean
-): Pick<
-  CreditCardBill,
-  "status" | "remainingAmount" | "nextReminderAt"
-> {
-  const remainingAmount = computeRemainingAmount(
-    bill.statementAmount,
-    bill.amountPaid
-  );
-  const status =
-    bill.status === "CANCELLED"
-      ? "CANCELLED"
-      : computeCreditCardBillStatus({
-          today: todayDateKey(timezone),
-          dueDate: bill.dueDate,
-          amountPaid: bill.amountPaid,
-          statementAmount: bill.statementAmount,
-        });
-  const nextReminderAt =
-    computeNextReminderAt({
-      bill: {
-        ...bill,
-        status,
-        remainingAmount,
-      },
-      today: todayDateKey(timezone),
-      globalPrefs: {
-        ...DEFAULT_CREDIT_CARD_BILL_REMINDERS,
-        enabled: globalEnabled,
-      },
-    }) ?? undefined;
-  return { status, remainingAmount, nextReminderAt };
-}
+// SPENDLY-725: shared with the server bill job; behaviour unchanged.
+const refreshDerivedFields = refreshCreditCardBillDerivedFields;
 
 export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
