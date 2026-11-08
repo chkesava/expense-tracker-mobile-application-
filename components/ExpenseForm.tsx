@@ -257,12 +257,21 @@ export function ExpenseForm({
   ]);
 
   // A new transaction defaults to the first account once accounts load, and
-  // keeps the user's choice across refreshes (SPENDLY-722).
+  // keeps the user's choice across refreshes (SPENDLY-722). It also re-runs
+  // with the reset's inputs: the reset clears the account, and this refills
+  // it, so a reset never leaves the form without one.
   useEffect(() => {
     if (editingExpense || editingIncome) return;
     const ids = accounts.map((a) => a.id);
     setAccountId((current) => defaultAccountId(current, ids));
-  }, [accounts, editingExpense, editingIncome]);
+  }, [
+    accounts,
+    editingExpense,
+    editingIncome,
+    initialType,
+    settings.defaultCategory,
+    settings.timezone,
+  ]);
 
   // Must mirror the hydration above so an untouched edit never reads as dirty.
   const editBaseline = useMemo(() => {

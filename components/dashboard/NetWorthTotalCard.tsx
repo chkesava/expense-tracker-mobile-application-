@@ -63,7 +63,9 @@ export const NetWorthTotalCard = memo(function NetWorthTotalCard({
         onPress();
       }}
       accessibilityRole="link"
-      accessibilityLabel={`${label}. Open accounts`}
+      // No label override: the name comes from the title, the (ghost-safe)
+      // amount and the change, so screen readers hear the figure.
+      accessibilityHint="Opens accounts"
       style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
         styles.card,
         {

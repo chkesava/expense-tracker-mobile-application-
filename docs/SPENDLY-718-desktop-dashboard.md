@@ -124,5 +124,5 @@ Local review, Expo web against the Firebase emulator (demo user), Playwright 1.x
 ## Limitations
 - **Ultrawide.** Above ~1930px the content is capped at 1680 and centred, so the hero spans 1680 rather than the full window.
 - **Search.** The header's search field opens the ledger, as the icon did. Spendly has no global search yet; **SPENDLY-721** (follow-up) builds it, with Ctrl/⌘K.
-- **Sparse history.** With fewer than 3 saved net-worth days, the hero shows the existing "Trend appears after…" note and the totals say "No change history yet". The emulator demo user has 1 day, so the screenshots show that state.
+- **Sparse history.** With fewer than 3 saved net-worth days (`MIN_POINTS_FOR_TREND`), the hero shows the existing "Trend appears after…" note and the totals say "No change history yet". Both use the same threshold. The emulator demo user has 1 day, so the screenshots show that state.
 - **Device and browser coverage.** No native device QA was needed, since the native tree is unchanged. Browser checks were Chromium only.

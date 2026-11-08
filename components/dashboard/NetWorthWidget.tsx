@@ -43,7 +43,7 @@ import {
 import { useSettings } from "@/providers/SettingsProvider";
 import { todayDateKey } from "@/shared/utils/dates";
 import { totalChange } from "@/shared/utils/dashboardDesktop";
-import { netWorthTrend, type NetWorthPeriod } from "@/shared/utils/netWorthHistory";
+import { MIN_POINTS_FOR_TREND, netWorthTrend, type NetWorthPeriod } from "@/shared/utils/netWorthHistory";
 import { signedCurrencyPrefix } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -148,7 +148,9 @@ function DesktopNetWorth({
   const { settings } = useSettings();
   const [period, setPeriod] = useState<NetWorthPeriod>("1M");
   const trend = useMemo(() => netWorthTrend(history.points, period, todayKey), [history.points, period, todayKey]);
-  const usable = !history.error && !history.loading;
+  // Same rule as the hero (NetWorthGlassCard): no change until enough saved
+  // days, so the totals and the hero never disagree about the period.
+  const usable = !history.error && !history.loading && history.points.length >= MIN_POINTS_FOR_TREND;
   const assetsChange = usable ? totalChange(trend.baseline, trend.latest, "assets") : NO_CHANGE;
   const liabilitiesChange = usable ? totalChange(trend.baseline, trend.latest, "liabilities") : NO_CHANGE;
   const when = trendWhen(trend, period, settings.dateFormat);
