@@ -16,6 +16,8 @@ import { useInvestments } from "@/hooks/useInvestments";
 import { useReceivables } from "@/hooks/useReceivables";
 import { useSipPlans } from "@/hooks/useSipPlans";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
+import { useTaxCalendarFacts } from "@/hooks/useTaxCalendarFacts";
+import { useTaxCenterFlag } from "@/hooks/useTaxCenterEnabled";
 import { useSettings } from "@/providers/SettingsProvider";
 import type { CalendarEvent, CalendarRange, CalendarSource } from "@/shared/types/calendar";
 import { getAccountKind } from "@/shared/utils/accountKind";
@@ -49,6 +51,9 @@ export function useFinancialCalendar(range: CalendarRange, options?: { includeCa
   const { establishments } = useEpf({ readFrom: "copy" });
   const { decisions, loading: decisionsLoading, error: decisionsError } = useDecisions();
   const { uid, reminders, loading: remindersLoading, error: remindersError } = useCalendarReminders();
+  // SPENDLY-297: tax deadlines, only while the tax center is enabled.
+  const { enabled: taxEnabled } = useTaxCenterFlag();
+  const { facts: taxFacts, loading: taxLoading, error: taxError } = useTaxCalendarFacts({ enabled: taxEnabled });
 
   // SPENDLY-320: Known fees from derived intelligence
   const { result: feeResult, loading: feeLoading, error: feeError } = useFeeIntelligence();
@@ -74,6 +79,7 @@ export function useFinancialCalendar(range: CalendarRange, options?: { includeCa
     decision: status(decisionsLoading, decisionsError),
     fee: status(feeLoading, feeError),
     reminder: status(remindersLoading, remindersError),
+    ...(taxEnabled ? { tax: status(taxLoading, taxError) } : {}),
   };
   const statusKey = JSON.stringify(sourceStatus);
 
@@ -94,9 +100,10 @@ export function useFinancialCalendar(range: CalendarRange, options?: { includeCa
       decisions,
       feePatterns,
       reminders,
+      taxFacts,
       extraEvents: options?.extraEvents,
     }),
-    [bills, cardNames, subscriptions, borrowingsCtx.borrowings, receivablesCtx.receivables, incomes, goals, investments, plans, contributions, employerNames, decisions, feePatterns, reminders, options?.extraEvents]
+    [bills, cardNames, subscriptions, borrowingsCtx.borrowings, receivablesCtx.receivables, incomes, goals, investments, plans, contributions, employerNames, decisions, feePatterns, reminders, taxFacts, options?.extraEvents]
   );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const stableStatus = useMemo(() => sourceStatus, [statusKey]);

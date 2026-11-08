@@ -38,6 +38,7 @@ import {
   type CalendarContext,
 } from "./calendarSources";
 import { reminderEvents } from "./calendarReminders";
+import { taxEvents, type TaxCalendarFacts } from "../features/tax/utils/taxCalendar";
 import { daysBetweenDateKeys, daysInMonth, endOfWeekDateKey, isValidDateKey, shiftDateKey, startOfWeekDateKey, type FirstDayOfWeek } from "./dates";
 
 /** Longest range one query may cover; longer requests are cut to this. */
@@ -66,6 +67,8 @@ export interface CalendarData {
   feePatterns?: readonly import("./feePatterns").FeePattern[];
   /** User reminders (SPENDLY-183). */
   reminders?: readonly CalendarReminder[];
+  /** SPENDLY-297: tax records behind the tax deadlines; absent when the tax center is off. */
+  taxFacts?: TaxCalendarFacts | null;
   /** Events from other features (later fee/decision/runway sources). */
   extraEvents?: readonly CalendarEvent[];
 }
@@ -108,6 +111,7 @@ const SOURCE_ORDER: Record<CalendarSource, number> = {
   goal: 10,
   decision: 11,
   reminder: 12,
+  tax: 13,
 };
 const DIRECTION_ORDER = { out: 0, in: 1, neutral: 2 } as const;
 
@@ -147,6 +151,7 @@ function collect(ctx: CalendarContext, data: CalendarData): CalendarEvent[] {
     ...feeEvents(data.feePatterns ?? [], ctx),
     ...decisionEvents(data.decisions ?? [], ctx),
     ...reminderEvents(data.reminders ?? [], ctx),
+    ...(data.taxFacts ? taxEvents(data.taxFacts, ctx) : []),
     ...(data.extraEvents ?? []).filter((e) => e.date >= ctx.range.from && e.date <= ctx.range.to),
   ];
 }

@@ -41,6 +41,8 @@ export function calendarEventActions(event: CalendarEvent | null | undefined): C
       return one("View fee & charges");
     case "goal":
       return one("Open goals");
+    case "tax":
+      return one("Open tax center");
     case "reminder":
       // Edit/complete actions live in the reminder sheet (SPENDLY-183).
       return [];
