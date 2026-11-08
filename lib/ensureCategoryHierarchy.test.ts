@@ -13,6 +13,10 @@ const setDocs: Array<{ path: string; data: Record<string, unknown> }> = [];
 /** Paths written by committed batches, in commit order. */
 const batchWrites: string[] = [];
 let autoId = 0;
+/** SPENDLY-730: the commit number (1-based) that fails, and a setDoc path that fails. */
+let commits = 0;
+let failCommit = 0;
+let failSetDocPath = "";
 
 vi.mock("firebase/firestore", () => ({
   doc: (base: FakeRef, ...segments: string[]) => {
@@ -36,6 +40,7 @@ vi.mock("firebase/firestore", () => ({
     return { docs: rows, metadata: { fromCache: false } };
   }),
   setDoc: vi.fn(async (ref: FakeRef, data: Record<string, unknown>) => {
+    if (ref.path === failSetDocPath) throw new Error("setDoc failed");
     setDocs.push({ path: ref.path, data });
     docs.set(ref.path, { ...(docs.get(ref.path) ?? {}), ...data });
   }),
@@ -46,7 +51,11 @@ vi.mock("firebase/firestore", () => ({
       set: vi.fn(stage),
       update: vi.fn(stage),
       delete: vi.fn(stage),
-      commit: async () => void batchWrites.push(...staged),
+      commit: async () => {
+        commits += 1;
+        if (commits === failCommit) throw new Error("commit failed");
+        batchWrites.push(...staged);
+      },
     };
   },
   serverTimestamp: () => ({ _methodName: "serverTimestamp" }),
@@ -206,5 +215,58 @@ describe("a taxonomy upgrade reaches the read model (SPENDLY-712)", () => {
     expect(pushed).toHaveLength(1);
     expect(new Set(pushed[0].paths)).toEqual(new Set(created));
     expect(new Set(outboxed[0].paths)).toEqual(new Set(created));
+  });
+});
+
+describe("a failed upgrade still announces what it committed (SPENDLY-730)", () => {
+  beforeEach(() => {
+    docs.clear();
+    collectionReads.length = 0;
+    setDocs.length = 0;
+    batchWrites.length = 0;
+    pushed.length = 0;
+    outboxed.length = 0;
+    commits = 0;
+    failCommit = 0;
+    failSetDocPath = "";
+  });
+
+  it("a later batch fails: the batches committed before it are announced, and the error still reaches the caller", async () => {
+    // A pre-hierarchy user: the old flat categories are deleted (commit 1),
+    // then the defaults are seeded (commit 2, which fails).
+    for (const id of ["old1", "old2", "old3"]) {
+      docs.set(`users/${UID}/categories/${id}`, { name: id, kind: "category", parentId: null });
+    }
+    docs.set(META, { categoryHierarchyVersion: 1, taxonomyFingerprint: taxonomyFingerprint() });
+    failCommit = 2;
+
+    await expect(ensureCategoryHierarchy(db, UID)).rejects.toThrow("commit failed");
+
+    const deleted = ["old1", "old2", "old3"].map((id) => `users/${UID}/categories/${id}`);
+    expect(batchWrites).toEqual(deleted);
+    expect(pushed).toEqual([{ uid: UID, paths: deleted }]);
+    expect(outboxed).toEqual([{ uid: UID, paths: deleted }]);
+    expect(setDocs.find((w) => w.path === META)).toBeUndefined(); // never stamped, so the next login retries
+  });
+
+  it("the stamp fails after every batch committed: all of them are announced", async () => {
+    failSetDocPath = META;
+
+    await expect(ensureCategoryHierarchy(db, UID)).rejects.toThrow("setDoc failed");
+
+    const created = [...new Set(batchWrites)];
+    expect(created.length).toBeGreaterThan(100);
+    expect(pushed).toHaveLength(1);
+    expect(new Set(pushed[0].paths)).toEqual(new Set(created));
+  });
+
+  it("nothing committed before the failure: nothing announced", async () => {
+    docs.set(META, { categoryHierarchyVersion: 1, taxonomyFingerprint: taxonomyFingerprint() });
+    failCommit = 1;
+
+    await expect(ensureCategoryHierarchy(db, UID)).rejects.toThrow("commit failed");
+
+    expect(pushed).toEqual([]);
+    expect(outboxed).toEqual([]);
   });
 });
