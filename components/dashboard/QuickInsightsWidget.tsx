@@ -34,6 +34,13 @@ export interface QuickInsightsWidgetProps {
   unavailable?: "missing" | "error" | null;
   monthLabel?: string;
   onOpenMonthPicker?: () => void;
+  /**
+   * SPENDLY-718: the desktop dashboard's half-width card — the month's
+   * figures in a column beside a taller six-month chart.
+   */
+  wide?: boolean;
+  /** Stretch to the desktop row's height. */
+  fill?: boolean;
 }
 
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -67,6 +74,8 @@ export const QuickInsightsWidget = memo(function QuickInsightsWidget({
   unavailable = null,
   monthLabel = "This Month",
   onOpenMonthPicker,
+  wide = false,
+  fill = false,
 }: QuickInsightsWidgetProps) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
@@ -91,7 +100,9 @@ export const QuickInsightsWidget = memo(function QuickInsightsWidget({
 
   return (
     <Section
-      title="Income & expenses"
+      fill={fill}
+      testID="dash-cashflow"
+      title={wide ? "Income vs Expenses" : "Income & expenses"}
       subtitle="Month to date"
       icon={<TrendingUp size={16} color={theme.colors.primary} strokeWidth={2.3} />}
       iconTint={surfaces.wash(theme.colors.primary)}
@@ -109,7 +120,9 @@ export const QuickInsightsWidget = memo(function QuickInsightsWidget({
         ) : null
       }
     >
-      <View style={styles.row}>
+      <View style={wide ? styles.wideBody : undefined}>
+      <View style={wide ? styles.wideFigures : undefined}>
+      <View style={[styles.row, wide && styles.rowWide]}>
         <Metric
           label="Income"
           icon={<ArrowDownLeft size={12} color={incomeColor} strokeWidth={2.6} />}
@@ -128,7 +141,7 @@ export const QuickInsightsWidget = memo(function QuickInsightsWidget({
           />
           <TrendText delta={pctChange(monthlyIncome, previousIncome)} />
         </Metric>
-        <View style={[styles.vDivider, { backgroundColor: surfaces.divider }]} />
+        {wide ? null : <View style={[styles.vDivider, { backgroundColor: surfaces.divider }]} />}
         <Metric
           label="Spent"
           icon={<ArrowUpRight size={12} color={spendColor} strokeWidth={2.6} />}
@@ -149,7 +162,7 @@ export const QuickInsightsWidget = memo(function QuickInsightsWidget({
         </Metric>
       </View>
 
-      <View style={[styles.netRow, { backgroundColor: surfaces.tile }]}>
+      <View style={[styles.netRow, wide && styles.netRowWide, { backgroundColor: surfaces.tile }]}>
         <View style={styles.netText}>
           <MetaLabel>Net cash flow</MetaLabel>
           {loading ? null : (
@@ -198,14 +211,21 @@ export const QuickInsightsWidget = memo(function QuickInsightsWidget({
         )}
       </View>
 
+      </View>
+
       {hasChartData ? (
-        <View style={[styles.chartBlock, { borderTopColor: surfaces.divider }]}>
+        <View
+          style={[
+            styles.chartBlock,
+            wide ? [styles.chartBlockWide, { borderLeftColor: surfaces.divider }] : { borderTopColor: surfaces.divider },
+          ]}
+        >
           <MetaLabel>Last {cashFlow.length} months</MetaLabel>
           {/* The SVG chart is the heaviest node here; let the figures paint first. */}
-          <LazyMount delayMs={80} minHeight={176}>
+          <LazyMount delayMs={80} minHeight={wide ? 206 : 176}>
             <BarChart
               data={chartData}
-              height={150}
+              height={wide ? 180 : 150}
               currency={currency}
               primaryLabel="Spent"
               secondaryLabel="Income"
@@ -215,6 +235,7 @@ export const QuickInsightsWidget = memo(function QuickInsightsWidget({
           </LazyMount>
         </View>
       ) : null}
+      </View>
     </Section>
   );
 });
@@ -319,5 +340,34 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 6,
+  },
+  wideBody: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 20,
+  },
+  wideFigures: {
+    flexBasis: "36%",
+    flexGrow: 0,
+    flexShrink: 0,
+    justifyContent: "center",
+  },
+  netRowWide: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 4,
+  },
+  rowWide: {
+    flexDirection: "column",
+    gap: 14,
+  },
+  chartBlockWide: {
+    flex: 1,
+    minWidth: 0,
+    marginTop: 0,
+    paddingTop: 0,
+    paddingLeft: 20,
+    borderTopWidth: 0,
+    borderLeftWidth: StyleSheet.hairlineWidth,
   },
 });

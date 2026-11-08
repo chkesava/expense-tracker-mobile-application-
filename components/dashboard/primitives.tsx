@@ -148,6 +148,11 @@ export type SectionProps = {
   plain?: boolean;
   style?: StyleProp<ViewStyle>;
   contentStyle?: StyleProp<ViewStyle>;
+  /**
+   * SPENDLY-718: grow to the row's height (desktop dashboard rows stretch
+   * their cards to one height). The body takes the spare room.
+   */
+  fill?: boolean;
   testID?: string;
 };
 
@@ -167,6 +172,7 @@ export function Section({
   plain = false,
   style,
   contentStyle,
+  fill = false,
   testID,
 }: SectionProps) {
   const { theme } = useTheme();
@@ -226,7 +232,7 @@ export function Section({
         </View>
       ) : null}
 
-      <View style={contentStyle}>{children}</View>
+      <View style={[fill && styles.fill, contentStyle]}>{children}</View>
 
       {footer ? (
         <View style={[styles.footer, { borderTopColor: surfaces.divider }]}>
@@ -238,7 +244,7 @@ export function Section({
 
   if (plain) {
     return (
-      <View testID={testID} style={style}>
+      <View testID={testID} style={[fill && styles.fill, style]}>
         {body}
       </View>
     );
@@ -250,8 +256,8 @@ export function Section({
       variant="outlined"
       elevation={0}
       radius={DASH_RADIUS.section}
-      style={[styles.sectionSurface, style]}
-      contentStyle={styles.sectionContent}
+      style={[styles.sectionSurface, fill && styles.fill, style]}
+      contentStyle={[styles.sectionContent, fill && styles.fill]}
     >
       {body}
     </Card>
@@ -844,6 +850,9 @@ const styles = StyleSheet.create({
   },
   sectionContent: {
     padding: DASH_SPACE.sectionPadding,
+  },
+  fill: {
+    flex: 1,
   },
   heroSurface: {
     borderRadius: DASH_RADIUS.section,

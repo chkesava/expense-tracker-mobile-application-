@@ -26,6 +26,7 @@ import {
   getRecentCategoryPairs,
   pushRecentCategoryPair,
 } from "@/shared/utils/categoryPreferences";
+import { reconcileSubcategory } from "@/shared/utils/categorySelection";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -122,16 +123,25 @@ export function CategoryPicker({
     if (category) setSelectedParentName(category);
   }, [category]);
 
-  // Auto-validate existing selection if subcategory is invalid for current parent
+  // Keep the subcategory valid for the parent the form holds. SPENDLY-722:
+  // this checks the committed `category` prop, never the draft parent. The
+  // draft lags the prop by a render, so validating against it re-sent the old
+  // parent whenever the category changed from outside, and the picker and
+  // the form overwrote each other in a loop. It only fixes the subcategory.
+  const committedParent = useMemo(
+    () => visibleParents.find((c) => c.name === category),
+    [visibleParents, category]
+  );
   useEffect(() => {
-    if (!activeParent || subcategories.length === 0) return;
-    const isValid = subcategories.some((s) => s.name === subcategory);
-    if (!isValid && subcategories.length > 0) {
-      onChangeRef.current(activeParent.name, subcategories[0].name, {
-        fromUser: false,
-      });
+    if (!committedParent) return;
+    const fix = reconcileSubcategory(
+      subcategory,
+      getSubcategories(committedParent.id).map((s) => s.name)
+    );
+    if (fix !== null) {
+      onChangeRef.current(committedParent.name, fix, { fromUser: false });
     }
-  }, [activeParent, subcategories, subcategory]);
+  }, [committedParent, getSubcategories, subcategory]);
 
   // Initial default if empty
   useEffect(() => {
