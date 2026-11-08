@@ -1,4 +1,4 @@
-import { memo, useMemo, type ComponentType, type ReactNode } from "react";
+import { memo, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
 import {
@@ -19,7 +19,8 @@ import {
 import { Amount } from "@/components/common/Amount";
 import { Skeleton } from "@/components/common/Skeleton";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
-import { NetWorthGlassCard } from "@/components/dashboard/NetWorthGlassCard";
+import { NetWorthGlassCard, trendWhen } from "@/components/dashboard/NetWorthGlassCard";
+import { NetWorthTotalCard } from "@/components/dashboard/NetWorthTotalCard";
 import {
   DASH_RADIUS,
   DASH_TYPE,
@@ -41,6 +42,8 @@ import {
 } from "@/shared/utils/dashboardAccountCards";
 import { useSettings } from "@/providers/SettingsProvider";
 import { todayDateKey } from "@/shared/utils/dates";
+import { totalChange } from "@/shared/utils/dashboardDesktop";
+import { netWorthTrend, type NetWorthPeriod } from "@/shared/utils/netWorthHistory";
 import { signedCurrencyPrefix } from "@/shared/utils/formatCurrency";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -48,6 +51,17 @@ export interface NetWorthWidgetProps {
   /** The screen's one `useUnifiedNetWorth` summary (SPENDLY-566). */
   netWorth: UnifiedNetWorthSummary;
   currency: string;
+}
+
+export interface NetWorthWidgetDesktopProps {
+  /**
+   * SPENDLY-718: `desktop` lays the hero beside Total Assets / Total
+   * Liabilities, with `aside` (the quick actions) under them.
+   */
+  variant?: "stack" | "desktop";
+  aside?: ReactNode;
+  /** Card gap for the desktop composition. */
+  gap?: number;
 }
 
 /**
@@ -58,13 +72,33 @@ export interface NetWorthWidgetProps {
  * from the daily points recorded below (SPENDLY-568), and the card says
  * whether today's point is saved (SPENDLY-620).
  */
-export const NetWorthWidget = memo(function NetWorthWidget({ netWorth, currency }: NetWorthWidgetProps) {
+export const NetWorthWidget = memo(function NetWorthWidget({
+  netWorth,
+  currency,
+  variant = "stack",
+  aside,
+  gap = 16,
+}: NetWorthWidgetProps & NetWorthWidgetDesktopProps) {
   const { settings } = useSettings();
   const todayKey = todayDateKey(settings.timezone);
   // SPENDLY-568: history is read only here, where the trend renders, and
   // today's point is recorded from this same summary once it is complete.
   const history = useNetWorthHistory(todayKey);
   const recorder = useNetWorthSnapshotRecorder({ summary: netWorth, todayKey, history });
+
+  if (variant === "desktop") {
+    return (
+      <DesktopNetWorth
+        netWorth={netWorth}
+        currency={currency}
+        history={history}
+        recorder={recorder}
+        todayKey={todayKey}
+        aside={aside}
+        gap={gap}
+      />
+    );
+  }
 
   // First load: a placeholder shaped like the card, so nothing jumps when the
   // totals land (SPENDLY-533).
@@ -85,6 +119,111 @@ export const NetWorthWidget = memo(function NetWorthWidget({ netWorth, currency 
       recorder={recorder}
     />
   );
+});
+
+/**
+ * SPENDLY-718 — the desktop first row: the net-worth hero (left) beside
+ * Total Assets | Total Liabilities with `aside` under them (right). One
+ * period drives the hero's line and both totals' change. Same summary, same
+ * history listener and recorder as the stacked card; nothing new is read.
+ */
+function DesktopNetWorth({
+  netWorth,
+  currency,
+  history,
+  recorder,
+  todayKey,
+  aside,
+  gap,
+}: {
+  netWorth: UnifiedNetWorthSummary;
+  currency: string;
+  history: ReturnType<typeof useNetWorthHistory>;
+  recorder: ReturnType<typeof useNetWorthSnapshotRecorder>;
+  todayKey: string;
+  aside: ReactNode;
+  gap: number;
+}) {
+  const router = useRouter();
+  const { settings } = useSettings();
+  const [period, setPeriod] = useState<NetWorthPeriod>("1M");
+  const trend = useMemo(() => netWorthTrend(history.points, period, todayKey), [history.points, period, todayKey]);
+  const usable = !history.error && !history.loading;
+  const assetsChange = usable ? totalChange(trend.baseline, trend.latest, "assets") : NO_CHANGE;
+  const liabilitiesChange = usable ? totalChange(trend.baseline, trend.latest, "liabilities") : NO_CHANGE;
+  const when = trendWhen(trend, period, settings.dateFormat);
+  const openAccounts = () => router.push("/ledger?tab=accounts" as Href);
+
+  return (
+    <View style={[desktopStyles.row, { gap }]}>
+      <View style={desktopStyles.hero} testID="dash-networth">
+        {netWorth.loading ? (
+          <DashboardSkeleton variant="hero" />
+        ) : (
+          <NetWorthGlassCard
+            variant="desktop"
+            period={period}
+            onPeriodChange={setPeriod}
+            netWorth={netWorth}
+            currency={currency}
+            points={history.points}
+            todayKey={todayKey}
+            historyLoading={history.loading}
+            historyFailed={Boolean(history.error)}
+            recorder={recorder}
+            style={desktopStyles.fill}
+          />
+        )}
+      </View>
+      <View style={[desktopStyles.side, { gap }]}>
+        <View style={[desktopStyles.totals, { gap }]}>
+          <NetWorthTotalCard
+            kind="assets"
+            value={netWorth.totalAssets}
+            currency={currency}
+            change={assetsChange}
+            when={when}
+            loading={netWorth.loading}
+            onPress={openAccounts}
+          />
+          <NetWorthTotalCard
+            kind="liabilities"
+            value={netWorth.totalLiabilities}
+            currency={currency}
+            change={liabilitiesChange}
+            when={when}
+            loading={netWorth.loading}
+            onPress={openAccounts}
+          />
+        </View>
+        {aside}
+      </View>
+    </View>
+  );
+}
+
+const NO_CHANGE = { change: null, changePct: null } as const;
+
+const desktopStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+  hero: {
+    flex: 56,
+    minWidth: 0,
+  },
+  side: {
+    flex: 44,
+    minWidth: 0,
+  },
+  totals: {
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+  fill: {
+    flex: 1,
+  },
 });
 
 /**

@@ -2,8 +2,10 @@ import { Platform, useWindowDimensions } from "react-native";
 
 import {
   SPENDLY_DIALOG_MAX_WIDTH,
+  type ContentWidthVariant,
   contentMaxWidthOf,
   gridColumnsOf,
+  isDesktopDashboard,
   layoutOf,
   sheetPresentationOf,
   sidebarVisible,
@@ -34,6 +36,7 @@ export function useResponsiveLayout() {
     columns: gridColumnsOf(layout),
     wideMaxWidth: contentMaxWidthOf(layout, "wide"),
     readableMaxWidth: contentMaxWidthOf(layout, "readable"),
+    desktopDashboard: isDesktopDashboard(width, IS_WEB),
   };
 }
 
@@ -41,9 +44,9 @@ export function useResponsiveLayout() {
  * Centring cap for a screen that owns its scroll view instead of using
  * PageShell. Spread into `contentContainerStyle`; null on phones and native.
  */
-export function useContentWidthStyle(variant: "wide" | "readable" = "wide") {
-  const { wideMaxWidth, readableMaxWidth } = useResponsiveLayout();
-  const maxWidth = variant === "readable" ? readableMaxWidth : wideMaxWidth;
+export function useContentWidthStyle(variant: ContentWidthVariant = "wide") {
+  const { layout } = useResponsiveLayout();
+  const maxWidth = contentMaxWidthOf(layout, variant);
   return maxWidth === undefined
     ? null
     : { width: "100%" as const, maxWidth, alignSelf: "center" as const };

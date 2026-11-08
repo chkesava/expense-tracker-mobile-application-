@@ -5,7 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Moon, Sun, Sunrise, Sunset } from "lucide-react-native";
+import { CalendarDays, Moon, Sun, Sunrise, Sunset } from "lucide-react-native";
 
 import { AppBarActions } from "@/components/layout/AppBarActions";
 import { AppBarBrand } from "@/components/layout/AppBarBrand";
@@ -15,6 +15,9 @@ import {
 } from "@/components/layout/chrome";
 import { useDayPeriod } from "@/hooks/useDayPeriod";
 import { useAuth } from "@/providers/AuthProvider";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
+import { todayDateKey } from "@/shared/utils/dates";
 import { greetingFor, type DayPeriod } from "@/shared/utils/dayPeriod";
 import { useTheme } from "@/theme/ThemeProvider";
 import { withAlpha } from "@/theme/surfaces";
@@ -25,6 +28,13 @@ import { DASHBOARD_BACKGROUNDS, DASHBOARD_SCENE_FOCUS } from "./dashboardBackgro
 export const DASHBOARD_HERO_HEIGHT = 300;
 /** How far the first card rides up over the hero's fade. */
 export const DASHBOARD_HERO_OVERLAP = 64;
+/**
+ * SPENDLY-718: the desktop header is a compact band — greeting, search,
+ * inbox, profile and today's date — so the net-worth row starts in the
+ * first fold of a 1080px monitor.
+ */
+export const DASHBOARD_DESKTOP_HERO_HEIGHT = 196;
+export const DASHBOARD_DESKTOP_HERO_OVERLAP = 52;
 
 const HERO_INK = "#FFFFFF";
 /** Warm accent for the period glyph, as in the reference. */
@@ -59,10 +69,22 @@ const PERIOD_ICONS: Record<DayPeriod, IconType> = {
  * pulls itself up and out by the same amounts so the image runs edge to edge
  * under the status bar.
  */
-export const DashboardHero = memo(function DashboardHero({ onOpenProfile }: { onOpenProfile: () => void }) {
+export const DashboardHero = memo(function DashboardHero({
+  onOpenProfile,
+  variant = "stack",
+  bleed,
+}: {
+  onOpenProfile: () => void;
+  /** SPENDLY-718: `desktop` is the compact wide-screen header (web ≥ 1280). */
+  variant?: "stack" | "desktop";
+  /** Horizontal page padding to bleed through; defaults to PageShell's. */
+  bleed?: number;
+}) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user } = useAuth();
+  const { settings } = useSettings();
+  const desktop = variant === "desktop";
   const period = useDayPeriod();
   const isFocused = useIsFocused();
   const PeriodIcon = PERIOD_ICONS[period];
@@ -73,7 +95,9 @@ export const DashboardHero = memo(function DashboardHero({ onOpenProfile }: { on
     "there";
 
   const bleedTop = insets.top + theme.space.md;
-  const height = insets.top + DASHBOARD_HERO_HEIGHT;
+  const height = insets.top + (desktop ? DASHBOARD_DESKTOP_HERO_HEIGHT : DASHBOARD_HERO_HEIGHT);
+  const overlap = desktop ? DASHBOARD_DESKTOP_HERO_OVERLAP : DASHBOARD_HERO_OVERLAP;
+  const todayLabel = desktop ? todayChipLabel(todayDateKey(settings.timezone), settings.dateFormat) : "";
 
   return (
     <>
@@ -87,8 +111,8 @@ export const DashboardHero = memo(function DashboardHero({ onOpenProfile }: { on
           {
             height,
             marginTop: -bleedTop,
-            marginHorizontal: -theme.space.md,
-            marginBottom: -DASHBOARD_HERO_OVERLAP,
+            marginHorizontal: -(bleed ?? theme.space.md),
+            marginBottom: -overlap,
             backgroundColor: theme.colors.background,
           },
         ]}
@@ -118,6 +142,38 @@ export const DashboardHero = memo(function DashboardHero({ onOpenProfile }: { on
           pointerEvents="none"
         />
 
+        {desktop ? (
+          <View style={[styles.desktopBar, { paddingHorizontal: bleed ?? theme.space.md }]}>
+            <View style={styles.desktopCopy}>
+              <View style={styles.greetingRow}>
+                <Text
+                  style={[styles.greeting, styles.greetingDesktop, { fontFamily: theme.fontFamily.bold }]}
+                  numberOfLines={1}
+                  accessibilityRole="header"
+                >
+                  {greetingFor(period)}, {firstName}
+                </Text>
+                <PeriodIcon size={24} color={PERIOD_GLYPH_COLOR} strokeWidth={2.2} />
+              </View>
+              <Text style={[styles.line, { fontFamily: theme.fontFamily.regular }]} numberOfLines={1}>
+                {PERIOD_LINES[period]}
+              </Text>
+            </View>
+            <View style={styles.desktopTools}>
+              <AppBarActions ink={HERO_INK} onOpenProfile={onOpenProfile} searchField />
+              <View
+                style={[styles.dateChip, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+                accessibilityLabel={`Today, ${todayLabel}`}
+              >
+                <CalendarDays size={15} color={theme.colors.mutedForeground} strokeWidth={2.1} />
+                <Text style={[styles.dateText, { color: theme.colors.foreground, fontFamily: theme.fontFamily.medium }]}>
+                  {todayLabel}
+                </Text>
+              </View>
+            </View>
+          </View>
+        ) : (
+        <>
         <View style={[styles.bar, { marginTop: insets.top }]}>
           <AppBarBrand ink={HERO_INK} />
           <AppBarActions ink={HERO_INK} onOpenProfile={onOpenProfile} />
@@ -141,10 +197,21 @@ export const DashboardHero = memo(function DashboardHero({ onOpenProfile }: { on
             {PERIOD_LINES[period]}
           </Text>
         </View>
+        </>
+        )}
       </View>
     </>
   );
 });
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** "Sun, 08/11/2026" — today in the user's timezone and date format. */
+function todayChipLabel(todayKey: string, dateFormat: Parameters<typeof formatDisplayDate>[1]): string {
+  const [y, m, d] = todayKey.split("-").map(Number);
+  const weekday = WEEKDAYS[new Date(y, (m || 1) - 1, d || 1).getDay()] ?? "";
+  return `${weekday}, ${formatDisplayDate(todayKey, dateFormat)}`;
+}
 
 const textShadow = {
   textShadowColor: "rgba(0,0,0,0.4)",
@@ -169,6 +236,40 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: APP_BAR_HORIZONTAL_PADDING,
+  },
+  desktopBar: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 24,
+    paddingTop: 22,
+  },
+  desktopCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 6,
+    paddingTop: 8,
+  },
+  desktopTools: {
+    alignItems: "flex-end",
+    gap: 10,
+  },
+  greetingDesktop: {
+    fontSize: 28,
+    lineHeight: 34,
+    letterSpacing: -0.6,
+  },
+  dateChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  dateText: {
+    fontSize: 13,
   },
   copy: {
     paddingHorizontal: 20,

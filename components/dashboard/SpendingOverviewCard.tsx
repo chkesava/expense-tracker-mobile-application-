@@ -4,6 +4,7 @@ import { useRouter, type Href } from "expo-router";
 import { ChevronDown, ChevronRight, ListOrdered, Target, TrendingUp } from "lucide-react-native";
 
 import { DonutChart } from "@/components/charts/DonutChart";
+import { Amount } from "@/components/common/Amount";
 import { EmptyState } from "@/components/common/EmptyState";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import {
@@ -42,6 +43,13 @@ export interface SpendingOverviewCardProps {
   monthlyBudget: number;
   /** `computeSpendlyBudget` for the month, from the screen. */
   budget: SpendlyBudget;
+  /**
+   * SPENDLY-718: the desktop dashboard's half-width card. The legend becomes
+   * a table with each category's amount, and the three links sit in a row.
+   */
+  wide?: boolean;
+  /** Stretch to the desktop row's height. */
+  fill?: boolean;
 }
 
 /** Legend entries before the rest fold into "Others". */
@@ -70,6 +78,8 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
   unavailable,
   monthlyBudget,
   budget,
+  wide = false,
+  fill = false,
 }: SpendingOverviewCardProps) {
   const router = useRouter();
   const { theme } = useTheme();
@@ -169,7 +179,7 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
   }
 
   return (
-    <Section title="Spending Overview" action={monthChip} testID="dashboard-spending-overview">
+    <Section title="Spending Overview" action={monthChip} fill={fill} testID="dashboard-spending-overview">
       {unavailable ? (
         <Text
           style={[styles.unavailable, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
@@ -186,11 +196,11 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
           description="Your spending breakdown appears here as you record expenses."
         />
       ) : (
-        <View style={styles.chartRow}>
+        <View style={[styles.chartRow, wide && styles.chartRowWide]}>
           <DonutChart
             data={segments}
-            size={140}
-            strokeWidth={22}
+            size={wide ? 150 : 140}
+            strokeWidth={wide ? 24 : 22}
             currency={currency}
             title="Total spent"
             titleBelow
@@ -222,17 +232,32 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
                   {c.category}
                 </Text>
                 <Text
-                  style={[styles.legendPct, { color: theme.colors.foreground, fontFamily: theme.fontFamily.medium }]}
+                  style={[
+                    styles.legendPct,
+                    wide && styles.legendPctWide,
+                    { color: theme.colors.foreground, fontFamily: theme.fontFamily.medium },
+                  ]}
                 >
                   {totalSpent > 0 ? `${Math.round(c.percentage)}%` : "—"}
                 </Text>
-                <ChevronRight size={14} color={theme.colors.mutedForeground} strokeWidth={2.2} />
+                {wide ? (
+                  <Amount
+                    value={Math.round(c.amount)}
+                    currency={currency}
+                    fractionDigits={0}
+                    ghostable
+                    numberOfLines={1}
+                    style={[styles.legendAmount, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
+                  />
+                ) : null}
+                {wide ? null : <ChevronRight size={14} color={theme.colors.mutedForeground} strokeWidth={2.2} />}
               </Pressable>
             ))}
           </View>
         </View>
       )}
 
+      <View style={wide ? styles.linkStrip : undefined}>
       {/* SPENDLY-580: the ranked categories for this month. */}
       <Pressable
         onPress={() => {
@@ -242,6 +267,7 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
         android_ripple={{ color: surfaces.control, borderless: false }}
         style={({ pressed }) => [
           styles.budgetRow,
+          wide && styles.linkWide,
           { backgroundColor: surfaces.tile, borderColor: theme.colors.border },
           pressed && styles.pressed,
         ]}
@@ -249,24 +275,26 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
         accessibilityLabel="Highest spending categories: see where you spend the most. Open the ranking"
         testID="dashboard-top-categories"
       >
-        <View style={[styles.budgetGlyph, { backgroundColor: withAlpha(theme.colors.primary, surfaces.isDark ? 0.18 : 0.1) }]}>
-          <ListOrdered size={18} color={theme.colors.primary} strokeWidth={2.2} />
-        </View>
+        {wide ? null : (
+          <View style={[styles.budgetGlyph, { backgroundColor: withAlpha(theme.colors.primary, surfaces.isDark ? 0.18 : 0.1) }]}>
+            <ListOrdered size={18} color={theme.colors.primary} strokeWidth={2.2} />
+          </View>
+        )}
         <View style={styles.budgetBody}>
           <Text
-            style={[styles.budgetTitle, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
+            style={[styles.budgetTitle, wide && styles.linkTitleWide, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
             numberOfLines={1}
           >
-            Highest spending categories
+            {wide ? "Top categories" : "Highest spending categories"}
           </Text>
           <Text
-            style={[styles.budgetCaption, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+            style={[styles.budgetCaption, wide && styles.linkCaptionWide, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
             numberOfLines={1}
           >
-            See where you spend the most
+            {wide ? "Where you spend most" : "See where you spend the most"}
           </Text>
         </View>
-        <ChevronRight size={18} color={theme.colors.mutedForeground} strokeWidth={2.2} />
+        {wide ? null : <ChevronRight size={18} color={theme.colors.mutedForeground} strokeWidth={2.2} />}
       </Pressable>
 
       {/* SPENDLY-578: the entry to Spending Trends for this month. */}
@@ -278,6 +306,7 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
         android_ripple={{ color: surfaces.control, borderless: false }}
         style={({ pressed }) => [
           styles.budgetRow,
+          wide && styles.linkWide,
           { backgroundColor: surfaces.tile, borderColor: theme.colors.border },
           pressed && styles.pressed,
         ]}
@@ -285,24 +314,26 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
         accessibilityLabel="Spending trend: see how your spending changes over time. Open spending trends"
         testID="dashboard-spending-trend"
       >
-        <View style={[styles.budgetGlyph, { backgroundColor: withAlpha(theme.colors.primary, surfaces.isDark ? 0.18 : 0.1) }]}>
-          <TrendingUp size={18} color={theme.colors.primary} strokeWidth={2.2} />
-        </View>
+        {wide ? null : (
+          <View style={[styles.budgetGlyph, { backgroundColor: withAlpha(theme.colors.primary, surfaces.isDark ? 0.18 : 0.1) }]}>
+            <TrendingUp size={18} color={theme.colors.primary} strokeWidth={2.2} />
+          </View>
+        )}
         <View style={styles.budgetBody}>
           <Text
-            style={[styles.budgetTitle, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
+            style={[styles.budgetTitle, wide && styles.linkTitleWide, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
             numberOfLines={1}
           >
             Spending trend
           </Text>
           <Text
-            style={[styles.budgetCaption, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+            style={[styles.budgetCaption, wide && styles.linkCaptionWide, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
             numberOfLines={1}
           >
-            See how your spending changes over time
+            {wide ? "Month over month" : "See how your spending changes over time"}
           </Text>
         </View>
-        <ChevronRight size={18} color={theme.colors.mutedForeground} strokeWidth={2.2} />
+        {wide ? null : <ChevronRight size={18} color={theme.colors.mutedForeground} strokeWidth={2.2} />}
       </Pressable>
 
       <Pressable
@@ -310,24 +341,27 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
         android_ripple={{ color: surfaces.control, borderless: false }}
         style={({ pressed }) => [
           styles.budgetRow,
+          wide && styles.linkWide,
           { backgroundColor: surfaces.tile, borderColor: theme.colors.border },
           pressed && styles.pressed,
         ]}
         accessibilityRole="button"
         accessibilityLabel={`${budgetTitle}: ${budgetCaption}. ${hasAnyBudget ? "Open budget progress" : "Set a budget"}`}
       >
-        <View style={[styles.budgetGlyph, { backgroundColor: withAlpha(theme.colors.destructive, surfaces.isDark ? 0.18 : 0.1) }]}>
-          <Target size={18} color={theme.colors.destructive} strokeWidth={2.2} />
-        </View>
+        {wide ? null : (
+          <View style={[styles.budgetGlyph, { backgroundColor: withAlpha(theme.colors.destructive, surfaces.isDark ? 0.18 : 0.1) }]}>
+            <Target size={18} color={theme.colors.destructive} strokeWidth={2.2} />
+          </View>
+        )}
         <View style={styles.budgetBody}>
           <Text
-            style={[styles.budgetTitle, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
+            style={[styles.budgetTitle, wide && styles.linkTitleWide, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
             numberOfLines={1}
           >
             {budgetTitle}
           </Text>
           <Text
-            style={[styles.budgetCaption, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+            style={[styles.budgetCaption, wide && styles.linkCaptionWide, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
             numberOfLines={1}
           >
             {budgetCaption}
@@ -336,8 +370,9 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
             <ProgressIndicator pct={budgetPct} status={budgetStatus} style={styles.budgetBar} />
           ) : null}
         </View>
-        <ChevronRight size={18} color={theme.colors.mutedForeground} strokeWidth={2.2} />
+        {wide ? null : <ChevronRight size={18} color={theme.colors.mutedForeground} strokeWidth={2.2} />}
       </Pressable>
+      </View>
     </Section>
   );
 });
@@ -400,6 +435,40 @@ const styles = StyleSheet.create({
   legendPct: {
     fontSize: 14,
     fontVariant: ["tabular-nums"],
+  },
+  legendPctWide: {
+    minWidth: 40,
+    textAlign: "right",
+  },
+  legendAmount: {
+    minWidth: 76,
+    textAlign: "right",
+    fontSize: 14,
+    fontVariant: ["tabular-nums"],
+  },
+  chartRowWide: {
+    flexWrap: "nowrap",
+    gap: 24,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+  linkStrip: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 16,
+  },
+  linkWide: {
+    flex: 1,
+    minWidth: 0,
+    marginTop: 0,
+    padding: 10,
+    gap: 10,
+  },
+  linkTitleWide: {
+    fontSize: 13.5,
+  },
+  linkCaptionWide: {
+    fontSize: 12,
   },
   budgetRow: {
     flexDirection: "row",

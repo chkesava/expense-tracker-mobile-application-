@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DASHBOARD_MAX,
   contentMaxWidthOf,
   gridColumnsOf,
+  isDesktopDashboard,
   layoutOf,
   sheetPresentationOf,
   sidebarVisible,
@@ -47,6 +49,31 @@ describe("contentMaxWidthOf", () => {
   it("keeps readable content at one width above compact", () => {
     expect(contentMaxWidthOf("medium", "readable")).toBe(720);
     expect(contentMaxWidthOf("expanded", "readable")).toBe(720);
+  });
+
+  it("gives the dashboard its desktop cap only at expanded (SPENDLY-718)", () => {
+    expect(contentMaxWidthOf("compact", "dashboard")).toBeUndefined();
+    expect(contentMaxWidthOf("medium", "dashboard")).toBe(960);
+    expect(contentMaxWidthOf("expanded", "dashboard")).toBe(DASHBOARD_MAX);
+    // A 1920 monitor's page column (1920 - 232 sidebar) fits under the cap.
+    expect(DASHBOARD_MAX).toBeLessThanOrEqual(1920 - 232);
+  });
+});
+
+describe("isDesktopDashboard (SPENDLY-718)", () => {
+  it("switches to the desktop composition at 1280 on web", () => {
+    expect(isDesktopDashboard(1279, true)).toBe(false);
+    expect(isDesktopDashboard(1280, true)).toBe(true);
+    expect(isDesktopDashboard(1920, true)).toBe(true);
+  });
+
+  it("keeps tablet and the small desktop on the existing grid", () => {
+    expect(isDesktopDashboard(768, true)).toBe(false);
+    expect(isDesktopDashboard(1024, true)).toBe(false);
+  });
+
+  it("never applies on native", () => {
+    expect(isDesktopDashboard(1920, false)).toBe(false);
   });
 });
 

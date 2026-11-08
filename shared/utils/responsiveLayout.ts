@@ -31,10 +31,12 @@ export function layoutOf(width: number, isWeb: boolean): SpendlyLayout {
 }
 
 /**
- * `wide` suits dashboards, hubs and lists; `readable` suits forms, settings
- * and long text, which get hard to scan when stretched.
+ * `wide` suits hubs and lists; `readable` suits forms, settings and long
+ * text, which get hard to scan when stretched. `dashboard` is the Expense
+ * dashboard (SPENDLY-718): wide below 1280, then room for its desktop
+ * composition on large monitors.
  */
-export type ContentWidthVariant = "wide" | "readable";
+export type ContentWidthVariant = "wide" | "readable" | "dashboard";
 
 const WIDE_MAX: Record<SpendlyLayout, number | undefined> = {
   compact: undefined,
@@ -42,6 +44,11 @@ const WIDE_MAX: Record<SpendlyLayout, number | undefined> = {
   expanded: 1280,
 };
 const READABLE_MAX = 720;
+/**
+ * SPENDLY-718: the desktop dashboard's cap. A 1920 monitor leaves a 1688
+ * page column beside the sidebar, so the cap only bites on ultrawide screens.
+ */
+export const DASHBOARD_MAX = 1680;
 
 /** Content cap, or `undefined` for full width (compact keeps today's layout). */
 export function contentMaxWidthOf(
@@ -49,7 +56,20 @@ export function contentMaxWidthOf(
   variant: ContentWidthVariant = "wide"
 ): number | undefined {
   if (layout === "compact") return undefined;
-  return variant === "readable" ? READABLE_MAX : WIDE_MAX[layout];
+  if (variant === "readable") return READABLE_MAX;
+  if (variant === "dashboard" && layout === "expanded") return DASHBOARD_MAX;
+  return WIDE_MAX[layout];
+}
+
+/**
+ * SPENDLY-718: the dashboard switches to its desktop composition (net worth
+ * beside the totals and quick actions, two analytics columns, three lower
+ * cards) from this viewport width. Below it, the SPENDLY-559 grid stays.
+ */
+export const DASHBOARD_DESKTOP_MIN = 1280;
+
+export function isDesktopDashboard(width: number, isWeb: boolean): boolean {
+  return isWeb && width >= DASHBOARD_DESKTOP_MIN;
 }
 
 /** How many columns a card grid uses. Compact is always one column. */

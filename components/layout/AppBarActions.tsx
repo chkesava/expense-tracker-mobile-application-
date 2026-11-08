@@ -15,10 +15,16 @@ import { themeUsesDarkPalette } from "@/theme/tokens";
 export function AppBarActions({
   onOpenProfile,
   ink,
+  searchField = false,
 }: {
   onOpenProfile: () => void;
   /** Icon colour override for a bar drawn over an image (SPENDLY-566). */
   ink?: string;
+  /**
+   * SPENDLY-718: a wide "Search transactions" field instead of the icon, for
+   * the desktop dashboard header. Same destination as the icon.
+   */
+  searchField?: boolean;
 }) {
   const { push } = useRouter();
   const { user } = useAuth();
@@ -52,16 +58,40 @@ export function AppBarActions({
   ).toUpperCase();
 
   return (
-    <View style={styles.rightSection}>
-      <Pressable
-        onPress={handleSearch}
-        android_ripple={{ color: ripple, borderless: true, radius: 24 }}
-        style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
-        accessibilityRole="button"
-        accessibilityLabel="Search transactions"
-      >
-        <Search size={APP_BAR_ICON_SIZE} color={iconColor} strokeWidth={2} />
-      </Pressable>
+    <View style={[styles.rightSection, searchField && styles.rightSectionWide]}>
+      {searchField ? (
+        <Pressable
+          onPress={handleSearch}
+          style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+            styles.searchField,
+            {
+              backgroundColor: theme.colors.card,
+              borderColor: hovered ? theme.colors.outline : theme.colors.border,
+            },
+            pressed && styles.pressed,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Search transactions"
+        >
+          <Search size={18} color={theme.colors.mutedForeground} strokeWidth={2} />
+          <Text
+            style={[styles.searchText, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+            numberOfLines={1}
+          >
+            Search transactions
+          </Text>
+        </Pressable>
+      ) : (
+        <Pressable
+          onPress={handleSearch}
+          android_ripple={{ color: ripple, borderless: true, radius: 24 }}
+          style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Search transactions"
+        >
+          <Search size={APP_BAR_ICON_SIZE} color={iconColor} strokeWidth={2} />
+        </Pressable>
+      )}
 
       <Pressable
         onPress={handleInbox}
@@ -99,6 +129,25 @@ const styles = StyleSheet.create({
   rightSection: {
     flexDirection: "row",
     alignItems: "center",
+  },
+  rightSectionWide: {
+    gap: 6,
+  },
+  searchField: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    width: 300,
+    maxWidth: "100%",
+    minHeight: 42,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    marginRight: 6,
+  },
+  searchText: {
+    flex: 1,
+    fontSize: 14,
   },
   iconButton: {
     width: APP_BAR_TOUCH_SIZE,

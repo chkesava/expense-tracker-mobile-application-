@@ -36,6 +36,8 @@ import { useTheme } from "@/theme/ThemeProvider";
 export interface SubscriptionsWidgetProps {
   currency: string;
   extraDues?: UpcomingDueItem[];
+  /** SPENDLY-718: stretch to the desktop dashboard row's height. */
+  fill?: boolean;
 }
 
 const PREVIEW_LIMIT = 4;
@@ -55,6 +57,7 @@ function dueLabel(days: number): string {
 export const SubscriptionsWidget = memo(function SubscriptionsWidget({
   currency,
   extraDues: explicitExtraDues,
+  fill = false,
 }: SubscriptionsWidgetProps) {
   const { push } = useRouter();
   const { theme } = useTheme();
@@ -141,6 +144,8 @@ export const SubscriptionsWidget = memo(function SubscriptionsWidget({
 
   return (
     <Section
+      fill={fill}
+      testID="dash-upcoming"
       title="Upcoming"
       subtitle={`${commitments.activeCount} active recurring`}
       icon={<Repeat size={16} color={theme.colors.primary} strokeWidth={2.3} />}

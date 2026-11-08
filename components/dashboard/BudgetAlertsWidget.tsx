@@ -39,6 +39,16 @@ export interface BudgetAlertsWidgetProps {
   categoryTotals?: Record<string, number>;
   activeMonth: string;
   budget: SpendlyBudget;
+  /** SPENDLY-718: stretch to the desktop dashboard row's height. */
+  fill?: boolean;
+  /**
+   * SPENDLY-718: the desktop dashboard splits the stack so its lower row
+   * stays balanced. `primary` is the Monthly Budget (or Category Budgets
+   * when no monthly target is set, or the empty state); `rest` is Category
+   * Budgets when the monthly card took the primary slot. `all` (default)
+   * is both, as on phones.
+   */
+  part?: "all" | "primary" | "rest";
 }
 
 function statusColorOf(
@@ -90,6 +100,8 @@ export const BudgetAlertsWidget = memo(function BudgetAlertsWidget({
   categoryTotals,
   activeMonth,
   budget,
+  fill = false,
+  part = "all",
 }: BudgetAlertsWidgetProps) {
   const router = useRouter();
   const { theme } = useTheme();
@@ -118,9 +130,20 @@ export const BudgetAlertsWidget = memo(function BudgetAlertsWidget({
         ? ("warning" as const)
         : ("positive" as const);
 
-  if (monthlyBudget === 0 && activeCategoryBudgets.length === 0) {
+  const hasCategories = activeCategoryBudgets.length > 0;
+  const showMonthly = part !== "rest" && monthlyBudget > 0;
+  const showCategories =
+    part === "all"
+      ? hasCategories
+      : part === "primary"
+        ? monthlyBudget === 0 && hasCategories
+        : monthlyBudget > 0 && hasCategories;
+
+  if (monthlyBudget === 0 && !hasCategories) {
+    if (part === "rest") return null;
     return (
       <Section
+        fill={fill}
         title="Monthly Budget"
         icon={<Wallet size={16} color={theme.colors.mutedForeground} strokeWidth={2.3} />}
         iconTint={surfaces.tile}
@@ -139,10 +162,14 @@ export const BudgetAlertsWidget = memo(function BudgetAlertsWidget({
     );
   }
 
+  if (!showMonthly && !showCategories) return null;
+
   return (
-    <View style={styles.stack}>
-      {monthlyBudget > 0 ? (
+    <View style={[styles.stack, fill && styles.fill]} testID={part === "rest" ? "dash-budget-categories" : "dash-budget"}>
+      {showMonthly ? (
         <Section
+          // The last card in the stack takes the row's spare height.
+          fill={fill && !showCategories}
           title="Monthly Budget"
           subtitle="Spending against this month's target"
           icon={<Wallet size={16} color={statusColor} strokeWidth={2.3} />}
@@ -208,8 +235,9 @@ export const BudgetAlertsWidget = memo(function BudgetAlertsWidget({
         </Section>
       ) : null}
 
-      {activeCategoryBudgets.length > 0 ? (
+      {showCategories ? (
         <Section
+          fill={fill}
           title="Category Budgets"
           subtitle={`${activeMonth} · ${activeCategoryBudgets.length} budgeted`}
           icon={<Target size={16} color={theme.colors.primary} strokeWidth={2.3} />}
@@ -275,6 +303,9 @@ export const BudgetAlertsWidget = memo(function BudgetAlertsWidget({
 const styles = StyleSheet.create({
   stack: {
     gap: 12,
+  },
+  fill: {
+    flex: 1,
   },
   grid: {
     marginTop: 14,
