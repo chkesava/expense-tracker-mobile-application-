@@ -6,7 +6,7 @@ Related work:
 - SPENDLY-532: dashboard redesign.
 - SPENDLY-566: Visual First and the mountain hero.
 - SPENDLY-559: responsive web grid.
-- SPENDLY-717: mobile web spacing. It is In Progress and also edits `app/(app)/dashboard.tsx`, so whichever branch merges second rebases.
+- SPENDLY-717: mobile web spacing, on main (PR #278). This branch is rebased onto it: phones keep 717's "Show more" split and Smart Insights placement, and `renderMoreItems` takes the Smart Insights position as a parameter.
 
 Reference: `design/references/spendly-desktop-dashboard-reference.png` (1672 × 941). Its warm cream and orange are the existing **Sunset Orange** palette; the implementation only uses theme tokens.
 
@@ -112,15 +112,15 @@ Local review, Expo web against the Firebase emulator (demo user), Playwright 1.x
 
 | Command | Result |
 |---|---|
-| `npx vitest run shared/utils/responsiveLayout.test.ts shared/utils/dashboardDesktop.test.ts shared/utils/dashboardWidgets.test.ts shared/config/navigation.test.ts shared/utils/netWorthHistory.test.ts` | Pass |
-| `npm test` | 8231 / 8232 pass. The 1 failure is `cloudflare/push-trigger/trigger.test.ts` (PUSH_REMINDERS_ENABLED contract). It fails identically on `main` and is untouched here |
-| `npm run typecheck:shared` | Pass |
-| `npx tsc -p tsconfig.json --noEmit` | Exit 0 before the final layout polish. A rerun after it printed no errors, but its exit code was lost when the job was stopped for low memory, so it needs one clean rerun |
-| `npm run build:web:expense` | Built (19.85 MB `expense` bundle) with the local-test env before the final polish. The production-config run was stopped for low memory and is pending |
+| `npx vitest run shared/utils/responsiveLayout.test.ts shared/utils/dashboardDesktop.test.ts shared/utils/dashboardWidgets.test.ts lib/dashboardEntrance.contract.test.ts shared/config/navigation.test.ts shared/utils/netWorthHistory.test.ts` | 107 / 107 pass, after the rebase onto main with SPENDLY-717 |
+| `npm test` | 8237 / 8238 pass, after the rebase. The 1 failure is `cloudflare/push-trigger/trigger.test.ts` (PUSH_REMINDERS_ENABLED contract). It fails identically on `main` and is untouched here |
+| `npm run typecheck:shared` | Exit 0, after the rebase |
+| `npx tsc -p tsconfig.json --noEmit` | Exit 0, no errors, after the rebase |
+| `npm run build:web:expense` | Exit 0 with production config (`.env.local` moved aside, so the emulator host is not inlined): 19.85 MB `expense` bundle |
 | Lint | No lint script is configured |
 
 ## Limitations
 - **Ultrawide.** Above ~1930px the content is capped at 1680 and centred, so the hero spans 1680 rather than the full window.
-- **Search.** The header's search field opens the ledger, as the icon did. Spendly has no global search yet.
+- **Search.** The header's search field opens the ledger, as the icon did. Spendly has no global search yet; **SPENDLY-721** (follow-up) builds it, with Ctrl/⌘K.
 - **Sparse history.** With fewer than 3 saved net-worth days, the hero shows the existing "Trend appears after…" note and the totals say "No change history yet". The emulator demo user has 1 day, so the screenshots show that state.
 - **Device and browser coverage.** No native device QA was needed, since the native tree is unchanged. Browser checks were Chromium only.
