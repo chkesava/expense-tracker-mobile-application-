@@ -10,6 +10,7 @@ import {
   getOrderedDashboardWidgets,
   budgetProgressSummary,
   getMoreDashboardWidgets,
+  splitCompactMoreCards,
   KNOWN_DASHBOARD_WIDGETS,
   spendingBreakdown,
   topCategoryShares,
@@ -363,5 +364,30 @@ describe("dashboardWidgets utilities", () => {
       expect(more).not.toContain("overview");
       expect(more).toContain("budgetAlerts");
     });
+  });
+});
+
+describe("splitCompactMoreCards (SPENDLY-717)", () => {
+  it("leads with accounts, Safe to Spend and Income & expenses, in that order", () => {
+    const ids = ["cashFlow", "focus", "budgetAlerts", "subscriptions", "financialGoals", "gamification", "accounts", "shortcuts"];
+    const { lead, rest } = splitCompactMoreCards(ids);
+    expect(lead).toEqual(["accounts", "focus", "cashFlow"]);
+    expect(rest).toEqual(["budgetAlerts", "subscriptions", "financialGoals", "gamification", "shortcuts"]);
+  });
+
+  it("never adds a card the user turned off, and never drops one", () => {
+    const ids = ["cashFlow", "budgetAlerts", "accounts", "shortcuts"]; // focus toggled off
+    const { lead, rest } = splitCompactMoreCards(ids);
+    expect(lead).toEqual(["accounts", "cashFlow"]);
+    expect([...lead, ...rest].sort()).toEqual([...ids].sort());
+  });
+
+  it("keeps the user's order for the rest", () => {
+    const { rest } = splitCompactMoreCards(["gamification", "focus", "subscriptions", "budgetAlerts"]);
+    expect(rest).toEqual(["gamification", "subscriptions", "budgetAlerts"]);
+  });
+
+  it("handles an empty list", () => {
+    expect(splitCompactMoreCards([])).toEqual({ lead: [], rest: [] });
   });
 });
