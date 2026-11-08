@@ -4,7 +4,7 @@ Plan: [SPENDLY-682-plan.md](SPENDLY-682-plan.md). Integration branch: `feature/S
 
 | Sub-task | Jira | Branch | State |
 |---|---|---|---|
-| A: server foundations | SPENDLY-725 | `feature/SPENDLY-725-daily-job-foundations` | built, awaiting merge approval ([doc](SPENDLY-725-daily-job-foundations.md)) |
+| A: server foundations | SPENDLY-725 | `feature/SPENDLY-725-daily-job-foundations` | merged into the 682 branch 6a7dd22e ([doc](SPENDLY-725-daily-job-foundations.md)) |
 | B: SIP daily job | SPENDLY-726 | `feature/SPENDLY-726-sip-daily-job` | not started |
 | C: bill daily job | SPENDLY-727 | `feature/SPENDLY-727-bill-daily-job` | not started |
 | D: read-only reports | SPENDLY-728 | `feature/SPENDLY-728-legacy-data-reports` | not started |
