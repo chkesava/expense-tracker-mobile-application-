@@ -27,8 +27,8 @@ export function memorySink(initial: { reads24h?: number; lastNotes?: Record<stri
     async readsUsedSince() {
       return (initial.reads24h ?? 0) + runs.reduce((s, r) => s + r.readsUsed, 0);
     },
-    async lastRunNotes(mode) {
-      const last = [...runs].reverse().find((r) => r.notes.syncMode === mode);
+    async lastRunNotes(mode, trigger) {
+      const last = [...runs].reverse().find((r) => r.notes.syncMode === mode && r.notes.trigger === trigger);
       return last ? last.notes : initial.lastNotes ?? null;
     },
     async checkpoints() {

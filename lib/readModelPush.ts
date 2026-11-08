@@ -14,12 +14,20 @@ import { MAX_PUSH_REFS, pushRefFromPath, pushRefKey, type PushRef } from "@/shar
  * The pusher de-duplicates, waits `debounceMs` so a burst of saves is one
  * request, then waits until Firestore has committed every pending write (so
  * the server reads the saved version; offline, it simply waits), and POSTs
- * the refs. It never sends data, never pushes in Spendly Test or a duress
- * session, drops anything noted for a user who has since signed out, and
- * never surfaces an error: a failed push is logged once and the nightly sync
- * repairs it.
+ * the refs, `MAX_PUSH_REFS` per request (SPENDLY-712: a bulk writer such as
+ * the category taxonomy upgrade names hundreds). When the server's rate limit
+ * answers 429 the unsent refs wait out its window; only a backlog over
+ * `MAX_PENDING_PUSH_REFS` becomes a per-user sync. It never sends data,
+ * never pushes in Spendly Test or a duress session, drops anything noted for
+ * a user who has since signed out, and never surfaces an error: a failed push
+ * is logged once and the nightly sync repairs it.
  */
 export type PushUser = { uid: string; getIdToken(): Promise<string> };
+
+/** More refs than this waiting to be sent, and one per-user sync replaces them. */
+export const MAX_PENDING_PUSH_REFS = 1000;
+/** After a 429, wait out the server's rate-limit window (PUSH_WINDOW_SECONDS). */
+export const PUSH_RATE_LIMIT_WAIT_MS = 10 * 60 * 1000;
 
 export type PusherDeps = {
   /** The function URL, or "" when the read model isn't set up in this build. */
@@ -32,16 +40,20 @@ export type PusherDeps = {
   fetch(url: string, init: { method: string; headers: Record<string, string>; body: string }): Promise<{ ok: boolean; status: number }>;
   log(event: string, detail: unknown): void;
   debounceMs?: number;
+  now?: () => number;
 };
 
 export function createReadModelPusher(deps: PusherDeps) {
   const debounceMs = deps.debounceMs ?? 2000;
+  const now = deps.now ?? Date.now;
   let pending = new Map<string, PushRef>();
   let pendingUid: string | null = null;
   let userSync = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let running = false;
   let warned = false;
+  // Rate limited until then: nothing is sent before it.
+  let heldUntil = 0;
 
   const warnOnce = (detail: unknown) => {
     if (warned) return;
@@ -49,12 +61,22 @@ export function createReadModelPusher(deps: PusherDeps) {
     deps.log("readModel.push", detail);
   };
 
-  function schedule() {
+  function schedule(ms = debounceMs) {
     if (timer) return;
     timer = setTimeout(() => {
       timer = null;
       void flush();
-    }, debounceMs);
+    }, ms);
+  }
+
+  function add(refs: PushRef[]) {
+    if (userSync) return;
+    for (const ref of refs) pending.set(pushRefKey(ref), ref);
+    // Too many to name: one per-user changed-only sync covers them all.
+    if (pending.size > MAX_PENDING_PUSH_REFS) {
+      userSync = true;
+      pending = new Map();
+    }
   }
 
   function accept(uid: string): boolean {
@@ -70,14 +92,7 @@ export function createReadModelPusher(deps: PusherDeps) {
 
   function note(uid: string, refs: PushRef[]) {
     if (!refs.length || !accept(uid)) return;
-    if (!userSync) {
-      for (const ref of refs) pending.set(pushRefKey(ref), ref);
-      // Too many to name: one per-user changed-only sync covers them all.
-      if (pending.size > MAX_PUSH_REFS) {
-        userSync = true;
-        pending = new Map();
-      }
-    }
+    add(refs);
     schedule();
   }
 
@@ -93,13 +108,21 @@ export function createReadModelPusher(deps: PusherDeps) {
       schedule();
       return;
     }
-    const refs = [...pending.values()];
+    const wait = heldUntil - now();
+    if (wait > 0) {
+      schedule(wait);
+      return;
+    }
     const sync = userSync;
     const uid = pendingUid;
-    pending = new Map();
+    // One request names at most MAX_PUSH_REFS; the rest go in the next ones.
+    const refs = sync ? [] : [...pending.values()].slice(0, MAX_PUSH_REFS);
+    if (sync) pending = new Map();
+    else for (const ref of refs) pending.delete(pushRefKey(ref));
     userSync = false;
     if (!uid || (!sync && refs.length === 0)) return;
     running = true;
+    let limited = false;
     try {
       await deps.waitForCommit();
       const user = deps.getUser();
@@ -111,11 +134,24 @@ export function createReadModelPusher(deps: PusherDeps) {
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify(sync ? { mode: "user" } : { refs }),
       });
+      if (response.status === 429) limited = true;
       if (!response.ok && response.status !== 202) warnOnce({ status: response.status });
     } catch (error) {
       warnOnce(error);
     } finally {
       running = false;
+      // Rate limited: keep this request's refs (same user only) for after the window.
+      if (limited && pendingUid === uid) {
+        heldUntil = now() + PUSH_RATE_LIMIT_WAIT_MS;
+        if (sync) {
+          userSync = true;
+          pending = new Map();
+        } else {
+          const rest = [...pending.values()];
+          pending = new Map();
+          add([...refs, ...rest]);
+        }
+      }
       if (pending.size || userSync) schedule();
     }
   }
