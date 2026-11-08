@@ -65,9 +65,22 @@ async function ensureCategoryHierarchyOnce(
   db: Firestore,
   uid: string
 ): Promise<void> {
-  // SPENDLY-712: every document this run commits, announced to the read model
-  // by stampVersion once all of them are saved.
+  // SPENDLY-712: every document this run commits, announced to the read model.
+  // SPENDLY-730: in `finally`, so the batches committed before a failure are
+  // announced too (a retry finds them already correct and won't write them).
   const written = new Set<string>();
+  try {
+    await migrateCategoryHierarchy(db, uid, written);
+  } finally {
+    noteDirectWrites(uid, [...written]);
+  }
+}
+
+async function migrateCategoryHierarchy(
+  db: Firestore,
+  uid: string,
+  written: Set<string>
+): Promise<void> {
   const metaRef = doc(db, "users", uid, "meta", "categories");
   const metaSnap = await getDoc(metaRef);
   const meta = metaSnap.exists() ? metaSnap.data() : undefined;
@@ -106,13 +119,13 @@ async function ensureCategoryHierarchyOnce(
   if (version >= CATEGORY_HIERARCHY_VERSION && !needsDocs) {
     // Already correct, but stamped before fingerprints existed: stamp it so
     // the next login takes the early exit above.
-    await stampVersion(db, uid, written);
+    await stampVersion(db, uid);
     return;
   }
 
   if (version === 0 && existing.length === 0) {
     await upsertDefaultTaxonomy(db, uid, [], written);
-    await stampVersion(db, uid, written);
+    await stampVersion(db, uid);
     return;
   }
 
@@ -125,14 +138,14 @@ async function ensureCategoryHierarchyOnce(
     await writer.flush();
     await upsertDefaultTaxonomy(db, uid, [], written);
     await remapAllNamedPairsToV4(db, uid, written);
-    await stampVersion(db, uid, written);
+    await stampVersion(db, uid);
     return;
   }
 
   await upsertDefaultTaxonomy(db, uid, existing, written);
   await reparentCustomSubsOntoMappedParents(db, uid, written);
   await remapAllNamedPairsToV4(db, uid, written);
-  await stampVersion(db, uid, written);
+  await stampVersion(db, uid);
 }
 
 /**
@@ -141,9 +154,10 @@ async function ensureCategoryHierarchyOnce(
  * loading categories by revision reload them.
  * SPENDLY-712: the read model gets exactly the documents written (the client
  * outbox, and the server push in chunks), not a per-user sync: that sync
- * timed out on Netlify for a 417-document taxonomy upgrade.
+ * timed out on Netlify for a 417-document taxonomy upgrade. They are announced
+ * by ensureCategoryHierarchyOnce once the run ends (SPENDLY-730).
  */
-async function stampVersion(db: Firestore, uid: string, written: Set<string>) {
+async function stampVersion(db: Firestore, uid: string) {
   await setDoc(
     doc(db, "users", uid, "meta", "categories"),
     {
@@ -155,7 +169,6 @@ async function stampVersion(db: Firestore, uid: string, written: Set<string>) {
     },
     { merge: true }
   );
-  noteDirectWrites(uid, [...written]);
 }
 
 /** Batches writes; each committed batch's paths are added to `written`. */
