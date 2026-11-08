@@ -14,6 +14,7 @@ import {
 } from "@/services/tax/taxDeductionStore";
 import { acceptTdsDifference, undoTdsAcceptance } from "@/services/tax/taxTdsStore";
 import { saveSaleDecision, undoSaleDecision, type SaleDecision } from "@/services/tax/taxCapitalGainStore";
+import { saveChecklistDecision, undoChecklistDecision } from "@/services/tax/taxChecklistStore";
 import type { FinancialYearKey, TaxAgeBand, TaxEntry, TaxLine, TaxProfile, TaxResidentialStatus } from "@/shared/features/tax/types";
 import { taxIssueMessage } from "@/shared/features/tax/utils/issueMessages";
 import type { TdsMatchRow } from "@/shared/features/tax/utils/tdsReconcile";
@@ -154,9 +155,25 @@ export function useTaxRecordActions(fy: FinancialYearKey, todayKey: string) {
     [fy, run]
   );
 
+  // SPENDLY-296: readiness checklist items.
+  const checklistDecision = useCallback(
+    (itemId: string, decision: "resolve" | "defer") =>
+      run("tax.checklist.decide", "Couldn't save this.", async (u) =>
+        writeSavedMessage(await saveChecklistDecision(u, fy, itemId, decision), decision === "resolve" ? "Marked as handled" : "Put off for later")
+      ),
+    [fy, run]
+  );
+
+  const undoChecklist = useCallback(
+    (itemId: string) => run("tax.checklist.undo", "Couldn't undo this.", async (u) => writeSavedMessage(await undoChecklistDecision(u, fy, itemId), "Back on your list")),
+    [fy, run]
+  );
+
   return {
     saving,
     saveProfile,
+    checklistDecision,
+    undoChecklist,
     saveRecord,
     removeRecord,
     acceptDifference,

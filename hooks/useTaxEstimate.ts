@@ -45,5 +45,17 @@ export function useTaxEstimate(fy: FinancialYearKey, options?: { enabled?: boole
     profile.retry();
   };
 
-  return { input, comparison, profile: profile.profile, loading, error, retry };
+  return {
+    input,
+    comparison,
+    profile: profile.profile,
+    income: income.summary,
+    deductions: deductions.summary,
+    capitalGains: capitalGains.summary,
+    entries: income.entries,
+    reviews: income.reviews,
+    loading,
+    error,
+    retry,
+  };
 }
