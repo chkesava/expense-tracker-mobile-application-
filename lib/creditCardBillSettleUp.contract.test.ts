@@ -5,12 +5,13 @@ import { describe, expect, it } from "vitest";
 /**
  * SPENDLY-719 guard. The bills list and every reminder trust the stored bill
  * (`amountPaid`, `status`, `remainingAmount`); only the bill pass keeps it in
- * line with the ledger, where cashback also settles statements. So:
+ * line with the ledger, where cashback also settles statements. So every
+ * money action that moves a card's settlement asks for a pass straight after
+ * (`requestBillPass`).
  *
- * - every money action that moves a card's settlement asks for a pass
- *   straight after (`requestBillPass`);
- * - the pass's "already done" fingerprint covers the stored settlement, so a
- *   skipped compare-and-set is retried instead of remembered as finished.
+ * SPENDLY-734 (epic SPENDLY-735): the pass runs on the server
+ * (the `bill-daily` job, scripts/lib/billDailyCore.ts), never in the app. `requestBillPass` is the
+ * one signal; SPENDLY-737 makes it ask the server to run now.
  *
  * A new writer of bill payments or cashback belongs in WRITERS below. These
  * files import React Native, so this pins their source.
@@ -56,12 +57,8 @@ describe("SPENDLY-719: stored bills are settled against the ledger after every m
     expect(callers.sort()).toEqual([...WRITERS].sort());
   });
 
-  it("the pass fingerprint is built by billPassFingerprint (which covers the stored settlement)", () => {
-    expect(provider).toContain("const fingerprint = billPassFingerprint({");
-    expect(provider).not.toContain("const fingerprint = JSON.stringify(");
-  });
-
-  it("an unfinished pass is not remembered as done", () => {
-    expect(provider).toContain('lastAutoBillFingerprintRef.current = incomplete ? "" : fingerprint;');
+  it("the app computes no bill pass itself: requestBillPass is a signal to the server (SPENDLY-734)", () => {
+    expect(provider).not.toContain("generateAutoBills");
+    expect(provider).toContain("const requestBillPass = useCallback(");
   });
 });
