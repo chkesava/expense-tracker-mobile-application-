@@ -1,5 +1,4 @@
 import {
-  addDoc,
   arrayUnion,
   collection,
   doc,
@@ -27,7 +26,7 @@ import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { notifyReadModelSnapshot } from "@/lib/readModelPush";
 import { noteDirectWrites } from "@/lib/readModelWriteHooks";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
-import { friendlyErrorMessage, logError } from "@/lib/errors";
+import { friendlyErrorMessage, logError, logWarning } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useAccounts } from "@/hooks/useAccounts";
@@ -43,7 +42,6 @@ import {
   DEFAULT_BILL_REMINDER_FREQUENCY,
   type CreateCreditCardBillInput,
   type CreditCardBill,
-  type CreditCardBillReminderLog,
 } from "@/shared/types/creditCardBill";
 import { validateCreateCreditCardBillInput } from "@/shared/utils/creditCardBillValidate";
 import { refreshCreditCardBillDerivedFields } from "@/shared/utils/creditCardBillDerived";
@@ -51,8 +49,10 @@ import {
   previewSettledAutoBillRecalculation,
   type SettledBillRecalculation,
 } from "@/shared/utils/autoCreditCardBills";
+import { billReminderPlanKey } from "@/shared/utils/creditCardBillReminders";
 import { todayDateKey } from "@/shared/utils/dates";
 import {
+  billNotificationsAllowed,
   cancelAllBillReminders,
   cancelBillReminders,
   reconcileBillReminders,
@@ -228,59 +228,66 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     };
   }, [user?.uid, timezone, shouldListen, billsSource.mode]);
 
-  const writeReminderLog = useCallback(
-    async (entry: Omit<CreditCardBillReminderLog, "id" | "sentAt" | "channel">) => {
-      const db = getFirestoreDb();
-      if (!user || !db) return;
-      try {
-        // Diagnostic log only — never block the caller on the network for it.
-        await commitWrite(
-          () =>
-            addDoc(
-              collection(db, "users", user.uid, "creditCardBillReminderLogs"),
-              {
-                billId: entry.billId,
-                notificationType: entry.notificationType,
-                daysBefore: entry.daysBefore ?? null,
-                sentAt: new Date().toISOString(),
-                channel: "local",
-                status: entry.status,
-                reason: entry.reason ?? null,
-                createdAt: serverTimestamp(),
-              }
-            ),
-          { graceMs: 0, onLateFailure: () => undefined }
-        );
-      } catch {
-        // soft-fail — logging must not affect bill state
+  // SPENDLY-738 (epic SPENDLY-735): local reminders are re-planned only when
+  // the plan's inputs change (`billReminderPlanKey`), not on every app focus
+  // or snapshot, and the pass writes nothing to Firestore. A device that
+  // can't schedule (no permission, web, an OS error) is a device condition,
+  // not a bill event: one warning per reason per session, counts only. The
+  // server's push job keeps its own reminder logs.
+  const appliedReminderPlan = useRef<string | null>(null);
+  const warnedReminderReasons = useRef(new Set<string>());
+
+  const refreshReminderSchedules = useCallback(
+    async (opts: { force?: boolean } = {}) => {
+      // Never cancel on a guess: wait until the mode is known.
+      if (reminderModeLoading) return;
+      const push = reminderMode === "push";
+      const accountsById = new Map(accounts.map((a) => [a.id, a]));
+      const granted = push ? false : await billNotificationsAllowed();
+      const plan = billReminderPlanKey({
+        uid: user?.uid ?? "",
+        mode: push ? "push" : "local",
+        granted,
+        today: todayDateKey(timezone),
+        timezone,
+        showAmounts,
+        globalPrefs,
+        bills,
+        accountsById,
+      });
+      if (!opts.force && plan === appliedReminderPlan.current) return;
+      if (push) {
+        await cancelAllBillReminders();
+        appliedReminderPlan.current = plan;
+        return;
+      }
+      const failed = new Map<string, number>();
+      await reconcileBillReminders({
+        bills,
+        accountsById,
+        globalPrefs,
+        timezone,
+        showAmounts,
+        granted,
+        onLog: (entry) => {
+          if (entry.status === "failed") failed.set(entry.reason ?? "unknown", (failed.get(entry.reason ?? "unknown") ?? 0) + 1);
+        },
+      });
+      appliedReminderPlan.current = plan;
+      for (const [reason, count] of failed) {
+        if (warnedReminderReasons.current.has(reason)) continue;
+        warnedReminderReasons.current.add(reason);
+        logWarning("creditCardBills.localReminders", new Error(`not scheduled (${reason}) for ${count} bill reminder(s)`));
       }
     },
-    [user]
+    [user?.uid, accounts, bills, globalPrefs, timezone, showAmounts, reminderMode, reminderModeLoading]
   );
 
-  const refreshReminderSchedules = useCallback(async () => {
-    // Never cancel on a guess: wait until the mode is known.
-    if (reminderModeLoading) return;
-    if (reminderMode === "push") {
-      await cancelAllBillReminders();
-      return;
-    }
-    const accountsById = new Map(accounts.map((a) => [a.id, a]));
-    await reconcileBillReminders({
-      bills,
-      accountsById,
-      globalPrefs,
-      timezone,
-      showAmounts,
-      onLog: async (entry) => {
-        // Only persist schedule failures / skips occasionally would be noisy;
-        // log explicit skipped/failed reasons only.
-        if (entry.status === "failed") {
-          await writeReminderLog(entry);
-        }
-      },
-    });
-  }, [accounts, bills, globalPrefs, timezone, showAmounts, writeReminderLog, reminderMode, reminderModeLoading]);
+  /** What the context exposes: a caller asking for a refresh always gets one. */
+  const forceRefreshReminderSchedules = useCallback(
+    () => refreshReminderSchedules({ force: true }),
+    [refreshReminderSchedules]
+  );
 
   const scheduleReconcile = useCallback(() => {
     if (reconcileTimer.current) clearTimeout(reconcileTimer.current);
@@ -491,7 +498,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       if (derived.status === "PAID" || derived.status === "CANCELLED") {
         await cancelBillReminders(billId);
       } else {
-        void refreshReminderSchedules();
+        void refreshReminderSchedules({ force: true });
       }
       return true;
     },
@@ -595,7 +602,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           if (result.billStatus === "PAID" || result.billStatus === "CANCELLED") {
             await cancelBillReminders(result.billId);
           } else {
-            void refreshReminderSchedules();
+            void refreshReminderSchedules({ force: true });
           }
         }
         toast.success(writeSavedMessage(result.outcome, "Payment updated"));
@@ -676,7 +683,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       previewBillRecalculation,
       recalculateBill,
       snoozeBillReminder,
-      refreshReminderSchedules,
+      refreshReminderSchedules: forceRefreshReminderSchedules,
       registerSubscriber,
     }),
     [
@@ -692,7 +699,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       previewBillRecalculation,
       recalculateBill,
       snoozeBillReminder,
-      refreshReminderSchedules,
+      forceRefreshReminderSchedules,
       registerSubscriber,
     ]
   );

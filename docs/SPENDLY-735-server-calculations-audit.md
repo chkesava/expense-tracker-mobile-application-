@@ -116,7 +116,7 @@ Manual only: `rebuild-domain-summaries`, `rebuild-financial-summaries` (balances
 | 0 | **SPENDLY-682 rollout** (owner, existing runbook) | `bill-daily`, `sip-daily` live; legacy crons retired | **prerequisite** | Must be live before the epic ships |
 | 1 | **SPENDLY-734** (rewritten): the app computes no bill pass; `bill-daily` also settles cards with work found on the read model | A0 | **P1** | Extends `bill-daily` (no new job). The read model finds stale settlements and late payments or cashback on any card, not only closing cards. The in-app pass is deleted. |
 | 2 | **SPENDLY-737**: on-demand server run after a money action | infrastructure | **P0 for shipping** | Worker route + request queue. `bill-daily` gets a queued-users mode. `requestBillPass()` becomes the request. The epic can't reach `main` without it. |
-| 3 | Bill reminders: stop the per-focus log writes; re-plan only on data change | B1 | **P1** | Small app fix that stops wasted writes now |
+| 3 | **SPENDLY-738** Bill reminders: stop the per-focus log writes; re-plan only on data change | B1 | **P1** | Small app fix that stops wasted writes now |
 | 4 | Subscriptions / EMIs / recurring transfers post on the server (`subscription-daily`) | A1 | **P1** | Money writes; posts on the due day even with the app closed |
 | 5 | EPF on the server: interest, summary, catch-up (extend `epf-cron` or a new `epf-daily` on `dailyJobCore`) | A7–A10 | **P1** | |
 | 6 | Daily net-worth and portfolio snapshots on the server (server-side quotes, like `sip-daily`'s `sipQuote`) | A5, A11 | **P1** | Removes the snapshot recorders and the per-minute read |

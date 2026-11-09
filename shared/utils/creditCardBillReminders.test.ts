@@ -4,6 +4,7 @@ import { DEFAULT_CREDIT_CARD_BILL_REMINDERS } from "../types/creditCardBill";
 import {
   addDaysToDateKey,
   applyQuietHours,
+  billReminderPlanKey,
   buildReminderSlots,
   computeNextReminderAt,
   stableReminderNotificationId,
@@ -118,5 +119,58 @@ describe("stableReminderNotificationId", () => {
         dateKey: "2026-08-14",
       })
     ).toBe("ccbill:b1:before:7");
+  });
+});
+
+describe("billReminderPlanKey (SPENDLY-738): re-plan local reminders only when something changed", () => {
+  const bill = (over: Record<string, unknown> = {}) =>
+    ({
+      id: "b1", accountId: "card", status: "UPCOMING", dueDate: "2026-11-21", remainingAmount: 505, currency: "INR",
+      reminderEnabled: true, reminderFrequency: null, nextReminderAt: null, ...over,
+    }) as never;
+  const base = {
+    uid: "u1",
+    mode: "local" as const,
+    granted: true,
+    today: "2026-11-09",
+    timezone: "Asia/Kolkata",
+    showAmounts: false,
+    globalPrefs: DEFAULT_CREDIT_CARD_BILL_REMINDERS,
+    bills: [bill(), bill({ id: "b2", dueDate: "2026-12-21" })],
+    accountsById: new Map([["card", { name: "Roar", accountNumber: "4111 1111 1111 1234", currentBalance: 100 }]]),
+  };
+  const key = (over: Partial<typeof base> = {}) => billReminderPlanKey({ ...base, ...over });
+
+  it("is stable: bill order and account balances don't matter", () => {
+    expect(key({ bills: [...base.bills].reverse() })).toBe(key());
+    expect(key({ accountsById: new Map([["card", { name: "Roar", accountNumber: "4111 1111 1111 1234", currentBalance: 9999 }]]) })).toBe(key());
+  });
+
+  it("changes when anything the reminders depend on changes", () => {
+    const k = key();
+    expect(key({ today: "2026-11-10" })).not.toBe(k);
+    expect(key({ granted: false })).not.toBe(k);
+    expect(key({ uid: "u2" })).not.toBe(k);
+    expect(key({ timezone: "UTC" })).not.toBe(k);
+    expect(key({ showAmounts: true })).not.toBe(k);
+    expect(key({ globalPrefs: { ...DEFAULT_CREDIT_CARD_BILL_REMINDERS, enabled: false } })).not.toBe(k);
+    expect(key({ bills: [bill({ status: "PAID", remainingAmount: 0 }), base.bills[1]] })).not.toBe(k);
+    expect(key({ bills: [bill({ dueDate: "2026-11-22" }), base.bills[1]] })).not.toBe(k);
+    expect(key({ bills: [bill({ nextReminderAt: "2026-11-15" }), base.bills[1]] })).not.toBe(k);
+    expect(key({ bills: [bill({ reminderEnabled: false }), base.bills[1]] })).not.toBe(k);
+    expect(key({ bills: [base.bills[0]] })).not.toBe(k);
+    expect(key({ accountsById: new Map([["card", { name: "Roar Gold", accountNumber: "4111 1111 1111 1234" }]]) })).not.toBe(k);
+    expect(key({ accountsById: new Map([["card", { name: "Roar", accountNumber: "4111 1111 1111 9999" }]]) })).not.toBe(k);
+  });
+
+  it("push mode: the plan is 'no local reminders', whatever the bills say", () => {
+    const push = key({ mode: "push" as never });
+    expect(key({ mode: "push" as never, bills: [], today: "2027-01-01" })).toBe(push);
+    expect(push).not.toBe(key());
+  });
+
+  it("never holds the full card number", () => {
+    expect(key()).not.toContain("4111");
+    expect(key()).toContain("1234");
   });
 });

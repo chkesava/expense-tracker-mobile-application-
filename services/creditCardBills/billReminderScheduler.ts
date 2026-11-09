@@ -181,6 +181,8 @@ export async function reconcileBillReminders(opts: {
   timezone?: string;
   /** SPENDLY-231: lock-screen amounts and card digits (settings.pushNotifications.showAmounts). */
   showAmounts?: boolean;
+  /** SPENDLY-738: the permission, when the caller already read it. */
+  granted?: boolean;
   onLog?: (entry: {
     billId: string;
     notificationType: "days_before" | "due_date" | "overdue" | "skipped";
@@ -190,10 +192,29 @@ export async function reconcileBillReminders(opts: {
   }) => Promise<void> | void;
 }): Promise<void> {
   const today = todayDateKey(opts.timezone);
-  const granted = await billNotificationsAllowed();
+  const granted = opts.granted ?? (await billNotificationsAllowed());
+
+  // SPENDLY-738: read the scheduled list once per pass, not once per bill.
+  let scheduled: Array<{ identifier?: string }> = [];
+  try {
+    scheduled = await (await loadNotifications()).getAllScheduledNotificationsAsync();
+  } catch {
+    // soft-fail (web, no module): nothing to cancel
+  }
+  const cancelScheduledFor = async (billId: string) => {
+    const prefix = `ccbill:${billId}:`;
+    const ids = scheduled.map((n) => String(n.identifier || "")).filter((id) => id.startsWith(prefix));
+    if (!ids.length) return;
+    try {
+      const Notifications = await loadNotifications();
+      await Promise.all(ids.map((id) => Notifications.cancelScheduledNotificationAsync(id)));
+    } catch {
+      // soft-fail
+    }
+  };
 
   for (const bill of opts.bills) {
-    await cancelBillReminders(bill.id);
+    await cancelScheduledFor(bill.id);
 
     const allowed = shouldSendBillReminder({
       status: bill.status,
