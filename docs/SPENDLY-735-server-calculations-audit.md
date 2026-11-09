@@ -1,6 +1,6 @@
 # SPENDLY-736 — Audit: background calculations in the Expense app
 
-This is a story in epic **SPENDLY-735**, "Server-side calculations: the app only delivers". It was audited on 2026-11-09 against the epic branch plus SPENDLY-734, the commit where the bill pass was removed. It covers the Expense app only; Ganesh Seva and Nutrition are out of scope.
+This is a story in epic **SPENDLY-735**, "Server-side calculations: the app only delivers". It was audited on 2026-11-09. Rev 2 on the same day is rebased on `main` 8cca6639, which includes PR #288 (SPENDLY-682: `dailyJobCore`, `sip-daily`, `bill-daily` and the Worker's 03:00 UTC cron). It covers the Expense app only; Ganesh Seva and Nutrition are out of scope.
 
 ## The owner's rule (2026-11-09)
 No calculation runs inside the app. The app only does two things:
@@ -25,6 +25,7 @@ Everything the app does in the background (on launch, on focus, on timers, or on
 
 | # | Item | Trigger | Reads → writes | Weight | Server today | Rank |
 |---|---|---|---|---|---|---|
+| A0 | **Credit card bill pass** (`providers/CreditCardBillsProvider.tsx` `generateAutoBills`: drafts, refresh, allocation, duplicate merge) | first load, **every app focus**, every new bill id, money actions (`requestBillPass`) | on a large ledger: every card's expenses from Firestore (~600 reads on the owner account, SPENDLY-732) → `creditCardBills` | **heavy** | **`bill-daily`** (SPENDLY-727), but only for cards whose cycle closed today or yesterday | **P1**: SPENDLY-734 removes it from the app and widens `bill-daily` |
 | A1 | **Subscription / EMI / recurring-transfer auto-post** (`providers/ExpenseReferenceDataProvider.tsx:805-823` → `processDueSubscriptions` `:729-803` → `services/subscriptions/duePost.ts:52-130`) | Startup idle once the subscriptions snapshot comes from the server; again on a change in subscription count | subscriptions listener (≤200), per-charge doc and account checks → `expenses`/`accountTransfers` (deterministic ids), `subscriptions.lastProcessed*`, account balances, `financialSummaries/dashboard_*` | light–medium | **none** | **P1**: writes money; EMIs post only when the app is opened |
 | A2 | **Category taxonomy upgrade** (`providers/AuthProvider.tsx:198-207` → `lib/ensureCategoryHierarchy.ts:51-149`) | Every launch and sign-in (1 doc read when the stamp is current, `:88-100`) | On an upgrade: all categories twice, **every expense** (`remapExpenses`), budgets, rules, subscriptions, trips → remaps on all of them | light; **heavy** on an upgrade launch | none | **P1**: a full-ledger read and write burst on the phone |
 | A3 | Accidental account-baseline repair (`providers/FinanceDataProvider.tsx:664-711`) | Every accounts snapshot (once per account per session) | accounts in memory → `accounts.balanceAsOfDate = null` | light | none (the manual rebaseline scripts are close) | P2 |
@@ -68,8 +69,7 @@ These items are not calculations of money, but they cost battery. Each is gated 
 | C10 | Spaces / rules refetch (`ExpenseReferenceDataProvider.tsx:584-596`) | Focus, >5 min stale | light | P3 |
 
 ### D. Checked: not background (no action)
-- **SIP execution** runs only from the manual button (`hooks/useSips.ts:224-243`). Nothing executes SIPs automatically, on the device or the server; the server only sends SIP events from existing data. *Gap:* SIPs post only when the user presses the button. This belongs with A1 if the owner wants SIPs auto-posted.
-- **Credit card bill pass:** removed from the app (SPENDLY-734); `bill-reconciler` owns it.
+- **SIP execution** runs in the app only from the manual button (`hooks/useSips.ts:224-243`), which is a user action and stays. Automatic execution is now on the server: **`sip-daily`** (SPENDLY-726) applies the app's `decideSipRun` in the user's zone. It goes live with the SPENDLY-682 rollout (`SIP_DAILY_ENABLED`, then the legacy cron retires).
 - **Balance rebuild** (`EditAccountModal`) and `recalculateBill` run only when the user starts them.
 
 ### E. On-screen heavy computing (runs while a screen is open, again on every data change)
@@ -82,11 +82,15 @@ These items are not calculations of money, but they cost battery. Each is gated 
 ### Existing server jobs
 | Job | What it does | When |
 |---|---|---|
-| `bill-reconciler` (SPENDLY-734, on PR #287) | creates, refreshes and settles bills | daily, plus Worker 00:00 UTC (needs the 737 on-demand trigger) |
+| `dailyJobCore` (SPENDLY-725) | **the foundation every daily job writes through**: own-tree writes only, duress skipped, stamps, one atomic batch, create / `lastUpdateTime` preconditions as conflicts, read-model push, dry run, counts-only summary, read budget | library |
+| `bill-daily` (SPENDLY-727) | the app's bill pass for cards whose cycle **closed today or yesterday**; a cashback-settled statement is born PAID | Worker 03:00 UTC (08:30 IST), gated by `BILL_DAILY_ENABLED` (not yet on) |
+| `sip-daily` (SPENDLY-726) | the only automatic SIP executor (the app's `decideSipRun`) | Worker 03:00 UTC, gated by `SIP_DAILY_ENABLED` (not yet on) |
 | `push-reminders` | push for bills, calendar, dues and goals; SIP, EPF and split events | every 15 min (Worker) |
 | `epf-cron` | monthly expected contributions, credit-window repair, lifecycle | `30 5 3 * *` |
 | `readmodel-sync` + verify + parity | Firestore → Supabase, counts, invariants | nightly |
 | `readmodel-health` | sync freshness alarm | hourly |
+
+Owner rollout of SPENDLY-682 is pending (`docs/LEGACY_CRONS_RETIREMENT_RUNBOOK.md`): reports, dry runs, Worker redeploy, legacy crons off, and both variables on, all in one window. **This epic depends on it:** once the app stops computing bills, `bill-daily` must be live.
 
 Manual only: `rebuild-domain-summaries`, `rebuild-financial-summaries` (balances, card totals, EPF summary, dashboard periods), `rebaseline-account`, and the reconcile reports.
 
@@ -98,31 +102,34 @@ Manual only: `rebuild-domain-summaries`, `rebuild-financial-summaries` (balances
 - **The on-device copy** (C4), as the offline source, until the owner decides otherwise. Its on-device shadow compares can stop (C8).
 
 ## Shared design for every move
-1. **One server runner per user** (`scripts/user-jobs.ts`, which grows out of `bill-reconciler`): modular jobs (bills, subscriptions, EPF, snapshots and so on), one workflow, the same read budget.
-2. **Find the work on Supabase** (0 Firestore reads), then **confirm on Firestore only for the items with work**. Write with compare-and-set or deterministic ids, stamps, and server push (R4.3a, SPENDLY-680).
-3. **On-demand runs** (SPENDLY-737): after a money action the app asks; the Worker starts the runner for that user, and requests are queued so no uid shows in public logs. **Scheduled runs:** daily at 00:00 UTC (before the 09:00 reminders); hourly where freshness matters (A1 posts on the due day).
-4. **Never two writers.** When a job moves, its app code is deleted, and a guard test pins that it never comes back, as with the bill pass.
-5. **Spark budget:** 50K reads/day, shared. Each job keeps its own allowance; finding work costs no Firestore reads.
+1. **One kind of server job:** `scripts/<name>-daily.ts` plus a pure `scripts/lib/<name>DailyCore.ts`, writing **only through `dailyJobCore.applyJobWrites`** (SPENDLY-725). That gives own-tree writes, atomic batches, compare-and-set conflicts, stamps, read-model push, dry run and counts-only logs.
+   - Each job gets a workflow gated by its own repository variable, dispatched by the Worker's daily 03:00 UTC cron (08:30 IST, before the 09:00 reminders).
+   - No second framework, and no second writer of the same data.
+2. **Find the work on Supabase** (0 Firestore reads) where a daily scan would otherwise read Firestore. Then **confirm on Firestore only for the items with work**, and write from Firestore (R4.3a).
+3. **On-demand runs** (SPENDLY-737): after a money action the app asks, and the Worker starts the job for that user. The request is queued so no uid appears in public logs. Each daily job gets a "queued users only" mode.
+4. **Never two writers.** When a job moves, its app code is deleted, and a guard test pins that it never comes back.
+5. **Spark budget:** 50K reads/day, shared. Each job keeps its own read budget (`jobReadBudget`).
 
 ## Proposed stories (order)
 | Order | Story | Covers | Rank | Note |
 |---|---|---|---|---|
-| 1 | **SPENDLY-737** On-demand server run + per-user job runner | infrastructure | **P0** | `requestBillPass()` becomes "ask the server"; the epic can't reach `main` without it |
-| 2 | **SPENDLY-734** Server bill reconciler; the app computes no bill pass | bills | P1 | built (PR #287), awaiting merge |
-| 3 | Bill reminders: stop the per-focus log writes; re-plan only on data change | B1 | **P1** | small app-side fix that stops wasted writes now |
-| 4 | Subscriptions / EMIs / recurring transfers post on the server (+ SIP auto-post if wanted) | A1 (+ D) | **P1** | money writes; posts on the due day even with the app closed |
-| 5 | EPF on the server: interest, summary and catch-up in `epf-cron`, daily + on demand | A7–A10 | **P1** | extends the existing job |
-| 6 | Daily net-worth and portfolio snapshots on the server (server-side quotes) | A5, A11 | **P1** | removes the snapshot recorders and the per-minute read |
-| 7 | Category taxonomy upgrade on the server | A2 | P1 | the upgrade burst runs as a job; the app only reads |
+| 0 | **SPENDLY-682 rollout** (owner, existing runbook) | `bill-daily`, `sip-daily` live; legacy crons retired | **prerequisite** | Must be live before the epic ships |
+| 1 | **SPENDLY-734** (rewritten): the app computes no bill pass; `bill-daily` also settles cards with work found on the read model | A0 | **P1** | Extends `bill-daily` (no new job). The read model finds stale settlements and late payments or cashback on any card, not only closing cards. The in-app pass is deleted. |
+| 2 | **SPENDLY-737**: on-demand server run after a money action | infrastructure | **P0 for shipping** | Worker route + request queue. `bill-daily` gets a queued-users mode. `requestBillPass()` becomes the request. The epic can't reach `main` without it. |
+| 3 | Bill reminders: stop the per-focus log writes; re-plan only on data change | B1 | **P1** | Small app fix that stops wasted writes now |
+| 4 | Subscriptions / EMIs / recurring transfers post on the server (`subscription-daily`) | A1 | **P1** | Money writes; posts on the due day even with the app closed |
+| 5 | EPF on the server: interest, summary, catch-up (extend `epf-cron` or a new `epf-daily` on `dailyJobCore`) | A7–A10 | **P1** | |
+| 6 | Daily net-worth and portfolio snapshots on the server (server-side quotes, like `sip-daily`'s `sipQuote`) | A5, A11 | **P1** | Removes the snapshot recorders and the per-minute read |
+| 7 | Category taxonomy upgrade on the server | A2 | P1 | |
 | 8 | Small passes on the server: baseline repair, logging streak, onboarding stamps | A3, A6, A12 | P2 | |
-| 9 | Recurring-merchant detection on the server (stored suggestions) | A4 | P2 | **new collection**: full read-model treatment (mapping, migration, RLS, allowlist, purge) |
-| 10 | Read-model load on the device: stop on-device shadow compares; indexed copy queries | C7, C8 | P2 | the server's nightly parity covers the compares |
-| 11 | Local reminders as the fallback only, once push reaches everyone; inbox listeners trimmed | B1–B4 | P2 | depends on SPENDLY-222 C4b |
-| 12 | Fee intelligence and ledger health as server-stored results | E1, E2 | P3 | new data; last |
+| 9 | Recurring-merchant detection on the server (stored suggestions) | A4 | P2 | **New collection:** full read-model treatment |
+| 10 | Read-model load on the device: stop on-device shadow compares; indexed copy queries | C7, C8 | P2 | |
+| 11 | Local reminders as the fallback only, once push reaches everyone; inbox listeners trimmed | B1–B4 | P2 | Depends on SPENDLY-222 C4b |
+| 12 | Fee intelligence and ledger health as server-stored results | E1, E2 | P3 | New data; last |
 
-Each story is approved one at a time (docs/AGENT_WORKFLOW.md §3).
+Each story is approved one at a time (docs/AGENT_WORKFLOW.md §3). 734 comes before 737, because 737's first consumer is the widened `bill-daily`.
 
 ## Open questions for the owner
-1. Should **SIPs be auto-posted** on the server (story 4)? Today they post only when the user presses the button.
-2. **The on-device copy (C4):** keep it as the offline source, or narrow it once screens read stored results?
-3. **Hourly vs daily** for subscription auto-post: daily at 05:30 IST is cheapest, and hourly posts closer to the due time.
+1. **The on-device copy (C4):** keep it as the offline source, or narrow it once screens read stored results?
+2. **Hourly vs daily** for subscription auto-post (story 4): the Worker's daily 03:00 UTC run is cheapest, and hourly posts closer to the due time.
+3. **SIP auto-execution** was answered by SPENDLY-726 (`sip-daily`). It goes live with the SPENDLY-682 rollout.
