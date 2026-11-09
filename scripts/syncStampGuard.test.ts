@@ -30,7 +30,9 @@ export const CHANGED_ONLY = ["expenses", "incomes", "accountPayments", "creditCa
  * Key: file. Value: substrings that identify the call, each with its reason.
  */
 const ALLOWED: Record<string, { match: string | RegExp; reason: string }[]> = {
-  "lib/ensureCategoryHierarchy.ts": [
+  // SPENDLY-742: the category migration moved here from lib/ensureCategoryHierarchy.ts
+  // (now run by the server's category-daily job); same writes, same exemptions.
+  "shared/data/categoryHierarchyMigration.ts": [
     { match: "(ref, payload, { merge: true })", reason: "inside createBatchWriter; its call sites are checked" },
     { match: "(ref, data)", reason: "inside createBatchWriter; its call sites are checked" },
     {
@@ -41,9 +43,8 @@ const ALLOWED: Record<string, { match: string | RegExp; reason: string }[]> = {
     { match: "{ categoryBudgets: next }", reason: "remapTripCategoryBudgets: trips" },
     { match: "{ defaultCategory: mapped.category }", reason: "the user's settings document" },
   ],
-  "providers/ExpenseReferenceDataProvider.tsx": [
-    { match: "isCompleted: true", reason: "subscriptions (completing an EMI)" },
-  ],
+  // SPENDLY-739: completing an EMI moved to the server (subscription-daily), whose
+  // applyJobWrites stamps updatedAt, so the provider's exemption is gone.
 };
 
 const matches = (args: string, m: string | RegExp) => (typeof m === "string" ? args.includes(m) : m.test(args));
