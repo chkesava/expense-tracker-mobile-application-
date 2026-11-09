@@ -7,6 +7,7 @@ import { useSettings } from "@/providers/SettingsProvider";
 import { cancelGoalNotifications, reconcileGoalNotifications } from "@/services/goals/goalReminderScheduler";
 import { todayDateKey } from "@/shared/utils/dates";
 import { goalReminders, planGoalNotifications, wantsNotifications } from "@/shared/utils/goalReminders";
+import { localReminderSourcesEnabled } from "@/shared/utils/push/reminderMode";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 
 /**
@@ -16,6 +17,9 @@ import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
  * same one the inbox uses), attached after startup idle and only while the
  * Save Goals feature is on. Re-plans whenever a goal changes — that is how
  * inactivity alerts move with each contribution, with no polling.
+ *
+ * SPENDLY-746 (epic SPENDLY-735): in push mode (or while the mode is unknown)
+ * it doesn't subscribe to the goals at all; the server sends the reminders.
  */
 export function GoalReminderSync() {
   const { enabled: saveGoals, loading: flagLoading } = useSaveGoalsFlag();
@@ -24,7 +28,8 @@ export function GoalReminderSync() {
   const [ready, setReady] = useState(false);
   useEffect(() => scheduleIdleWork(() => setReady(true)), []);
   const { settings } = useSettings();
-  const { goals } = useFinancialGoals({ enabled: ready && saveGoals });
+  const local = localReminderSourcesEnabled({ mode, loading: modeLoading });
+  const { goals } = useFinancialGoals({ enabled: ready && saveGoals && local });
   const today = todayDateKey(settings.timezone);
 
   const plan = useMemo(() => (saveGoals ? planGoalNotifications(goals, today) : []), [saveGoals, goals, today]);
