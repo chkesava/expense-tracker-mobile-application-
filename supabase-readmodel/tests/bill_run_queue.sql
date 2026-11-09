@@ -36,8 +36,9 @@ language sql security definer as $$
 $$;
 create function brq_test.requests() returns integer
 language sql security definer as $$ select count(*)::int from net._requests $$;
-create function brq_test.last_request() returns net._requests
-language sql security definer as $$ select * from net._requests order by id desc limit 1 $$;
+-- jsonb, not net._requests: the caller (authenticated) has no usage on schema net.
+create function brq_test.last_request() returns jsonb
+language sql security definer as $$ select to_jsonb(r) from net._requests r order by r.id desc limit 1 $$;
 grant execute on all functions in schema brq_test to authenticated, anon, service_role;
 
 -- ─── 1. Server writes never queue (the sync, the push, bill-daily's own bills) ─
@@ -73,20 +74,20 @@ set local role authenticated;
 do $$ begin perform set_config('request.jwt.claims', brq_test.claims('user-a'), true); end $$;
 do $$
 declare
-  r net._requests;
+  r jsonb;
   first_at timestamptz;
 begin
   first_at := brq_test.queued('user-a');
   perform public.rm_client_apply('expenses', jsonb_build_array(brq_test.row('user-a', 'c2', 50)), '[]'::jsonb);
   if brq_test.requests() <> 1 then raise exception 'expected 1 dispatch, got %', brq_test.requests(); end if;
   r := brq_test.last_request();
-  if r.url <> 'https://api.github.com/repos/chkesava/expense-tracker-mobile-application-/actions/workflows/bill-daily.yml/dispatches'
-     or r.body <> '{"ref": "main", "inputs": {"dry_run": "false", "trigger": "queue"}}'::jsonb
-     or r.headers->>'Authorization' <> 'Bearer test-token' then
-    raise exception 'dispatch is wrong: %', row_to_json(r);
+  if r->>'url' <> 'https://api.github.com/repos/chkesava/expense-tracker-mobile-application-/actions/workflows/bill-daily.yml/dispatches'
+     or r->'body' <> '{"ref": "main", "inputs": {"dry_run": "false", "trigger": "queue"}}'::jsonb
+     or r->'headers'->>'Authorization' <> 'Bearer test-token' then
+    raise exception 'dispatch is wrong: %', r;
   end if;
   -- No uid anywhere in the request.
-  if r.body::text like '%user-a%' or r.url like '%user-a%' then raise exception 'the dispatch named the user'; end if;
+  if (r->'body')::text like '%user-a%' or r->>'url' like '%user-a%' then raise exception 'the dispatch named the user'; end if;
   if brq_test.queued('user-a') < first_at then raise exception 'the queue time did not move forward'; end if;
 
   -- ─── 4. Debounce: another save within the minute queues, no second dispatch
