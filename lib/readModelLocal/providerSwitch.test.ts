@@ -37,6 +37,8 @@ const INTEGRATED = [
   "groupFunds",
   // SPENDLY-230: the unified inbox's notification rows.
   "notifications",
+  // SPENDLY-744: the server's recurring-merchant suggestions (display only).
+  "recurringSuggestions",
 ].sort();
 
 const NOT_YET: Record<string, string> = {
@@ -125,6 +127,18 @@ describe("provider read switches (SPENDLY-673)", () => {
     expect(finance).not.toMatch(/balanceAsOfDate: null/);
     const gamification = readFileSync(join(ROOT, "hooks", "useGamification.ts"), "utf8");
     expect(gamification).not.toMatch(/setDoc\(statsRef/);
+  });
+
+  // SPENDLY-744 (epic SPENDLY-735): recurring-merchant detection runs on the
+  // server (recurring-weekly); the app only queues the stored suggestions.
+  it("the app runs no recurring detection; the suggestions are server-written", () => {
+    const files = ["app", "components", "hooks", "lib", "providers", "services", "shared"].flatMap((dir) => sources(join(ROOT, dir)));
+    for (const file of files) {
+      if (file.endsWith(join("services", "recurring", "recurringDetector.ts"))) continue;
+      expect(readFileSync(file, "utf8"), file).not.toMatch(/detectRecurringPatterns\(/);
+    }
+    const rules = readFileSync(join(ROOT, "firestore.rules"), "utf8");
+    expect(rules).toMatch(/match \/recurringSuggestions\/\{suggestionId\} \{\s*allow read: if isOwner\(uid\);\s*allow write: if false;/);
   });
 
   // SPENDLY-598 (R4.3a): more writers that write from what the screens read.

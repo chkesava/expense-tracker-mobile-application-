@@ -1,0 +1,103 @@
+name: Recurring weekly
+
+# SPENDLY-744 (epic SPENDLY-735): recurring-merchant detection moved off the
+# phone. The app's detector and review filter run on the Supabase copy and
+# the result is stored at users/{uid}/recurringSuggestions. Rules:
+# scripts/lib/recurringWeeklyCore.ts.
+#
+# The Cloudflare Worker `spendly-push-trigger` dispatches this workflow on its
+# daily 03:00 UTC tick (08:30 IST) with `trigger: cron`, which runs only when
+# the repository variable RECURRING_WEEKLY_ENABLED is "true", and then only on
+# Sundays (IST): the gate step stops the other six days before any install.
+# A manual dispatch always runs (dry run by default).
+#
+# Secrets: FIREBASE_SERVICE_ACCOUNT (or RECURRING_FIREBASE_SERVICE_ACCOUNT),
+#          READMODEL_SUPABASE_SERVICE_ROLE_KEY (required: the inputs come from the copy)
+# Variables: RECURRING_WEEKLY_ENABLED, READMODEL_SUPABASE_URL, RECURRING_MAX_READS_PER_RUN
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Decide and log, write nothing"
+        required: true
+        default: true
+        type: boolean
+      trigger:
+        description: "Who started the run. The Cloudflare Worker sends cron, which obeys RECURRING_WEEKLY_ENABLED and runs on Sundays only."
+        required: false
+        default: manual
+        type: choice
+        options:
+          - manual
+          - cron
+
+concurrency:
+  group: recurring-weekly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: Recurring-merchant suggestions
+    if: vars.RECURRING_WEEKLY_ENABLED == 'true' || inputs.trigger != 'cron'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Weekly gate
+        id: gate
+        env:
+          TRIGGER: ${{ inputs.trigger }}
+        run: |
+          # 7 = Sunday (ISO weekday), in India time.
+          if [ "$TRIGGER" != "cron" ] || [ "$(TZ=Asia/Kolkata date +%u)" = "7" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Not Sunday (IST): nothing to do."
+          fi
+
+      - name: Checkout
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/checkout@v7
+        with:
+          # The job never pushes; don't leave the token in git config.
+          persist-credentials: false
+
+      - name: Set up Node
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.gate.outputs.run == 'true'
+        run: npm ci
+
+      - name: Run
+        if: steps.gate.outputs.run == 'true'
+        env:
+          RECURRING_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.RECURRING_FIREBASE_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
+          READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+          RECURRING_MAX_READS_PER_RUN: ${{ vars.RECURRING_MAX_READS_PER_RUN || '3000' }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RECURRING_FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT (or RECURRING_FIREBASE_SERVICE_ACCOUNT) is not set."
+            exit 1
+          fi
+          args=""
+          if [ "$DRY_RUN" = "true" ]; then args="--dry-run"; fi
+          npx --no-install tsx scripts/recurring-weekly.ts $args | tee recurring-weekly.log
+          {
+            echo "## Recurring weekly"
+            echo '```json'
+            sed -n '/^{/,/^}/p' recurring-weekly.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
