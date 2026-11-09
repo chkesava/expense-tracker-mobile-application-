@@ -28,6 +28,7 @@ const MIGRATED = new Set([
   "groupFunds",
   "notifications",
   "recurringSuggestions",
+  "serverResults",
 ]);
 
 /** `file:collection` listeners that stay on Firestore on purpose. */

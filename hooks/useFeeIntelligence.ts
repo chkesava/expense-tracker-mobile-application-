@@ -1,95 +1,59 @@
-import { useEffect, useMemo, useState } from "react";
-import { InteractionManager } from "react-native";
+import { useMemo } from "react";
 
 import { useFeeReviews } from "@/hooks/useFeeReviews";
-import { useAuth } from "@/providers/AuthProvider";
-import {
-  useAccountsContext,
-  useExpensesContext,
-  useIncomesContext,
-} from "@/providers/FinanceDataProvider";
+import { useServerResults } from "@/hooks/useServerResults";
 import type { FeeReview } from "@/shared/types/fee";
-import {
-  createFeeDetectionCache,
-  detectFees,
-  type FeeDetectionCache,
-  type FeeDetectionResult,
-} from "@/shared/utils/feeDetection";
+import { resolveFeeRows, type FeeDetectionResult } from "@/shared/utils/feeDetection";
+import { feeRowSetFromDocs } from "@/shared/utils/serverResults";
 
 /**
- * Fee records for the signed-in user (SPENDLY-315): the detection engine over
- * the ledger already in memory, folded with the user's reviews.
+ * Fee records for the signed-in user (SPENDLY-315), folded with the user's
+ * reviews.
  *
- * Performance:
- *   - Runs only once the full expense and income history has loaded
- *     (`expensesComplete` / `incomesComplete`) — a fee total over the staged
- *     300-row page would be quietly wrong.
- *   - Runs after interactions, so opening the screen is never blocked by it.
- *   - One detection cache per uid for the session, so moving between fee
- *     surfaces or receiving one new SMS re-reads only changed rows.
+ * SPENDLY-747 (epic SPENDLY-735): the full-ledger scan runs on the server
+ * (insights-daily stores the fee rows at users/{uid}/serverResults). Here the
+ * stored rows are only paired and resolved with the user's current reviews,
+ * so a review shows at once, with no ledger scan on the phone. Before the
+ * server has stored a result, there are no records (`computedAt` is null).
  */
-
-const caches = new Map<string, FeeDetectionCache>();
-
-function cacheFor(uid: string): FeeDetectionCache {
-  let cache = caches.get(uid);
-  if (!cache) {
-    cache = createFeeDetectionCache();
-    caches.set(uid, cache);
-  }
-  return cache;
-}
 
 export interface FeeIntelligence {
   result: FeeDetectionResult | null;
   reviews: FeeReview[];
   reviewById: Map<string, FeeReview>;
-  /** True until history, reviews and the first detection pass are ready. */
+  /** When the server computed the rows (its run id), or null before the first run. */
+  computedAt: string | null;
+  /** True until the stored rows and the reviews have loaded. */
   loading: boolean;
   error: { message: string; retryable: boolean } | null;
   retry: () => void;
 }
 
+const NO_ROWS = { rows: [], scanned: 0, reclassified: 0 };
+
 export function useFeeIntelligence(options?: { enabled?: boolean }): FeeIntelligence {
   const enabled = options?.enabled !== false;
-  const { user } = useAuth();
-  const uid = user?.uid;
-  const { expenses, expensesComplete, financeError: expensesError } = useExpensesContext();
-  const { incomes, incomesComplete } = useIncomesContext();
-  const { accounts, entries } = useAccountsContext();
-  const { reviews, loading: reviewsLoading, error: reviewsError, retry } = useFeeReviews({ enabled });
+  const { docs, loading: resultsLoading, error: resultsError, retry: retryResults } = useServerResults({ enabled });
+  const { reviews, loading: reviewsLoading, error: reviewsError, retry: retryReviews } = useFeeReviews({ enabled });
 
-  const [result, setResult] = useState<FeeDetectionResult | null>(null);
-  const historyReady = expensesComplete && incomesComplete;
-
-  useEffect(() => {
-    if (!enabled || !uid || !historyReady || reviewsLoading) return;
-    let cancelled = false;
-    const task = InteractionManager.runAfterInteractions(() => {
-      if (cancelled) return;
-      const next = detectFees({ expenses, incomes, entries, accounts, reviews, cache: cacheFor(uid) });
-      if (!cancelled) setResult(next);
-    });
-    return () => {
-      cancelled = true;
-      task.cancel();
-    };
-  }, [enabled, uid, historyReady, reviewsLoading, expenses, incomes, entries, accounts, reviews]);
-
-  // A different user must never see the previous user's records.
-  useEffect(() => {
-    setResult(null);
-  }, [uid]);
-
+  const stored = useMemo(() => (docs ? feeRowSetFromDocs(docs) : null), [docs]);
+  const result = useMemo(
+    () => (docs && !reviewsLoading ? resolveFeeRows(stored ?? NO_ROWS, reviews) : null),
+    [docs, stored, reviews, reviewsLoading]
+  );
   const reviewById = useMemo(() => new Map(reviews.map((r) => [r.id, r] as const)), [reviews]);
-  const failure = expensesError ?? reviewsError;
+  const failure = resultsError ?? reviewsError;
 
   return {
     result,
     reviews,
     reviewById,
-    loading: enabled && Boolean(uid) && !failure && (!historyReady || reviewsLoading || result === null),
+    computedAt: stored?.runId ?? null,
+    loading: enabled && !failure && (resultsLoading || reviewsLoading || (docs !== null && result === null)),
     error: failure ? { message: failure.message, retryable: failure.retryable } : null,
-    retry,
+    retry: () => {
+      retryResults();
+      retryReviews();
+    },
   };
 }
