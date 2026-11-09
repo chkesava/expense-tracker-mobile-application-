@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { AlertTriangle, BadgeCheck, Percent } from "lucide-react-native";
 
@@ -48,7 +48,6 @@ export function EpfBalanceTab({ establishment }: { establishment: EpfEstablishme
     interestLoading,
     interestError,
     retryInterest,
-    recomputeInterest,
     recordReconciliation,
   } = useEpfInterest();
 
@@ -99,17 +98,8 @@ export function EpfBalanceTab({ establishment }: { establishment: EpfEstablishme
     [reconciliations, establishment.id]
   );
 
-  // Recompute after load and whenever this establishment's ledger changes.
-  // Catch-up on the dashboard does the same; this covers a reversal that
-  // happens while Balance is already open. Writes are idempotent.
-  useEffect(() => {
-    if (loading) return;
-    void recomputeInterest({
-      establishmentId: establishment.id,
-      contributions,
-      transfers,
-    });
-  }, [loading, contributions, transfers, establishment.id, recomputeInterest]);
+  // SPENDLY-740: stored FY interest is written by the server's epf-daily job;
+  // the schedule above is computed for display only.
 
   if (loading) {
     return (

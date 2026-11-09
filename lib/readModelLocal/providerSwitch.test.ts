@@ -172,12 +172,18 @@ describe("provider read switches (SPENDLY-673)", () => {
     for (const file of optIns) expect(readFileSync(join(ROOT, file), "utf8")).not.toMatch(writers);
   });
 
-  // SPENDLY-599 (R4.3a).
-  it("the EPF summary sync compares with the stored summary on Firestore; only display opts into the copy", () => {
+  // SPENDLY-599 (R4.3a); SPENDLY-740: the EPF summary, FY interest and the
+  // contribution catch-up are written by the server's epf-daily job. The app
+  // only reads them; no EPF background writer may come back.
+  it("the EPF screens write no derived EPF data; only display opts into the copy", () => {
     const summaries = readFileSync(join(ROOT, "hooks", "useDomainSummaries.ts"), "utf8");
     expect(summaries).toContain('useReadModelSource("financialSummaries", { copy: options?.readFrom === "copy" })');
-    const sync = readFileSync(join(ROOT, "hooks", "useEpfSummarySync.ts"), "utf8");
-    expect(sync).toMatch(/useEpfSummary\(\)/);
+    for (const file of ["components/epf/EpfDashboard.tsx", "components/epf/EpfBalanceTab.tsx", "hooks/useEpfLedger.ts", "hooks/useEpfInterest.ts", "hooks/useEpfContributions.ts"]) {
+      const text = readFileSync(join(ROOT, file), "utf8");
+      for (const banned of ["recomputeInterest", "repairCreditWindows", "repairLifecycleStates", "useEpfCatchUp", "useEpfSummarySync", "planScheduledContributions"]) {
+        expect(text, `${file}: ${banned}`).not.toContain(banned);
+      }
+    }
   });
 
   it("the net-worth point confirms its history and inputs on Firestore when any comes from the copy", () => {
