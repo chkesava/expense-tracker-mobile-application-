@@ -10,7 +10,13 @@ name: Bill daily
 #
 # Secrets: FIREBASE_SERVICE_ACCOUNT (or BILL_FIREBASE_SERVICE_ACCOUNT),
 #          READMODEL_SUPABASE_SERVICE_ROLE_KEY (optional, read-model push)
-# Variables: BILL_DAILY_ENABLED, READMODEL_SUPABASE_URL, BILL_MAX_READS_PER_RUN
+# Variables: BILL_DAILY_ENABLED, READMODEL_SUPABASE_URL, BILL_MAX_READS_PER_RUN,
+#            BILL_READMODEL_FINDER ("off" settles closing cards only)
+#
+# SPENDLY-734: with the read-model settings the job also settles every card
+# whose bill work the read model shows (a payment or cashback after the close,
+# a stale stored settlement). Finding it costs no Firestore reads; each card is
+# then read and written from Firestore.
 
 on:
   workflow_dispatch:
@@ -65,6 +71,7 @@ jobs:
           READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
           READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
           BILL_MAX_READS_PER_RUN: ${{ vars.BILL_MAX_READS_PER_RUN || '5000' }}
+          BILL_READMODEL_FINDER: ${{ vars.BILL_READMODEL_FINDER || 'on' }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail

@@ -100,12 +100,21 @@ describe("provider read switches (SPENDLY-673)", () => {
   });
 
   // SPENDLY-597 (R4.3a): writers that write from what the screens read.
-  it("the credit card bill pass never writes from the copy: it checks its inputs' modes and verifies on Firestore", () => {
+  // SPENDLY-734: the credit card bill pass left the app; the server reconciler
+  // finds the work on the read model and writes only from Firestore. The app
+  // must not write bills from what it reads at all.
+  it("the app runs no credit card bill pass: no statement, allocation or merge is computed from screen data", () => {
     const text = readFileSync(join(ROOT, "providers", "CreditCardBillsProvider.tsx"), "utf8");
-    expect(text).toMatch(/billPassReadsCopy\(passInputModesRef\.current\)/);
-    expect(text).toMatch(/loadAuthoritativeBillInputs\(firestoreBillReader\(/);
-    for (const c of ["expenses", "accountPayments", "accounts", "accountTypes"]) {
-      expect(text).toContain(`useReadModelMode("${c}")`);
+    for (const banned of [
+      "generateAutoBills",
+      "planBillPass",
+      "collectAutoCreditCardBillDrafts",
+      "collectAutoCreditCardBillRefreshPatches",
+      "collectCreditBillAllocationPatches",
+      "collectCreditBillDuplicateResolutions",
+      "createAutoCreditCardBill",
+    ]) {
+      expect(text, banned).not.toContain(banned);
     }
   });
 
