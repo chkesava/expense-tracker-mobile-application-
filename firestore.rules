@@ -1680,6 +1680,13 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // SPENDLY-747 (epic SPENDLY-735): fee rows and the Journal health report,
+      // computed and written only by the server's insights-daily job.
+      match /serverResults/{resultId} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
+
       // `collection` is only bound inside this match. Helpers declared on
       // `users/{uid}` cannot read it (null → list/create denied). Validated
       // names above must stay off this list: nested matches OR together.

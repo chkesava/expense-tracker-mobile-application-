@@ -956,6 +956,19 @@ export const READ_MODEL_TABLES: TableSpec[] = [
       f("updated_at", "updatedAt", "timestamp"),
     ],
   },
+  // SPENDLY-747 (migration 20261114000000): the insights-daily job's results
+  // (fee rows, the Journal health report), written only by the server; the
+  // app reads them. Never on rm_client_apply's allowlist.
+  {
+    table: "server_results",
+    collection: "serverResults",
+    fields: [
+      f("kind", "kind", "text"),
+      f("run_id", "runId", "text"),
+      f("created_at", "createdAt", "timestamp"),
+      f("updated_at", "updatedAt", "timestamp"),
+    ],
+  },
 ];
 
 export const SPEC_BY_COLLECTION = new Map(READ_MODEL_TABLES.map((s) => [s.collection, s]));

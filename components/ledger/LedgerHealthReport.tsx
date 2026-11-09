@@ -13,9 +13,13 @@
  * Every figure comes from `runLedgerAudit`, which refuses to diagnose a staged
  * ledger at all. This component adds no rule of its own — and offers no action
  * that writes, only navigation.
+ *
+ * SPENDLY-747 (epic SPENDLY-735): the audit runs on the server over the whole
+ * ledger (insights-daily, users/{uid}/serverResults/ledgerHealth); this shows
+ * the stored report and when it was checked. No ledger scan on the phone.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { Check, TriangleAlert } from "lucide-react-native";
@@ -30,15 +34,12 @@ import {
   accountAccent,
   accountAccentBorder,
 } from "@/components/accounts/accountScreenTheme";
-import { useAccountsContext } from "@/providers/FinanceDataProvider";
-import { useCreditCardBills } from "@/hooks/useCreditCardBills";
-import { useExpenseReferenceData } from "@/providers/ExpenseReferenceDataProvider";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
-import { useExpenses } from "@/hooks/useExpenses";
-import { useIncomes } from "@/hooks/useIncomes";
-import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
+import { useServerResults } from "@/hooks/useServerResults";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatDisplayDate } from "@/shared/utils/dateDisplay";
+import { ledgerHealthFromDocs } from "@/shared/utils/serverResults";
 import {
-  runLedgerAudit,
   type LedgerAuditCheckResult,
   type LedgerAuditFinding,
   type LedgerAuditReport,
@@ -66,67 +67,11 @@ export function LedgerHealthReport({
   const currency = useDisplayCurrency();
   const listBottomPadding = usePageListBottomPadding();
 
-  const { expenses, complete: expensesComplete, error, retry, isFromCache } =
-    useExpenses();
-  const { incomes, complete: incomesComplete } = useIncomes();
-  const { accounts, accountsLoading, accountTypes } = useAccountsContext();
-  const { bills, billsLoading } = useCreditCardBills();
-  const { subscriptions, subscriptionsLoading, spaces, spacesLoading } =
-    useExpenseReferenceData();
-
-  const input = useMemo(
-    () => ({
-      expenses,
-      incomes,
-      accounts,
-      accountTypes,
-      bills,
-      subscriptions,
-      spaces,
-      readiness: {
-        expensesComplete,
-        incomesComplete,
-        accountsLoaded: !accountsLoading,
-        billsLoaded: !billsLoading,
-        subscriptionsLoaded: !subscriptionsLoading,
-        spacesLoaded: !spacesLoading,
-        // No provider loads trips or splits on this screen; their checks report
-        // "not checked" rather than a verdict. SPENDLY-112b.
-        tripsLoaded: false,
-        splitsLoaded: false,
-        fromCache: isFromCache,
-      },
-    }),
-    [
-      expenses,
-      incomes,
-      accounts,
-      accountTypes,
-      bills,
-      subscriptions,
-      spaces,
-      expensesComplete,
-      incomesComplete,
-      accountsLoading,
-      billsLoading,
-      subscriptionsLoading,
-      spacesLoading,
-      isFromCache,
-    ]
-  );
-
-  // Deferred rather than a plain `useMemo`, for two reasons: the checking state
-  // the acceptance criteria ask for would otherwise never render, and a
-  // multi-thousand-row scan on the render pass would drop frames on the tab
-  // switch. `undefined` *is* the checking state.
-  const [report, setReport] = useState<LedgerAuditReport | undefined>(undefined);
-
-  useEffect(() => {
-    setReport(undefined);
-    return scheduleIdleWork(() => setReport(runLedgerAudit(input)), {
-      fallbackDelayMs: 120,
-    });
-  }, [input]);
+  const { settings } = useSettings();
+  const { docs, error, retry } = useServerResults();
+  const stored = docs ? ledgerHealthFromDocs(docs) : null;
+  const report: LedgerAuditReport | undefined = stored?.report;
+  const checkedOn = stored ? formatDisplayDate(new Date(stored.runId), settings.dateFormat) : null;
 
   const renderFinding = useCallback(
     ({ item }: { item: LedgerAuditFinding }) => (
@@ -149,15 +94,37 @@ export function LedgerHealthReport({
     );
   }
 
-  if (!report) {
+  if (!docs) {
     return (
       <View style={styles.pending}>
         <Text style={[styles.pendingLabel, { color: theme.colors.mutedForeground }]}>
-          Checking {expenses.length + incomes.length} transactions…
+          Loading the latest check…
         </Text>
         {[0, 1, 2, 3].map((index) => (
           <Skeleton key={index} height={72} borderRadius={theme.radius.lg} />
         ))}
+      </View>
+    );
+  }
+
+  if (!report) {
+    return (
+      <View
+        style={[
+          styles.panel,
+          {
+            backgroundColor: theme.colors.card,
+            borderColor: theme.colors.border,
+          },
+        ]}
+      >
+        <Text style={[styles.panelTitle, { color: theme.colors.foreground }]}>
+          Not checked yet
+        </Text>
+        <Text style={[styles.note, { color: theme.colors.mutedForeground }]}>
+          Spendly checks your whole ledger once a day. Your first check hasn't
+          run yet; its results will show here.
+        </Text>
       </View>
     );
   }
@@ -188,6 +155,11 @@ export function LedgerHealthReport({
   const header = (
     <View style={styles.header}>
       <Verdict report={report} isDark={isDark} />
+      {checkedOn ? (
+        <Text style={[styles.note, { color: theme.colors.mutedForeground }]}>
+          Checked on {checkedOn}. Changes since then show at the next daily check.
+        </Text>
+      ) : null}
       {report.status === "issues" ? (
         <Text style={[styles.note, { color: theme.colors.mutedForeground }]}>
           Nothing here has been changed. These are findings to review, not

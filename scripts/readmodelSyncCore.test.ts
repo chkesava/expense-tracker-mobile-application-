@@ -626,7 +626,7 @@ describe("account lifecycle (SPENDLY-508)", () => {
       "goalFundingPlans", "groupFundEvents", "groupFunds", "holdings", "incomes", "investmentCashTransactions", "investments",
       "ledgerEvents", "merchantOverrides", "netWorthHistory", "notifications", "portfolioSettings",
       "portfolioTransactions", "receivableRepayments", "receivables", "recurringDismissals", "recurringSuggestions",
-      "runwayOverrides", "runwaySettings", "sipPlans", "sipTransactions", "spaces",
+      "runwayOverrides", "runwaySettings", "serverResults", "sipPlans", "sipTransactions", "spaces",
       "subscriptions", "trips", "userSettings", "virtualPositions", "watchlists", "watchlists/items", "whatIfScenarios",
     ]);
     for (const excluded of ["meta", "stats", "daily_logs", "weight_history", "pandalMemberships", "goalNames"]) {

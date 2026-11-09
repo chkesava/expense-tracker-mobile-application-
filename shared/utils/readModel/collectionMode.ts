@@ -45,6 +45,8 @@ export const SWITCHED_COLLECTIONS: readonly string[] = [
   "notifications",
   // SPENDLY-744: the server's recurring-merchant suggestions (display only).
   "recurringSuggestions",
+  // SPENDLY-747: the server's fee rows and Journal health report (display only).
+  "serverResults",
 ];
 
 /** SPENDLY-745: `shadow` only while readModel.deviceShadow is on, else `firestore` (no on-device compare). */

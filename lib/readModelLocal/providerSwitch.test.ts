@@ -39,6 +39,8 @@ const INTEGRATED = [
   "notifications",
   // SPENDLY-744: the server's recurring-merchant suggestions (display only).
   "recurringSuggestions",
+  // SPENDLY-747: the server's fee rows and Journal health report (display only).
+  "serverResults",
 ].sort();
 
 const NOT_YET: Record<string, string> = {
@@ -139,6 +141,17 @@ describe("provider read switches (SPENDLY-673)", () => {
     }
     const rules = readFileSync(join(ROOT, "firestore.rules"), "utf8");
     expect(rules).toMatch(/match \/recurringSuggestions\/\{suggestionId\} \{\s*allow read: if isOwner\(uid\);\s*allow write: if false;/);
+  });
+
+  // SPENDLY-747 (epic SPENDLY-735): the fee scan and the ledger audit run on
+  // the server (insights-daily); the app resolves stored rows with its reviews.
+  it("the app runs no full-ledger fee scan or ledger audit; the results are server-written", () => {
+    const files = ["app", "components", "hooks", "lib", "providers", "services"].flatMap((dir) => sources(join(ROOT, dir)));
+    for (const file of files) {
+      expect(readFileSync(file, "utf8"), file).not.toMatch(/(detectFees|classifyFeeRows|runLedgerAudit)\(/);
+    }
+    const rules = readFileSync(join(ROOT, "firestore.rules"), "utf8");
+    expect(rules).toMatch(/match \/serverResults\/\{resultId\} \{\s*allow read: if isOwner\(uid\);\s*allow write: if false;/);
   });
 
   // SPENDLY-598 (R4.3a): more writers that write from what the screens read.

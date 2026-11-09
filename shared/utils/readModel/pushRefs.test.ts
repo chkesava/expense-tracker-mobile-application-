@@ -14,7 +14,7 @@ describe("push refs (SPENDLY-583)", () => {
       "goalFundingPlans", "groupFundEvents", "groupFunds", "holdings", "incomes", "investmentCashTransactions", "investments",
       "ledgerEvents", "merchantOverrides", "netWorthHistory", "notifications", "portfolioSettings",
       "portfolioTransactions", "receivableRepayments", "receivables", "recurringDismissals", "recurringSuggestions",
-      "runwayOverrides", "runwaySettings", "sipPlans", "sipTransactions", "spaces",
+      "runwayOverrides", "runwaySettings", "serverResults", "sipPlans", "sipTransactions", "spaces",
       "subscriptions", "trips", "userSettings", "virtualPositions", "watchlists", "watchlists/items", "whatIfScenarios",
     ]);
     // The name lock is not data and is never pushed.
