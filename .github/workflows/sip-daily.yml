@@ -1,0 +1,80 @@
+name: SIP daily
+
+# SPENDLY-726 (682-B): the daily server SIP run that replaces the legacy
+# site's `sip-execute` cron. Rules: scripts/lib/sipDailyCore.ts.
+#
+# Manual dispatch only for now. SPENDLY-729 adds the Cloudflare Worker's daily
+# dispatch (trigger=cron), which runs only when the repository variable
+# SIP_DAILY_ENABLED is "true". A manual dispatch always runs (dry run by
+# default) so a production preview is possible before enabling.
+#
+# Secrets: FIREBASE_SERVICE_ACCOUNT (or SIP_FIREBASE_SERVICE_ACCOUNT),
+#          READMODEL_SUPABASE_SERVICE_ROLE_KEY (optional, read-model push)
+# Variables: SIP_DAILY_ENABLED, READMODEL_SUPABASE_URL, SIP_MAX_READS_PER_RUN
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Decide and log every SIP, write nothing"
+        required: true
+        default: true
+        type: boolean
+      trigger:
+        description: "Who started the run. The Cloudflare Worker sends cron, which obeys SIP_DAILY_ENABLED."
+        required: false
+        default: manual
+        type: choice
+        options:
+          - manual
+          - cron
+
+concurrency:
+  group: sip-daily
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: Execute due SIPs
+    if: vars.SIP_DAILY_ENABLED == 'true' || inputs.trigger != 'cron'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run
+        env:
+          SIP_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.SIP_FIREBASE_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
+          READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+          SIP_MAX_READS_PER_RUN: ${{ vars.SIP_MAX_READS_PER_RUN || '3000' }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SIP_FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT (or SIP_FIREBASE_SERVICE_ACCOUNT) is not set."
+            exit 1
+          fi
+          args=""
+          if [ "$DRY_RUN" = "true" ]; then args="--dry-run"; fi
+          npx --no-install tsx scripts/sip-daily.ts $args | tee sip-daily.log
+          {
+            echo "## SIP daily"
+            echo '```json'
+            sed -n '/^{/,/^}/p' sip-daily.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
