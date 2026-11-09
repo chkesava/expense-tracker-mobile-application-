@@ -8,7 +8,7 @@
 
 ## What the user sees
 
-**Tax center (`/tax`), now the dashboard**
+**Tax center (`/tax`), now the dashboard.** Since SPENDLY-733 it is the Money hub's **Tax & ITR** section (`/ledger?tab=tax`); `/tax` redirects there.
 - **Year selector:** the existing year chips.
 - **Progress:**
   - "Not started" when nothing is set or entered;

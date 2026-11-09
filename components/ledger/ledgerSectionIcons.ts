@@ -5,6 +5,7 @@ import {
   CreditCard,
   History,
   Landmark,
+  ReceiptIndianRupee,
   Repeat,
   Users,
   Wallet,
@@ -27,4 +28,5 @@ export const LEDGER_SECTION_ICONS: Record<LedgerHubTabId, SectionIcon> = {
   receivables: ArrowDownLeft,
   groupFunds: Users,
   subscriptions: Repeat,
+  tax: ReceiptIndianRupee,
 };

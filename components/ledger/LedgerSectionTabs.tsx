@@ -4,11 +4,12 @@ import { MoreHorizontal } from "lucide-react-native";
 
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
 import { Chip } from "@/components/ui/Chip";
+import { useTaxCenterFlag } from "@/hooks/useTaxCenterEnabled";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import {
-  LEDGER_SECTIONS,
+  visibleLedgerSections,
   type LedgerHubTabId,
 } from "@/shared/config/navigation";
 
@@ -42,6 +43,8 @@ export function LedgerSectionTabs({
   // Midnight Emerald), not the fixed account green the Money hub used.
   const accent = theme.colors.primary;
   const surfaces = useSurfaces();
+  // SPENDLY-733: the Tax & ITR section only while its flag is on.
+  const { enabled: taxCenter } = useTaxCenterFlag();
 
   const scrollRef = useRef<ScrollView>(null);
   // Offsets are read imperatively when the selection changes; keeping them in
@@ -66,7 +69,7 @@ export function LedgerSectionTabs({
           // The row is a tablist, not a scroll region, for a screen reader.
           accessibilityRole="tablist"
         >
-          {LEDGER_SECTIONS.map((entry) => {
+          {visibleLedgerSections({ taxCenter }).map((entry) => {
             const selected = entry.id === section;
             const count = counts?.[entry.id];
             const label =

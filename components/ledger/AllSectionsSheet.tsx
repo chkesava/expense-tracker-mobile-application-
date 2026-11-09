@@ -2,13 +2,14 @@ import { StyleSheet, View } from "react-native";
 
 import { Modal } from "@/components/common";
 import { LEDGER_SECTION_ICONS } from "@/components/ledger/ledgerSectionIcons";
+import { useTaxCenterFlag } from "@/hooks/useTaxCenterEnabled";
 import {
   SettingsGroupLabel,
   SettingsHubRow,
 } from "@/components/settings/SettingsHubRow";
 import {
   LEDGER_GROUPS,
-  LEDGER_SECTIONS,
+  visibleLedgerSections,
   type LedgerHubTabId,
 } from "@/shared/config/navigation";
 
@@ -30,6 +31,7 @@ export function AllSectionsSheet({
   section: LedgerHubTabId;
   onSelect: (section: LedgerHubTabId) => void;
 }) {
+  const { enabled: taxCenter } = useTaxCenterFlag();
   const handleSelect = (next: LedgerHubTabId) => {
     onClose();
     // Defer so the switch doesn't race the dismiss animation.
@@ -46,7 +48,7 @@ export function AllSectionsSheet({
     <Modal isOpen={isOpen} onClose={onClose} title="All sections" maxHeight="70%">
       <View style={styles.groups}>
         {LEDGER_GROUPS.map((group) => {
-          const sections = LEDGER_SECTIONS.filter(
+          const sections = visibleLedgerSections({ taxCenter }).filter(
             (entry) => entry.group === group.id
           );
           if (sections.length === 0) return null;

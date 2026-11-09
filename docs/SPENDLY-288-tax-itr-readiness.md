@@ -39,6 +39,7 @@ The order below is the proposed working order (plan §4).
 | SPENDLY-297 | Calendar deadlines and reminders | Merged to the epic branch (`1e7e1736`, [doc](SPENDLY-297-tax-deadlines.md)) |
 | SPENDLY-710 | Exportable readiness summary | Merged to the epic branch (`8f8f59ec`, [doc](SPENDLY-710-readiness-export.md)) |
 | SPENDLY-299 | QA, privacy, accuracy and rollout | Merged to the epic branch ([rollout](SPENDLY-288-rollout.md)) |
+| SPENDLY-733 | Tax & ITR as a Money hub section (owner request during manual test) | Built on `feature/SPENDLY-733-tax-money-hub`, awaiting review and merge ([doc](SPENDLY-733-tax-money-hub.md)) |
 
 ## Decisions
 All of D1–D9 (plan §6) were approved as recommended on 2026-11-07:

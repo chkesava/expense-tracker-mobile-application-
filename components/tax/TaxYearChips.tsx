@@ -14,17 +14,20 @@ export function TaxYearChips({
   years,
   value,
   onChange,
+  inset = true,
 }: {
   years: readonly FinancialYearKey[];
   value: FinancialYearKey;
   onChange: (fy: FinancialYearKey) => void;
+  /** Side padding; off where the page already pads (the Money hub, SPENDLY-733). */
+  inset?: boolean;
 }) {
   const { theme } = useTheme();
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{ gap: theme.space.sm, paddingHorizontal: theme.space.lg }}
+      contentContainerStyle={{ gap: theme.space.sm, paddingHorizontal: inset ? theme.space.lg : 0 }}
       accessibilityRole="radiogroup"
       accessibilityLabel="Financial year"
     >

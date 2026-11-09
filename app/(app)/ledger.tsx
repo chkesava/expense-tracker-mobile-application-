@@ -13,6 +13,8 @@ import { CreditCardBillsList } from "@/components/creditCardBills/CreditCardBill
 import { BorrowingsList } from "@/components/borrowings/BorrowingsList";
 import { ReceivablesList } from "@/components/receivables/ReceivablesList";
 import { GroupFundsList } from "@/components/groupFunds/GroupFundsList";
+import { TaxCenterHub } from "@/components/tax/TaxCenterHub";
+import { useTaxCenterFlag } from "@/hooks/useTaxCenterEnabled";
 import { SubscriptionsList } from "@/components/subscriptions/SubscriptionsList";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -105,7 +107,7 @@ const AUDIT_VIEWS = [
 
 export default function LedgerScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ tab?: string }>();
+  const params = useLocalSearchParams<{ tab?: string; fy?: string }>();
   const { theme } = useTheme();
   const { settings } = useSettings();
   const {
@@ -172,6 +174,8 @@ export default function LedgerScreen() {
   const { accountTypes } = useAccountTypes();
   const displayCurrency = useDisplayCurrency();
   const { settings: systemSettings } = useSystemSettings();
+  // SPENDLY-733: the Tax & ITR section exists only while the tax center is on.
+  const { enabled: taxCenter, loading: taxCenterLoading } = useTaxCenterFlag();
 
   useEffect(() => {
     const remapped = resolveLegacyLedgerTabRoute(params.tab);
@@ -186,6 +190,11 @@ export default function LedgerScreen() {
       setLedgerTab(params.tab as LedgerTab);
     }
   }, [params.tab, router, setLedgerTab]);
+
+  // With the tax center off (or turned off), never leave the hub on an empty section.
+  useEffect(() => {
+    if (ledgerTab === "tax" && !taxCenter && !taxCenterLoading) setLedgerTab("expenses");
+  }, [ledgerTab, taxCenter, taxCenterLoading, setLedgerTab]);
 
   const [refreshing, setRefreshing] = useState(false);
   // SPENDLY-585: the listeners are live, so a healthy refresh has nothing
@@ -1012,6 +1021,11 @@ export default function LedgerScreen() {
 
       {/* Tab: Subscriptions */}
       {ledgerTab === "subscriptions" && <SubscriptionsList />}
+
+      {/* Tab: Tax & ITR (SPENDLY-733) */}
+      {ledgerTab === "tax" && taxCenter && (
+        <TaxCenterHub initialFy={params.fy} onYearChange={(fy) => router.setParams({ fy })} />
+      )}
         </>
       )}
 

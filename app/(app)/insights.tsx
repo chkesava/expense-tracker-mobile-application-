@@ -20,7 +20,6 @@ import { ExportDataModal } from "@/components/analytics/ExportDataModal";
 import { AiAdvisorView } from "@/components/ai/AiAdvisorView";
 import { DecisionsEntryCard } from "@/components/decisions/DecisionsEntryCard";
 import { FeeInsightsEntryCard } from "@/components/fees/FeeInsightsEntryCard";
-import { TaxEntryCard } from "@/components/tax/TaxEntryCard";
 import { haptic } from "@/lib/haptics";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import { useSetupProgress } from "@/providers/SetupProgressProvider";
@@ -130,7 +129,6 @@ export default function InsightsScreen() {
               {pageHeader}
               <DecisionsEntryCard />
               <FeeInsightsEntryCard />
-              <TaxEntryCard />
             </>
           }
         />
