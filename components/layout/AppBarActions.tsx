@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Bell, Search } from "lucide-react-native";
 
@@ -8,6 +8,7 @@ import {
 } from "@/components/layout/chrome";
 import { haptic } from "@/lib/haptics";
 import { useAuth } from "@/providers/AuthProvider";
+import { useModalActions } from "@/providers/ModalProvider";
 import { useRemindersInbox } from "@/providers/RemindersInboxProvider";
 import { useTheme } from "@/theme/ThemeProvider";
 import { themeUsesDarkPalette } from "@/theme/tokens";
@@ -22,12 +23,13 @@ export function AppBarActions({
   ink?: string;
   /**
    * SPENDLY-718: a wide "Search transactions" field instead of the icon, for
-   * the desktop dashboard header. Same destination as the icon.
+   * the desktop dashboard header.
    */
   searchField?: boolean;
 }) {
   const { push } = useRouter();
   const { user } = useAuth();
+  const { setIsGlobalSearchOpen } = useModalActions();
   const { theme, themeName } = useTheme();
   const isDark = themeUsesDarkPalette(themeName);
   const iconColor = ink ?? theme.colors.foreground;
@@ -42,8 +44,8 @@ export function AppBarActions({
   };
 
   const handleSearch = () => {
-    void haptic.navigation();
-    push("/ledger" as never);
+    void haptic.selection();
+    setIsGlobalSearchOpen(true);
   };
 
   const handleOpenProfile = () => {
@@ -71,15 +73,38 @@ export function AppBarActions({
             pressed && styles.pressed,
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Search transactions"
+          accessibilityLabel="Search transactions, accounts, and screens"
         >
           <Search size={18} color={theme.colors.mutedForeground} strokeWidth={2} />
           <Text
             style={[styles.searchText, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
             numberOfLines={1}
           >
-            Search transactions
+            Search transactions, accounts…
           </Text>
+          {Platform.OS === "web" && (
+            <View
+              style={[
+                styles.kbdBadge,
+                {
+                  backgroundColor: theme.colors.muted,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.kbdText,
+                  {
+                    color: theme.colors.mutedForeground,
+                    fontFamily: theme.fontFamily.medium,
+                  },
+                ]}
+              >
+                Ctrl K
+              </Text>
+            </View>
+          )}
         </Pressable>
       ) : (
         <Pressable
@@ -87,7 +112,7 @@ export function AppBarActions({
           android_ripple={{ color: ripple, borderless: true, radius: 24 }}
           style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
           accessibilityRole="button"
-          accessibilityLabel="Search transactions"
+          accessibilityLabel="Search transactions, accounts, and screens"
         >
           <Search size={APP_BAR_ICON_SIZE} color={iconColor} strokeWidth={2} />
         </Pressable>
@@ -137,7 +162,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    width: 300,
+    width: 320,
     maxWidth: "100%",
     minHeight: 42,
     paddingHorizontal: 14,
@@ -148,6 +173,16 @@ const styles = StyleSheet.create({
   searchText: {
     flex: 1,
     fontSize: 14,
+  },
+  kbdBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  kbdText: {
+    fontSize: 11,
+    letterSpacing: 0.2,
   },
   iconButton: {
     width: APP_BAR_TOUCH_SIZE,

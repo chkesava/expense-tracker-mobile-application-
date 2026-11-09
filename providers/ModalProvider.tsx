@@ -39,6 +39,10 @@ export interface ModalActionsType {
   setIsCreateReceivableOpen: (open: boolean) => void;
   setIsCreateBorrowingOpen: (open: boolean) => void;
   setIsCreateRecurringOpen: (open: boolean) => void;
+  /**
+   * SPENDLY-721: global command-palette search.
+   */
+  setIsGlobalSearchOpen: (open: boolean) => void;
 }
 
 export interface ModalUiContextType {
@@ -58,6 +62,7 @@ export interface ModalUiContextType {
   isCreateReceivableOpen: boolean;
   isCreateBorrowingOpen: boolean;
   isCreateRecurringOpen: boolean;
+  isGlobalSearchOpen: boolean;
 }
 
 export type ModalContextType = MonthContextType &
@@ -90,6 +95,7 @@ export function ModalProvider({ children }: { children: ReactNode }) {
   const [isCreateReceivableOpen, setIsCreateReceivableOpen] = useState(false);
   const [isCreateBorrowingOpen, setIsCreateBorrowingOpen] = useState(false);
   const [isCreateRecurringOpen, setIsCreateRecurringOpen] = useState(false);
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
 
   const monthValue = useMemo(
     () => ({
@@ -119,6 +125,7 @@ export function ModalProvider({ children }: { children: ReactNode }) {
       isCreateReceivableOpen,
       isCreateBorrowingOpen,
       isCreateRecurringOpen,
+      isGlobalSearchOpen,
     }),
     [
       isAddExpenseOpen,
@@ -137,6 +144,7 @@ export function ModalProvider({ children }: { children: ReactNode }) {
       isCreateReceivableOpen,
       isCreateBorrowingOpen,
       isCreateRecurringOpen,
+      isGlobalSearchOpen,
     ]
   );
 
@@ -158,6 +166,7 @@ export function ModalProvider({ children }: { children: ReactNode }) {
       setIsCreateReceivableOpen,
       setIsCreateBorrowingOpen,
       setIsCreateRecurringOpen,
+      setIsGlobalSearchOpen,
     }),
     []
   );
