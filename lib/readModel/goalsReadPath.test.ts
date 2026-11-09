@@ -50,7 +50,8 @@ const doc = (e: GoalEvent) => {
 };
 const user = { uid: "u1", getIdToken: async () => "t", getIdTokenResult: async () => ({ claims: {} }) };
 const conditions = (mode: string | undefined, extra: Record<string, unknown> = {}) => ({
-  setting: mode ? { goals: mode, ...extra } : undefined,
+  // SPENDLY-745: shadow compares only with deviceShadow on.
+  setting: mode ? { goals: mode, deviceShadow: true, ...extra } : undefined,
   online: true,
   duress: false,
   localTestMode: true,

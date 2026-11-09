@@ -20,7 +20,7 @@ const base = (over: Partial<CollectionModeInput> = {}): CollectionModeInput => (
 describe("per-collection read switch (SPENDLY-673)", () => {
   it("serves from the copy only when everything allows it", () => {
     expect(effectiveCollectionMode(base())).toEqual({ mode: "supabase", configured: "supabase" });
-    expect(effectiveCollectionMode(base({ setting: { creditCardBills: "shadow" } })).mode).toBe("shadow");
+    expect(effectiveCollectionMode(base({ setting: { creditCardBills: "shadow", deviceShadow: true } })).mode).toBe("shadow");
   });
 
   it("is firestore by default, for unknown values, and for collections that aren't switchable", () => {
@@ -42,14 +42,14 @@ describe("per-collection read switch (SPENDLY-673)", () => {
     ["fell back this session", { fellBack: true }],
   ] as const)("is firestore when %s, whatever is configured", (reason, over) => {
     for (const mode of ["shadow", "supabase"]) {
-      expect(effectiveCollectionMode(base({ setting: { creditCardBills: mode }, ...over }))).toEqual({ mode: "firestore", configured: mode, reason });
+      expect(effectiveCollectionMode(base({ setting: { creditCardBills: mode, deviceShadow: true }, ...over }))).toEqual({ mode: "firestore", configured: mode, reason });
     }
   });
 
   it("supabase waits for a ready copy (a screen never goes blank while it fills); shadow doesn't need it", () => {
     for (const copyState of ["off", "hydrating", "error"] as const) {
       expect(effectiveCollectionMode(base({ copyState })).mode).toBe("firestore");
-      expect(effectiveCollectionMode(base({ copyState, setting: { creditCardBills: "shadow" } })).mode).toBe("shadow");
+      expect(effectiveCollectionMode(base({ copyState, setting: { creditCardBills: "shadow", deviceShadow: true } })).mode).toBe("shadow");
     }
   });
 });

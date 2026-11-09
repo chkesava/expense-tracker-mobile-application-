@@ -419,6 +419,8 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       removeChannel: (channel) => {
         void clientFor().then((c) => c?.removeChannel(channel as never));
       },
+      // SPENDLY-745: no catch-up polls in the background.
+      active: () => AppState.currentState === "active",
       changesSince: async (since, limit) => {
         const c = await clientFor();
         if (!c) return { data: null, error: "read model not connected" };
