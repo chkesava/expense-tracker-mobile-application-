@@ -65,7 +65,6 @@ import type {
 
 type CreateHoldingInput = Omit<Holding, "id" | "createdAt" | "updatedAt">;
 type CreateAlertInput = Omit<PriceAlert, "id" | "createdAt" | "isActive" | "triggeredAt">;
-type CreateSnapshotInput = Omit<PortfolioSnapshot, "id" | "date" | "createdAt">;
 
 const SETTINGS_DOC_ID = "config";
 
@@ -496,28 +495,7 @@ function usePortfolioState(options?: {
     }
   }, [db, settings?.createdAt, user]);
 
-  const saveDailySnapshot = useCallback(async (snapshot: CreateSnapshotInput) => {
-    if (!user || !db) return false;
-    // SPENDLY-598 (R4.3a): this writes the day's value from the holdings on
-    // screen. When they come from the on-device copy, write only if Firestore
-    // holds the same holdings; otherwise skip (it retries on a later render).
-    if (holdingsSourceModeRef.current === "supabase") {
-      const fresh = await getDocs(query(collection(db, "users", user.uid, "holdings")));
-      if (holdingsFingerprint(toSourceDocs(fresh).map((d) => ({ id: d.id, ...d.data } as Holding))) !== holdingsFingerprint(holdingsRef.current)) {
-        return false;
-      }
-    }
-    const date = today;
-    const ref = doc(db, "users", user.uid, "portfolioSnapshots", date);
-    try {
-      if ((await getDoc(ref)).exists()) return true;
-      await setDoc(ref, { ...snapshot, date, createdAt: serverTimestamp() });
-      return true;
-    } catch (error) {
-      logError("portfolio.savePortfolioSnapshot", error);
-      return false;
-    }
-  }, [db, user, today]);
+  // SPENDLY-741: the daily portfolio snapshot is recorded by the server (snapshot-daily).
 
   const executeMockBuy = useCallback(async (holdingId: string, quantity: number, price: number, fees = 0) => {
     if (!user || !db) return false;
@@ -593,7 +571,6 @@ function usePortfolioState(options?: {
     toggleAlert,
     deleteAlert,
     saveSettings,
-    saveDailySnapshot,
     executeMockBuy,
     executeMockSell,
     cancelOrder,
@@ -626,10 +603,3 @@ export function usePortfolio(options?: {
   return shareParent && ctx ? ctx : local;
 }
 
-/** SPENDLY-598: what the daily snapshot's value depends on, per holding. */
-function holdingsFingerprint(list: Holding[]): string {
-  return list
-    .map((h) => `${h.id}:${h.quantity}:${h.averageBuyPrice}`)
-    .sort()
-    .join("|");
-}

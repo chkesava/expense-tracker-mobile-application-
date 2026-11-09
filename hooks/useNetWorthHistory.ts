@@ -30,7 +30,7 @@ export function useNetWorthHistory(todayKey: string) {
   const [loading, setLoading] = useState(true);
   const { error, setError, retry, attempt } = useLoadFailure();
   // SPENDLY-599: firestore (default) | shadow | supabase, per readModel.netWorthHistory.
-  // The recorder confirms on Firestore before writing (netWorthSnapshotVerify).
+  // Display only: the server records the points (snapshot-daily, SPENDLY-741).
   const historySource = useReadModelSource("netWorthHistory");
 
   useEffect(() => {

@@ -140,11 +140,17 @@ describe("provider read switches (SPENDLY-673)", () => {
     expect(text).toMatch(/existing\.metadata\.fromCache/);
   });
 
-  it("the daily portfolio snapshot checks holdings on Firestore when they come from the copy", () => {
-    const text = readFileSync(join(ROOT, "hooks", "usePortfolio.ts"), "utf8");
-    expect(text).toMatch(/holdingsSourceModeRef\.current === "supabase"/);
-    expect(text).toMatch(/holdingsFingerprint\(/);
+  // SPENDLY-741 (epic SPENDLY-735): the daily portfolio snapshot and the
+  // net-worth point are recorded by the server (snapshot-daily) from Firestore.
+  it("the app records no daily snapshots: no portfolio snapshot or net-worth point is written from screen data", () => {
+    for (const file of ["hooks/usePortfolio.ts", "components/portfolio/PortfolioDashboard.tsx", "components/dashboard/NetWorthWidget.tsx", "hooks/useNetWorthSnapshotStatus.ts"]) {
+      const text = readFileSync(join(ROOT, file), "utf8");
+      for (const banned of ["saveDailySnapshot", "recordNetWorthSnapshot", "netWorthSnapshotWrite"]) {
+        expect(text, `${file}: ${banned}`).not.toContain(banned);
+      }
+    }
   });
+
 
   it("EPF hooks read the copy only for a caller that opts in (readFrom: \"copy\")", () => {
     const epf = uses.filter((u) => u.collection.startsWith("epf"));
@@ -184,20 +190,6 @@ describe("provider read switches (SPENDLY-673)", () => {
         expect(text, `${file}: ${banned}`).not.toContain(banned);
       }
     }
-  });
-
-  it("the net-worth point confirms its history and inputs on Firestore when any comes from the copy", () => {
-    const recorder = readFileSync(join(ROOT, "hooks", "useNetWorthSnapshotRecorder.ts"), "utf8");
-    expect(recorder).toMatch(/if \(snapshotReadsCopy\(modesRef\.current\)\) \{\s*const verdict = await confirmSnapshotOnFirestore\(/);
-    expect(recorder).toMatch(/useReadModelModes\(NET_WORTH_SNAPSHOT_COLLECTIONS\)/);
-    const verify = readFileSync(join(ROOT, "services", "netWorth", "netWorthSnapshotVerify.ts"), "utf8");
-    // Every source of composeNetWorth's totals (the ledger only raises a non-blocking flag).
-    for (const c of ["accounts", "accountTypes", "investments", "holdings", "investmentCashTransactions", "borrowings", "borrowingRepayments", "receivables", "receivableRepayments"]) {
-      expect(verify).toContain(`{ collection: "${c}" }`);
-    }
-    expect(verify).toContain('{ collection: "financialSummaries", docId: "epf" }');
-    expect(verify).toMatch(/if \(one\.metadata\.fromCache\) return null;/);
-    expect(verify).toMatch(/all\.metadata\.fromCache \? null/);
   });
 
   it("goal writes are built from Firestore's goals when the copy serves them", () => {

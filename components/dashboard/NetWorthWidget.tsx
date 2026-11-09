@@ -32,7 +32,7 @@ import {
 } from "@/components/dashboard/primitives";
 import { useInvestmentsEnabled } from "@/hooks/useInvestmentsEnabled";
 import { useNetWorthHistory } from "@/hooks/useNetWorthHistory";
-import { useNetWorthSnapshotRecorder } from "@/hooks/useNetWorthSnapshotRecorder";
+import { useNetWorthSnapshotStatus } from "@/hooks/useNetWorthSnapshotStatus";
 import type { UnifiedNetWorthSummary } from "@/hooks/useUnifiedNetWorth";
 import { haptic } from "@/lib/haptics";
 import {
@@ -81,10 +81,11 @@ export const NetWorthWidget = memo(function NetWorthWidget({
 }: NetWorthWidgetProps & NetWorthWidgetDesktopProps) {
   const { settings } = useSettings();
   const todayKey = todayDateKey(settings.timezone);
-  // SPENDLY-568: history is read only here, where the trend renders, and
-  // today's point is recorded from this same summary once it is complete.
+  // SPENDLY-568: history is read only here, where the trend renders.
+  // SPENDLY-741: the server records today's point each morning; this only
+  // shows whether it is saved and, if not, why.
   const history = useNetWorthHistory(todayKey);
-  const recorder = useNetWorthSnapshotRecorder({ summary: netWorth, todayKey, history });
+  const recorder = useNetWorthSnapshotStatus({ summary: netWorth, todayKey, history });
 
   if (variant === "desktop") {
     return (
@@ -139,7 +140,7 @@ function DesktopNetWorth({
   netWorth: UnifiedNetWorthSummary;
   currency: string;
   history: ReturnType<typeof useNetWorthHistory>;
-  recorder: ReturnType<typeof useNetWorthSnapshotRecorder>;
+  recorder: ReturnType<typeof useNetWorthSnapshotStatus>;
   todayKey: string;
   aside: ReactNode;
   gap: number;
