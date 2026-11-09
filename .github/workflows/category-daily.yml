@@ -1,0 +1,86 @@
+name: Category daily
+
+# SPENDLY-742 (epic SPENDLY-735): category taxonomy upgrades run here, not at
+# sign-in (an upgrade remaps every expense). Selects users whose
+# meta/categories stamp is behind and runs the shared migration
+# (shared/data/categoryHierarchyMigration.ts). New users are still seeded by
+# the app. Rules: scripts/lib/categoryDailyCore.ts.
+#
+# The Cloudflare Worker `spendly-push-trigger` dispatches this workflow on its
+# daily 03:00 UTC tick (08:30 IST) with `trigger: cron`, which runs only when
+# the repository variable CATEGORY_DAILY_ENABLED is "true". A manual dispatch
+# always runs (dry run by default: counts only, writes nothing).
+#
+# Secrets: FIREBASE_SERVICE_ACCOUNT (or CATEGORY_FIREBASE_SERVICE_ACCOUNT),
+#          READMODEL_SUPABASE_SERVICE_ROLE_KEY (optional: read-model push)
+# Variables: CATEGORY_DAILY_ENABLED, READMODEL_SUPABASE_URL, CATEGORY_MAX_READS_PER_RUN
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Decide and log, write nothing"
+        required: true
+        default: true
+        type: boolean
+      trigger:
+        description: "Who started the run. The Cloudflare Worker sends cron, which obeys CATEGORY_DAILY_ENABLED."
+        required: false
+        default: manual
+        type: choice
+        options:
+          - manual
+          - cron
+
+concurrency:
+  group: category-daily
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: Upgrade category taxonomies
+    if: vars.CATEGORY_DAILY_ENABLED == 'true' || inputs.trigger != 'cron'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The job never pushes; don't leave the token in git config.
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run
+        env:
+          CATEGORY_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.CATEGORY_FIREBASE_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
+          READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+          CATEGORY_MAX_READS_PER_RUN: ${{ vars.CATEGORY_MAX_READS_PER_RUN || '5000' }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CATEGORY_FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT (or CATEGORY_FIREBASE_SERVICE_ACCOUNT) is not set."
+            exit 1
+          fi
+          args=""
+          if [ "$DRY_RUN" = "true" ]; then args="--dry-run"; fi
+          npx --no-install tsx scripts/category-daily.ts $args | tee category-daily.log
+          {
+            echo "## Category daily"
+            echo '```json'
+            sed -n '/^{/,/^}/p' category-daily.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

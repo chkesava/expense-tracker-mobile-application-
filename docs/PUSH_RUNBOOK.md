@@ -40,7 +40,7 @@ GitHub starts scheduled runs in this repository hours late, or drops them; in on
 - **What it sends:** `dry_run: false, trigger: cron`.
 - **The on/off switch still applies:** those runs obey `PUSH_REMINDERS_ENABLED` like the schedule.
 - **Fallback:** the GitHub schedule stays. A double run is harmless, because each notice is claimed once.
-- **Daily jobs (SPENDLY-729):** the same Worker also has a `0 3 * * *` cron that dispatches `subscription-daily.yml` (SPENDLY-739), `sip-daily.yml`, `epf-daily.yml` (SPENDLY-740), `bill-daily.yml` and `snapshot-daily.yml` (SPENDLY-741), each gated by its own variable. See [LEGACY_CRONS_RETIREMENT_RUNBOOK.md](LEGACY_CRONS_RETIREMENT_RUNBOOK.md). Redeploying the Worker deploys both crons.
+- **Daily jobs (SPENDLY-729):** the same Worker also has a `0 3 * * *` cron that dispatches `category-daily.yml` (SPENDLY-742), `subscription-daily.yml` (SPENDLY-739), `sip-daily.yml`, `epf-daily.yml` (SPENDLY-740), `bill-daily.yml` and `snapshot-daily.yml` (SPENDLY-741), each gated by its own variable. See [LEGACY_CRONS_RETIREMENT_RUNBOOK.md](LEGACY_CRONS_RETIREMENT_RUNBOOK.md). Redeploying the Worker deploys both crons.
 
 **One-time setup:**
 1. **Create the GitHub token.** Go to GitHub → Settings → Developer settings → **Fine-grained personal access tokens** → Generate.
