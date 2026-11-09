@@ -5,6 +5,8 @@
  *   npx tsx scripts/bill-daily.ts --dry-run     # decide and log, write nothing
  *   npx tsx scripts/bill-daily.ts               # create / settle statements
  *   npx tsx scripts/bill-daily.ts --dry-run --now=2026-11-06T03:00:00Z   # preview another day (QA)
+ *   npx tsx scripts/bill-daily.ts --queue       # SPENDLY-737: only the users the read model queued
+ *                                                 after an app save (needs the read-model settings)
  *
  * Credentials: BILL_FIREBASE_SERVICE_ACCOUNT or FIREBASE_SERVICE_ACCOUNT (JSON),
  * else application default. FIRESTORE_EMULATOR_HOST uses the emulator.
@@ -26,8 +28,15 @@ import { isActiveLedgerRow } from "../shared/utils/ledgerRow";
 import { createServerPush } from "../netlify/functions/_readmodelServerPush";
 import { serverPushPorts } from "../netlify/functions/readmodel-push";
 import { finishJobSummary, jobReadBudget, summaryAnnotations, type JobDb } from "./lib/dailyJobCore";
-import { findBillWorkOnReadModel, runBillDaily, storedBillFromDoc, type BillDailyPorts, type ReadModelBillWork } from "./lib/billDailyCore";
-import { supabaseBillReadModel } from "./lib/billReadModelSource";
+import {
+  findBillWorkOnReadModel,
+  runBillDaily,
+  runBillQueue,
+  storedBillFromDoc,
+  type BillDailyPorts,
+  type ReadModelBillWork,
+} from "./lib/billDailyCore";
+import { supabaseBillReadModel, supabaseBillRunQueue } from "./lib/billReadModelSource";
 
 function positive(value: string | undefined, fallback: number): number {
   const n = Number(value);
@@ -36,6 +45,7 @@ function positive(value: string | undefined, fallback: number): number {
 
 async function main() {
   const dryRun = process.argv.includes("--dry-run");
+  const queueMode = process.argv.includes("--queue");
   const nowArg = process.argv.find((a) => a.startsWith("--now="))?.slice(6);
   const now = nowArg ? new Date(nowArg) : new Date();
   if (Number.isNaN(now.getTime())) throw new Error(`--now must be an ISO time, got ${nowArg}`);
@@ -58,6 +68,15 @@ async function main() {
       return snap.docs
         .filter((d) => d.ref.parent.parent?.parent.id === "users")
         .map((d) => ({ uid: d.ref.parent.parent!.id, account: { ...(d.data() as Account), id: d.id } }));
+    },
+    async listAccountsFor(uids) {
+      const out: Array<{ uid: string; account: Account }> = [];
+      for (const uid of uids) {
+        const snap = await db.collection(`users/${uid}/accounts`).get();
+        charge(snap.size);
+        out.push(...snap.docs.map((d) => ({ uid, account: { ...(d.data() as Account), id: d.id } })));
+      }
+      return out;
     },
     async accountTypes(uid) {
       const snap = await db.collection(`users/${uid}/accountTypes`).get();
@@ -93,11 +112,33 @@ async function main() {
     stamp: () => FieldValue.serverTimestamp(),
   };
 
+  const rmUrl = process.env.READMODEL_SUPABASE_URL;
+  const rmKey = process.env.READMODEL_SUPABASE_SERVICE_ROLE_KEY;
+
+  // SPENDLY-737: queue mode settles only the users the read model queued.
+  if (queueMode) {
+    if (!rmUrl || !rmKey) throw new Error("--queue needs READMODEL_SUPABASE_URL and READMODEL_SUPABASE_SERVICE_ROLE_KEY");
+    const client = createClient(rmUrl, rmKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const summary = await runBillQueue({
+      queue: supabaseBillRunQueue(client),
+      ports,
+      readModel: supabaseBillReadModel(client),
+      now,
+      dryRun,
+      budget,
+      push,
+      log,
+    });
+    finishJobSummary(summary, budget, push ? await push.flush() : null);
+    console.log(JSON.stringify(summary, null, 2));
+    for (const line of summaryAnnotations(summary)) console.log(line);
+    if (summary.writes.failed > 0) process.exitCode = 1;
+    return;
+  }
+
   // SPENDLY-734: cards with bill work on the read model (no Firestore reads).
   // A failure here only narrows the run to closing cards, as before.
   let readModel: ReadModelBillWork | null = null;
-  const rmUrl = process.env.READMODEL_SUPABASE_URL;
-  const rmKey = process.env.READMODEL_SUPABASE_SERVICE_ROLE_KEY;
   if (rmUrl && rmKey && process.env.BILL_READMODEL_FINDER !== "off") {
     try {
       const client = createClient(rmUrl, rmKey, { auth: { persistSession: false, autoRefreshToken: false } });

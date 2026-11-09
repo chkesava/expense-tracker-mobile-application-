@@ -262,6 +262,31 @@ Run it from the workflow with `mode = full`, first with `dry_run = true` to see 
 
 **Turning it off:** set `readModel.realtime = false`. The copy (594) then catches up at every launch and whenever the app comes back to the foreground (601). While realtime is on but down, it polls the catch-up every 30 s.
 
+## Bill-run queue (SPENDLY-737)
+An app save to a bill input (expenses, account payments, card bills, accounts; `written_by = 'client'`) queues its owner in `server_run_queue`. At most once a minute it asks GitHub to run `bill-daily.yml` with `trigger: queue`. Migration `20261112000000`. The job reads the queue itself, so no uid is ever a workflow input. Server writes never queue.
+
+**Turning it on** (after the migration is applied with a dry run and approval):
+1. **Create a GitHub fine-grained token:** this repository only, **Actions: read and write**, with an expiry you note. The Worker's `GITHUB_DISPATCH_TOKEN` has the same scope, so you can reuse it.
+2. **Store it in Vault** (Supabase → SQL editor, as the owner):
+   ```sql
+   select vault.create_secret('<token>', 'spendly_github_dispatch_token');
+   ```
+3. **Enable `pg_net`:** Database → Extensions. The migration enables it when available.
+4. **`BILL_DAILY_ENABLED`:** queue runs obey it, like the Worker's 03:00 runs.
+
+**Off:**
+- Without the Vault secret, nothing is dispatched. The queue still fills, and the daily run serves it.
+- Setting `BILL_DAILY_ENABLED` to anything but `true` also stops the queue runs.
+- To stop queueing altogether, drop the `*_bill_run_ins` / `*_bill_run_upd` triggers.
+
+**Rotate the token:** run `select vault.update_secret((select id from vault.secrets where name = 'spendly_github_dispatch_token'), '<new token>');`, then revoke the old one.
+
+**Check it:**
+- `select job, last_dispatch_at from server_run_dispatches;`
+- `select count(*) from server_run_queue;`
+- `select status_code, created from net._http_response order by created desc limit 5;`
+- Actions → *Bill daily* runs with `trigger: queue`.
+
 ## The on-device copy (SPENDLY-594)
 
 **What it is:** each device keeps a copy of its user's read-model rows (`lib/readModelLocal/`): SQLite on Android and iOS (`spendly-readmodel.db`), IndexedDB on web.

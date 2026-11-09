@@ -103,11 +103,6 @@ type CreditCardBillsContextType = {
   ) => Promise<boolean>;
   cancelBill: (billId: string) => Promise<boolean>;
   /**
-   * SPENDLY-719: settle stored bills against the ledger soon. Call after a
-   * write that moves a card's settlement outside this provider (cashback).
-   */
-  requestBillPass: () => void;
-  /**
    * SPENDLY-99: what a settled auto statement would become if recomputed
    * against full history, or null when there is nothing to correct. Pure —
    * writes nothing, so the UI can show the before/after before asking.
@@ -140,15 +135,12 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   const [bills, setBills] = useState<CreditCardBill[]>([]);
   const [billsLoading, setBillsLoading] = useState(true);
   const reconcileTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /**
-   * SPENDLY-734 (epic SPENDLY-735): the app computes no bill pass. The
-   * server's `bill-daily` job (scripts/lib/billDailyCore.ts) settles stored
-   * bills against the ledger, cashback included: closing cards, and every
-   * card whose work it finds on the read model. Money actions still call this
-   * after they save: SPENDLY-737 makes it ask the server to run for this user
-   * now; until then the daily run settles them.
-   */
-  const requestBillPass = useCallback(() => {}, []);
+  // SPENDLY-734/737 (epic SPENDLY-735): the app computes no bill pass. The
+  // server's `bill-daily` job settles stored bills against the ledger,
+  // cashback included. A money action needs no extra call: its save reaches
+  // the read model, which queues this user and starts the job within about a
+  // minute (supabase-readmodel migration 20261112000000); the daily 03:00 UTC
+  // run catches anything else.
 
   const globalPrefs = settings.creditCardBillReminders;
   const timezone = settings.timezone;
@@ -547,11 +539,11 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       if (derived.status === "PAID") {
         await cancelBillReminders(billId);
       }
-      // The stamp above counts cash only; the ledger also counts cashback.
-      requestBillPass();
+      // The stamp above counts cash only; the server's bill-daily run, queued
+      // by this save (SPENDLY-737), settles the rest against the ledger.
       return true;
     },
-    [user, bills, timezone, globalPrefs.enabled, requestBillPass]
+    [user, bills, timezone, globalPrefs.enabled]
   );
 
   const recordBillPayment = useCallback(
@@ -568,9 +560,8 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           await cancelBillReminders(input.bill.id);
         }
         toast.success(writeSavedMessage(result.outcome, "Bill payment recorded"));
-        // SPENDLY-719: the stamp counts this payment only; settle the stored
-        // bill against the ledger (cashback included) now.
-        requestBillPass();
+        // SPENDLY-719/737: the stamp counts this payment only; the server's
+        // bill-daily run, queued by this save, settles the rest (cashback included).
         return result.paymentId;
       } catch (err) {
         logError("creditCardBills.recordBillPayment", err);
@@ -578,7 +569,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         return null;
       }
     },
-    [user, timezone, requestBillPass]
+    [user, timezone]
   );
 
   const editBillPayment = useCallback(
@@ -608,7 +599,6 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           }
         }
         toast.success(writeSavedMessage(result.outcome, "Payment updated"));
-        requestBillPass();
         return true;
       } catch (err) {
         logError("creditCardBills.editBillPayment", err);
@@ -616,7 +606,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         return false;
       }
     },
-    [user, timezone, refreshReminderSchedules, requestBillPass]
+    [user, timezone, refreshReminderSchedules]
   );
 
   const markBillPaid = useCallback(
@@ -642,10 +632,9 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         paymentDate: opts.paymentDate,
         paymentIds,
       });
-      if (ok) requestBillPass();
       return ok;
     },
-    [bills, updateBill, requestBillPass]
+    [bills, updateBill]
   );
 
   const cancelBill = useCallback(
@@ -680,7 +669,6 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       createBill,
       updateBill,
       applyPaymentToBill,
-      requestBillPass,
       recordBillPayment,
       editBillPayment,
       markBillPaid,
@@ -697,7 +685,6 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       createBill,
       updateBill,
       applyPaymentToBill,
-      requestBillPass,
       recordBillPayment,
       editBillPayment,
       markBillPaid,

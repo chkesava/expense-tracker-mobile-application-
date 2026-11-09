@@ -28,8 +28,6 @@ export function useCreditCardBills(options?: { enabled?: boolean }) {
     recalculateBill: ctx.recalculateBill,
     snoozeBillReminder: ctx.snoozeBillReminder,
     refreshReminderSchedules: ctx.refreshReminderSchedules,
-    /** SPENDLY-719: settle stored bills against the ledger (after cashback). */
-    requestBillPass: ctx.requestBillPass,
   };
 }
 

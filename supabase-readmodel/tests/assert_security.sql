@@ -317,6 +317,51 @@ begin
 end
 $$;
 
+-- 11. SPENDLY-737: the bill-run queue is server-only. No client grants or
+--     policies on its tables; its functions are definers with an empty
+--     search_path that no client role can execute; every bill input carries
+--     both queue triggers.
+do $$
+declare
+  fn regprocedure;
+  t text;
+  missing text;
+begin
+  foreach t in array array['server_run_queue', 'server_run_dispatches'] loop
+    if has_table_privilege('authenticated', 'public.' || t, 'select')
+       or has_table_privilege('anon', 'public.' || t, 'select')
+       or has_table_privilege('authenticated', 'public.' || t, 'insert')
+       or has_table_privilege('authenticated', 'public.' || t, 'delete') then
+      raise exception '% must be server-only', t;
+    end if;
+    if exists (select 1 from pg_policies where schemaname = 'public' and tablename = t) then
+      raise exception '% must have no policies', t;
+    end if;
+  end loop;
+  foreach fn in array array[
+    'public.server_run_dispatch(text)'::regprocedure,
+    'public.server_run_note_bill_inputs()'::regprocedure,
+    'public.server_run_forget_purged()'::regprocedure
+  ] loop
+    if not (select p.prosecdef and p.proconfig @> array['search_path=""'] from pg_proc p where p.oid = fn) then
+      raise exception '% must be security definer with an empty search_path', fn;
+    end if;
+    if has_function_privilege('authenticated', fn, 'execute') or has_function_privilege('anon', fn, 'execute') then
+      raise exception '% must not be executable by client roles', fn;
+    end if;
+  end loop;
+  select string_agg(x, ', ') into missing
+  from unnest(array['expenses', 'account_payments', 'credit_card_bills', 'accounts']) as x
+  where (
+    select count(*) from pg_trigger g join pg_class c on c.oid = g.tgrelid
+    where c.relname = x and g.tgname in (x || '_bill_run_ins', x || '_bill_run_upd') and not g.tgisinternal
+  ) <> 2;
+  if missing is not null then
+    raise exception 'bill inputs without both bill-run triggers: %', missing;
+  end if;
+end
+$$;
+
 select 'read-model security assertions passed' as result;
 
 -- 7. SPENDLY-513: the Phase 3 views run as the caller (security_invoker), so

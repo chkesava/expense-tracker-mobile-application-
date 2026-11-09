@@ -72,3 +72,38 @@ end
 $$;
 grant usage on schema realtime to anon, authenticated, service_role;
 grant select on realtime.messages to authenticated;
+
+-- SPENDLY-737: stand-ins for two Supabase extensions the bill-run queue uses.
+-- pg_net's net.http_post queues an HTTP request (sent after commit); here the
+-- request lands in net._requests so the tests can read it back. Vault's
+-- decrypted secrets are a plain table the tests fill.
+create schema if not exists net;
+create table if not exists net._requests (
+  id      bigserial primary key,
+  url     text,
+  body    jsonb,
+  headers jsonb,
+  at      timestamptz not null default now()
+);
+create or replace function net.http_post(
+  url text,
+  body jsonb default '{}'::jsonb,
+  params jsonb default '{}'::jsonb,
+  headers jsonb default '{}'::jsonb,
+  timeout_milliseconds integer default 5000
+)
+returns bigint
+language plpgsql
+as $$
+declare
+  rid bigint;
+begin
+  insert into net._requests (url, body, headers) values (url, body, headers) returning id into rid;
+  return rid;
+end
+$$;
+create schema if not exists vault;
+create table if not exists vault.decrypted_secrets (
+  name             text primary key,
+  decrypted_secret text
+);
