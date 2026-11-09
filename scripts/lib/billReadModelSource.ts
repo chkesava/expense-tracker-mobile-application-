@@ -15,12 +15,13 @@ import { storedBillFromDoc, type BillRunQueue, type ReadModelBillSource, type Us
 
 const PAGE = 1000;
 
-type Row = { uid: string; doc_id: string; doc: Record<string, unknown> | null };
+export type ReadModelRow = { uid: string; doc_id: string; doc: Record<string, unknown> | null };
+type Row = ReadModelRow;
 type Doc = { id: string; data: Record<string, unknown> };
 type Page = PromiseLike<{ data: unknown; error: { message: string } | null }>;
 
 /** Every row of a query, a PostgREST page (1000) at a time. */
-async function allRows(page: (from: number, to: number) => Page): Promise<Row[]> {
+export async function allRows(page: (from: number, to: number) => Page): Promise<Row[]> {
   const out: Row[] = [];
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await page(from, from + PAGE - 1);
@@ -37,7 +38,7 @@ export function readModelRowToDoc(row: Row): Doc {
   return { id, data: row.doc ?? {} };
 }
 
-function tableOf(collection: string): string {
+export function tableOf(collection: string): string {
   const spec = SPEC_BY_COLLECTION.get(collection);
   if (!spec) throw new Error(`read model: ${collection} is not synced`);
   return spec.table;

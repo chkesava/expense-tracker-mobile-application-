@@ -32,13 +32,17 @@ export type JobWrite =
   /** Set (optionally merged). Stamps updatedAt; createdAt only when `stampCreatedAt`. */
   | { kind: "set"; path: string; data: JobData; merge?: boolean; stampCreatedAt?: boolean }
   /** Update an existing document; with `lastUpdateTime`, refused (conflict) if it changed since read. */
-  | { kind: "update"; path: string; data: JobData; lastUpdateTime?: unknown };
+  | { kind: "update"; path: string; data: JobData; lastUpdateTime?: unknown }
+  /** SPENDLY-740: remove a derived document (e.g. a stale EPF interest year). The push tombstones it. */
+  | { kind: "delete"; path: string };
 
 /** The slice of an Admin SDK write batch the core uses. */
 export type JobBatch = {
   create(ref: { path: string }, data: JobData): unknown;
   set(ref: { path: string }, data: JobData, options?: { merge?: boolean }): unknown;
   update(ref: { path: string }, data: JobData, precondition?: { lastUpdateTime: unknown }): unknown;
+  /** Optional so older fakes compile; the Admin SDK batch has it. */
+  delete?(ref: { path: string }): unknown;
   commit(): Promise<unknown>;
 };
 
@@ -103,7 +107,9 @@ export async function applyJobWrites(opts: {
   if (writes.length > JOB_BATCH_LIMIT) throw new Error(`${writes.length} writes exceed the batch limit (${JOB_BATCH_LIMIT}); chunk them`);
 
   if (opts.dryRun) {
-    for (const w of writes) opts.log(`[DRY RUN] would ${w.kind} ${w.path} (${Object.keys(w.data).sort().join(", ")})`);
+    for (const w of writes) {
+      opts.log(`[DRY RUN] would ${w.kind} ${w.path}${w.kind === "delete" ? "" : ` (${Object.keys(w.data).sort().join(", ")})`}`);
+    }
     return { status: "dry-run", paths };
   }
 
@@ -116,6 +122,9 @@ export async function applyJobWrites(opts: {
       const data = { ...w.data, updatedAt: opts.stamp(), ...(w.stampCreatedAt ? { createdAt: opts.stamp() } : {}) };
       if (w.merge) batch.set(ref, data, { merge: true });
       else batch.set(ref, data);
+    } else if (w.kind === "delete") {
+      if (!batch.delete) throw new Error("this batch cannot delete");
+      batch.delete(ref);
     } else {
       const data = { ...w.data, updatedAt: opts.stamp() };
       if (w.lastUpdateTime !== undefined) batch.update(ref, data, { lastUpdateTime: w.lastUpdateTime });

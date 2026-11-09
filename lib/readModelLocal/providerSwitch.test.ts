@@ -124,10 +124,14 @@ describe("provider read switches (SPENDLY-673)", () => {
   });
 
   // SPENDLY-598 (R4.3a): more writers that write from what the screens read.
-  it("subscription auto-posting re-plans on server-confirmed Firestore data when the copy serves", () => {
+  // SPENDLY-739 (epic SPENDLY-735): subscription posting left the app; the
+  // server's subscription-daily job plans on Firestore data (R4.3a). The app
+  // must not post charges from what it reads at all.
+  it("the app runs no subscription auto-post: no charge is planned or posted from screen data", () => {
     const text = readFileSync(join(ROOT, "providers", "ExpenseReferenceDataProvider.tsx"), "utf8");
-    expect(text).toMatch(/subscriptionsModeRef\.current === "supabase"/);
-    expect(text).toMatch(/if \(fresh\.metadata\.fromCache\) return;/);
+    for (const banned of ["processDueSubscriptions", "planDueSubscriptionPosts", "postDueSubscriptionCharge", "evaluateSubscriptionDue"]) {
+      expect(text, banned).not.toContain(banned);
+    }
   });
 
   it("watchlist setup confirms on the server that there are no lists before writing", () => {
@@ -168,12 +172,18 @@ describe("provider read switches (SPENDLY-673)", () => {
     for (const file of optIns) expect(readFileSync(join(ROOT, file), "utf8")).not.toMatch(writers);
   });
 
-  // SPENDLY-599 (R4.3a).
-  it("the EPF summary sync compares with the stored summary on Firestore; only display opts into the copy", () => {
+  // SPENDLY-599 (R4.3a); SPENDLY-740: the EPF summary, FY interest and the
+  // contribution catch-up are written by the server's epf-daily job. The app
+  // only reads them; no EPF background writer may come back.
+  it("the EPF screens write no derived EPF data; only display opts into the copy", () => {
     const summaries = readFileSync(join(ROOT, "hooks", "useDomainSummaries.ts"), "utf8");
     expect(summaries).toContain('useReadModelSource("financialSummaries", { copy: options?.readFrom === "copy" })');
-    const sync = readFileSync(join(ROOT, "hooks", "useEpfSummarySync.ts"), "utf8");
-    expect(sync).toMatch(/useEpfSummary\(\)/);
+    for (const file of ["components/epf/EpfDashboard.tsx", "components/epf/EpfBalanceTab.tsx", "hooks/useEpfLedger.ts", "hooks/useEpfInterest.ts", "hooks/useEpfContributions.ts"]) {
+      const text = readFileSync(join(ROOT, file), "utf8");
+      for (const banned of ["recomputeInterest", "repairCreditWindows", "repairLifecycleStates", "useEpfCatchUp", "useEpfSummarySync", "planScheduledContributions"]) {
+        expect(text, `${file}: ${banned}`).not.toContain(banned);
+      }
+    }
   });
 
   it("the net-worth point confirms its history and inputs on Firestore when any comes from the copy", () => {
