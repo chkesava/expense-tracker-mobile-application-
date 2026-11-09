@@ -30,7 +30,7 @@ export const PUSH_CRON = "*/15 * * * *";
  */
 export const DAILY_CRON = "0 3 * * *";
 // SPENDLY-739: subscription-daily first, so a charge posted today is in place before bills settle.
-export const DAILY_WORKFLOWS = ["category-daily.yml", "subscription-daily.yml", "sip-daily.yml", "epf-daily.yml", "bill-daily.yml", "snapshot-daily.yml"] as const;
+export const DAILY_WORKFLOWS = ["category-daily.yml", "subscription-daily.yml", "sip-daily.yml", "epf-daily.yml", "bill-daily.yml", "housekeeping-daily.yml", "snapshot-daily.yml"] as const;
 export type DispatchWorkflow = typeof DISPATCH_TARGET.workflow | (typeof DAILY_WORKFLOWS)[number];
 
 export type FetchLike = (
