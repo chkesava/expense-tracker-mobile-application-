@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   StyleSheet,
   Text,
   View,
@@ -62,10 +63,8 @@ import {
 import { applyAccountActivityFilters } from "@/shared/utils/accountActivityFilters";
 import { searchAccountActivities } from "@/shared/utils/accountActivitySearch";
 import { buildJournalRecords, type JournalScope } from "@/shared/utils/journalActivities";
-import {
-  isDateScopeCoveredByLoadedHistory,
-  resolveJournalDateScope,
-} from "@/shared/utils/journalDateScope";
+import { resolveJournalDateScope } from "@/shared/utils/journalDateScope";
+import { planJournalMonthLoad } from "@/shared/utils/journalMonthLoad";
 import {
   runJournalFilterPipeline,
   withJournalDateScope,
@@ -73,7 +72,6 @@ import {
 import type { JournalPeriodGranularity } from "@/shared/utils/journalPeriodSummary";
 import { journalCashFlowById } from "@/shared/utils/journalRunningBalance";
 import {
-  journalHistoryNotice,
   journalRefreshAction,
   journalScopeLabel,
 } from "@/shared/utils/journalRefresh";
@@ -308,49 +306,44 @@ export default function LedgerScreen() {
     return min;
   }, [journal.records]);
 
-  // True once a direct date-range query has confirmed the selected month —
-  // not merely the heuristic above — regardless of how far pagination has
-  // paged back. A custom range (`monthOverridden`) isn't covered by this: it
-  // can span months a single query never fetched, so it still relies on the
-  // heuristic or full history below.
-  const activeMonthDirectlyLoaded =
-    !journal.dateScope.monthOverridden &&
-    !!journal.dateScope.monthKey &&
-    incomeMonthsLoaded.has(journal.dateScope.monthKey) &&
-    (expensesTab === "income" ||
-      expenseMonthsLoaded.has(journal.dateScope.monthKey));
-
-  // SPENDLY-111 follow-up: the period card only needs the active month (or
-  // range) covered, not the whole ledger. Waiting for every page before
-  // showing "this month's" spend forces a full-history read just to render a
-  // card that never looks past the month filter anyway.
-  const periodSummaryComplete =
-    ledgerComplete ||
-    activeMonthDirectlyLoaded ||
-    isDateScopeCoveredByLoadedHistory(journal.dateScope, oldestLoadedRecordDate);
-
-  // Rather than making the user click "Load older" repeatedly until the
-  // selected month happens to surface in createdAt order, fetch it directly
-  // the moment it's picked and isn't already covered.
-  useEffect(() => {
-    if (periodSummaryComplete) return;
-    if (journal.dateScope.monthOverridden) return;
-    const monthKey = journal.dateScope.monthKey;
-    if (!monthKey) return;
-    if (!incomeMonthsLoaded.has(monthKey)) void loadIncomesForMonth(monthKey);
-    if (expensesTab !== "income" && !expenseMonthsLoaded.has(monthKey)) {
-      void loadExpensesForMonth(monthKey);
-    }
-  }, [
-    periodSummaryComplete,
-    journal.dateScope.monthOverridden,
-    journal.dateScope.monthKey,
-    expensesTab,
-    incomeMonthsLoaded,
+  // SPENDLY-748: a past month is loaded on demand with one month-scoped
+  // query per collection (cached for the session), instead of trusting the
+  // createdAt-ordered window to reach it. The current month keeps the window.
+  const monthPlan = planJournalMonthLoad({
+    scope: journal.dateScope,
+    currentMonthKey: currentMonthKey(settings.timezone),
+    ledgerComplete,
+    oldestLoadedDate: oldestLoadedRecordDate,
+    needsExpenses: expensesTab !== "income",
     expenseMonthsLoaded,
-    loadIncomesForMonth,
-    loadExpensesForMonth,
-  ]);
+    incomeMonthsLoaded,
+  });
+  const periodSummaryComplete = monthPlan.periodComplete;
+  const { loadExpensesMonth, loadIncomesMonth } = monthPlan;
+
+  const [monthLoad, setMonthLoad] = useState<{ monthKey: string; status: "loading" | "error" } | null>(null);
+  const [monthRetry, setMonthRetry] = useState(0);
+  useEffect(() => {
+    const monthKey = loadExpensesMonth ?? loadIncomesMonth;
+    if (!monthKey) {
+      setMonthLoad(null);
+      return;
+    }
+    let cancelled = false;
+    setMonthLoad({ monthKey, status: "loading" });
+    void Promise.all([
+      loadIncomesMonth ? loadIncomesForMonth(loadIncomesMonth) : true,
+      loadExpensesMonth ? loadExpensesForMonth(loadExpensesMonth) : true,
+    ]).then((results) => {
+      if (cancelled) return;
+      setMonthLoad(results.every(Boolean) ? null : { monthKey, status: "error" });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadExpensesMonth, loadIncomesMonth, monthRetry, loadIncomesForMonth, loadExpensesForMonth]);
+  const monthLoading = monthLoad?.status === "loading";
+  const monthFailed = monthLoad?.status === "error";
 
   // SPENDLY-512: with the Journal on the read model (`supabase` mode), a
   // category / account / amount filter fetches every matching row, so the
@@ -378,11 +371,38 @@ export default function LedgerScreen() {
   const hasNarrowedView =
     journal.activeFilterCount > 0 || debouncedQuery.trim().length > 0;
 
+  // SPENDLY-748: a month with nothing in it (or still loading) says so,
+  // instead of the first-run "No Expenses Yet" prompt.
+  const periodLabel = journal.dateScope.monthOverridden ? "this range" : journal.dateScope.monthKey;
+  const hasAnyLedgerRows = expenses.length > 0 || incomes.length > 0;
+  const periodEmptyState =
+    journal.filtered.length > 0 || !hasAnyLedgerRows ? undefined : monthLoading ? (
+      <EmptyState illustration="general" title={`Loading ${periodLabel}`} description="Fetching this month's transactions." />
+    ) : monthFailed ? (
+      <EmptyState
+        illustration="general"
+        title={`Couldn't load ${periodLabel}`}
+        description="Check your connection and try again."
+        primaryAction={{ label: "Retry", onPress: () => setMonthRetry((n) => n + 1) }}
+      />
+    ) : periodSummaryComplete ? (
+      <EmptyState
+        illustration="general"
+        title={`No transactions in ${periodLabel}`}
+        description="Nothing was recorded in this period. Pick another month to see its activity."
+      />
+    ) : (
+      <EmptyState
+        illustration="general"
+        title={`Nothing loaded for ${periodLabel} yet`}
+        description="Scroll down to load older history."
+      />
+    );
+
   // SPENDLY-111: ExpenseList's own Spent/Income/Net card is superseded by
   // JournalPeriodSummary, which is rounded, scoped to the rows actually in
   // view, and refuses to render at all while the ledger is truncated. Showing
   // both would put two different Spent figures on one screen.
-  const historyNotice = journalHistoryNotice({ periodComplete: periodSummaryComplete });
 
   const cashFlowById = useMemo(
     () => journalCashFlowById(journal.runningBalance),
@@ -712,48 +732,31 @@ export default function LedgerScreen() {
         </Text>
       ) : null}
 
-      {!ledgerComplete && !expensesLoading && !incomesLoading ? (
+      {monthLoading ? (
+        <View style={styles.monthStatus} accessibilityRole="progressbar" accessibilityLabel={`Loading ${monthLoad?.monthKey}`}>
+          <ActivityIndicator size="small" color={theme.colors.primary} />
+          <Text style={[styles.noticeBody, { color: theme.colors.mutedForeground }]}>
+            Loading {monthLoad?.monthKey}…
+          </Text>
+        </View>
+      ) : monthFailed ? (
         <View
           style={[
             styles.notice,
-            {
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.warning,
-            },
+            { backgroundColor: theme.colors.card, borderColor: theme.colors.destructive },
           ]}
         >
-          <Text
-            style={[
-              styles.noticeTitle,
-              { color: theme.colors.foreground },
-            ]}
-          >
-            {historyNotice.title}
+          <Text style={[styles.noticeTitle, { color: theme.colors.foreground }]}>
+            Couldn't load {monthLoad?.monthKey}
           </Text>
-          <Text
-            style={[
-              styles.noticeBody,
-              { color: theme.colors.mutedForeground },
-            ]}
-          >
-            {historyNotice.body}
+          <Text style={[styles.noticeBody, { color: theme.colors.mutedForeground }]}>
+            Check your connection and try again.
           </Text>
-          {hasMoreLedger ? (
-            <View style={{ marginTop: 8, flexDirection: "row" }}>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={isFetchingMoreLedger}
-                onPress={() => {
-                  void loadMoreLedger(expensesTab === "income" ? "incomes" : "all");
-                }}
-              >
-                <Text style={{ fontSize: 13, fontWeight: "600", color: theme.colors.primary }}>
-                  {isFetchingMoreLedger ? "Loading older..." : "Load older transactions (+50)"}
-                </Text>
-              </Button>
-            </View>
-          ) : null}
+          <View style={{ marginTop: 8, flexDirection: "row" }}>
+            <Button size="sm" variant="outline" onPress={() => setMonthRetry((n) => n + 1)}>
+              <Text style={{ fontSize: 13, fontWeight: "600", color: theme.colors.primary }}>Retry</Text>
+            </Button>
+          </View>
         </View>
       ) : null}
       <JournalPeriodSummary
@@ -849,7 +852,9 @@ export default function LedgerScreen() {
                           onPress: clearJournalFilters,
                         }}
                       />
-                    ) : undefined
+                    ) : (
+                      periodEmptyState
+                    )
                   }
                   expenses={filteredExpenses}
                   incomes={filteredIncomes}
@@ -862,7 +867,7 @@ export default function LedgerScreen() {
                     // SPENDLY-490: a month that is already fully loaded has
                     // nothing older to show; paging on would only pull the
                     // rest of the ledger in for nothing.
-                    if (periodSummaryComplete) return;
+                    if (periodSummaryComplete || monthLoading) return;
                     if (hasMoreLedger && !isFetchingMoreLedger) {
                       void loadMoreLedger("all");
                     }
@@ -925,7 +930,9 @@ export default function LedgerScreen() {
                           onPress: clearJournalFilters,
                         }}
                       />
-                    ) : undefined
+                    ) : (
+                      periodEmptyState
+                    )
                   }
                   expenses={[]}
                   incomes={filteredIncomes}
@@ -935,7 +942,7 @@ export default function LedgerScreen() {
                   refreshing={refreshing}
                   onRefresh={handleRefresh}
                   onEndReached={() => {
-                    if (periodSummaryComplete) return;
+                    if (periodSummaryComplete || monthLoading) return;
                     if (hasMoreIncomes && !isFetchingMoreIncomes) {
                       void loadMoreIncomes();
                     }
@@ -1074,6 +1081,12 @@ const styles = StyleSheet.create({
   noticeBody: {
     fontSize: 12,
     lineHeight: 17,
+  },
+  monthStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 4,
   },
   monthPickerChip: {
     alignSelf: "flex-start",

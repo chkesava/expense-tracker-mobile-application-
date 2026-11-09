@@ -28,23 +28,3 @@ export function journalScopeLabel(input: {
   const period = input.monthOverridden ? "custom range" : input.monthKey;
   return input.periodComplete ? period : `${period} · loaded so far`;
 }
-
-/**
- * The notice shown while older history hasn't been paged in. It used to quote
- * the size of the app-wide live window ("Displaying the latest 342"), which
- * read as if the Journal had fetched that many rows for the month.
- */
-export function journalHistoryNotice(input: { periodComplete: boolean }): {
-  title: string;
-  body: string;
-} {
-  return input.periodComplete
-    ? {
-        title: "Older history not loaded",
-        body: "Everything in this period is shown. Older transactions load when you pick an earlier month or tap below.",
-      }
-    : {
-        title: "Showing recent transactions",
-        body: "Some of this period may be older than what's loaded. Scroll down or tap below to load older history.",
-      };
-}

@@ -46,6 +46,7 @@ import { useNetwork } from "@/providers/NetworkProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { ReadModelReadConditions } from "@/lib/readModel/screenReadPath";
 import { readJournalMatches, readJournalMonth, readJournalPage, shadowCompareJournalHistory } from "@/lib/readModel/journalReadPath";
+import { createJournalMonthCache } from "@/lib/readModel/journalMonthCache";
 import type { JournalMatch } from "@/lib/readModel/backend";
 import { isLocalTestMode, isReadModelEnvConfigured } from "@/lib/env";
 import { assertNetworkAllowed } from "@/lib/networkGuard";
@@ -153,7 +154,8 @@ type ExpensesContextType = {
    */
   expenseMonthsLoaded: Set<string>;
   /** Fetches every expense dated within `monthKey`, once, via `where("date", ...)`. */
-  loadExpensesForMonth: (monthKey: string) => Promise<void>;
+  /** Resolves false when the month could not be read (the screen shows a retry). */
+  loadExpensesForMonth: (monthKey: string) => Promise<boolean>;
   /**
    * SPENDLY-512: in read-model `supabase` mode, loads every expense matching
    * the filter's SQL-checkable conditions, so a filtered Journal is complete
@@ -193,7 +195,8 @@ export type IncomesContextType = {
   /** Month keys ("YYYY-MM") confirmed loaded by a direct `date`-range query. Mirrors `expenseMonthsLoaded`. */
   incomeMonthsLoaded: Set<string>;
   /** Fetches every income dated within `monthKey`, once, via `where("date", ...)`. */
-  loadIncomesForMonth: (monthKey: string) => Promise<void>;
+  /** Resolves false when the month could not be read (the screen shows a retry). */
+  loadIncomesForMonth: (monthKey: string) => Promise<boolean>;
   /** Mirrors `loadMatchingExpenses` for incomes. */
   loadMatchingIncomes: (match: JournalMatch) => Promise<void>;
   /** Local ledger mutation helper for optimistic updates. */
@@ -587,11 +590,12 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   // screen can trust one month's totals without paging through the whole
   // createdAt-ordered history first. Refs dedupe in-flight/duplicate calls;
   // the state copies drive re-renders.
-  const expenseMonthsLoadedRef = useRef<Set<string>>(new Set());
+  // SPENDLY-748: one month-scoped read per month for the session.
+  const expenseMonthCacheRef = useRef(createJournalMonthCache());
   const [expenseMonthsLoaded, setExpenseMonthsLoaded] = useState<Set<string>>(
     new Set()
   );
-  const incomeMonthsLoadedRef = useRef<Set<string>>(new Set());
+  const incomeMonthCacheRef = useRef(createJournalMonthCache());
   const [incomeMonthsLoaded, setIncomeMonthsLoaded] = useState<Set<string>>(
     new Set()
   );
@@ -674,6 +678,10 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       setPaginatedExpenses([]);
       setRealtimeIncomes([]);
       setPaginatedIncomes([]);
+      expenseMonthCacheRef.current.reset();
+      incomeMonthCacheRef.current.reset();
+      setExpenseMonthsLoaded(new Set());
+      setIncomeMonthsLoaded(new Set());
       lastExpenseDocRef.current = null;
       lastIncomeDocRef.current = null;
       setHasMoreExpenses(false);
@@ -1999,33 +2007,36 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
    * A single bounded `where("date", ...)` read is cheap (the month's actual
    * row count) and, unlike the cursor page, proves the month is complete.
    */
-  const loadExpensesForMonth = useCallback(async (monthKey: string) => {
+  const loadExpensesForMonth = useCallback(async (monthKey: string): Promise<boolean> => {
     const u = userRef.current;
     const database = getFirestoreDb();
-    if (!u || !database || expenseMonthsLoadedRef.current.has(monthKey)) return;
+    if (!u || !database) return false;
     const scope = resolveJournalDateScope(monthKey, { fromDate: "", toDate: "" });
-    if (!scope.fromDate || !scope.toDate) return;
+    if (!scope.fromDate || !scope.toDate) return false;
 
-    expenseMonthsLoadedRef.current.add(monthKey);
-    try {
-      const newItems = await readJournalMonth<Expense>({
-        db: database,
-        user: u,
-        collectionName: "expenses",
-        monthKey,
-        conditions: readModelRef.current,
-        locallyRemovedIds: locallyRemovedIdsRef.current,
-      });
-      setPaginatedExpenses((prev) => {
-        const toAdd = unseenRows(prev, realtimeExpensesRef.current, newItems);
-        return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
-      });
-      setExpenseMonthsLoaded(new Set(expenseMonthsLoadedRef.current));
-    } catch (err) {
-      expenseMonthsLoadedRef.current.delete(monthKey);
-      logError("financeProvider.loadExpensesForMonth", err);
-      toast.error(friendlyErrorMessage(err, "Failed to load that month's expenses"));
-    }
+    const cache = expenseMonthCacheRef.current;
+    const ok = await cache.load(
+      monthKey,
+      async () => {
+        const newItems = await readJournalMonth<Expense>({
+          db: database,
+          user: u,
+          collectionName: "expenses",
+          monthKey,
+          conditions: readModelRef.current,
+          locallyRemovedIds: locallyRemovedIdsRef.current,
+        });
+        // Signed out or switched user while the read was in flight.
+        if (userRef.current?.uid !== u.uid) return;
+        setPaginatedExpenses((prev) => {
+          const toAdd = unseenRows(prev, realtimeExpensesRef.current, newItems);
+          return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+        });
+      },
+      (err) => logError("financeProvider.loadExpensesForMonth", err)
+    );
+    if (ok) setExpenseMonthsLoaded(cache.loaded());
+    return ok;
   }, []);
 
   const loadMatchingExpenses = useCallback(async (match: JournalMatch) => {
@@ -2144,33 +2155,36 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
   }, [loadMoreIncomes]);
 
   /** Mirrors `loadExpensesForMonth` for incomes. */
-  const loadIncomesForMonth = useCallback(async (monthKey: string) => {
+  const loadIncomesForMonth = useCallback(async (monthKey: string): Promise<boolean> => {
     const u = userRef.current;
     const database = getFirestoreDb();
-    if (!u || !database || incomeMonthsLoadedRef.current.has(monthKey)) return;
+    if (!u || !database) return false;
     const scope = resolveJournalDateScope(monthKey, { fromDate: "", toDate: "" });
-    if (!scope.fromDate || !scope.toDate) return;
+    if (!scope.fromDate || !scope.toDate) return false;
 
-    incomeMonthsLoadedRef.current.add(monthKey);
-    try {
-      const newItems = await readJournalMonth<Income>({
-        db: database,
-        user: u,
-        collectionName: "incomes",
-        monthKey,
-        conditions: readModelRef.current,
-        locallyRemovedIds: locallyRemovedIdsRef.current,
-      });
-      setPaginatedIncomes((prev) => {
-        const toAdd = unseenRows(prev, realtimeIncomesRef.current, newItems);
-        return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
-      });
-      setIncomeMonthsLoaded(new Set(incomeMonthsLoadedRef.current));
-    } catch (err) {
-      incomeMonthsLoadedRef.current.delete(monthKey);
-      logError("financeProvider.loadIncomesForMonth", err);
-      toast.error(friendlyErrorMessage(err, "Failed to load that month's incomes"));
-    }
+    const cache = incomeMonthCacheRef.current;
+    const ok = await cache.load(
+      monthKey,
+      async () => {
+        const newItems = await readJournalMonth<Income>({
+          db: database,
+          user: u,
+          collectionName: "incomes",
+          monthKey,
+          conditions: readModelRef.current,
+          locallyRemovedIds: locallyRemovedIdsRef.current,
+        });
+        // Signed out or switched user while the read was in flight.
+        if (userRef.current?.uid !== u.uid) return;
+        setPaginatedIncomes((prev) => {
+          const toAdd = unseenRows(prev, realtimeIncomesRef.current, newItems);
+          return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+        });
+      },
+      (err) => logError("financeProvider.loadIncomesForMonth", err)
+    );
+    if (ok) setIncomeMonthsLoaded(cache.loaded());
+    return ok;
   }, []);
 
   const loadMatchingIncomes = useCallback(async (match: JournalMatch) => {
