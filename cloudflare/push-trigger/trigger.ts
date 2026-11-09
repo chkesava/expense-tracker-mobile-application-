@@ -20,6 +20,18 @@ export const DISPATCH_TARGET = {
   ref: "main",
 } as const;
 
+/** The push reminders tick (wrangler.toml). */
+export const PUSH_CRON = "*/15 * * * *";
+/**
+ * SPENDLY-729: the daily jobs that replace the legacy site's crons (682), at
+ * 03:00 UTC (08:30 IST), the legacy crons' own slot. Each run is marked
+ * `trigger: cron`, so it does nothing until its repository variable
+ * (SIP_DAILY_ENABLED, BILL_DAILY_ENABLED) is "true".
+ */
+export const DAILY_CRON = "0 3 * * *";
+export const DAILY_WORKFLOWS = ["sip-daily.yml", "bill-daily.yml"] as const;
+export type DispatchWorkflow = typeof DISPATCH_TARGET.workflow | (typeof DAILY_WORKFLOWS)[number];
+
 export type FetchLike = (
   url: string,
   init: { method: string; headers: Record<string, string>; body: string }
@@ -27,9 +39,9 @@ export type FetchLike = (
 
 export type DispatchResult = { ok: true; status: number } | { ok: false; status: number | null; reason: string };
 
-export function dispatchRequest(token: string) {
+export function dispatchRequest(token: string, workflow: DispatchWorkflow = DISPATCH_TARGET.workflow) {
   return {
-    url: `https://api.github.com/repos/${DISPATCH_TARGET.repo}/actions/workflows/${DISPATCH_TARGET.workflow}/dispatches`,
+    url: `https://api.github.com/repos/${DISPATCH_TARGET.repo}/actions/workflows/${workflow}/dispatches`,
     init: {
       method: "POST",
       headers: {
@@ -45,23 +57,42 @@ export function dispatchRequest(token: string) {
   };
 }
 
-/** One dispatch. Logs the outcome; never logs the token. */
+/** One dispatch of the push reminders job. Logs the outcome; never logs the token. */
 export async function dispatchPushReminders(env: TriggerEnv, fetchFn: FetchLike, log: (line: string) => void): Promise<DispatchResult> {
+  return dispatchWorkflow(env, fetchFn, log, DISPATCH_TARGET.workflow);
+}
+
+/** SPENDLY-729: which workflows a cron tick starts. Unknown crons start nothing. */
+export function workflowsForCron(cron: string | undefined): DispatchWorkflow[] {
+  if (cron === DAILY_CRON) return [...DAILY_WORKFLOWS];
+  if (cron === PUSH_CRON || cron === undefined) return [DISPATCH_TARGET.workflow];
+  return [];
+}
+
+/** Every workflow for this tick, one dispatch each (independent: one failing doesn't stop the other). */
+export async function dispatchForCron(cron: string | undefined, env: TriggerEnv, fetchFn: FetchLike, log: (line: string) => void): Promise<DispatchResult[]> {
+  const targets = workflowsForCron(cron);
+  if (!targets.length) log(`push-trigger: no workflow for cron "${cron}"`);
+  return Promise.all(targets.map((workflow) => dispatchWorkflow(env, fetchFn, log, workflow)));
+}
+
+/** One dispatch. Logs the outcome; never logs the token. */
+export async function dispatchWorkflow(env: TriggerEnv, fetchFn: FetchLike, log: (line: string) => void, workflow: DispatchWorkflow): Promise<DispatchResult> {
   const token = env.GITHUB_DISPATCH_TOKEN?.trim();
   if (!token) {
     log("push-trigger: GITHUB_DISPATCH_TOKEN is not set; nothing dispatched");
     return { ok: false, status: null, reason: "no-token" };
   }
-  const { url, init } = dispatchRequest(token);
+  const { url, init } = dispatchRequest(token, workflow);
   try {
     const res = await fetchFn(url, init);
     if (res.status >= 200 && res.status < 300) return { ok: true, status: res.status };
     const detail = (await res.text().catch(() => "")).replaceAll(token, "[token]").slice(0, 300);
-    log(`push-trigger: GitHub answered ${res.status}: ${detail}`);
+    log(`push-trigger: GitHub answered ${res.status} for ${workflow}: ${detail}`);
     return { ok: false, status: res.status, reason: "http" };
   } catch (error) {
     const message = (error instanceof Error ? error.message : String(error)).replaceAll(token, "[token]");
-    log(`push-trigger: dispatch failed: ${message}`);
+    log(`push-trigger: dispatch of ${workflow} failed: ${message}`);
     return { ok: false, status: null, reason: "network" };
   }
 }
