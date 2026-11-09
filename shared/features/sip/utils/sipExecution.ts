@@ -7,6 +7,7 @@
  * rules can be tested under the `shared/**` vitest glob (SPENDLY-16).
  */
 
+import { formatDateKey, startOfDayInTimeZone } from "@/shared/utils/dates";
 import { roundMoney } from "@/shared/utils/money";
 import type {
   SipFrequency,
@@ -18,15 +19,22 @@ import type {
 /** Stay under Firestore's 500-write cap with headroom for the four docs per SIP. */
 export const SIP_BATCH_WRITE_LIMIT = 400;
 
-export function localDateKey(date: Date): string {
+/**
+ * SPENDLY-725: every date helper below takes an optional IANA `timeZone`.
+ * Without it they use the device's local zone, as the app always has. A server
+ * job (UTC) passes the user's zone so "today" and the scheduled key match what
+ * the user's phone would compute; never the runner's zone.
+ */
+export function localDateKey(date: Date, timeZone?: string): string {
+  if (timeZone) return formatDateKey(date, timeZone);
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
-export function sipScheduledKey(nextExecutionDate: string): string {
-  return localDateKey(startOfLocalDay(new Date(nextExecutionDate)));
+export function sipScheduledKey(nextExecutionDate: string, timeZone?: string): string {
+  return localDateKey(startOfLocalDay(new Date(nextExecutionDate), timeZone), timeZone);
 }
 
 export function sipTransactionId(sipId: string, scheduledKey: string): string {
@@ -41,7 +49,8 @@ export function sipNotificationId(
   return `n_${sipId}_${scheduledKey}_${kind}`;
 }
 
-export function startOfLocalDay(date: Date): Date {
+export function startOfLocalDay(date: Date, timeZone?: string): Date {
+  if (timeZone) return startOfDayInTimeZone(formatDateKey(date, timeZone), timeZone);
   const next = new Date(date);
   next.setHours(0, 0, 0, 0);
   return next;
@@ -50,8 +59,16 @@ export function startOfLocalDay(date: Date): Date {
 export function calculateNextExecutionDate(
   frequency: SipFrequency,
   executionDay: number,
-  fromDate: Date = new Date()
+  fromDate: Date = new Date(),
+  timeZone?: string
 ): Date {
+  if (timeZone) {
+    // Same calendar rules, run on the zone's calendar day, then that day's
+    // midnight in the zone.
+    const [y, m, d] = formatDateKey(fromDate, timeZone).split("-").map(Number);
+    const local = calculateNextExecutionDate(frequency, executionDay, new Date(y, m - 1, d));
+    return startOfDayInTimeZone(localDateKey(local), timeZone);
+  }
   const nextDate = startOfLocalDay(fromDate);
 
   if (frequency === "daily") {
@@ -80,10 +97,11 @@ export function calculateNextExecutionDate(
   return startOfLocalDay(nextDate);
 }
 
-export function isSipDue(nextExecutionDate: string, today: Date): boolean {
-  const next = startOfLocalDay(new Date(nextExecutionDate));
-  if (Number.isNaN(next.getTime())) return false;
-  return next.getTime() <= startOfLocalDay(today).getTime();
+export function isSipDue(nextExecutionDate: string, today: Date, timeZone?: string): boolean {
+  const raw = new Date(nextExecutionDate);
+  if (Number.isNaN(raw.getTime())) return false;
+  const next = startOfLocalDay(raw, timeZone);
+  return next.getTime() <= startOfLocalDay(today, timeZone).getTime();
 }
 
 export function isSipEnded(endDate: string | undefined, scheduledKey: string): boolean {
@@ -195,13 +213,16 @@ export function decideSipRun(
     today: Date;
     price?: number;
     existingTxStatus?: SipTransactionStatus;
+    /** SPENDLY-725: the user's zone when run on a server; the device's otherwise. */
+    timeZone?: string;
   }
 ): SipRunOp | null {
   if (plan.status !== "active") return null;
-  if (!isSipDue(plan.nextExecutionDate, options.today)) return null;
+  const tz = options.timeZone;
+  if (!isSipDue(plan.nextExecutionDate, options.today, tz)) return null;
 
-  const nextDate = startOfLocalDay(new Date(plan.nextExecutionDate));
-  const scheduledKey = localDateKey(nextDate);
+  const nextDate = startOfLocalDay(new Date(plan.nextExecutionDate), tz);
+  const scheduledKey = localDateKey(nextDate, tz);
   if (isSipEnded(plan.endDate, scheduledKey)) {
     return { kind: "complete", planId: plan.id };
   }
@@ -213,7 +234,8 @@ export function decideSipRun(
   const nextExecutionDate = calculateNextExecutionDate(
     plan.frequency,
     plan.executionDay,
-    nextDate
+    nextDate,
+    tz
   ).toISOString();
 
   if (plan.skipNextExecution) {

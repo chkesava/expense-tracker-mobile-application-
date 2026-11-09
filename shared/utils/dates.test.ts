@@ -7,6 +7,7 @@ import {
   formatDateKey,
   isValidDateKey,
   isValidMonthKey,
+  isValidTimeZone,
   MAX_MONTH_RANGE,
   monthFromDateKey,
   monthKeyOf,
@@ -14,6 +15,7 @@ import {
   monthKeysBetween,
   parseLocalDate,
   shiftMonthKey,
+  startOfDayInTimeZone,
   toLocalDateKey,
   todayDateKey,
 } from "./dates";
@@ -163,5 +165,35 @@ describe("dates", () => {
       const keys = monthKeysBetween("0021-06", "2026-09");
       expect(keys).toHaveLength(MAX_MONTH_RANGE);
     });
+  });
+});
+
+describe("startOfDayInTimeZone (SPENDLY-725)", () => {
+  it("is the instant the calendar day starts in that zone", () => {
+    expect(startOfDayInTimeZone("2026-11-11", "Asia/Kolkata").toISOString()).toBe("2026-11-10T18:30:00.000Z");
+    expect(startOfDayInTimeZone("2026-11-11", "UTC").toISOString()).toBe("2026-11-11T00:00:00.000Z");
+    expect(startOfDayInTimeZone("2026-01-01", "America/New_York").toISOString()).toBe("2026-01-01T05:00:00.000Z");
+  });
+
+  it("handles DST transitions (New York, spring forward and fall back)", () => {
+    expect(startOfDayInTimeZone("2026-03-08", "America/New_York").toISOString()).toBe("2026-03-08T05:00:00.000Z");
+    expect(startOfDayInTimeZone("2026-03-09", "America/New_York").toISOString()).toBe("2026-03-09T04:00:00.000Z");
+    expect(startOfDayInTimeZone("2026-11-01", "America/New_York").toISOString()).toBe("2026-11-01T04:00:00.000Z");
+  });
+
+  it("round-trips with formatDateKey", () => {
+    for (const tz of ["Asia/Kolkata", "UTC", "Pacific/Auckland", "America/Los_Angeles"]) {
+      expect(formatDateKey(startOfDayInTimeZone("2026-02-28", tz), tz)).toBe("2026-02-28");
+    }
+  });
+});
+
+describe("isValidTimeZone", () => {
+  it("accepts IANA zones and rejects anything else", () => {
+    expect(isValidTimeZone("Asia/Kolkata")).toBe(true);
+    expect(isValidTimeZone("UTC")).toBe(true);
+    expect(isValidTimeZone("Mars/Olympus")).toBe(false);
+    expect(isValidTimeZone("")).toBe(false);
+    expect(isValidTimeZone(undefined)).toBe(false);
   });
 });

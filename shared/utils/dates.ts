@@ -1,3 +1,14 @@
+/** True when `timezone` is an IANA zone `Intl` accepts (e.g. "Asia/Kolkata"). */
+export function isValidTimeZone(timezone: string | null | undefined): timezone is string {
+  if (!timezone || typeof timezone !== "string") return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Browser / device timezone (fallback when user setting is unavailable). */
 export function getBrowserTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -12,6 +23,36 @@ export function formatDateKey(date: Date = new Date(), timezone?: string): strin
     month: "2-digit",
     day: "2-digit",
   }).format(date);
+}
+
+/** Milliseconds `timezone` is ahead of UTC at `instant` (IST → +19,800,000). */
+function timeZoneOffsetMs(instant: number, timezone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(new Date(instant));
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+  return asUtc - Math.floor(instant / 1000) * 1000;
+}
+
+/**
+ * SPENDLY-725 — the instant `dateKey` (YYYY-MM-DD) starts in `timezone`, e.g.
+ * ("2026-11-11", "Asia/Kolkata") → 2026-11-10T18:30:00.000Z. What a device in
+ * that zone gets from `new Date(y, m, d)`, so a server job running in UTC can
+ * reproduce the app's local-midnight dates. DST-safe (offset re-checked).
+ */
+export function startOfDayInTimeZone(dateKey: string, timezone: string): Date {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const guess = Date.UTC(y, m - 1, d);
+  const first = guess - timeZoneOffsetMs(guess, timezone);
+  return new Date(guess - timeZoneOffsetMs(first, timezone));
 }
 
 /** Today's calendar date as YYYY-MM-DD. */
