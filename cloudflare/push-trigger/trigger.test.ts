@@ -71,8 +71,11 @@ describe("dispatchPushReminders", () => {
 });
 
 describe("contract: Worker, wrangler.toml and the workflow agree", () => {
-  const workflow = readFileSync(join(root, ".github", "workflows", DISPATCH_TARGET.workflow), "utf8");
-  const wrangler = readFileSync(join(__dirname, "wrangler.toml"), "utf8");
+  // SPENDLY-720: normalise line endings, so the regexes below hold on a
+  // Windows (core.autocrlf, CRLF) checkout as well as on CI (LF).
+  const lf = (text: string) => text.replace(/\r\n/g, "\n");
+  const workflow = lf(readFileSync(join(root, ".github", "workflows", DISPATCH_TARGET.workflow), "utf8"));
+  const wrangler = lf(readFileSync(join(__dirname, "wrangler.toml"), "utf8"));
 
   it("the workflow accepts the inputs the Worker sends", () => {
     expect(workflow).toMatch(/workflow_dispatch:\s*\n\s*inputs:/);

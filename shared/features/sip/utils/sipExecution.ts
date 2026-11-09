@@ -79,22 +79,33 @@ export function calculateNextExecutionDate(
     if (diff <= 0) diff += 7;
     nextDate.setDate(nextDate.getDate() + diff);
   } else if (frequency === "monthly") {
-    if (nextDate.getDate() >= executionDay) {
-      nextDate.setMonth(nextDate.getMonth() + 1);
-    }
-    const lastDayOfMonth = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate();
-    nextDate.setDate(Math.min(executionDay, lastDayOfMonth));
+    // SPENDLY-731: the execution day in this month (clamped to its length);
+    // if that isn't after `fromDate`, the same in the next month. Moving the
+    // month with the day pinned to 1 avoids the setMonth overflow (31 Jan + 1
+    // month was 3 Mar, so February was skipped), and "strictly after" stops a
+    // day-31 plan scheduled on 28 Feb from getting 28 Feb back (stuck forever).
+    const sameMonth = dayInMonth(nextDate.getFullYear(), nextDate.getMonth(), executionDay);
+    return sameMonth.getTime() > nextDate.getTime()
+      ? sameMonth
+      : dayInMonth(nextDate.getFullYear(), nextDate.getMonth() + 1, executionDay);
   } else if (frequency === "quarterly") {
-    nextDate.setMonth(nextDate.getMonth() + 3);
-    const lastDayOfMonth = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate();
-    nextDate.setDate(Math.min(executionDay, lastDayOfMonth));
+    return dayInMonth(nextDate.getFullYear(), nextDate.getMonth() + 3, executionDay);
   } else if (frequency === "yearly") {
-    nextDate.setFullYear(nextDate.getFullYear() + 1);
-    const lastDayOfMonth = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate();
-    nextDate.setDate(Math.min(executionDay, lastDayOfMonth));
+    return dayInMonth(nextDate.getFullYear() + 1, nextDate.getMonth(), executionDay);
   }
 
   return startOfLocalDay(nextDate);
+}
+
+/**
+ * SPENDLY-731: local midnight of `day` in month `monthIndex` of `year`, the day
+ * clamped to that month's length (31 → 28/29 in February, 30 in April).
+ * `monthIndex` may run past 11; the year rolls over, never the day.
+ */
+function dayInMonth(year: number, monthIndex: number, day: number): Date {
+  const first = new Date(year, monthIndex, 1);
+  const lastDay = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  return new Date(first.getFullYear(), first.getMonth(), Math.min(Math.max(1, day), lastDay));
 }
 
 export function isSipDue(nextExecutionDate: string, today: Date, timeZone?: string): boolean {

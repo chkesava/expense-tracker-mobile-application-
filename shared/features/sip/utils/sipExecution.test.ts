@@ -158,9 +158,7 @@ describe("timezone-aware keys for server jobs (SPENDLY-725)", () => {
     const next = calculateNextExecutionDate("monthly", 11, new Date(istMidnight), IST);
     expect(next.toISOString()).toBe("2026-12-10T18:30:00.000Z");
     // Same calendar rule as the phone for every frequency, from a month end.
-    // (Note: from 31 Jan, monthly day 31 gives 31 Mar on a phone too. That is
-    // the existing rule's own behaviour, tracked separately; this story only
-    // guarantees the server matches the phone.)
+    // (Month-end handling itself is pinned in the SPENDLY-731 tests below.)
     const fromKey = "2027-01-31";
     const phone = (f: "daily" | "weekly" | "monthly" | "quarterly" | "yearly") =>
       localDateKey(calculateNextExecutionDate(f, 31, new Date(2027, 0, 31)));
@@ -180,5 +178,67 @@ describe("timezone-aware keys for server jobs (SPENDLY-725)", () => {
     expect(op.txId).toBe(sipTransactionId("sip1", "2026-11-11"));
     expect(op.scheduledKey).toBe("2026-11-11");
     expect(op.nextExecutionDate).toBe("2026-12-10T18:30:00.000Z");
+  });
+});
+
+describe("month-end execution days (SPENDLY-731)", () => {
+  const next = (f: "monthly" | "quarterly" | "yearly", day: number, y: number, m: number, d: number) =>
+    localDateKey(calculateNextExecutionDate(f, day, new Date(y, m - 1, d)));
+
+  it("monthly day 31 visits every month, clamped to its length (no skipped February)", () => {
+    expect(next("monthly", 31, 2027, 1, 31)).toBe("2027-02-28");
+    expect(next("monthly", 31, 2027, 2, 28)).toBe("2027-03-31");
+    expect(next("monthly", 31, 2027, 3, 31)).toBe("2027-04-30");
+    expect(next("monthly", 31, 2027, 4, 30)).toBe("2027-05-31");
+    expect(next("monthly", 31, 2028, 1, 31)).toBe("2028-02-29"); // leap year
+    expect(next("monthly", 31, 2026, 12, 31)).toBe("2027-01-31"); // year rolls over
+  });
+
+  it("a day-31 plan scheduled on 28 Feb moves on to March (was stuck: 28 Feb gave 28 Feb)", () => {
+    const from = new Date(2027, 1, 28);
+    const result = calculateNextExecutionDate("monthly", 31, from);
+    expect(result.getTime()).toBeGreaterThan(from.getTime());
+    expect(localDateKey(result)).toBe("2027-03-31");
+  });
+
+  it("monthly day 29 and 30 clamp in February and come back after", () => {
+    expect(next("monthly", 30, 2027, 1, 30)).toBe("2027-02-28");
+    expect(next("monthly", 30, 2027, 2, 28)).toBe("2027-03-30");
+    expect(next("monthly", 29, 2027, 1, 29)).toBe("2027-02-28");
+    expect(next("monthly", 29, 2028, 1, 29)).toBe("2028-02-29");
+  });
+
+  it("ordinary days behave exactly as before", () => {
+    expect(next("monthly", 15, 2026, 11, 15)).toBe("2026-12-15"); // on the day: next month
+    expect(next("monthly", 15, 2026, 11, 10)).toBe("2026-11-15"); // before the day: this month
+    expect(next("monthly", 15, 2026, 11, 20)).toBe("2026-12-15"); // after the day: next month
+    expect(next("monthly", 1, 2026, 12, 1)).toBe("2027-01-01");
+  });
+
+  it("the result is always strictly after the start, for every monthly day and start in a year", () => {
+    for (let day = 1; day <= 31; day++) {
+      for (let t = new Date(2027, 0, 1); t.getFullYear() === 2027; t.setDate(t.getDate() + 1)) {
+        const from = new Date(t);
+        const result = calculateNextExecutionDate("monthly", day, from);
+        expect(result.getTime()).toBeGreaterThan(from.getTime());
+        // and never more than one month ahead (no skipped month)
+        const monthsAhead = (result.getFullYear() - from.getFullYear()) * 12 + result.getMonth() - from.getMonth();
+        expect(monthsAhead).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it("quarterly and yearly clamp at month end instead of overflowing", () => {
+    expect(next("quarterly", 31, 2026, 11, 30)).toBe("2027-02-28");
+    expect(next("quarterly", 31, 2026, 8, 31)).toBe("2026-11-30");
+    expect(next("quarterly", 31, 2027, 2, 28)).toBe("2027-05-31");
+    expect(next("yearly", 29, 2028, 2, 29)).toBe("2029-02-28");
+    expect(next("yearly", 15, 2026, 6, 15)).toBe("2027-06-15");
+  });
+
+  it("the server (user's zone) and the phone still agree on month ends", () => {
+    const IST = "Asia/Kolkata";
+    const server = calculateNextExecutionDate("monthly", 31, new Date("2027-01-30T18:30:00.000Z"), IST); // 31 Jan IST
+    expect(localDateKey(server, IST)).toBe("2027-02-28");
   });
 });
