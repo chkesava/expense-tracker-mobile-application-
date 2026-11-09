@@ -111,6 +111,7 @@ describe("every server-side writer of a synced collection pushes (SPENDLY-680)",
     // SPENDLY-726: daily job cores write through `applyJobWrites`, which notes
     // every committed path to the push its CLI creates (pinned below).
     "scripts/lib/sipDailyCore.ts": "writes via applyJobWrites; sip-daily.ts creates the push",
+    "scripts/lib/billDailyCore.ts": "writes via applyJobWrites; bill-daily.ts creates the push",
   };
   const PUSHES = /\bcreateServerPush\(|\breadModel\b[^\n]*serverPushPorts|\bserverPushPorts\(/;
 
@@ -153,7 +154,7 @@ describe("every server-side writer of a synced collection pushes (SPENDLY-680)",
   // job that doesn't push.
   it("every daily job CLI (scripts/*-daily.ts) creates the server push", () => {
     const clis = readdirSync(join(ROOT, "scripts")).filter((n) => /-daily\.ts$/.test(n));
-    expect(clis).toContain("sip-daily.ts");
+    expect(clis).toEqual(expect.arrayContaining(["sip-daily.ts", "bill-daily.ts"]));
     const missing = clis.filter((n) => !/\bcreateServerPush\(serverPushPorts\(/.test(readFileSync(join(ROOT, "scripts", n), "utf8")));
     expect(missing, `daily jobs that don't push: ${missing.join(", ")}`).toEqual([]);
   });
