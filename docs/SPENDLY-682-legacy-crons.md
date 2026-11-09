@@ -8,7 +8,7 @@ Plan: [SPENDLY-682-plan.md](SPENDLY-682-plan.md). Integration branch: `feature/S
 | B: SIP daily job | SPENDLY-726 | `feature/SPENDLY-726-sip-daily-job` | merged into the 682 branch ([doc](SPENDLY-726-sip-daily-job.md)) |
 | C: bill daily job | SPENDLY-727 | `feature/SPENDLY-727-bill-daily-job` | merged into the 682 branch ([doc](SPENDLY-727-bill-daily-job.md)) |
 | D: read-only reports | SPENDLY-728 | `feature/SPENDLY-728-legacy-data-reports` | merged into the 682 branch; owner runs on production ([doc](SPENDLY-728-legacy-data-reports.md)) |
-| E: cut-over + runbook | SPENDLY-729 | `feature/SPENDLY-729-legacy-crons-cutover` | code + runbook built, awaiting merge approval; cut-over steps are the owner's ([runbook](LEGACY_CRONS_RETIREMENT_RUNBOOK.md)) |
+| E: cut-over + runbook | SPENDLY-729 | `feature/SPENDLY-729-legacy-crons-cutover` | merged into the 682 branch; cut-over steps are the owner's after main ([runbook](LEGACY_CRONS_RETIREMENT_RUNBOOK.md)) |
 
 ## Decisions
 - **2026-11-05 (user):** retire the legacy `sip-execute` and `credit-card-bills` crons; rebuild them here.
