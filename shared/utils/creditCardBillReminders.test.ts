@@ -137,7 +137,9 @@ describe("billReminderPlanKey (SPENDLY-738): re-plan local reminders only when s
     showAmounts: false,
     globalPrefs: DEFAULT_CREDIT_CARD_BILL_REMINDERS,
     bills: [bill(), bill({ id: "b2", dueDate: "2026-12-21" })],
-    accountsById: new Map([["card", { name: "Roar", accountNumber: "4111 1111 1111 1234", currentBalance: 100 }]]),
+    accountsById: new Map<string, { name?: string; accountNumber?: string; currentBalance?: number }>([
+      ["card", { name: "Roar", accountNumber: "4111 1111 1111 1234", currentBalance: 100 }],
+    ]),
   };
   const key = (over: Partial<typeof base> = {}) => billReminderPlanKey({ ...base, ...over });
 
