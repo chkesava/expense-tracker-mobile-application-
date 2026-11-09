@@ -124,10 +124,14 @@ describe("provider read switches (SPENDLY-673)", () => {
   });
 
   // SPENDLY-598 (R4.3a): more writers that write from what the screens read.
-  it("subscription auto-posting re-plans on server-confirmed Firestore data when the copy serves", () => {
+  // SPENDLY-739 (epic SPENDLY-735): subscription posting left the app; the
+  // server's subscription-daily job plans on Firestore data (R4.3a). The app
+  // must not post charges from what it reads at all.
+  it("the app runs no subscription auto-post: no charge is planned or posted from screen data", () => {
     const text = readFileSync(join(ROOT, "providers", "ExpenseReferenceDataProvider.tsx"), "utf8");
-    expect(text).toMatch(/subscriptionsModeRef\.current === "supabase"/);
-    expect(text).toMatch(/if \(fresh\.metadata\.fromCache\) return;/);
+    for (const banned of ["processDueSubscriptions", "planDueSubscriptionPosts", "postDueSubscriptionCharge", "evaluateSubscriptionDue"]) {
+      expect(text, banned).not.toContain(banned);
+    }
   });
 
   it("watchlist setup confirms on the server that there are no lists before writing", () => {
