@@ -7,6 +7,7 @@ import {
   LEDGER_GROUPS,
   LEDGER_HUB_TAB_IDS,
   LEDGER_SECTIONS,
+  visibleLedgerSections,
   isAccountDetailRoute,
   isDashboardRoute,
   isNavItemActive,
@@ -257,6 +258,17 @@ describe("Money hub sections", () => {
       );
       expect(members.length).toBeGreaterThan(0);
     }
+  });
+
+  it("shows Tax & ITR only while the tax center is on (SPENDLY-733)", () => {
+    const on = visibleLedgerSections({ taxCenter: true }).map((s) => s.id);
+    const off = visibleLedgerSections({ taxCenter: false }).map((s) => s.id);
+    expect(on).toContain("tax");
+    expect(off).not.toContain("tax");
+    expect(off).toEqual(on.filter((id) => id !== "tax"));
+    expect(LEDGER_SECTIONS.find((s) => s.id === "tax")).toMatchObject({ group: "tax", label: "Tax & ITR" });
+    // The year screens are stack screens over the hub: back pops to it.
+    expect(resolveAndroidBackAction("/tax/2025-26/income")).toBe("pop");
   });
 });
 

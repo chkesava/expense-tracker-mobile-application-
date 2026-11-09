@@ -23,7 +23,8 @@ export type LedgerTab =
   | "borrowings"
   | "receivables"
   | "groupFunds"
-  | "subscriptions";
+  | "subscriptions"
+  | "tax";
 
 export interface LedgerStateContextType {
   // Active Transactions hub tab

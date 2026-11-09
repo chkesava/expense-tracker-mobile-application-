@@ -105,6 +105,8 @@ export const LEDGER_HUB_TAB_IDS = [
   "receivables",
   "groupFunds",
   "subscriptions",
+  // SPENDLY-733: the Tax & ITR Readiness Center, while its flag is on.
+  "tax",
 ] as const;
 
 export type LedgerHubTabId = (typeof LEDGER_HUB_TAB_IDS)[number];
@@ -124,6 +126,8 @@ export const LEDGER_GROUPS = [
   // SPENDLY-687: money held for others (Group Funds).
   { id: "held", label: "Held for others" },
   { id: "recurring", label: "Recurring" },
+  // SPENDLY-733: tax records and readiness, by financial year.
+  { id: "tax", label: "Tax" },
 ] as const;
 
 export type LedgerGroupId = (typeof LEDGER_GROUPS)[number]["id"];
@@ -136,6 +140,8 @@ export type LedgerSectionMeta = {
   /** Longer form for the All-sections sheet row. */
   title: string;
   subtitle: string;
+  /** Shown only while this feature is on (SPENDLY-733: the tax center flag). */
+  requires?: "taxCenter";
 };
 
 /**
@@ -200,7 +206,20 @@ export const LEDGER_SECTIONS: LedgerSectionMeta[] = [
     title: "Recurring",
     subtitle: "Subscriptions, EMIs and auto-transfers",
   },
+  {
+    id: "tax",
+    group: "tax",
+    label: "Tax & ITR",
+    title: "Tax & ITR readiness",
+    subtitle: "Income, TDS, deductions and your estimate, by year",
+    requires: "taxCenter",
+  },
 ];
+
+/** The Money hub sections this user sees: a flagged section only while its feature is on. */
+export function visibleLedgerSections(features: { taxCenter: boolean }): LedgerSectionMeta[] {
+  return LEDGER_SECTIONS.filter((s) => s.requires !== "taxCenter" || features.taxCenter);
+}
 
 export const VAULT_HUB_TAB_IDS = [
   "shared",
