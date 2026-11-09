@@ -6,7 +6,7 @@ Plan: [SPENDLY-682-plan.md](SPENDLY-682-plan.md). Integration branch: `feature/S
 |---|---|---|---|
 | A: server foundations | SPENDLY-725 | `feature/SPENDLY-725-daily-job-foundations` | merged into the 682 branch 6a7dd22e ([doc](SPENDLY-725-daily-job-foundations.md)) |
 | B: SIP daily job | SPENDLY-726 | `feature/SPENDLY-726-sip-daily-job` | merged into the 682 branch ([doc](SPENDLY-726-sip-daily-job.md)) |
-| C: bill daily job | SPENDLY-727 | `feature/SPENDLY-727-bill-daily-job` | not started |
+| C: bill daily job | SPENDLY-727 | `feature/SPENDLY-727-bill-daily-job` | built, awaiting merge approval ([doc](SPENDLY-727-bill-daily-job.md)) |
 | D: read-only reports | SPENDLY-728 | `feature/SPENDLY-728-legacy-data-reports` | not started |
 | E: cut-over + runbook | SPENDLY-729 | `feature/SPENDLY-729-legacy-crons-cutover` | not started |
 
