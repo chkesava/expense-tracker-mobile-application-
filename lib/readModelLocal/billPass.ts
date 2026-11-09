@@ -176,3 +176,56 @@ export function billPassFingerprint(input: {
 export function billPassReadsCopy(modes: string[]): boolean {
   return modes.includes("supabase");
 }
+
+/**
+ * SPENDLY-732 — where the bill pass takes its inputs from.
+ *
+ * - `screen`: the providers' own Firestore listeners, which hold the whole
+ *   ledger (`expensesComplete`).
+ * - `checkScreenThenFirestore`: some input is the on-device copy (SPENDLY-597).
+ *   Check for work on the screen's data first (free), and only if there is
+ *   some, run on Firestore's inputs.
+ * - `firestore`: the screen holds only the staged expenses page (300 rows,
+ *   SPENDLY-409: there is no idle upgrade to the whole ledger any more). The
+ *   pass must not run on a partial ledger (SPENDLY-97: understated
+ *   statements), and a work check on it means nothing, so it reads its inputs
+ *   from Firestore (`loadAuthoritativeBillInputs`: every credit card's
+ *   expenses by equality query, plus accounts, types, payments and bills).
+ *
+ * Before SPENDLY-732 the pass was skipped in that last case, so for anyone
+ * with 300 or more expenses it never ran in normal use: no statement
+ * creation, refresh, payment/cashback allocation or duplicate merge.
+ */
+export type BillPassInputPlan = "screen" | "checkScreenThenFirestore" | "firestore";
+
+export function billPassInputPlan(input: { readsCopy: boolean; ledgerComplete: boolean }): BillPassInputPlan {
+  if (!input.ledgerComplete) return "firestore";
+  return input.readsCopy ? "checkScreenThenFirestore" : "screen";
+}
+
+/** What asked for a pass. `background` = app focus or a new bill id appearing. */
+export type BillPassTrigger = "initial" | "requested" | "background";
+
+/**
+ * A `firestore` pass reads every card's expenses (hundreds of reads). App
+ * focus happens many times a day, so background triggers in that plan run at
+ * most once per interval. The first pass of a session and passes asked for
+ * after a money action always run.
+ */
+export const BILL_PASS_FIRESTORE_MIN_INTERVAL_MS = 30 * 60 * 1000;
+
+export function billPassThrottled(input: {
+  plan: BillPassInputPlan;
+  trigger: BillPassTrigger;
+  lastFirestorePassAt: number | null;
+  now: number;
+}): boolean {
+  if (input.plan !== "firestore" || input.trigger !== "background") return false;
+  if (input.lastFirestorePassAt == null) return false;
+  return input.now - input.lastFirestorePassAt < BILL_PASS_FIRESTORE_MIN_INTERVAL_MS;
+}
+
+/** The pass may start once every listener it reads has delivered (not necessarily the whole ledger). */
+export function billPassListenersReady(state: { billsLoading: boolean; expensesLoading: boolean; paymentsLoading: boolean }): boolean {
+  return !state.billsLoading && !state.expensesLoading && !state.paymentsLoading;
+}
