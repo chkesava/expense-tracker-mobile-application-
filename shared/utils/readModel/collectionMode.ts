@@ -1,4 +1,5 @@
 import { READ_MODEL_TABLES } from "./mapping";
+import { withDeviceShadow } from "../readModelMode";
 
 /**
  * SPENDLY-673 — the per-collection read switch:
@@ -46,10 +47,11 @@ export const SWITCHED_COLLECTIONS: readonly string[] = [
   "recurringSuggestions",
 ];
 
+/** SPENDLY-745: `shadow` only while readModel.deviceShadow is on, else `firestore` (no on-device compare). */
 export function configuredCollectionMode(readModelSetting: unknown, collection: string): CollectionMode {
   if (!readModelSetting || typeof readModelSetting !== "object") return "firestore";
   const value = (readModelSetting as Record<string, unknown>)[collection];
-  return (COLLECTION_MODES as readonly unknown[]).includes(value) ? (value as CollectionMode) : "firestore";
+  return (COLLECTION_MODES as readonly unknown[]).includes(value) ? withDeviceShadow(value as CollectionMode, readModelSetting) : "firestore";
 }
 
 export type CollectionModeInput = {
