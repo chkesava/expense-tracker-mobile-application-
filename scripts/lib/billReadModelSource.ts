@@ -11,7 +11,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Account, AccountPayment, AccountType, Expense } from "../../shared/types/expense";
 import { isActiveLedgerRow } from "../../shared/utils/ledgerRow";
 import { SPEC_BY_COLLECTION } from "../../shared/utils/readModel/mapping";
-import { storedBillFromDoc, type ReadModelBillSource, type UserBillSettings } from "./billDailyCore";
+import { storedBillFromDoc, type BillRunQueue, type ReadModelBillSource, type UserBillSettings } from "./billDailyCore";
 
 const PAGE = 1000;
 
@@ -106,6 +106,35 @@ export function supabaseBillReadModel(client: SupabaseClient): ReadModelBillSour
         payments: payments.map((d) => ({ ...(d.data as unknown as AccountPayment), id: d.id })),
         bills: bills.map((d) => ({ bill: storedBillFromDoc(d.id, d.data), updateTime: null })),
       };
+    },
+  };
+}
+
+/**
+ * SPENDLY-737: the bill-run queue (`server_run_queue`, service role only).
+ * `done` deletes a request only if no newer save re-queued the user since it
+ * was read (`requested_at` unchanged or older).
+ */
+export function supabaseBillRunQueue(client: SupabaseClient): BillRunQueue {
+  return {
+    async pending() {
+      const { data, error } = await client
+        .from("server_run_queue")
+        .select("uid, requested_at")
+        .eq("job", "bill-daily")
+        .order("requested_at", { ascending: true })
+        .limit(500);
+      if (error) throw new Error(`read model: ${error.message}`);
+      return ((data ?? []) as Array<{ uid: string; requested_at: string }>).map((r) => ({ uid: r.uid, requestedAt: r.requested_at }));
+    },
+    async done(uid, requestedAt) {
+      const { error } = await client
+        .from("server_run_queue")
+        .delete()
+        .eq("job", "bill-daily")
+        .eq("uid", uid)
+        .lte("requested_at", requestedAt);
+      if (error) throw new Error(`read model: ${error.message}`);
     },
   };
 }

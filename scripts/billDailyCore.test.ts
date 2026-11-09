@@ -8,7 +8,9 @@ import {
   cardClosedRecently,
   findBillWorkOnReadModel,
   runBillDaily,
+  runBillQueue,
   storedBillFromDoc,
+  type BillRunQueue,
   type BillDailyPorts,
   type ReadModelBillSource,
   type StoredBill,
@@ -300,5 +302,102 @@ describe("SPENDLY-734: bill work found on the read model, settled from Firestore
       timezone: "Asia/Kolkata", currency: "INR", remindersEnabled: false,
     });
     expect(storedBillFromDoc("b", { amountPaid: "268.71" })).toMatchObject({ id: "b", amountPaid: 268.71, paymentIds: [] });
+  });
+});
+
+describe("SPENDLY-737: queue mode settles only the users an app save queued", () => {
+  const LATER = new Date("2026-11-09T03:05:00.000Z");
+  const cashOnly = {
+    accountId: "roar", statementDate: "2026-11-01", billingPeriodStart: "2026-10-02", billingPeriodEnd: "2026-11-01",
+    dueDate: "2026-11-06", statementAmount: 505, minimumDueAmount: 25, amountPaid: 268.71, paymentIds: ["hdfc"],
+    status: "PARTIALLY_PAID", remainingAmount: 236.29, note: AUTO_CREDIT_CARD_BILL_NOTE,
+  };
+  const copy: ReadModelBillSource = {
+    users: async () => [
+      { uid: "u1", accounts: [roar, bank], accountTypes: [{ id: "t-credit", name: "Credit Card" }, { id: "t-bank", name: "Bank" }] as never },
+      { uid: "u9", accounts: [roar], accountTypes: [{ id: "t-credit", name: "Credit Card" }] as never },
+    ],
+    settings: async () => ({ timezone: "Asia/Kolkata", currency: "INR", remindersEnabled: true }),
+    cardInputs: async () => ({ expenses: SPEND, payments: PAID, bills: [{ bill: storedBillFromDoc("roar_2026-11-01", cashOnly), updateTime: null }] }),
+  };
+  function queueOf(rounds: Array<Array<{ uid: string; requestedAt: string }>>) {
+    let i = 0;
+    const done = vi.fn(async () => undefined);
+    const queue: BillRunQueue = { pending: async () => rounds[i++] ?? [], done };
+    return { queue, done };
+  }
+  const harness = (rounds: Array<Array<{ uid: string; requestedAt: string }>>, dryRun = false, perRun = 1000) => {
+    const w = world({ [BILL]: cashOnly });
+    const budget = jobReadBudget(perRun);
+    const listAccounts = vi.fn(async () => [{ uid: "u1", account: roar }]);
+    // Charges the budget as the CLI's Firestore ports do.
+    const listAccountsFor = vi.fn(async (uids: readonly string[]) => {
+      budget.add(2);
+      return uids.includes("u1") ? [{ uid: "u1", account: roar }, { uid: "u1", account: bank }] : [];
+    });
+    const { queue, done } = queueOf(rounds);
+    const run = runBillQueue({
+      queue,
+      ports: w.ports({ listAccounts, listAccountsFor }),
+      readModel: copy,
+      now: LATER,
+      dryRun,
+      budget,
+      push: null,
+      log: () => undefined,
+    });
+    return { w, run, done, listAccounts, listAccountsFor };
+  };
+
+  it("the queued Roar user is settled to PAID; only that user is read; the request is cleared", async () => {
+    const h = harness([[{ uid: "u1", requestedAt: "2026-11-09T03:04:00.123456+00:00" }]]);
+    const s = await h.run;
+    expect(h.w.get(BILL)).toMatchObject({ amountPaid: 505, status: "PAID" });
+    expect(h.listAccounts).not.toHaveBeenCalled(); // no collection-group scan of every user
+    expect(h.listAccountsFor).toHaveBeenCalledWith(["u1"]);
+    expect(h.w.cardInputs).toHaveBeenCalledTimes(1);
+    expect(h.done).toHaveBeenCalledWith("u1", "2026-11-09T03:04:00.123456+00:00");
+    expect(s.counts).toMatchObject({ queueRounds: 1, queueUsers: 1, cardsFromReadModel: 1, readModelUsers: 1 });
+  });
+
+  it("an empty queue reads nothing", async () => {
+    const h = harness([]);
+    const s = await h.run;
+    expect(h.listAccountsFor).not.toHaveBeenCalled();
+    expect(h.w.cardInputs).not.toHaveBeenCalled();
+    expect(s.counts.queueRounds ?? 0).toBe(0);
+  });
+
+  it("a save during the run is taken by the next round", async () => {
+    const h = harness([
+      [{ uid: "u1", requestedAt: "t1" }],
+      [{ uid: "u1", requestedAt: "t2" }],
+    ]);
+    const s = await h.run;
+    expect(s.counts.queueRounds).toBe(2);
+    expect(h.done.mock.calls).toEqual([["u1", "t1"], ["u1", "t2"]]);
+  });
+
+  it("dry run: one round, nothing written, nothing cleared", async () => {
+    const h = harness([[{ uid: "u1", requestedAt: "t1" }], [{ uid: "u1", requestedAt: "t2" }]], true);
+    const s = await h.run;
+    expect(h.w.get(BILL)).toMatchObject({ amountPaid: 268.71 });
+    expect(h.done).not.toHaveBeenCalled();
+    expect(s.counts.queueRounds).toBe(1);
+  });
+
+  it("a duress entry is never served, but is cleared", async () => {
+    const h = harness([[{ uid: "u1_duress", requestedAt: "t1" }]]);
+    const s = await h.run;
+    expect(h.listAccountsFor).not.toHaveBeenCalled();
+    expect(h.w.cardInputs).not.toHaveBeenCalled();
+    expect(h.done).toHaveBeenCalledWith("u1_duress", "t1");
+    expect(s.counts.queueUsers ?? 0).toBe(0);
+  });
+
+  it("out of read budget: requests stay queued for the next run", async () => {
+    const h = harness([[{ uid: "u1", requestedAt: "t1" }]], false, 2);
+    await h.run;
+    expect(h.done).not.toHaveBeenCalled();
   });
 });

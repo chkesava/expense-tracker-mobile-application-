@@ -97,7 +97,9 @@ Guards that still pass:
 - `dailyJobCore`;
 - `autoCreditCardBills`, `creditCardLedger`, `creditCardBillDerived`.
 
-## Until SPENDLY-737
+## Until SPENDLY-737 (historical)
+> **Done in SPENDLY-737:** `requestBillPass()` was removed. The save itself queues the server run through the read model ([SPENDLY-737](SPENDLY-737-server-run-after-save.md)).
+
 A payment's own stamp (`increment` + `arrayUnion`, inside the payment save) still updates the bill at once. Cashback allocation, new statements and refreshes wait for the next `bill-daily` run (08:30 IST). The epic doesn't reach `main` before SPENDLY-737, so no release has that gap.
 
 ## Owner steps (after the epic reaches `main`)
