@@ -29,6 +29,7 @@ import {
   sipTransactionId,
   type SipRunOp,
 } from "../../shared/features/sip/utils/sipExecution";
+import { isValidTimeZone } from "../../shared/utils/dates";
 import { isDuressUid } from "../../shared/utils/duress";
 import {
   applyJobWrites,
@@ -209,7 +210,8 @@ export async function runSipDaily(opts: {
 }): Promise<DailyJobSummary> {
   const { ports, now, budget } = opts;
   const summary = newJobSummary("sip-daily", opts.dryRun);
-  const zones = new Map<string, string>();
+  // A user's zone, or null when the stored one is invalid (that user is skipped).
+  const zones = new Map<string, string | null>();
   const seenUsers = new Set<string>();
   let cursor: string | undefined;
 
@@ -229,10 +231,18 @@ export async function runSipDaily(opts: {
       }
       bump(summary, "plansSeen");
 
-      let tz = zones.get(uid);
+      if (!zones.has(uid)) {
+        const stored = await ports.timeZoneOf(uid);
+        // Unset → the legacy default. Set but invalid → skip: guessing a zone
+        // could move the scheduled date, and a throw would stop everyone else.
+        const zone = stored == null || stored === "" ? DEFAULT_TIME_ZONE : isValidTimeZone(stored) ? stored : null;
+        zones.set(uid, zone);
+        if (!zone) summary.failures.push(`plan ${plan.id}: invalid timezone on the account; its SIPs were skipped`);
+      }
+      const tz = zones.get(uid);
       if (!tz) {
-        tz = (await ports.timeZoneOf(uid)) || DEFAULT_TIME_ZONE;
-        zones.set(uid, tz);
+        bump(summary, "invalidTimeZone");
+        continue;
       }
       if (plan.status !== "active" || !isSipDue(plan.nextExecutionDate, now, tz)) {
         bump(summary, "notDueInUserZone");

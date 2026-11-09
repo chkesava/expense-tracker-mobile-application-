@@ -98,6 +98,26 @@ describe("duplicate bills report (SPENDLY-728)", () => {
     const md = renderDuplicateBillsReport([r], "2026-11-09T00:00:00Z");
     expect(md).toContain("legacy random ids: 3");
     expect(md).toContain("Open legacy-only bills");
-    expect(md).not.toMatch(/G9Nx/);
+    expect(md).toContain("## u#abc");
+  });
+});
+
+describe("reports never print a uid (SPENDLY-728)", () => {
+  it("hashUid gives a short tag that doesn't contain the uid", async () => {
+    const { hashUid } = await import("./lib/readmodelSyncCore");
+    const tag = hashUid("G9NxBehpGFSascp95Pbwr6Fk9nn2");
+    expect(tag).toMatch(/^u#[0-9a-f]{10}$/);
+    expect(tag).not.toContain("G9Nx");
+  });
+
+  it("both CLIs pass only hashUid(uid) to the report, never the uid", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    for (const cli of ["report-sip-drift.ts", "report-duplicate-bills.ts"]) {
+      const src = readFileSync(join(__dirname, cli), "utf8");
+      expect(src, cli).toMatch(/hashUid\(u\)/);
+      expect(src, cli).not.toMatch(/userTag:\s*u\b/);
+      expect(src, cli).not.toMatch(/ForUser\(u,/);
+    }
   });
 });

@@ -14,7 +14,7 @@
 
 import type { CreditCardBill } from "../../shared/types/creditCardBill";
 import { autoCreditCardBillDocId } from "../../shared/utils/autoCreditCardBills";
-import { collectCreditBillDuplicateResolutions, type DuplicateCreditCardBillSlice } from "../../shared/utils/creditCardLedger";
+import { collectCreditBillDuplicateResolutions } from "../../shared/utils/creditCardLedger";
 import { roundMoney } from "../../shared/utils/money";
 
 export type BillLine = {
@@ -37,7 +37,7 @@ const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
 export function duplicateBillsForUser(userTag: string, bills: CreditCardBill[], today: string): UserBillDuplicates {
   const isApp = (b: CreditCardBill) => b.id === autoCreditCardBillDocId(b.accountId, b.statementDate);
-  const resolutions = collectCreditBillDuplicateResolutions(bills as unknown as DuplicateCreditCardBillSlice[], today);
+  const resolutions = collectCreditBillDuplicateResolutions(bills, today);
   const cancel = new Set(resolutions.flatMap((r) => r.cancelIds));
 
   const byCycle = new Map<string, CreditCardBill[]>();

@@ -36,7 +36,8 @@ The push guard (`readmodelServerPush.test.ts`) treats any file with `.set(` near
   - legacy ids and app ids;
   - drift in funds, plans and double runs with the counts;
   - a clean user;
-  - duplicate classification and verdicts, with no uid in the output.
+  - duplicate classification and verdicts (the report heading is the user tag);
+  - the uid guarantee: `hashUid` gives a `u#` tag without the uid, and both CLIs pass only `hashUid(u)` to the report.
 - **Emulator:** both CLIs ran end to end on the emulator. Duplicate bills: 1 user, 4 bills, 0 legacy ids. SIP drift: 0 users with SIP data. Both match the demo data.
 - **Typecheck:** temporary config extending `tsconfig.json`, clean.
 - **Production run: NOT done by the agent.** The session's permission settings blocked production reads. The owner runs both commands above with the read-only service account and reviews them; this is the acceptance step of the ticket.

@@ -211,5 +211,7 @@ export function summaryAnnotations(summary: DailyJobSummary): string[] {
   if (summary.stoppedForBudget) lines.push(`::warning::${summary.job} stopped early: read budget spent. The next run carries on.`);
   if (summary.readModelPushFailed > 0) lines.push(`::warning::${summary.job}: ${summary.readModelPushFailed} docs not pushed to the read model; the nightly sync copies them.`);
   if (summary.writes.failed > 0) lines.push(`::error::${summary.job}: ${summary.writes.failed} write batch(es) failed.`);
+  const badZones = summary.counts.invalidTimeZone ?? 0;
+  if (badZones > 0) lines.push(`::warning::${summary.job}: skipped ${badZones} item(s) on accounts with an invalid timezone; see failures.`);
   return lines;
 }

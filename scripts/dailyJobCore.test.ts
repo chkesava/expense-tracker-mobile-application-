@@ -190,3 +190,11 @@ describe("daily job summary", () => {
     ]);
   });
 });
+
+describe("summary annotations for skipped accounts", () => {
+  it("warns when items were skipped for an invalid timezone", () => {
+    const s = newJobSummary("bill-daily", false);
+    s.counts.invalidTimeZone = 2;
+    expect(summaryAnnotations(s)).toContain("::warning::bill-daily: skipped 2 item(s) on accounts with an invalid timezone; see failures.");
+  });
+});

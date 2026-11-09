@@ -7,6 +7,7 @@ import {
   formatDateKey,
   isValidDateKey,
   isValidMonthKey,
+  isValidTimeZone,
   MAX_MONTH_RANGE,
   monthFromDateKey,
   monthKeyOf,
@@ -184,5 +185,15 @@ describe("startOfDayInTimeZone (SPENDLY-725)", () => {
     for (const tz of ["Asia/Kolkata", "UTC", "Pacific/Auckland", "America/Los_Angeles"]) {
       expect(formatDateKey(startOfDayInTimeZone("2026-02-28", tz), tz)).toBe("2026-02-28");
     }
+  });
+});
+
+describe("isValidTimeZone", () => {
+  it("accepts IANA zones and rejects anything else", () => {
+    expect(isValidTimeZone("Asia/Kolkata")).toBe(true);
+    expect(isValidTimeZone("UTC")).toBe(true);
+    expect(isValidTimeZone("Mars/Olympus")).toBe(false);
+    expect(isValidTimeZone("")).toBe(false);
+    expect(isValidTimeZone(undefined)).toBe(false);
   });
 });

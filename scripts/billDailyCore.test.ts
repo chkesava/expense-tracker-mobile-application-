@@ -165,3 +165,20 @@ describe("runBillDaily (SPENDLY-727)", () => {
     expect(dry.docs.size).toBe(0);
   });
 });
+
+describe("invalid stored timezone (CodeRabbit on #288)", () => {
+  it("skips only that user's cards and keeps going for everyone else", async () => {
+    const w = world();
+    const s = await run(w, {
+      listAccounts: async () => [
+        { uid: "bad", account: roar },
+        { uid: "u1", account: roar },
+      ],
+      settings: async (uid) => (uid === "bad" ? { timezone: "Mars/Olympus" } : { timezone: "Asia/Kolkata", currency: "INR", remindersEnabled: true }),
+    });
+    expect(s.counts.invalidTimeZone).toBe(1);
+    expect(s.failures.some((f) => f.includes("invalid timezone"))).toBe(true);
+    expect([...w.docs.keys()].some((k) => k.startsWith("users/bad/"))).toBe(false);
+    expect(w.get(BILL)).toMatchObject({ status: "PAID" });
+  });
+});

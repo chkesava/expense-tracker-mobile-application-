@@ -37,7 +37,7 @@ import {
 import { getClosedBillingCycle, normalizeBillGenerationDay } from "../../shared/utils/billingCycle";
 import { refreshCreditCardBillDerivedFields } from "../../shared/utils/creditCardBillDerived";
 import { collectCreditBillAllocationPatches, collectCreditBillDuplicateResolutions } from "../../shared/utils/creditCardLedger";
-import { formatDateKey, parseLocalDate, shiftDateKey, toLocalDateKey } from "../../shared/utils/dates";
+import { formatDateKey, isValidTimeZone, parseLocalDate, shiftDateKey, toLocalDateKey } from "../../shared/utils/dates";
 import { isDuressUid } from "../../shared/utils/duress";
 import {
   applyJobWrites,
@@ -264,7 +264,14 @@ export async function runBillDaily(opts: {
     const cards = maybe.filter((a) => getAccountKind(typeNameById.get(a.typeId) || "") === "credit");
     if (!cards.length) continue;
     const settings = await ports.settings(uid);
-    const timezone = settings.timezone || DEFAULT_TIME_ZONE;
+    // Unset → the legacy default. Set but invalid → skip this user: guessing a
+    // zone could pick the wrong close day, and a throw would stop everyone else.
+    const timezone = settings.timezone ? settings.timezone : DEFAULT_TIME_ZONE;
+    if (!isValidTimeZone(timezone)) {
+      bump(summary, "invalidTimeZone");
+      summary.failures.push(`card ${cards[0].id}: invalid timezone on the account; its statements were skipped`);
+      continue;
+    }
     const today = formatDateKey(now, timezone);
 
     for (const card of cards) {

@@ -1,3 +1,14 @@
+/** True when `timezone` is an IANA zone `Intl` accepts (e.g. "Asia/Kolkata"). */
+export function isValidTimeZone(timezone: string | null | undefined): timezone is string {
+  if (!timezone || typeof timezone !== "string") return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Browser / device timezone (fallback when user setting is unavailable). */
 export function getBrowserTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;

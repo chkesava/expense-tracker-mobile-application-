@@ -20,16 +20,16 @@ The old site `kesavaexpensetracker.netlify.app` (repo `chkesava/expense-tracker`
    - **SIP:** the plans due today in IST and what each would do (execute / skip / fail). No `virtualPortfolio` writes ever appear.
    - **Bills:** cards that closed today or yesterday, and the creates and updates planned.
    - **Both:** `failures: []`, and `stoppedForBudget: false`.
-3. **Pick the switch-over morning.** Do steps 4–6 between 03:00 UTC (the legacy run) and the next day's 03:00 UTC, so that day has exactly one run of each.
-4. **Turn off the legacy crons.** In `chkesava/expense-tracker`, edit `netlify.toml` and delete the `schedule = "0 3 * * *"` lines of `[functions."sip-execute"]` and `[functions."credit-card-bills"]`, then push.
-   - The site keeps serving prices to pre-2026-10-12 APKs (SPENDLY-522). **Only the schedules go.**
-   - Check: Netlify → the old site → Functions → each function shows no schedule.
-5. **Enable the new jobs:** GitHub → Settings → Secrets and variables → Actions → Variables. Set `SIP_DAILY_ENABLED` = `true` and `BILL_DAILY_ENABLED` = `true`.
-6. **Redeploy the Worker** with the new daily cron. The token secret is already set (PUSH_RUNBOOK, "Reliable trigger"):
+3. **Pick the switch-over window.** Do steps 4–6 **after** one 03:00 UTC tick (the legacy run) and **finish all three before the next 03:00 UTC**. Each daily run then happens exactly once: the legacy cron already ran that day, and tomorrow only the new jobs run. If you can't finish in the window, stop after step 4 (harmless: the jobs stay off) and do 5–6 in the next window.
+4. **Redeploy the Worker first.** The jobs are still switched off, so the new cron starts runs that skip at once:
    ```
    npx wrangler@4.158.0 deploy -c cloudflare/push-trigger/wrangler.toml
    ```
-   Cloudflare → Workers → `spendly-push-trigger` → Triggers should list `*/15 * * * *` and `0 3 * * *`.
+   Cloudflare → Workers → `spendly-push-trigger` → Triggers should list `*/15 * * * *` and `0 3 * * *`. The token secret is already set (PUSH_RUNBOOK, "Reliable trigger").
+5. **Turn off the legacy crons.** In `chkesava/expense-tracker`, edit `netlify.toml` and delete the `schedule = "0 3 * * *"` lines of `[functions."sip-execute"]` and `[functions."credit-card-bills"]`, then push.
+   - The site keeps serving prices to pre-2026-10-12 APKs (SPENDLY-522). **Only the schedules go.**
+   - Check: Netlify → the old site → Functions → each function shows no schedule.
+6. **Enable the new jobs, in the same window as step 5:** GitHub → Settings → Secrets and variables → Actions → Variables. Set `SIP_DAILY_ENABLED` = `true` and `BILL_DAILY_ENABLED` = `true`. Steps 5 and 6 must both be done before the next 03:00 UTC, so a day never has neither job nor both.
 7. **Verify the first morning**, after 03:00 UTC:
    - Actions → *SIP daily* and *Bill daily* each show one `workflow_dispatch` run, green.
    - **SIP summary:** `executed` matches the plans due; `conflicts` is 0 or explained; `readModelPushed` > 0 when anything was written.
@@ -41,10 +41,10 @@ The old site `kesavaexpensetracker.netlify.app` (repo `chkesava/expense-tracker`
 
 ## Pause or roll back
 - **Pause one job:** set its variable to `false`. Worker runs then start and skip at once, with no reads.
-- **Roll back to the legacy crons:**
+- **Roll back to the legacy crons:** the same window rule applies. After one 03:00 UTC tick and before the next:
   1. Set both variables to `false`.
   2. Restore the two `schedule` lines in the old repo.
-  3. The next 03:00 UTC is the legacy run again.
+  3. The next 03:00 UTC is the legacy run again. If only one step is done when 03:00 UTC comes, that day runs neither (step 1 only) or both (step 2 only); both is harmless (the writes are idempotent), so do step 2 first if in doubt.
 - **Idempotent:** the new jobs' writes use the app's ids. A day run by both by mistake creates no duplicate SIP rows; the transaction-row create refuses. Bills are compare-and-set.
 
 ## Costs

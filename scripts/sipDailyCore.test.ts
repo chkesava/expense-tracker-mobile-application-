@@ -240,3 +240,19 @@ describe("runSipDaily (SPENDLY-726)", () => {
     expect(s.counts.plansSeen ?? 0).toBe(0);
   });
 });
+
+describe("invalid stored timezone (CodeRabbit on #288)", () => {
+  it("skips only that user's plans, never guesses a zone, and keeps going for everyone else", async () => {
+    const w = world({
+      "users/bad": { timezone: "Mars/Olympus" },
+      "users/bad/sipPlans/p1": plan(),
+      "users/good": { timezone: "Asia/Kolkata" },
+      "users/good/sipPlans/p1": plan(),
+    });
+    const s = await run(w);
+    expect(s.counts.invalidTimeZone).toBe(1);
+    expect(s.failures.some((f) => f.includes("invalid timezone"))).toBe(true);
+    expect(w.get("users/bad/sipTransactions/p1_2026-11-11")).toBeUndefined();
+    expect(w.get("users/good/sipTransactions/p1_2026-11-11")).toMatchObject({ status: "executed" });
+  });
+});
