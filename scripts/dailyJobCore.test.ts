@@ -198,3 +198,49 @@ describe("summary annotations for skipped accounts", () => {
     expect(summaryAnnotations(s)).toContain("::warning::bill-daily: skipped 2 item(s) on accounts with an invalid timezone; see failures.");
   });
 });
+
+describe("delete writes (SPENDLY-740)", () => {
+  it("deletes inside the same atomic batch, notes the path for the push, and dry-runs without data keys", async () => {
+    const deleted: string[] = [];
+    const committed: string[] = [];
+    const db: JobDb = {
+      doc: (path) => ({ path }),
+      batch: () => ({
+        create: () => undefined,
+        set: (ref) => committed.push(ref.path),
+        update: () => undefined,
+        delete: (ref) => deleted.push(ref.path),
+        commit: async () => undefined,
+      }),
+    };
+    const noted: string[] = [];
+    const push = { note: (_uid: string, paths: Iterable<string>) => noted.push(...paths) };
+    const result = await applyJobWrites({
+      db,
+      uid: "u1",
+      writes: [
+        { kind: "set", path: "users/u1/epfInterestEntries/e1_2025-26", data: { interest: 1 }, merge: true },
+        { kind: "delete", path: "users/u1/epfInterestEntries/e1_2024-25" },
+      ],
+      dryRun: false,
+      stamp: () => "<ts>",
+      push,
+      log: () => undefined,
+    });
+    expect(result.status).toBe("written");
+    expect(deleted).toEqual(["users/u1/epfInterestEntries/e1_2024-25"]);
+    expect(noted).toContain("users/u1/epfInterestEntries/e1_2024-25");
+
+    const lines: string[] = [];
+    await applyJobWrites({
+      db,
+      uid: "u1",
+      writes: [{ kind: "delete", path: "users/u1/epfInterestEntries/x" }],
+      dryRun: true,
+      stamp: () => "<ts>",
+      push: null,
+      log: (l) => lines.push(l),
+    });
+    expect(lines).toEqual(["[DRY RUN] would delete users/u1/epfInterestEntries/x"]);
+  });
+});

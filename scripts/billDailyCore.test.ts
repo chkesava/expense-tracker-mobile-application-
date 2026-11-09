@@ -4,7 +4,18 @@ import type { CreditCardBill } from "../shared/types/creditCardBill";
 import type { Account, AccountPayment, Expense } from "../shared/types/expense";
 import { AUTO_CREDIT_CARD_BILL_NOTE } from "../shared/utils/autoCreditCardBills";
 import { jobReadBudget, type JobDb } from "./lib/dailyJobCore";
-import { cardClosedRecently, runBillDaily, type BillDailyPorts, type StoredBill } from "./lib/billDailyCore";
+import {
+  cardClosedRecently,
+  findBillWorkOnReadModel,
+  runBillDaily,
+  runBillQueue,
+  storedBillFromDoc,
+  type BillRunQueue,
+  type BillDailyPorts,
+  type ReadModelBillSource,
+  type StoredBill,
+} from "./lib/billDailyCore";
+import { billSettingsFromDoc, readModelRowToDoc } from "./lib/billReadModelSource";
 
 type Doc = { data: Record<string, unknown>; updateTime: number };
 
@@ -180,5 +191,213 @@ describe("invalid stored timezone (CodeRabbit on #288)", () => {
     expect(s.failures.some((f) => f.includes("invalid timezone"))).toBe(true);
     expect([...w.docs.keys()].some((k) => k.startsWith("users/bad/"))).toBe(false);
     expect(w.get(BILL)).toMatchObject({ status: "PAID" });
+  });
+});
+
+describe("SPENDLY-734: bill work found on the read model, settled from Firestore", () => {
+  // 9 Nov: the Roar cycle closed on 1 Nov, so it is not a closing card any more.
+  const LATER = new Date("2026-11-09T03:00:00.000Z");
+  const cashOnly = {
+    accountId: "roar", statementDate: "2026-11-01", billingPeriodStart: "2026-10-02", billingPeriodEnd: "2026-11-01",
+    dueDate: "2026-11-06", statementAmount: 505, minimumDueAmount: 25, amountPaid: 268.71, paymentIds: ["hdfc"],
+    status: "PARTIALLY_PAID", remainingAmount: 236.29, note: AUTO_CREDIT_CARD_BILL_NOTE,
+  };
+  const copyOf = (bill: Record<string, unknown>, payments: AccountPayment[] = PAID): ReadModelBillSource => ({
+    users: async () => [
+      { uid: "u1", accounts: [roar, bank], accountTypes: [{ id: "t-credit", name: "Credit Card" }, { id: "t-bank", name: "Bank" }] as never },
+    ],
+    settings: async () => ({ timezone: "Asia/Kolkata", currency: "INR", remindersEnabled: true }),
+    cardInputs: async () => ({ expenses: SPEND, payments, bills: [{ bill: storedBillFromDoc("roar_2026-11-01", bill), updateTime: null }] }),
+  });
+  const runAt = (w: ReturnType<typeof world>, readModel: Awaited<ReturnType<typeof findBillWorkOnReadModel>> | null, dryRun = false) =>
+    runBillDaily({ ports: w.ports(), now: LATER, dryRun, budget: jobReadBudget(1000), push: null, log: () => undefined, readModel });
+
+  it("the reported Roar bill (cashback recorded after the close) is found on the copy and settled to PAID", async () => {
+    const work = await findBillWorkOnReadModel(copyOf(cashOnly), LATER);
+    expect([...(work.cards.get("u1") ?? [])]).toEqual(["roar"]);
+
+    const w = world({ [BILL]: cashOnly });
+    const s = await runAt(w, work);
+    expect(s.counts.cardsFromReadModel).toBe(1);
+    expect(s.counts.cardsClosing ?? 0).toBe(0);
+    expect(w.get(BILL)).toMatchObject({ amountPaid: 505, status: "PAID", remainingAmount: 0 });
+    // Only the named card is read from Firestore.
+    expect(w.cardInputs).toHaveBeenCalledTimes(1);
+    expect(w.cardInputs).toHaveBeenCalledWith("u1", "roar");
+  });
+
+  it("without the read model the job is unchanged: a card that closed days ago costs nothing", async () => {
+    const w = world({ [BILL]: cashOnly });
+    const s = await runAt(w, null);
+    expect(w.cardInputs).not.toHaveBeenCalled();
+    expect(w.get(BILL)).toMatchObject({ amountPaid: 268.71 });
+    expect(s.counts.cardsFromReadModel ?? 0).toBe(0);
+  });
+
+  it("a settled copy names nothing: no Firestore card reads", async () => {
+    const settled = { ...cashOnly, amountPaid: 505, paymentIds: ["cb", "hdfc"], status: "PAID", remainingAmount: 0 };
+    const work = await findBillWorkOnReadModel(copyOf(settled), LATER);
+    expect(work.cards.size).toBe(0);
+    const w = world({ [BILL]: settled });
+    await runAt(w, work);
+    expect(w.cardInputs).not.toHaveBeenCalled();
+  });
+
+  it("writes Firestore's numbers, never the copy's: a lagging copy that names a settled card writes nothing", async () => {
+    const work = await findBillWorkOnReadModel(copyOf(cashOnly), LATER);
+    const settled = { ...cashOnly, amountPaid: 505, paymentIds: ["cb", "hdfc"], status: "PAID", remainingAmount: 0 };
+    const w = world({ [BILL]: settled });
+    const s = await runAt(w, work);
+    expect(s.counts.readModelDisagreed).toBe(1);
+    expect(s.writes.written).toBe(0);
+    expect(w.get(BILL)).toMatchObject(settled);
+  });
+
+  it("Firestore changed after the job read it: compare-and-set refuses, nothing written", async () => {
+    const work = await findBillWorkOnReadModel(copyOf(cashOnly), LATER);
+    const w = world({ [BILL]: cashOnly });
+    const s = await runBillDaily({
+      ports: w.ports({
+        cardInputs: async () => ({ expenses: SPEND, payments: PAID, bills: [{ bill: storedBillFromDoc("roar_2026-11-01", cashOnly), updateTime: 0 }] }),
+      }),
+      now: LATER, dryRun: false, budget: jobReadBudget(1000), push: null, log: () => undefined, readModel: work,
+    });
+    expect(s.counts.conflicts).toBe(1);
+    expect(w.get(BILL)).toMatchObject({ amountPaid: 268.71 });
+  });
+
+  it("dry run plans the settle and writes nothing; summary counts the finder", async () => {
+    const work = await findBillWorkOnReadModel(copyOf(cashOnly), LATER);
+    const w = world({ [BILL]: cashOnly });
+    const s = await runAt(w, work, true);
+    expect(w.get(BILL)).toMatchObject({ amountPaid: 268.71 });
+    expect(s.counts).toMatchObject({ readModelUsers: 1, readModelCards: 1, cardsFromReadModel: 1 });
+  });
+
+  it("the finder skips duress accounts and survives one failing user without naming it", async () => {
+    let calls = 0;
+    const source: ReadModelBillSource = {
+      users: async () => [
+        { uid: "u1__duress", accounts: [roar], accountTypes: [{ id: "t-credit", name: "Credit Card" }] as never },
+        { uid: "u2", accounts: [roar], accountTypes: [{ id: "t-credit", name: "Credit Card" }] as never },
+        { uid: "u3", accounts: [roar], accountTypes: [{ id: "t-credit", name: "Credit Card" }] as never },
+      ],
+      settings: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error("read model: users/u2 unreachable");
+        return { timezone: "Asia/Kolkata" };
+      },
+      cardInputs: copyOf(cashOnly).cardInputs,
+    };
+    const work = await findBillWorkOnReadModel(source, LATER);
+    expect(work.failures).toBe(1);
+    expect(work.usersSeen).toBe(2);
+    expect([...work.cards.keys()]).toEqual(["u3"]);
+  });
+
+  it("read-model rows map back to the documents and settings they copy", () => {
+    expect(readModelRowToDoc({ uid: "u", doc_id: "roar_2026-11-01", doc: { amountPaid: 1 } })).toEqual({ id: "roar_2026-11-01", data: { amountPaid: 1 } });
+    expect(readModelRowToDoc({ uid: "u", doc_id: "list/item", doc: null })).toEqual({ id: "item", data: {} });
+    expect(billSettingsFromDoc({ timezone: "Asia/Kolkata", currency: "INR", creditCardBillReminders: { enabled: false } })).toEqual({
+      timezone: "Asia/Kolkata", currency: "INR", remindersEnabled: false,
+    });
+    expect(storedBillFromDoc("b", { amountPaid: "268.71" })).toMatchObject({ id: "b", amountPaid: 268.71, paymentIds: [] });
+  });
+});
+
+describe("SPENDLY-737: queue mode settles only the users an app save queued", () => {
+  const LATER = new Date("2026-11-09T03:05:00.000Z");
+  const cashOnly = {
+    accountId: "roar", statementDate: "2026-11-01", billingPeriodStart: "2026-10-02", billingPeriodEnd: "2026-11-01",
+    dueDate: "2026-11-06", statementAmount: 505, minimumDueAmount: 25, amountPaid: 268.71, paymentIds: ["hdfc"],
+    status: "PARTIALLY_PAID", remainingAmount: 236.29, note: AUTO_CREDIT_CARD_BILL_NOTE,
+  };
+  const copy: ReadModelBillSource = {
+    users: async () => [
+      { uid: "u1", accounts: [roar, bank], accountTypes: [{ id: "t-credit", name: "Credit Card" }, { id: "t-bank", name: "Bank" }] as never },
+      { uid: "u9", accounts: [roar], accountTypes: [{ id: "t-credit", name: "Credit Card" }] as never },
+    ],
+    settings: async () => ({ timezone: "Asia/Kolkata", currency: "INR", remindersEnabled: true }),
+    cardInputs: async () => ({ expenses: SPEND, payments: PAID, bills: [{ bill: storedBillFromDoc("roar_2026-11-01", cashOnly), updateTime: null }] }),
+  };
+  function queueOf(rounds: Array<Array<{ uid: string; requestedAt: string }>>) {
+    let i = 0;
+    const done = vi.fn(async () => undefined);
+    const queue: BillRunQueue = { pending: async () => rounds[i++] ?? [], done };
+    return { queue, done };
+  }
+  const harness = (rounds: Array<Array<{ uid: string; requestedAt: string }>>, dryRun = false, perRun = 1000) => {
+    const w = world({ [BILL]: cashOnly });
+    const budget = jobReadBudget(perRun);
+    const listAccounts = vi.fn(async () => [{ uid: "u1", account: roar }]);
+    // Charges the budget as the CLI's Firestore ports do.
+    const listAccountsFor = vi.fn(async (uids: readonly string[]) => {
+      budget.add(2);
+      return uids.includes("u1") ? [{ uid: "u1", account: roar }, { uid: "u1", account: bank }] : [];
+    });
+    const { queue, done } = queueOf(rounds);
+    const run = runBillQueue({
+      queue,
+      ports: w.ports({ listAccounts, listAccountsFor }),
+      readModel: copy,
+      now: LATER,
+      dryRun,
+      budget,
+      push: null,
+      log: () => undefined,
+    });
+    return { w, run, done, listAccounts, listAccountsFor };
+  };
+
+  it("the queued Roar user is settled to PAID; only that user is read; the request is cleared", async () => {
+    const h = harness([[{ uid: "u1", requestedAt: "2026-11-09T03:04:00.123456+00:00" }]]);
+    const s = await h.run;
+    expect(h.w.get(BILL)).toMatchObject({ amountPaid: 505, status: "PAID" });
+    expect(h.listAccounts).not.toHaveBeenCalled(); // no collection-group scan of every user
+    expect(h.listAccountsFor).toHaveBeenCalledWith(["u1"]);
+    expect(h.w.cardInputs).toHaveBeenCalledTimes(1);
+    expect(h.done).toHaveBeenCalledWith("u1", "2026-11-09T03:04:00.123456+00:00");
+    expect(s.counts).toMatchObject({ queueRounds: 1, queueUsers: 1, cardsFromReadModel: 1, readModelUsers: 1 });
+  });
+
+  it("an empty queue reads nothing", async () => {
+    const h = harness([]);
+    const s = await h.run;
+    expect(h.listAccountsFor).not.toHaveBeenCalled();
+    expect(h.w.cardInputs).not.toHaveBeenCalled();
+    expect(s.counts.queueRounds ?? 0).toBe(0);
+  });
+
+  it("a save during the run is taken by the next round", async () => {
+    const h = harness([
+      [{ uid: "u1", requestedAt: "t1" }],
+      [{ uid: "u1", requestedAt: "t2" }],
+    ]);
+    const s = await h.run;
+    expect(s.counts.queueRounds).toBe(2);
+    expect(h.done.mock.calls).toEqual([["u1", "t1"], ["u1", "t2"]]);
+  });
+
+  it("dry run: one round, nothing written, nothing cleared", async () => {
+    const h = harness([[{ uid: "u1", requestedAt: "t1" }], [{ uid: "u1", requestedAt: "t2" }]], true);
+    const s = await h.run;
+    expect(h.w.get(BILL)).toMatchObject({ amountPaid: 268.71 });
+    expect(h.done).not.toHaveBeenCalled();
+    expect(s.counts.queueRounds).toBe(1);
+  });
+
+  it("a duress entry is never served, but is cleared", async () => {
+    const h = harness([[{ uid: "u1_duress", requestedAt: "t1" }]]);
+    const s = await h.run;
+    expect(h.listAccountsFor).not.toHaveBeenCalled();
+    expect(h.w.cardInputs).not.toHaveBeenCalled();
+    expect(h.done).toHaveBeenCalledWith("u1_duress", "t1");
+    expect(s.counts.queueUsers ?? 0).toBe(0);
+  });
+
+  it("out of read budget: requests stay queued for the next run", async () => {
+    const h = harness([[{ uid: "u1", requestedAt: "t1" }]], false, 2);
+    await h.run;
+    expect(h.done).not.toHaveBeenCalled();
   });
 });

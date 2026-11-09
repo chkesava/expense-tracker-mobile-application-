@@ -117,7 +117,7 @@ Everything else is **not** in the read model. Waves 2 and 3 were first closed as
 - **R4.2** Don't create a parallel ledger, or recompute an authoritative summary in a component or in SQL (`CLAUDE.md` safety invariants). SQL may recompute only **for reconciliation** (`readmodel_invariants`, parity), never for display.
 - **R4.3** Until a collection's read switch is `supabase` (SPENDLY-673), its live window, realtime listeners and anything a user just wrote are served from Firestore, as before.
 - **R4.3a** A collection whose data **drives a write** stays on Firestore until that writer reads Firestore directly: due-subscription auto-posting, SIP execution, the EPF summary sync. `lib/readModelLocal/providerSwitch.test.ts` lists them and refuses a read switch on them.
-  - **Or the writer verifies on Firestore** (SPENDLY-597, the user's decision): the credit card bill pass checks for work on the screen's data and, only if there is some, re-reads its inputs from Firestore before writing (`lib/readModelLocal/billPass.ts`); the account baseline repair confirms on Firestore. A new writer that writes from provider data must do one or the other.
+  - **Or the writer verifies on Firestore** (SPENDLY-597, the user's decision): the credit card bill pass, which runs only on the server since SPENDLY-734 (`bill-daily`, `scripts/lib/billDailyCore.ts`), finds the work on the read model and, only for the cards with work, re-reads its inputs from Firestore before writing; the account baseline repair confirms on Firestore. A new writer that writes from provider data must do one or the other.
 
 ## 5. Deletion
 

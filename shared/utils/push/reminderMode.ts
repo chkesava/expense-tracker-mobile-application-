@@ -31,3 +31,14 @@ export function reminderMode(input: {
   const live = pushRemindersLiveForUser({ pushRemindersLive: input.pushRemindersLive, pushRemindersLiveFor: input.pushRemindersLiveFor, uid: input.uid });
   return live && input.registeredForUser && input.permissionGranted ? "push" : "local";
 }
+
+/**
+ * SPENDLY-746 (epic SPENDLY-735): whether a local reminder scheduler (calendar,
+ * goals) may load its data. Only once the mode is known and it is "local": in
+ * push mode the server sends the reminders, so the phone neither schedules
+ * nor keeps listeners for them; while the mode is unknown it waits (it never
+ * cancels or schedules on a guess either).
+ */
+export function localReminderSourcesEnabled(input: { mode: ReminderMode; loading: boolean }): boolean {
+  return !input.loading && input.mode === "local";
+}

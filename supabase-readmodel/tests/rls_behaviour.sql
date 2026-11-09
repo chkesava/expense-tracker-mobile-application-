@@ -34,7 +34,7 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications'
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications', 'recurring_suggestions', 'server_results'
   ] loop
     execute format(
       $sql$insert into public.%I (uid, doc_id, doc, source_path, source_update_time, source_deleted) values
@@ -79,7 +79,7 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications'
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications', 'recurring_suggestions', 'server_results'
   ] loop
     return query execute format('select %L::text, r.uid, r.doc_id from public.%I r', t, t);
   end loop;
@@ -99,8 +99,8 @@ begin
   if wrong is not null then
     raise exception 'user A saw rows that are not theirs or are tombstoned: %', wrong;
   end if;
-  if (select count(*) from rls_test.visible()) <> 114 then
-    raise exception 'user A should see 2 rows in each of 57 tables (Wave 1 + SPENDLY-609 goals + Waves 2 and 3 + SPENDLY-591 + SPENDLY-685 + SPENDLY-224 + SPENDLY-230), saw %', (select count(*) from rls_test.visible());
+  if (select count(*) from rls_test.visible()) <> 118 then
+    raise exception 'user A should see 2 rows in each of 59 tables (Wave 1 + SPENDLY-609 goals + Waves 2 and 3 + SPENDLY-591 + SPENDLY-685 + SPENDLY-224 + SPENDLY-230 + SPENDLY-744 + SPENDLY-747), saw %', (select count(*) from rls_test.visible());
   end if;
   if (select count(*) from public.sync_status) <> 1
      or exists (select 1 from public.sync_status s where s.uid <> 'user-a') then
@@ -114,7 +114,7 @@ do $$ begin perform set_config('request.jwt.claims', rls_test.claims('{"sub": "u
 do $$
 begin
   if exists (select 1 from rls_test.visible() v where v.uid <> 'user-b')
-     or (select count(*) from rls_test.visible()) <> 57 then
+     or (select count(*) from rls_test.visible()) <> 59 then
     raise exception 'user B isolation failed';
   end if;
 end
@@ -177,7 +177,7 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications', 'sync_status',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications', 'recurring_suggestions', 'server_results', 'sync_status',
     'sync_runs', 'sync_checkpoints', 'sync_failures'
   ] loop
     -- Column-free (or last-column) statements, so the probe fails on
@@ -276,7 +276,7 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications', 'recurring_suggestions', 'server_results',
     'sync_runs', 'sync_status', 'sync_checkpoints', 'sync_failures',
     'v_cash_flow_by_month'
   ] loop

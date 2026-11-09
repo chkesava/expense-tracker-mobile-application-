@@ -320,7 +320,7 @@ export function feeSourceFromEntry(entry: AccountEntry, account?: Account): FeeS
 // Per-row classification (cacheable: depends only on the row and its account)
 // ---------------------------------------------------------------------------
 
-interface RowDetection {
+export interface RowDetection {
   role: FeeRole;
   feeType?: FeeTypeId;
   subtype?: string;
@@ -710,17 +710,37 @@ export interface FeeDetectionResult {
 }
 
 /**
- * Detect, pair and resolve. Pure: same inputs, same output. With a `cache`,
- * rows whose content has not changed are not re-classified.
+ * SPENDLY-747 (epic SPENDLY-735): the rows a fee result is built from. The
+ * full-ledger scan (`classifyFeeRows`) runs on the server; the app keeps
+ * only these rows and resolves them with the user's current reviews
+ * (`resolveFeeRows`), so a review shows at once with no ledger scan.
+ *
+ * A row is a candidate (its detection) or a reviewed row that is not one
+ * (`detection: null`, kept for its source). Reviews are only ever written on
+ * an existing record, and records only come from these rows, so resolving
+ * them with any later set of reviews gives exactly what `detectFees` would.
  */
-export function detectFees(input: FeeDetectionInput): FeeDetectionResult {
+export interface StoredFeeRow {
+  key: string;
+  source: FeeSourceSnapshot;
+  detection: RowDetection | null;
+}
+
+export interface FeeRowSet {
+  /** In ledger visit order (expenses, incomes, entries), which the resolver keeps. */
+  rows: StoredFeeRow[];
+  scanned: number;
+  reclassified: number;
+  engineVersion: number;
+}
+
+/** The full-ledger scan: classify every row; keep candidates and reviewed rows. */
+export function classifyFeeRows(input: FeeDetectionInput): FeeRowSet {
   const accountById = new Map(input.accounts.map((a) => [a.id, a] as const));
-  const reviewByKey = new Map((input.reviews ?? []).map((r) => [feeReviewDocId({ kind: r.sourceKind, id: r.sourceId }), r] as const));
+  const reviewed = new Set((input.reviews ?? []).map((r) => feeReviewDocId({ kind: r.sourceKind, id: r.sourceId })));
   const cache = input.cache ?? createFeeDetectionCache();
   const seen = new Set<string>();
-
-  const candidates: Candidate[] = [];
-  const reviewedSources = new Map<string, FeeSourceSnapshot>();
+  const rows: StoredFeeRow[] = [];
   let scanned = 0;
   let reclassified = 0;
 
@@ -736,10 +756,8 @@ export function detectFees(input: FeeDetectionInput): FeeDetectionResult {
       cache.rows.set(key, cached);
       reclassified += 1;
     }
-    if (reviewByKey.has(key)) reviewedSources.set(key, source);
-    if (cached.detection && cached.detection.confidence >= FEE_CANDIDATE_MIN_CONFIDENCE - 0.1) {
-      candidates.push({ key, source, detection: cached.detection });
-    }
+    const candidate = cached.detection && cached.detection.confidence >= FEE_CANDIDATE_MIN_CONFIDENCE - 0.1 ? cached.detection : null;
+    if (candidate || reviewed.has(key)) rows.push({ key, source, detection: candidate });
   };
 
   for (const e of input.expenses) visit(feeSourceFromExpense(e, e.accountId ? accountById.get(e.accountId) : undefined), e.accountId ? accountById.get(e.accountId) : undefined);
@@ -750,6 +768,20 @@ export function detectFees(input: FeeDetectionInput): FeeDetectionResult {
   }
   // Drop cache entries for rows that no longer exist.
   for (const key of cache.rows.keys()) if (!seen.has(key)) cache.rows.delete(key);
+  return { rows, scanned, reclassified, engineVersion: FEE_ENGINE_VERSION };
+}
+
+/** Pair and resolve stored rows with the user's reviews: no ledger scan. */
+export function resolveFeeRows(set: Pick<FeeRowSet, "rows" | "scanned" | "reclassified">, reviews: readonly FeeReview[] = []): FeeDetectionResult {
+  const reviewByKey = new Map(reviews.map((r) => [feeReviewDocId({ kind: r.sourceKind, id: r.sourceId }), r] as const));
+  const candidates: Candidate[] = [];
+  const reviewedSources = new Map<string, FeeSourceSnapshot>();
+  for (const row of set.rows) {
+    if (reviewByKey.has(row.key)) reviewedSources.set(row.key, row.source);
+    if (row.detection) candidates.push({ key: row.key, source: row.source, detection: row.detection });
+  }
+  const scanned = set.scanned;
+  const reclassified = set.reclassified;
 
   // Effective fee pool: user decisions first.
   const fees: PoolFee[] = [];
@@ -850,6 +882,14 @@ export function detectFees(input: FeeDetectionInput): FeeDetectionResult {
       candidates: records.filter(needsFeeReview).length,
     },
   };
+}
+
+/**
+ * Detect, pair and resolve. Pure: same inputs, same output. With a `cache`,
+ * rows whose content has not changed are not re-classified.
+ */
+export function detectFees(input: FeeDetectionInput): FeeDetectionResult {
+  return resolveFeeRows(classifyFeeRows(input), input.reviews ?? []);
 }
 
 /** The review queue: every record the user still has to resolve, newest first. */

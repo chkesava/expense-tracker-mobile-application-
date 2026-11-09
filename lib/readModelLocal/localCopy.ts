@@ -2,7 +2,7 @@ import type { ChangesSinceRow, ReadModelChangeEvent } from "@/lib/readModelRealt
 import type { ClientWriteEntry } from "@/shared/utils/readModel/clientOutbox";
 import { READ_MODEL_TABLES, type ReadModelRow, type TableSpec } from "@/shared/utils/readModel/mapping";
 
-import type { LocalRow, LocalRowStore, LocalStoreFactory } from "./store";
+import { withReadCache, type LocalRow, type LocalRowStore, type LocalStoreFactory } from "./store";
 
 /**
  * SPENDLY-594 (ADR v2 D1) — the on-device copy of the user's read-model rows,
@@ -235,7 +235,8 @@ export function createLocalCopy(deps: LocalCopyDeps) {
         await opened.close();
         return null;
       }
-      store = opened;
+      // SPENDLY-745: one storage read per table per change, shared by every screen.
+      store = withReadCache(opened);
       await run(async (s, g) => {
         const missing: string[] = [];
         for (const t of specs.keys()) if ((await s.getMeta(hydratedKey(t))) !== "1") missing.push(t);

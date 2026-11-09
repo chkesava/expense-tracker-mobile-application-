@@ -1,65 +1,17 @@
-import { increment } from "@/lib/firestore";
+import { increment, serverTimestamp } from "@/lib/firestore";
+import {
+  buildDashboardSummaryOpsWith,
+  type DashboardSummaryDelta,
+  type ExpenseLike,
+  type IncomeLike,
+} from "@/shared/utils/dashboardMutationsCore";
 import { addCategoryDeltas, summaryMonthOf } from "@/shared/utils/dashboardSummaryKeys";
 
-export type DashboardSummaryDelta = {
-  expenseDelta?: number;
-  incomeDelta?: number;
-  categoryDeltas?: Record<string, number>;
-  transactionCountDelta?: number;
-};
+export type { DashboardSummaryDelta } from "@/shared/utils/dashboardMutationsCore";
 
-type ExpenseLike = {
-  amount: number;
-  category?: string;
-  subcategory?: string;
-  month?: string;
-  date?: string;
-};
-
-type IncomeLike = { amount: number; month?: string; date?: string };
-
-export function buildDashboardSummaryOps(
-  uid: string,
-  month: string | undefined, // YYYY-MM
-  delta: DashboardSummaryDelta
-) {
-  const ops: any[] = [];
-  if (!uid || !month) return ops;
-
-  const data: any = {};
-  if (delta.expenseDelta) {
-    data.totalExpenses = increment(delta.expenseDelta);
-  }
-  if (delta.incomeDelta) {
-    data.totalIncome = increment(delta.incomeDelta);
-  }
-  if (delta.transactionCountDelta) {
-    data.transactionCount = increment(delta.transactionCountDelta);
-  }
-  if (delta.categoryDeltas) {
-    // A nested map, not `"categoryTotals.<key>"`: in set({merge:true}) a
-    // dotted key is a literal top-level field name, so the old shape never
-    // reached the map (SPENDLY-495). Merge deep-merges the nested map.
-    const categoryTotals: Record<string, unknown> = {};
-    for (const [key, catDelta] of Object.entries(delta.categoryDeltas)) {
-      if (catDelta !== 0) categoryTotals[key] = increment(catDelta);
-    }
-    if (Object.keys(categoryTotals).length > 0) data.categoryTotals = categoryTotals;
-  }
-
-  if (Object.keys(data).length > 0) {
-    data.period = month;
-    data.summaryVersion = 1;
-
-    ops.push({
-      op: "set",
-      ref: { path: `users/${uid}/financialSummaries/dashboard_${month}` },
-      data,
-      merge: true,
-    });
-  }
-
-  return ops;
+/** The app's builder: the client SDK's increment (logic in dashboardMutationsCore, SPENDLY-739). */
+export function buildDashboardSummaryOps(uid: string, month: string | undefined, delta: DashboardSummaryDelta) {
+  return buildDashboardSummaryOpsWith({ increment, serverTimestamp }, uid, month, delta);
 }
 
 /** A new expense: +amount to its month, parent and subcategory. */

@@ -12,7 +12,6 @@ import {
   onSnapshot,
   orderBy,
   query,
-  updateDoc,
 } from "@/lib/firestore";
 import {
   createContext,
@@ -26,7 +25,6 @@ import {
 } from "react";
 import { AppState } from "react-native";
 
-import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
 import { snapshotErrorHandler, type LoadFailure } from "@/lib/firestoreErrors";
 import {
@@ -35,17 +33,12 @@ import {
   logQuerySnapshot,
 } from "@/lib/firestoreReadDebug";
 import { notifyReadModelSnapshot } from "@/lib/readModelPush";
-import { noteDirectWrites } from "@/lib/readModelWriteHooks";
-import { commitWrite } from "@/lib/firestoreWrite";
-import { toast } from "@/lib/toast";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useReadModelSource } from "@/hooks/useReadModelSource";
 import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
 import { getAppLocalCopy } from "@/lib/readModelLocal/appCopy";
 import { pendingClientWrites } from "@/lib/readModelClientWrites";
 import { useAuth } from "@/providers/AuthProvider";
-import { useSettings } from "@/providers/SettingsProvider";
-import { postDueSubscriptionCharge } from "@/services/subscriptions/duePost";
 import type {
   CategorizationRule,
   Category,
@@ -54,16 +47,10 @@ import type {
 } from "@/shared/types/expense";
 import type { Space } from "@/shared/types/space";
 import type { Subscription } from "@/shared/types/subscription";
-import { parseLocalDate, todayDateKey } from "@/shared/utils/dates";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import { perfEvent } from "@/lib/perf";
 import { readCategoriesLoadRecord, writeCategoriesLoadRecord } from "@/lib/categoryRevision";
 import { categoriesRevisionOf, loadCategoriesByRevision } from "@/shared/utils/categoryRevision";
-import {
-  canAutoPostSubscriptions,
-  evaluateSubscriptionDue,
-  planDueSubscriptionPosts,
-} from "@/shared/utils/subscriptionProcessor";
 
 export type ExpenseReferenceData = {
   categories: Category[];
@@ -120,8 +107,6 @@ export function ExpenseReferenceDataProvider({
   // SPENDLY-673: firestore (default) | shadow | supabase, per readModel.categoryBudgets.
   const budgetsSource = useReadModelSource("categoryBudgets");
   const db = getFirestoreDb();
-  const { settings } = useSettings();
-  const timezone = settings.timezone;
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
@@ -135,7 +120,6 @@ export function ExpenseReferenceDataProvider({
   const [subscriptionsLoading, setSubscriptionsLoading] = useState(true);
   // SPENDLY-525: true until a subscriptions snapshot is confirmed by the
   // server. Due-posting never runs on cache-only data.
-  const [subscriptionsFromCache, setSubscriptionsFromCache] = useState(true);
   const [spacesLoading, setSpacesLoading] = useState(true);
   const [rulesLoading, setRulesLoading] = useState(true);
   const [budgetsLoading, setBudgetsLoading] = useState(true);
@@ -178,10 +162,6 @@ export function ExpenseReferenceDataProvider({
     attempt: goalsAttempt,
   } = useLoadFailure();
 
-  const isProcessingDueRef = useRef(false);
-  const skippedAccountToastShown = useRef(false);
-  const subscriptionsRef = useRef(subscriptions);
-  subscriptionsRef.current = subscriptions;
   // SPENDLY-598: firestore (default) | shadow | supabase, per readModel.subscriptions.
   const subscriptionsSource = useReadModelSource("subscriptions");
   // SPENDLY-599: firestore (default) | shadow | supabase, per readModel.financialGoals.
@@ -190,8 +170,6 @@ export function ExpenseReferenceDataProvider({
   const categoriesSource = useReadModelSource("categories");
   const spacesSource = useReadModelSource("spaces");
   const rulesSource = useReadModelSource("categorizationRules");
-  const subscriptionsModeRef = useRef(subscriptionsSource.mode);
-  subscriptionsModeRef.current = subscriptionsSource.mode;
 
   // SPENDLY-411: budgets/goals are only read from optional, user-configurable
   // dashboard widgets and per-screen planning hooks — unlike categories/
@@ -272,10 +250,6 @@ export function ExpenseReferenceDataProvider({
       }
     };
   }, []);
-
-  useEffect(() => {
-    skippedAccountToastShown.current = false;
-  }, [uid]);
 
   // SPENDLY-660: categories are a near-static catalogue (~190 docs per user),
   // so instead of a live listener (re-billed in full after every 30-minute
@@ -399,7 +373,6 @@ export function ExpenseReferenceDataProvider({
       return;
     }
     setSubscriptionsLoading(true);
-    setSubscriptionsFromCache(true);
     // SPENDLY-598: the same mapping for either source.
     const applySubscriptions = (docs: SourceDoc[]) => {
       setSubscriptions(docs.map((d) => ({ id: d.id, ...(d.data as Omit<Subscription, "id">) })));
@@ -409,8 +382,6 @@ export function ExpenseReferenceDataProvider({
     if (subscriptionsSource.mode === "supabase") {
       return subscriptionsSource.subscribe(
         (docs) => {
-          // The copy has no cache/server state; auto-posting verifies on Firestore itself (R4.3a).
-          setSubscriptionsFromCache(false);
           applySubscriptions(docs);
         },
         { orderBy: [{ field: "name", direction: "asc" }], limit: 200 }
@@ -420,19 +391,14 @@ export function ExpenseReferenceDataProvider({
     perfEvent("firestore_listener_start", { collection: "subscriptions" });
     let seenFirst = false;
     const unsub = onSnapshot(
-      // SPENDLY-412: defensive bound (observed <25 docs) — stays realtime,
-      // subscriptions drive the due-subscription auto-posting side effect below.
+      // SPENDLY-412: defensive bound (observed <25 docs). Display only since
+      // SPENDLY-739: the server posts due charges (subscription-daily).
       query(
         collection(db, "users", uid, "subscriptions"),
         orderBy("name", "asc"),
         limit(200)
       ),
-      // SPENDLY-525: metadata changes too, so the cache → server transition
-      // is seen even when the data didn't change. Auto-posting waits for it.
-      // Metadata-only events cost no reads.
-      { includeMetadataChanges: true },
       (snap) => {
-        setSubscriptionsFromCache(snap.metadata.fromCache);
         if (seenFirst && snap.docChanges().length === 0) return;
         seenFirst = true;
         logQuerySnapshot(path, snap, { feature: "reference", queryShape: "subscriptions" });
@@ -726,101 +692,10 @@ export function ExpenseReferenceDataProvider({
     };
   }, [uid, db, goalsAttempt, setGoalsError, shouldListenGoals, goalsSource.mode]);
 
-  const processDueSubscriptions = useCallback(async () => {
-    const database = getFirestoreDb();
-    const listOnScreen = subscriptionsRef.current;
-    if (!uid || !database || isProcessingDueRef.current || listOnScreen.length === 0) {
-      return;
-    }
-
-    isProcessingDueRef.current = true;
-    try {
-      const now = parseLocalDate(todayDateKey(timezone));
-      let list = listOnScreen;
-      // SPENDLY-598 (R4.3a): posting writes charges from these subscriptions.
-      // When they come from the on-device copy: if nothing is due or completed
-      // on the copy, stop (no reads); otherwise re-read them from Firestore,
-      // server-confirmed, and plan on that.
-      if (subscriptionsModeRef.current === "supabase") {
-        const onCopy = planDueSubscriptionPosts(list, now);
-        const completes = list.some((sub) => sub.id && sub.source !== "sms" && evaluateSubscriptionDue(sub, now).isCompleted && !sub.isCompleted);
-        if (!onCopy.length && !completes) return;
-        const fresh = await getDocs(query(collection(database, "users", uid, "subscriptions"), orderBy("name", "asc"), limit(200)));
-        if (fresh.metadata.fromCache) return; // only server data may drive a post (SPENDLY-525)
-        list = fresh.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Subscription, "id">) }));
-      }
-      const plan = planDueSubscriptionPosts(list, now);
-      let skippedNoAccount = 0;
-
-      for (const action of plan) {
-        if (!action.subscriptionId) continue;
-        try {
-          const result = await postDueSubscriptionCharge(uid, action);
-          if (result.status === "skipped_no_account") {
-            skippedNoAccount += 1;
-          }
-        } catch (err) {
-          logError("subscriptions.processingDueSubscriptions", err);
-        }
-      }
-
-      if (skippedNoAccount > 0 && !skippedAccountToastShown.current) {
-        skippedAccountToastShown.current = true;
-        toast.warning(
-          skippedNoAccount === 1
-            ? "A subscription needs an account before it can auto-post"
-            : "Some subscriptions need an account before they can auto-post"
-        );
-      }
-
-      for (const sub of list) {
-        if (!sub.id) continue;
-        if (sub.source === "sms") continue;
-        if (plan.some((a) => a.subscriptionId === sub.id)) continue;
-        const evaluation = evaluateSubscriptionDue(sub, now);
-        if (evaluation.isCompleted && !sub.isCompleted) {
-          const subRef = doc(database, "users", uid, "subscriptions", sub.id);
-          try {
-            await commitWrite(
-              () =>
-                updateDoc(subRef, {
-                  isCompleted: true,
-                  isActive: false,
-                }),
-              { label: "subscription" }
-            );
-            noteDirectWrites(uid, [subRef.path]);
-          } catch (err) {
-            logError("subscriptions.processingDueSubscriptions", err);
-          }
-        }
-      }
-    } catch (err) {
-      logError("subscriptions.processingDueSubscriptions", err);
-    } finally {
-      isProcessingDueRef.current = false;
-    }
-  }, [uid, timezone]);
-
-  useEffect(() => {
-    if (
-      !canAutoPostSubscriptions({
-        loading: subscriptionsLoading,
-        fromCache: subscriptionsFromCache,
-        count: subscriptions.length,
-      })
-    ) {
-      return;
-    }
-    return scheduleIdleWork(() => {
-      void processDueSubscriptions();
-    }, { timeoutMs: 3000, fallbackDelayMs: 1500 });
-  }, [
-    subscriptionsLoading,
-    subscriptionsFromCache,
-    subscriptions.length,
-    processDueSubscriptions,
-  ]);
+  // SPENDLY-739 (epic SPENDLY-735): due subscriptions, EMIs and recurring
+  // transfers are posted by the server's `subscription-daily` job (08:30 IST,
+  // scripts/lib/subscriptionDailyCore.ts), with the same planner, ids, balance
+  // and summary updates. The app no longer posts them on launch.
 
   const value = useMemo<ExpenseReferenceData>(
     () => ({

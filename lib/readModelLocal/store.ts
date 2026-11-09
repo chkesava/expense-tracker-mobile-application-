@@ -92,3 +92,61 @@ export function memoryStoreFactory(): LocalStoreFactory & { dump(): Map<string, 
     },
   };
 }
+
+/**
+ * SPENDLY-745 (epic SPENDLY-735): a store whose `all(table)` is read from the
+ * device storage once per change, not once per screen. Every subscriber of a
+ * table used to re-read the whole table from SQLite/IndexedDB on each change;
+ * now the first read after a change is shared until the table changes again.
+ * Every write to a table (`put`, `remove`, `clear`, `evictOldest`) drops its
+ * cached rows first, so a read never sees older rows than the storage holds.
+ * Callers get a fresh array each time; the rows themselves are not copied, and
+ * nothing in the read path mutates them.
+ */
+export function withReadCache(store: LocalRowStore): LocalRowStore & { readsFromStorage(): number } {
+  const cache = new Map<string, Promise<LocalRow[]>>();
+  let reads = 0;
+  const drop = (table: string) => cache.delete(table);
+  return {
+    get uid() {
+      return store.uid;
+    },
+    async put(table, rows) {
+      drop(table);
+      await store.put(table, rows);
+    },
+    async remove(table, docIds) {
+      drop(table);
+      await store.remove(table, docIds);
+    },
+    async clear(table) {
+      drop(table);
+      await store.clear(table);
+    },
+    async all(table) {
+      let pending = cache.get(table);
+      if (!pending) {
+        reads += 1;
+        pending = store.all(table);
+        cache.set(table, pending);
+        pending.catch(() => {
+          if (cache.get(table) === pending) cache.delete(table);
+        });
+      }
+      return [...(await pending)];
+    },
+    get: (table, docIds) => store.get(table, docIds),
+    count: (table) => store.count(table),
+    async evictOldest(table, keep) {
+      drop(table);
+      return store.evictOldest(table, keep);
+    },
+    getMeta: (key) => store.getMeta(key),
+    setMeta: (key, value) => store.setMeta(key, value),
+    async close() {
+      cache.clear();
+      await store.close();
+    },
+    readsFromStorage: () => reads,
+  };
+}

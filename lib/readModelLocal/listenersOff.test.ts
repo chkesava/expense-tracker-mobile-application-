@@ -27,6 +27,8 @@ const MIGRATED = new Set([
   "calendarReminders", "categories", "categorizationRules", "spaces",
   "groupFunds",
   "notifications",
+  "recurringSuggestions",
+  "serverResults",
 ]);
 
 /** `file:collection` listeners that stay on Firestore on purpose. */

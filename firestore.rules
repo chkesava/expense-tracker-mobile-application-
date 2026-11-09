@@ -1672,6 +1672,21 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // SPENDLY-744 (epic SPENDLY-735): recurring-merchant suggestions are
+      // written only by the server's recurring-weekly job (Admin SDK); the app
+      // reads them. Kept off the catch-all list below.
+      match /recurringSuggestions/{suggestionId} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
+
+      // SPENDLY-747 (epic SPENDLY-735): fee rows and the Journal health report,
+      // computed and written only by the server's insights-daily job.
+      match /serverResults/{resultId} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
+
       // `collection` is only bound inside this match. Helpers declared on
       // `users/{uid}` cannot read it (null → list/create denied). Validated
       // names above must stay off this list: nested matches OR together.

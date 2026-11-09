@@ -37,6 +37,10 @@ const INTEGRATED = [
   "groupFunds",
   // SPENDLY-230: the unified inbox's notification rows.
   "notifications",
+  // SPENDLY-744: the server's recurring-merchant suggestions (display only).
+  "recurringSuggestions",
+  // SPENDLY-747: the server's fee rows and Journal health report (display only).
+  "serverResults",
 ].sort();
 
 const NOT_YET: Record<string, string> = {
@@ -100,25 +104,65 @@ describe("provider read switches (SPENDLY-673)", () => {
   });
 
   // SPENDLY-597 (R4.3a): writers that write from what the screens read.
-  it("the credit card bill pass never writes from the copy: it checks its inputs' modes and verifies on Firestore", () => {
+  // SPENDLY-734: the credit card bill pass left the app; the server reconciler
+  // finds the work on the read model and writes only from Firestore. The app
+  // must not write bills from what it reads at all.
+  it("the app runs no credit card bill pass: no statement, allocation or merge is computed from screen data", () => {
     const text = readFileSync(join(ROOT, "providers", "CreditCardBillsProvider.tsx"), "utf8");
-    expect(text).toMatch(/billPassReadsCopy\(passInputModesRef\.current\)/);
-    expect(text).toMatch(/loadAuthoritativeBillInputs\(firestoreBillReader\(/);
-    for (const c of ["expenses", "accountPayments", "accounts", "accountTypes"]) {
-      expect(text).toContain(`useReadModelMode("${c}")`);
+    for (const banned of [
+      "generateAutoBills",
+      "planBillPass",
+      "collectAutoCreditCardBillDrafts",
+      "collectAutoCreditCardBillRefreshPatches",
+      "collectCreditBillAllocationPatches",
+      "collectCreditBillDuplicateResolutions",
+      "createAutoCreditCardBill",
+    ]) {
+      expect(text, banned).not.toContain(banned);
     }
   });
 
-  it("the account baseline repair confirms on Firestore when accounts come from the copy", () => {
-    const text = readFileSync(join(ROOT, "providers", "FinanceDataProvider.tsx"), "utf8");
-    expect(text).toMatch(/accountsSource\.mode === "supabase"\s*\?\s*getDoc\(doc\(db, "users", uid, "accounts", accountId\)\)/);
+  // SPENDLY-743 (epic SPENDLY-735): the account baseline repair and the
+  // logging streak are written by the server (housekeeping-daily).
+  it("the app writes no baseline repair or logging streak from screen data", () => {
+    const finance = readFileSync(join(ROOT, "providers", "FinanceDataProvider.tsx"), "utf8");
+    expect(finance).not.toMatch(/balanceAsOfDate: null/);
+    const gamification = readFileSync(join(ROOT, "hooks", "useGamification.ts"), "utf8");
+    expect(gamification).not.toMatch(/setDoc\(statsRef/);
+  });
+
+  // SPENDLY-744 (epic SPENDLY-735): recurring-merchant detection runs on the
+  // server (recurring-weekly); the app only queues the stored suggestions.
+  it("the app runs no recurring detection; the suggestions are server-written", () => {
+    const files = ["app", "components", "hooks", "lib", "providers", "services", "shared"].flatMap((dir) => sources(join(ROOT, dir)));
+    for (const file of files) {
+      if (file.endsWith(join("services", "recurring", "recurringDetector.ts"))) continue;
+      expect(readFileSync(file, "utf8"), file).not.toMatch(/detectRecurringPatterns\(/);
+    }
+    const rules = readFileSync(join(ROOT, "firestore.rules"), "utf8");
+    expect(rules).toMatch(/match \/recurringSuggestions\/\{suggestionId\} \{\s*allow read: if isOwner\(uid\);\s*allow write: if false;/);
+  });
+
+  // SPENDLY-747 (epic SPENDLY-735): the fee scan and the ledger audit run on
+  // the server (insights-daily); the app resolves stored rows with its reviews.
+  it("the app runs no full-ledger fee scan or ledger audit; the results are server-written", () => {
+    const files = ["app", "components", "hooks", "lib", "providers", "services"].flatMap((dir) => sources(join(ROOT, dir)));
+    for (const file of files) {
+      expect(readFileSync(file, "utf8"), file).not.toMatch(/(detectFees|classifyFeeRows|runLedgerAudit)\(/);
+    }
+    const rules = readFileSync(join(ROOT, "firestore.rules"), "utf8");
+    expect(rules).toMatch(/match \/serverResults\/\{resultId\} \{\s*allow read: if isOwner\(uid\);\s*allow write: if false;/);
   });
 
   // SPENDLY-598 (R4.3a): more writers that write from what the screens read.
-  it("subscription auto-posting re-plans on server-confirmed Firestore data when the copy serves", () => {
+  // SPENDLY-739 (epic SPENDLY-735): subscription posting left the app; the
+  // server's subscription-daily job plans on Firestore data (R4.3a). The app
+  // must not post charges from what it reads at all.
+  it("the app runs no subscription auto-post: no charge is planned or posted from screen data", () => {
     const text = readFileSync(join(ROOT, "providers", "ExpenseReferenceDataProvider.tsx"), "utf8");
-    expect(text).toMatch(/subscriptionsModeRef\.current === "supabase"/);
-    expect(text).toMatch(/if \(fresh\.metadata\.fromCache\) return;/);
+    for (const banned of ["processDueSubscriptions", "planDueSubscriptionPosts", "postDueSubscriptionCharge", "evaluateSubscriptionDue"]) {
+      expect(text, banned).not.toContain(banned);
+    }
   });
 
   it("watchlist setup confirms on the server that there are no lists before writing", () => {
@@ -127,11 +171,17 @@ describe("provider read switches (SPENDLY-673)", () => {
     expect(text).toMatch(/existing\.metadata\.fromCache/);
   });
 
-  it("the daily portfolio snapshot checks holdings on Firestore when they come from the copy", () => {
-    const text = readFileSync(join(ROOT, "hooks", "usePortfolio.ts"), "utf8");
-    expect(text).toMatch(/holdingsSourceModeRef\.current === "supabase"/);
-    expect(text).toMatch(/holdingsFingerprint\(/);
+  // SPENDLY-741 (epic SPENDLY-735): the daily portfolio snapshot and the
+  // net-worth point are recorded by the server (snapshot-daily) from Firestore.
+  it("the app records no daily snapshots: no portfolio snapshot or net-worth point is written from screen data", () => {
+    for (const file of ["hooks/usePortfolio.ts", "components/portfolio/PortfolioDashboard.tsx", "components/dashboard/NetWorthWidget.tsx", "hooks/useNetWorthSnapshotStatus.ts"]) {
+      const text = readFileSync(join(ROOT, file), "utf8");
+      for (const banned of ["saveDailySnapshot", "recordNetWorthSnapshot", "netWorthSnapshotWrite"]) {
+        expect(text, `${file}: ${banned}`).not.toContain(banned);
+      }
+    }
   });
+
 
   it("EPF hooks read the copy only for a caller that opts in (readFrom: \"copy\")", () => {
     const epf = uses.filter((u) => u.collection.startsWith("epf"));
@@ -159,26 +209,18 @@ describe("provider read switches (SPENDLY-673)", () => {
     for (const file of optIns) expect(readFileSync(join(ROOT, file), "utf8")).not.toMatch(writers);
   });
 
-  // SPENDLY-599 (R4.3a).
-  it("the EPF summary sync compares with the stored summary on Firestore; only display opts into the copy", () => {
+  // SPENDLY-599 (R4.3a); SPENDLY-740: the EPF summary, FY interest and the
+  // contribution catch-up are written by the server's epf-daily job. The app
+  // only reads them; no EPF background writer may come back.
+  it("the EPF screens write no derived EPF data; only display opts into the copy", () => {
     const summaries = readFileSync(join(ROOT, "hooks", "useDomainSummaries.ts"), "utf8");
     expect(summaries).toContain('useReadModelSource("financialSummaries", { copy: options?.readFrom === "copy" })');
-    const sync = readFileSync(join(ROOT, "hooks", "useEpfSummarySync.ts"), "utf8");
-    expect(sync).toMatch(/useEpfSummary\(\)/);
-  });
-
-  it("the net-worth point confirms its history and inputs on Firestore when any comes from the copy", () => {
-    const recorder = readFileSync(join(ROOT, "hooks", "useNetWorthSnapshotRecorder.ts"), "utf8");
-    expect(recorder).toMatch(/if \(snapshotReadsCopy\(modesRef\.current\)\) \{\s*const verdict = await confirmSnapshotOnFirestore\(/);
-    expect(recorder).toMatch(/useReadModelModes\(NET_WORTH_SNAPSHOT_COLLECTIONS\)/);
-    const verify = readFileSync(join(ROOT, "services", "netWorth", "netWorthSnapshotVerify.ts"), "utf8");
-    // Every source of composeNetWorth's totals (the ledger only raises a non-blocking flag).
-    for (const c of ["accounts", "accountTypes", "investments", "holdings", "investmentCashTransactions", "borrowings", "borrowingRepayments", "receivables", "receivableRepayments"]) {
-      expect(verify).toContain(`{ collection: "${c}" }`);
+    for (const file of ["components/epf/EpfDashboard.tsx", "components/epf/EpfBalanceTab.tsx", "hooks/useEpfLedger.ts", "hooks/useEpfInterest.ts", "hooks/useEpfContributions.ts"]) {
+      const text = readFileSync(join(ROOT, file), "utf8");
+      for (const banned of ["recomputeInterest", "repairCreditWindows", "repairLifecycleStates", "useEpfCatchUp", "useEpfSummarySync", "planScheduledContributions"]) {
+        expect(text, `${file}: ${banned}`).not.toContain(banned);
+      }
     }
-    expect(verify).toContain('{ collection: "financialSummaries", docId: "epf" }');
-    expect(verify).toMatch(/if \(one\.metadata\.fromCache\) return null;/);
-    expect(verify).toMatch(/all\.metadata\.fromCache \? null/);
   });
 
   it("goal writes are built from Firestore's goals when the copy serves them", () => {

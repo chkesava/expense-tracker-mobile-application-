@@ -196,7 +196,7 @@ export function ReconcileStatementModal({
   // SPENDLY-553: confirmation text is masked in ghost mode, like every amount.
   const money = useGhostMoney(currency);
   const scopeVars = useSpendlyScopeVars();
-  const { bills, updateBill, requestBillPass } = useCreditCardBills();
+  const { bills, updateBill } = useCreditCardBills();
 
   const [pasteText, setPasteText] = useState("");
   const [lines, setLines] = useState<StatementLine[]>([]);
@@ -537,8 +537,8 @@ export function ReconcileStatementModal({
                     providerRef: merchant,
                     source: "statement",
                   });
-                  // SPENDLY-719: cashback settles statements; update the stored bills now.
-                  requestBillPass();
+                  // SPENDLY-719/737: cashback settles statements; the save queues the
+                  // server's bill-daily run through the read model.
                 } catch (error) {
                   logError("reconcileStatement.recordCashback", error);
                   toast.error(

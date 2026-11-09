@@ -2,6 +2,8 @@
 
 Sub-task of SPENDLY-682 ([plan](SPENDLY-682-plan.md), [tracker](SPENDLY-682-legacy-crons.md)). Branch `feature/SPENDLY-727-bill-daily-job`. Builds on SPENDLY-725.
 
+> **Widened by SPENDLY-734 (epic SPENDLY-735):** besides closing cards, the job settles every card whose bill work the Supabase read model shows (found with no Firestore reads, then read and written from Firestore). The app no longer runs a bill pass. See [SPENDLY-734](SPENDLY-734-bills-server-only.md).
+
 ## Why
 The legacy site's `credit-card-bills` cron:
 - sums raw expenses only (no cashback, refunds or transfers);

@@ -1,10 +1,8 @@
+import { increment, serverTimestamp } from "@/lib/firestore";
 import type { MutationOp } from "@/shared/types/mutations";
-import { buildAccountBalanceOps } from "@/shared/utils/balanceMutations";
 import { todayDateKey } from "@/shared/utils/dates";
-import {
-  baselineAwareBalanceDeltas,
-  type BalanceLeg,
-} from "@/shared/utils/ledgerAccountDeltas";
+import { journalBalanceOpsWith } from "@/shared/utils/journalBalanceOpsCore";
+import type { BalanceLeg } from "@/shared/utils/ledgerAccountDeltas";
 
 import type { AccountInfo } from "./fetchAccountTypes";
 
@@ -15,6 +13,8 @@ import type { AccountInfo } from "./fetchAccountTypes";
  *
  * Bank legs dated before the account's `balanceAsOfDate` are dropped, as a
  * full rebuild drops them; card legs move `currentOutstanding` as before.
+ * SPENDLY-739: the logic is `journalBalanceOpsWith` (shared, no client
+ * import), which the server's daily jobs use too.
  */
 export function journalBalanceOps(
   owner: string,
@@ -22,28 +22,5 @@ export function journalBalanceOps(
   info: Map<string, AccountInfo>,
   today: string = todayDateKey()
 ): MutationOp[] {
-  const deltas = baselineAwareBalanceDeltas(
-    legs,
-    (accountId) => {
-      const account = info.get(accountId);
-      return account
-        ? { isCreditCard: account.isCreditCard, balanceAsOfDate: account.balanceAsOfDate }
-        : undefined;
-    },
-    today
-  );
-  return buildAccountBalanceOps(
-    owner,
-    deltas.map((d) => {
-      const account = info.get(d.accountId);
-      return {
-        accountId: d.accountId,
-        amountDelta: d.amountDelta,
-        isCreditCard: d.isCreditCard ?? account?.isCreditCard ?? false,
-        oldBalance: account?.oldBalance,
-        oldOutstanding: account?.oldOutstanding,
-        needsInitialization: account?.needsInitialization,
-      };
-    })
-  );
+  return journalBalanceOpsWith({ increment, serverTimestamp }, owner, legs, info, today);
 }

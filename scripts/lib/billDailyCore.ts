@@ -23,6 +23,11 @@
  * - Adds the "statement created" inbox notice (deterministic id) for a
  *   statement that closed today or yesterday, as the legacy cron did.
  * - Duress trees are skipped; erased accounts have no cards to find.
+ * - SPENDLY-734 (epic SPENDLY-735: the app computes no bill pass): also every
+ *   card whose work the **read model** shows (`findBillWorkOnReadModel`): a
+ *   payment or cashback recorded after the close, a stale stored settlement.
+ *   Finding it costs no Firestore reads; the card is then read and written
+ *   from Firestore exactly like a closing card (R4.3a: never from the copy).
  */
 
 import type { CreditCardBill } from "../../shared/types/creditCardBill";
@@ -54,11 +59,27 @@ import type { ReadBudget } from "./pushRunCore";
 export const DEFAULT_TIME_ZONE = "Asia/Kolkata";
 
 export type StoredBill = { bill: CreditCardBill; updateTime: unknown };
+
+const NUMERIC_BILL_FIELDS = ["statementAmount", "minimumDueAmount", "amountPaid", "remainingAmount"] as const;
+
+/**
+ * A bill as stored (numbers normalised), from Firestore or its read-model
+ * copy. Not `parseStoredBill`: its recomputed status would hide a stale
+ * stored one.
+ */
+export function storedBillFromDoc(id: string, data: Record<string, unknown>): CreditCardBill {
+  const bill = { ...data, id } as Record<string, unknown>;
+  for (const f of NUMERIC_BILL_FIELDS) if (bill[f] != null) bill[f] = Number(bill[f]) || 0;
+  if (!Array.isArray(bill.paymentIds)) bill.paymentIds = [];
+  return bill as unknown as CreditCardBill;
+}
 export type UserBillSettings = { timezone?: string; currency?: string; remindersEnabled?: boolean };
 
 export type BillDailyPorts = {
   /** Every account across users, with its owner. One collection-group read. */
   listAccounts(): Promise<Array<{ uid: string; account: Account }>>;
+  /** SPENDLY-737 (queue mode): only these users' accounts, one collection read each. */
+  listAccountsFor?(uids: readonly string[]): Promise<Array<{ uid: string; account: Account }>>;
   accountTypes(uid: string): Promise<AccountType[]>;
   settings(uid: string): Promise<UserBillSettings>;
   /** One card's inputs: its expenses, the payments into it, and its bills. */
@@ -230,6 +251,70 @@ export function cardBillWrites(
   return writes;
 }
 
+/**
+ * SPENDLY-734 — the read model's copy of the users' card data, for finding
+ * bill work without Firestore reads. Only ever read; nothing is written from it.
+ */
+export type ReadModelBillSource = {
+  /** Every user with accounts in the read model, with their accounts and account types. */
+  users(): Promise<Array<{ uid: string; accounts: Account[]; accountTypes: AccountType[] }>>;
+  settings(uid: string): Promise<UserBillSettings>;
+  cardInputs(uid: string, cardId: string): Promise<{ expenses: Expense[]; payments: AccountPayment[]; bills: StoredBill[] }>;
+};
+
+export type ReadModelBillWork = {
+  /** uid → card ids whose bills the app's pass would change, per the copy. */
+  cards: Map<string, Set<string>>;
+  usersSeen: number;
+  failures: number;
+};
+
+/**
+ * Runs the app's bill pass (`planCardBills`) on the read model's copy of every
+ * credit card and returns the cards it would change. A card can be named
+ * wrongly when the copy lags; the job then reads it from Firestore, finds
+ * nothing and counts `readModelDisagreed`. Never logs a uid.
+ */
+export async function findBillWorkOnReadModel(
+  source: ReadModelBillSource,
+  now: Date,
+  options: { onlyUids?: ReadonlySet<string> } = {}
+): Promise<ReadModelBillWork> {
+  const work: ReadModelBillWork = { cards: new Map(), usersSeen: 0, failures: 0 };
+  for (const { uid, accounts, accountTypes } of await source.users()) {
+    if (!uid || isDuressUid(uid)) continue;
+    if (options.onlyUids && !options.onlyUids.has(uid)) continue;
+    const typeNameById = new Map(accountTypes.map((t) => [t.id, t.name]));
+    const cards = accounts.filter((a) => a.id && getAccountKind(typeNameById.get(a.typeId) || "") === "credit");
+    if (!cards.length) continue;
+    work.usersSeen += 1;
+    try {
+      const settings = await source.settings(uid);
+      const timezone = settings.timezone || DEFAULT_TIME_ZONE;
+      if (!isValidTimeZone(timezone)) continue;
+      const today = formatDateKey(now, timezone);
+      for (const card of cards) {
+        const { expenses, payments, bills } = await source.cardInputs(uid, card.id as string);
+        const plan = planCardBills({
+          card,
+          typeNameById,
+          expenses,
+          payments,
+          stored: bills,
+          today,
+          timezone,
+          currency: settings.currency || "INR",
+          remindersEnabled: settings.remindersEnabled ?? true,
+        });
+        if (plan.targets.length) work.cards.set(uid, (work.cards.get(uid) ?? new Set()).add(card.id as string));
+      }
+    } catch {
+      work.failures += 1;
+    }
+  }
+  return work;
+}
+
 export async function runBillDaily(opts: {
   ports: BillDailyPorts;
   now: Date;
@@ -237,10 +322,27 @@ export async function runBillDaily(opts: {
   budget: ReadBudget;
   push: JobPush | null;
   log: (line: string) => void;
+  /** SPENDLY-734: cards with work found on the read model; they join the closing cards. */
+  readModel?: ReadModelBillWork | null;
+  /** SPENDLY-737 (queue mode): only these users; their accounts come from `listAccountsFor`. */
+  onlyUids?: readonly string[];
+  /** Accumulate into this summary (queue mode runs several rounds). */
+  summary?: DailyJobSummary;
 }): Promise<DailyJobSummary> {
   const { ports, now, budget } = opts;
-  const summary = newJobSummary("bill-daily", opts.dryRun);
-  const all = await ports.listAccounts();
+  const summary = opts.summary ?? newJobSummary("bill-daily", opts.dryRun);
+  if (opts.readModel) {
+    bump(summary, "readModelUsers", opts.readModel.usersSeen);
+    bump(summary, "readModelCards", [...opts.readModel.cards.values()].reduce((n, c) => n + c.size, 0));
+    if (opts.readModel.failures) bump(summary, "readModelFailures", opts.readModel.failures);
+  }
+  let all: Array<{ uid: string; account: Account }>;
+  if (opts.onlyUids) {
+    if (!ports.listAccountsFor) throw new Error("bill-daily: queue mode needs listAccountsFor");
+    all = opts.onlyUids.length ? await ports.listAccountsFor(opts.onlyUids) : [];
+  } else {
+    all = await ports.listAccounts();
+  }
   const byUser = new Map<string, Account[]>();
   for (const { uid, account } of all) byUser.set(uid, [...(byUser.get(uid) ?? []), account]);
 
@@ -253,9 +355,12 @@ export async function runBillDaily(opts: {
     }
     // Cheap first filter on the bill day alone (any zone is within a day of UTC).
     const utcToday = formatDateKey(now, "UTC");
+    const hinted = opts.readModel?.cards.get(uid) ?? new Set<string>();
     const maybe = accounts.filter(
-      (a) => normalizeBillGenerationDay(a.billGenerationDay) != null &&
-        [shiftDateKey(utcToday, -1), utcToday, shiftDateKey(utcToday, 1)].some((d) => cardClosedRecently(a, d))
+      (a) =>
+        (!!a.id && hinted.has(a.id)) ||
+        (normalizeBillGenerationDay(a.billGenerationDay) != null &&
+          [shiftDateKey(utcToday, -1), utcToday, shiftDateKey(utcToday, 1)].some((d) => cardClosedRecently(a, d)))
     );
     if (!maybe.length) continue;
 
@@ -277,8 +382,9 @@ export async function runBillDaily(opts: {
     for (const card of cards) {
       if (budget.exhausted()) break;
       const closed = cardClosedRecently(card, today);
-      if (!closed || !card.id) continue;
-      bump(summary, "cardsClosing");
+      const fromReadModel = !!card.id && hinted.has(card.id);
+      if ((!closed && !fromReadModel) || !card.id) continue;
+      bump(summary, closed ? "cardsClosing" : "cardsFromReadModel");
       const { expenses, payments, bills } = await ports.cardInputs(uid, card.id);
       const plan = planCardBills({
         card,
@@ -293,6 +399,8 @@ export async function runBillDaily(opts: {
       });
       if (!plan.targets.length) {
         bump(summary, "cardsUpToDate");
+        // The copy named this card, Firestore has nothing to change: the copy lags.
+        if (!closed) bump(summary, "readModelDisagreed");
         continue;
       }
       const yesterday = shiftDateKey(today, -1);
@@ -305,6 +413,67 @@ export async function runBillDaily(opts: {
       }
       if (result.status === "conflict") bump(summary, "conflicts");
     }
+  }
+  return summary;
+}
+
+/**
+ * SPENDLY-737 — the users the read model queued after an app save to a bill
+ * input (supabase-readmodel migration 20261112000000: the trigger queues the
+ * owner and asks GitHub to run this job with `trigger: queue`). Never logged.
+ */
+export type BillRunQueue = {
+  pending(): Promise<Array<{ uid: string; requestedAt: string }>>;
+  /** Clears the user's request unless a newer save re-queued it meanwhile. */
+  done(uid: string, requestedAt: string): Promise<void>;
+};
+
+export const BILL_QUEUE_MAX_ROUNDS = 3;
+
+/**
+ * Queue mode: settles the queued users only. Each round reads the queue, finds
+ * the work for those users on the read model, runs the bill pass for their
+ * cards (closing or named) from Firestore, then clears the requests it
+ * served. A save during the run re-queues its user (newer `requestedAt`), so
+ * the next round, or the next dispatch, takes it. A dry run reads only.
+ */
+export async function runBillQueue(opts: {
+  queue: BillRunQueue;
+  ports: BillDailyPorts;
+  readModel: ReadModelBillSource;
+  now: Date;
+  dryRun: boolean;
+  budget: ReadBudget;
+  push: JobPush | null;
+  log: (line: string) => void;
+  maxRounds?: number;
+}): Promise<DailyJobSummary> {
+  const summary = newJobSummary("bill-daily", opts.dryRun);
+  const rounds = opts.dryRun ? 1 : opts.maxRounds ?? BILL_QUEUE_MAX_ROUNDS;
+  for (let round = 0; round < rounds; round += 1) {
+    if (opts.budget.exhausted()) break;
+    const pending = await opts.queue.pending();
+    if (!pending.length) break;
+    bump(summary, "queueRounds");
+    const live = pending.filter((p) => p.uid && !isDuressUid(p.uid));
+    bump(summary, "queueUsers", live.length);
+    const onlyUids = live.map((p) => p.uid);
+    const work = await findBillWorkOnReadModel(opts.readModel, opts.now, { onlyUids: new Set(onlyUids) });
+    await runBillDaily({
+      ports: opts.ports,
+      now: opts.now,
+      dryRun: opts.dryRun,
+      budget: opts.budget,
+      push: opts.push,
+      log: opts.log,
+      readModel: work,
+      onlyUids,
+      summary,
+    });
+    if (opts.dryRun) break;
+    // Out of budget mid-round: keep every request; the next run serves them (idempotent).
+    if (opts.budget.exhausted()) break;
+    for (const p of pending) await opts.queue.done(p.uid, p.requestedAt);
   }
   return summary;
 }

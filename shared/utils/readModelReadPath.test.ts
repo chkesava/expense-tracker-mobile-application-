@@ -11,7 +11,7 @@ describe("read-model mode (SPENDLY-511)", () => {
     expect(configuredReadModelMode(undefined, "journal")).toBe("firestore");
     expect(configuredReadModelMode({}, "journal")).toBe("firestore");
     expect(configuredReadModelMode({ journal: "supabase" }, "journal")).toBe("supabase");
-    expect(configuredReadModelMode({ journal: "shadow" }, "journal")).toBe("shadow");
+    expect(configuredReadModelMode({ journal: "shadow", deviceShadow: true }, "journal")).toBe("shadow");
     expect(configuredReadModelMode({ journal: "SUPABASE" }, "journal")).toBe("firestore");
     expect(configuredReadModelMode({ journal: true }, "journal")).toBe("firestore");
     expect(configuredReadModelMode("supabase", "journal")).toBe("firestore");
@@ -99,7 +99,7 @@ describe("read-model freshness (SPENDLY-511)", () => {
 
 describe("Phase 3 screens (SPENDLY-513)", () => {
   it("each screen reads its own key and defaults to firestore", () => {
-    const setting = { journal: "supabase", insights: "shadow", cashFlow: "supabase", audit: "bogus" };
+    const setting = { journal: "supabase", insights: "shadow", cashFlow: "supabase", audit: "bogus", deviceShadow: true };
     expect(configuredReadModelMode(setting, "insights")).toBe("shadow");
     expect(configuredReadModelMode(setting, "cashFlow")).toBe("supabase");
     expect(configuredReadModelMode(setting, "audit")).toBe("firestore");

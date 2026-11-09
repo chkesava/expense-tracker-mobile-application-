@@ -166,3 +166,66 @@ export function isBillSnoozed(bill: Pick<CreditCardBill, "nextReminderAt">, toda
   const until = typeof bill.nextReminderAt === "string" ? bill.nextReminderAt.slice(0, 10) : "";
   return /^\d{4}-\d{2}-\d{2}$/.test(until) && until > today;
 }
+
+/**
+ * SPENDLY-738 (epic SPENDLY-735) — everything the local bill-reminder plan
+ * depends on, as one string. The provider re-plans (cancel + schedule native
+ * notifications) only when this changes, not on every app focus.
+ *
+ * It holds each bill's reminder fields and the card's name and last 4 (the
+ * notification text). It does NOT hold the account's balances, so a new
+ * expense doesn't re-plan every reminder. `today` makes it change once a day.
+ */
+export function billReminderPlanKey(input: {
+  uid: string;
+  mode: "local" | "push";
+  granted: boolean;
+  today: string;
+  timezone?: string;
+  showAmounts?: boolean;
+  globalPrefs: CreditCardBillRemindersSettings;
+  bills: readonly Pick<
+    CreditCardBill,
+    | "id"
+    | "accountId"
+    | "status"
+    | "dueDate"
+    | "remainingAmount"
+    | "currency"
+    | "reminderEnabled"
+    | "reminderFrequency"
+    | "nextReminderAt"
+  >[];
+  accountsById: ReadonlyMap<string, { name?: string; accountNumber?: string }>;
+}): string {
+  // Push mode: the plan is "no local reminders", whatever the bills say.
+  if (input.mode === "push") return JSON.stringify({ uid: input.uid, mode: "push" });
+  const digits = (n?: string) => (n ?? "").replace(/\D/g, "").slice(-4);
+  return JSON.stringify({
+    uid: input.uid,
+    mode: input.mode,
+    granted: input.granted,
+    today: input.today,
+    timezone: input.timezone ?? null,
+    showAmounts: !!input.showAmounts,
+    prefs: input.globalPrefs,
+    bills: [...input.bills]
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      .map((b) => {
+        const account = input.accountsById.get(b.accountId);
+        return [
+          b.id,
+          b.accountId,
+          b.status,
+          b.dueDate,
+          b.remainingAmount,
+          b.currency ?? null,
+          b.reminderEnabled ?? null,
+          b.reminderFrequency ?? null,
+          b.nextReminderAt ?? null,
+          account?.name ?? null,
+          digits(account?.accountNumber),
+        ];
+      }),
+  });
+}

@@ -6,19 +6,9 @@ import {
   type DocumentSnapshot,
   type Firestore,
 } from "@/lib/firestore";
-import { isCreditCardAccount } from "@/shared/utils/accountKind";
+import { accountInfoFromData, type JournalAccountInfo } from "@/shared/utils/journalBalanceOpsCore";
 
-export type AccountInfo = {
-  isCreditCard: boolean;
-  oldBalance: number;
-  oldOutstanding: number;
-  /** SPENDLY-436: true when `balanceInitialized` was missing on the account. */
-  needsInitialization: boolean;
-  /** SPENDLY-496: false when no account doc was found (e.g. it was deleted). */
-  exists: boolean;
-  /** SPENDLY-496: the account's baseline; earlier rows sit inside the opening balance. */
-  balanceAsOfDate: string | null;
-};
+export type AccountInfo = JournalAccountInfo;
 
 /**
  * One account doc, cache first (SPENDLY-491). The accounts collection has a
@@ -76,31 +66,8 @@ export async function docAlreadyWritten(ref: DocumentReference): Promise<boolean
 }
 
 export function accountInfoFromSnap(snap: DocumentSnapshot, typeName?: string | null): AccountInfo {
-  if (!snap.exists()) {
-    return {
-      isCreditCard: false,
-      oldBalance: 0,
-      oldOutstanding: 0,
-      needsInitialization: false,
-      exists: false,
-      balanceAsOfDate: null,
-    };
-  }
-  const data = snap.data();
-  // SPENDLY-497: the same rule the screens use (the account type's name).
-  const isCreditCard = isCreditCardAccount({ typeName, accountTypeId: data.accountTypeId });
-  // SPENDLY-436: a missing `balanceInitialized` means currentBalance was
-  // never seeded — reading it as `?? 0` here would silently drop
-  // openingBalance the moment this edit/delete/restore applies.
-  const needsInitialization = data.balanceInitialized !== true;
-  return {
-    isCreditCard,
-    oldBalance: needsInitialization ? (data.openingBalance ?? 0) : (data.currentBalance ?? 0),
-    oldOutstanding: data.currentOutstanding ?? 0,
-    needsInitialization,
-    exists: true,
-    balanceAsOfDate: typeof data.balanceAsOfDate === "string" ? data.balanceAsOfDate : null,
-  };
+  // SPENDLY-739: one parser for the app and the server (accountInfoFromData).
+  return accountInfoFromData(snap.exists() ? (snap.data() as Record<string, unknown>) : null, typeName);
 }
 
 export async function fetchAccountTypes(

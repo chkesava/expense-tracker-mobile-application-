@@ -18,7 +18,7 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications', 'recurring_suggestions', 'server_results',
     'sync_runs', 'sync_status', 'sync_checkpoints', 'sync_failures'
   ]) as t
   where not exists (select 1 from pg_tables where schemaname = 'public' and tablename = t);
@@ -67,7 +67,7 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications', 'sync_status',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications', 'recurring_suggestions', 'server_results', 'sync_status',
           'v_active_expenses', 'v_active_incomes', 'v_cash_flow_by_month'
         )
       ))
@@ -113,7 +113,7 @@ begin
     raise exception 'unexpected policies: %', bad;
   end if;
   select count(*) into n from pg_policies where schemaname = 'public';
-  if n <> 58 then  -- 10 Wave 1 + sync_status + SPENDLY-609 goals (2) + SPENDLY-589 Wave 2 (5) + SPENDLY-590 Wave 3 (14) + SPENDLY-591 (21) + SPENDLY-592 (1) + SPENDLY-685 group funds (2) + SPENDLY-224 devices (1) + SPENDLY-230 notifications (1)
+  if n <> 60 then  -- 10 Wave 1 + sync_status + SPENDLY-609 goals (2) + SPENDLY-589 Wave 2 (5) + SPENDLY-590 Wave 3 (14) + SPENDLY-591 (21) + SPENDLY-592 (1) + SPENDLY-685 group funds (2) + SPENDLY-224 devices (1) + SPENDLY-230 notifications (1) + SPENDLY-744 recurring suggestions (1) + SPENDLY-747 server results (1)
     raise exception 'expected 58 owner-read policies, found %', n;
   end if;
   if exists (
@@ -169,7 +169,7 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications'
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications', 'recurring_suggestions', 'server_results'
   ]) as t
   where (
     select count(*) from information_schema.columns c
@@ -243,7 +243,7 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications'
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications', 'recurring_suggestions', 'server_results'
   ]) as t
   where (
     select count(*) from information_schema.columns c
@@ -313,6 +313,51 @@ begin
   end if;
   if (select count(*) from jsonb_object_keys(c)) <> 3 then
     raise exception 'readmodel_capacity returns exactly db_bytes, realtime_messages_24h, largest_tables: %', c;
+  end if;
+end
+$$;
+
+-- 11. SPENDLY-737: the bill-run queue is server-only. No client grants or
+--     policies on its tables; its functions are definers with an empty
+--     search_path that no client role can execute; every bill input carries
+--     both queue triggers.
+do $$
+declare
+  fn regprocedure;
+  t text;
+  missing text;
+begin
+  foreach t in array array['server_run_queue', 'server_run_dispatches'] loop
+    if has_table_privilege('authenticated', 'public.' || t, 'select')
+       or has_table_privilege('anon', 'public.' || t, 'select')
+       or has_table_privilege('authenticated', 'public.' || t, 'insert')
+       or has_table_privilege('authenticated', 'public.' || t, 'delete') then
+      raise exception '% must be server-only', t;
+    end if;
+    if exists (select 1 from pg_policies where schemaname = 'public' and tablename = t) then
+      raise exception '% must have no policies', t;
+    end if;
+  end loop;
+  foreach fn in array array[
+    'public.server_run_dispatch(text)'::regprocedure,
+    'public.server_run_note_bill_inputs()'::regprocedure,
+    'public.server_run_forget_purged()'::regprocedure
+  ] loop
+    if not (select p.prosecdef and p.proconfig @> array['search_path=""'] from pg_proc p where p.oid = fn) then
+      raise exception '% must be security definer with an empty search_path', fn;
+    end if;
+    if has_function_privilege('authenticated', fn, 'execute') or has_function_privilege('anon', fn, 'execute') then
+      raise exception '% must not be executable by client roles', fn;
+    end if;
+  end loop;
+  select string_agg(x, ', ') into missing
+  from unnest(array['expenses', 'account_payments', 'credit_card_bills', 'accounts']) as x
+  where (
+    select count(*) from pg_trigger g join pg_class c on c.oid = g.tgrelid
+    where c.relname = x and g.tgname in (x || '_bill_run_ins', x || '_bill_run_upd') and not g.tgisinternal
+  ) <> 2;
+  if missing is not null then
+    raise exception 'bill inputs without both bill-run triggers: %', missing;
   end if;
 end
 $$;

@@ -14,7 +14,6 @@ import {
   applyPostPlanToSubscriptions,
   subscriptionChargeDocId,
   subscriptionsToUpcomingDues,
-  canAutoPostSubscriptions,
 } from "./subscriptionProcessor";
 
 describe("subscriptionProcessor utilities", () => {
@@ -618,14 +617,3 @@ describe("SPENDLY-158 — overdue recurring items", () => {
 
 // SPENDLY-525: a cache-only snapshot can carry a stale account and a stale
 // lastProcessed; posting from it moved an already-posted charge.
-describe("canAutoPostSubscriptions", () => {
-  it("posts only from a loaded, server-confirmed, non-empty snapshot", () => {
-    expect(canAutoPostSubscriptions({ loading: false, fromCache: false, count: 3 })).toBe(true);
-  });
-
-  it("waits while the snapshot is cache-only, loading or empty", () => {
-    expect(canAutoPostSubscriptions({ loading: false, fromCache: true, count: 3 })).toBe(false);
-    expect(canAutoPostSubscriptions({ loading: true, fromCache: false, count: 3 })).toBe(false);
-    expect(canAutoPostSubscriptions({ loading: false, fromCache: false, count: 0 })).toBe(false);
-  });
-});
