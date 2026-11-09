@@ -940,6 +940,21 @@ export const READ_MODEL_TABLES: TableSpec[] = [
       f("created_at", "createdAt", "timestamp"),
       f("updated_at", "updatedAt", "timestamp"),
     ],
+  },  // SPENDLY-744 (migration 20261113000000): recurring-merchant suggestions,
+  // written only by the server's recurring-weekly job; the app reads them
+  // into its review queue. Never on rm_client_apply's allowlist.
+  {
+    table: "recurring_suggestions",
+    collection: "recurringSuggestions",
+    fields: [
+      f("merchant", "merchant", "text"),
+      f("amount", "amount", "money"),
+      f("category", "category", "text"),
+      f("frequency", "frequency", "text"),
+      f("occurrences", "occurrences", "integer"),
+      f("created_at", "createdAt", "timestamp"),
+      f("updated_at", "updatedAt", "timestamp"),
+    ],
   },
 ];
 

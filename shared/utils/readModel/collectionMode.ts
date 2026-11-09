@@ -42,6 +42,8 @@ export const SWITCHED_COLLECTIONS: readonly string[] = [
   "groupFunds",
   // SPENDLY-230: the unified inbox's notification rows.
   "notifications",
+  // SPENDLY-744: the server's recurring-merchant suggestions (display only).
+  "recurringSuggestions",
 ];
 
 export function configuredCollectionMode(readModelSetting: unknown, collection: string): CollectionMode {
