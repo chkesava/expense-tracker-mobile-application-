@@ -3,7 +3,22 @@ import { describe, expect, it, vi } from "vitest";
 import type { CreditCardBill } from "@/shared/types/creditCardBill";
 import { computeRemainingAmount } from "@/shared/utils/creditCardBillStatus";
 
-import { billPassFingerprint, billPassHasWork, billPassReadsCopy, loadAuthoritativeBillInputs, toCreditCardBill, type AuthoritativeReader, type BillPassInputs } from "./billPass";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import {
+  BILL_PASS_FIRESTORE_MIN_INTERVAL_MS,
+  billPassFingerprint,
+  billPassHasWork,
+  billPassInputPlan,
+  billPassListenersReady,
+  billPassReadsCopy,
+  billPassThrottled,
+  loadAuthoritativeBillInputs,
+  toCreditCardBill,
+  type AuthoritativeReader,
+  type BillPassInputs,
+} from "./billPass";
 
 const TODAY = "2026-11-04";
 const derived = (bill: CreditCardBill) => ({ status: bill.status, remainingAmount: computeRemainingAmount(bill.statementAmount, bill.amountPaid) });
@@ -122,5 +137,82 @@ describe("the bill pass retries a stale stored settlement (SPENDLY-719)", () => 
     const a = billPassFingerprint({ ...base, bills: [bill(268.71, "PARTIALLY_PAID"), { ...bill(0, "UPCOMING"), id: "other" }] });
     const b = billPassFingerprint({ ...base, bills: [{ ...bill(0, "UPCOMING"), id: "other" }, bill(268.71, "PARTIALLY_PAID")] });
     expect(a).toBe(b);
+  });
+});
+
+describe("the bill pass runs on a staged ledger, from Firestore (SPENDLY-732)", () => {
+  it("a staged expenses page (300+ rows, never complete since SPENDLY-409) reads Firestore instead of skipping", () => {
+    expect(billPassInputPlan({ readsCopy: false, ledgerComplete: false })).toBe("firestore");
+    expect(billPassInputPlan({ readsCopy: true, ledgerComplete: false })).toBe("firestore");
+  });
+
+  it("a whole ledger keeps the existing paths: screen data, or the copy's work check first (SPENDLY-597)", () => {
+    expect(billPassInputPlan({ readsCopy: false, ledgerComplete: true })).toBe("screen");
+    expect(billPassInputPlan({ readsCopy: true, ledgerComplete: true })).toBe("checkScreenThenFirestore");
+  });
+
+  it("starts once the listeners delivered, without waiting for the whole ledger", () => {
+    expect(billPassListenersReady({ billsLoading: false, expensesLoading: false, paymentsLoading: false })).toBe(true);
+    expect(billPassListenersReady({ billsLoading: true, expensesLoading: false, paymentsLoading: false })).toBe(false);
+    expect(billPassListenersReady({ billsLoading: false, expensesLoading: true, paymentsLoading: false })).toBe(false);
+    expect(billPassListenersReady({ billsLoading: false, expensesLoading: false, paymentsLoading: true })).toBe(false);
+  });
+
+  it("throttles only background triggers of a Firestore pass", () => {
+    const now = 10 * BILL_PASS_FIRESTORE_MIN_INTERVAL_MS;
+    const recent = now - 60_000;
+    const old = now - BILL_PASS_FIRESTORE_MIN_INTERVAL_MS;
+    expect(billPassThrottled({ plan: "firestore", trigger: "background", lastFirestorePassAt: recent, now })).toBe(true);
+    expect(billPassThrottled({ plan: "firestore", trigger: "background", lastFirestorePassAt: old, now })).toBe(false);
+    expect(billPassThrottled({ plan: "firestore", trigger: "background", lastFirestorePassAt: null, now })).toBe(false);
+    // The session's first pass and passes after a money action always run.
+    expect(billPassThrottled({ plan: "firestore", trigger: "initial", lastFirestorePassAt: recent, now })).toBe(false);
+    expect(billPassThrottled({ plan: "firestore", trigger: "requested", lastFirestorePassAt: recent, now })).toBe(false);
+    // Screen-data passes cost no reads: never throttled.
+    expect(billPassThrottled({ plan: "screen", trigger: "background", lastFirestorePassAt: recent, now })).toBe(false);
+  });
+
+  it("the reported Roar bill heals on Firestore inputs although the screen holds only the staged page", async () => {
+    // Firestore: the whole card ledger (both cycle expenses, cash payment + cashback, the cash-only stamp).
+    const docs: Record<string, { id: string; data: Record<string, unknown> }[]> = {
+      accounts: [{ id: "card", data: { name: "Roar", typeId: "t-card", billGenerationDay: 1, creditLimit: 35000 } }],
+      accountTypes: [{ id: "t-card", data: { name: "Credit Card" } }],
+      accountPayments: [
+        { id: "pay-hdfc", data: { fromAccountId: "bank", toAccountId: "card", amount: 268.71, date: "2026-11-02" } },
+        { id: "cb-roar", data: { fromAccountId: "cashback", toAccountId: "card", amount: 236.29, date: "2026-10-20", sourceType: "cashback" } },
+      ],
+      creditCardBills: [
+        billDoc("roar-nov", {
+          statementDate: "2026-11-01",
+          billingPeriodStart: "2026-10-02",
+          billingPeriodEnd: "2026-11-01",
+          dueDate: "2026-11-06",
+          statementAmount: 505,
+          amountPaid: 268.71,
+          paymentIds: ["pay-hdfc"],
+          status: "PARTIALLY_PAID",
+          remainingAmount: 236.29,
+        }),
+      ],
+    };
+    const cardExpenses = [
+      { id: "e1", data: { accountId: "card", amount: 300, date: "2026-10-10", month: "2026-10", category: "Food" } },
+      { id: "e2", data: { accountId: "card", amount: 205, date: "2026-10-25", month: "2026-10", category: "Food" } },
+    ];
+    const read: AuthoritativeReader = {
+      all: async (c) => docs[c] ?? [],
+      where: async (_c, _f, value) => cardExpenses.filter((e) => e.data.accountId === value),
+    };
+    expect(billPassInputPlan({ readsCopy: false, ledgerComplete: false })).toBe("firestore");
+    const inputs = await loadAuthoritativeBillInputs(read, "2026-11-09");
+    expect(inputs.expenses).toHaveLength(2);
+    expect(billPassHasWork(inputs, "2026-11-09", derived)).toBe(true);
+  });
+
+  it("the provider no longer gates the pass on the whole ledger (source guard)", () => {
+    const src = readFileSync(join(__dirname, "../../providers/CreditCardBillsProvider.tsx"), "utf8");
+    expect(src).not.toContain("canRunAutoCreditCardBillGeneration");
+    expect(src).toContain("billPassInputPlan(");
+    expect(src).toContain("billPassThrottled(");
   });
 });

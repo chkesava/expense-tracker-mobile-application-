@@ -36,7 +36,19 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useAccountPayments } from "@/hooks/useAccountPayments";
 import { useReadModelMode, useReadModelSource } from "@/hooks/useReadModelSource";
-import { billPassFingerprint, billPassHasWork, billPassReadsCopy, loadAuthoritativeBillInputs, toCreditCardBill, type AuthoritativeReader, type BillPassInputs } from "@/lib/readModelLocal/billPass";
+import {
+  billPassFingerprint,
+  billPassHasWork,
+  billPassInputPlan,
+  billPassListenersReady,
+  billPassReadsCopy,
+  billPassThrottled,
+  loadAuthoritativeBillInputs,
+  toCreditCardBill,
+  type AuthoritativeReader,
+  type BillPassInputs,
+  type BillPassTrigger,
+} from "@/lib/readModelLocal/billPass";
 import { toSourceDocs } from "@/lib/readModelLocal/readSource";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useExpenses } from "@/hooks/useExpenses";
@@ -54,7 +66,6 @@ import { validateCreateCreditCardBillInput } from "@/shared/utils/creditCardBill
 import { refreshCreditCardBillDerivedFields } from "@/shared/utils/creditCardBillDerived";
 import { getAccountKind } from "@/shared/utils/accountKind";
 import {
-  canRunAutoCreditCardBillGeneration,
   collectAutoCreditCardBillDrafts,
   collectAutoCreditCardBillRefreshPatches,
   previewSettledAutoBillRecalculation,
@@ -199,7 +210,9 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   // An unfinished pass (a skipped compare-and-set, or offline) retries a few
   // times, then waits for the next trigger rather than looping.
   const autoGenerateRetries = useRef(0);
-  const generateAutoBillsRef = useRef<(() => Promise<void>) | null>(null);
+  // SPENDLY-732: when the last pass on Firestore inputs (staged ledger) ran.
+  const lastFirestorePassAt = useRef<number | null>(null);
+  const generateAutoBillsRef = useRef<((trigger: BillPassTrigger) => Promise<void>) | null>(null);
 
   /**
    * SPENDLY-719: run the bill pass soon. Money actions call this so the
@@ -210,7 +223,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   const requestBillPass = useCallback((delayMs = 400) => {
     if (autoGenerateTimer.current) clearTimeout(autoGenerateTimer.current);
     autoGenerateTimer.current = setTimeout(() => {
-      void generateAutoBillsRef.current?.();
+      void generateAutoBillsRef.current?.("requested");
     }, delayMs);
   }, []);
 
@@ -224,6 +237,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     autoGenerateToastShown.current = false;
     lastAutoBillFingerprintRef.current = "";
     didInitialAutoGenerate.current = false;
+    lastFirestorePassAt.current = null;
   }, [user?.uid]);
 
   const [shouldListen, setShouldListen] = useState(false);
@@ -461,17 +475,25 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     ]
   );
 
-  const generateAutoBills = useCallback(async () => {
+  const generateAutoBills = useCallback(async (trigger: BillPassTrigger) => {
     // SPENDLY-97: the AppState listener below calls this directly, so the gate
     // cannot live only in the trigger effect — a foreground during a listener
     // resubscribe would otherwise generate from the staged page.
+    // SPENDLY-732: the staged page no longer skips the pass (SPENDLY-409 made
+    // it permanent, so the pass never ran for ledgers of 300+ rows); it runs
+    // on Firestore's inputs instead (`billPassInputPlan`).
     if (!user) return;
+    if (!billPassListenersReady({ billsLoading, expensesLoading, paymentsLoading })) return;
+    const plan = billPassInputPlan({
+      readsCopy: billPassReadsCopy(passInputModesRef.current),
+      ledgerComplete: expensesComplete,
+    });
     if (
-      !canRunAutoCreditCardBillGeneration({
-        billsLoading,
-        expensesLoading,
-        paymentsLoading,
-        expensesComplete,
+      billPassThrottled({
+        plan,
+        trigger,
+        lastFirestorePassAt: lastFirestorePassAt.current,
+        now: Date.now(),
       })
     ) {
       return;
@@ -774,14 +796,23 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       // what it reads, so it never writes from the on-device copy. When any
       // input is served by the copy: check for work on the screen's data
       // (free), and only if there is some, run on Firestore's inputs.
+      // SPENDLY-732: on the staged expenses page, always run on Firestore's
+      // inputs (a work check on a partial ledger means nothing).
       const stateInputs: BillPassInputs = { accounts, accountTypes, expenses, payments, bills };
-      if (!billPassReadsCopy(passInputModesRef.current)) {
+      if (plan === "screen") {
         await runBillPass(stateInputs);
         return;
       }
       const today = todayDateKey(timezone);
-      if (!billPassHasWork(stateInputs, today, (bill) => refreshDerivedFields(bill, timezone, globalPrefs.enabled))) return;
-      await runBillPass(await loadAuthoritativeBillInputs(firestoreBillReader(db, user.uid), today));
+      if (
+        plan === "checkScreenThenFirestore" &&
+        !billPassHasWork(stateInputs, today, (bill) => refreshDerivedFields(bill, timezone, globalPrefs.enabled))
+      ) {
+        return;
+      }
+      const authoritative = await loadAuthoritativeBillInputs(firestoreBillReader(db, user.uid), today);
+      if (plan === "firestore") lastFirestorePassAt.current = Date.now();
+      await runBillPass(authoritative);
     } catch (err) {
       logError("creditCardBills.autoPass", err);
     } finally {
@@ -812,40 +843,33 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     generateAutoBillsRef.current = generateAutoBills;
   }, [generateAutoBills]);
 
-  const scheduleAutoGenerate = useCallback(() => {
+  // SPENDLY-732: the timer runs the latest pass (the ref), so a pass scheduled
+  // on the cache's staged page still sees `expensesComplete` if the server
+  // snapshot completed the ledger in the meantime.
+  const scheduleAutoGenerate = useCallback((trigger: BillPassTrigger = "background") => {
     if (autoGenerateTimer.current) clearTimeout(autoGenerateTimer.current);
     autoGenerateTimer.current = setTimeout(() => {
-      void generateAutoBills();
+      void generateAutoBillsRef.current?.(trigger);
     }, 400);
-  }, [generateAutoBills]);
+  }, []);
 
   // SPENDLY-45: do not run on every bills/expenses/payments snapshot — that
   // is a write triggered by a read and races across devices. First load plus
   // app focus is enough; deterministic ids make a replay a merge.
-  // SPENDLY-97: `expensesComplete`, not `expensesLoading` — the latter goes
-  // false on the staged first-paint page, and this pass backfills 12 cycles.
-  // Still one-shot: the ref is only claimed once the ledger is whole.
+  // SPENDLY-97 / SPENDLY-732: on the staged first-paint page the pass reads
+  // its inputs from Firestore (it backfills 12 cycles, far outside the page);
+  // once the screen holds the whole ledger it uses that. One-shot.
   useEffect(() => {
     if (!user) return;
-    if (
-      !canRunAutoCreditCardBillGeneration({
-        billsLoading,
-        expensesLoading,
-        paymentsLoading,
-        expensesComplete,
-      })
-    ) {
-      return;
-    }
+    if (!billPassListenersReady({ billsLoading, expensesLoading, paymentsLoading })) return;
     if (didInitialAutoGenerate.current) return;
     didInitialAutoGenerate.current = true;
-    scheduleAutoGenerate();
+    scheduleAutoGenerate("initial");
   }, [
     user,
     billsLoading,
     expensesLoading,
     paymentsLoading,
-    expensesComplete,
     scheduleAutoGenerate,
   ]);
 

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { changeFieldsOf, READ_MODEL_TABLES } from "../shared/utils/readModel/mapping";
 import { memorySink } from "./lib/readmodelSyncMemory";
-import { ALWAYS_FULL, MASS_TOMBSTONE_MIN, OVERLAP_MS, runSync, type Page, type PageRequest, type SourcePort } from "./lib/readmodelSyncCore";
+import { ABANDONED_RUN_MS, ALWAYS_FULL, MASS_TOMBSTONE_MIN, OVERLAP_MS, runSync, type Page, type PageRequest, type SourcePort } from "./lib/readmodelSyncCore";
 
 /**
  * A fake Firestore: documents with createdAt / updatedAt (ms) and an
@@ -355,6 +355,72 @@ describe("read-model sync core (SPENDLY-506)", () => {
     expect(m.tables.get("categories")!.size).toBe(30);
   });
 
+  it("stops at its time limit like the read budget: partial, a resume point, no checkpoint for the unfinished pair (SPENDLY-712)", async () => {
+    const big = fakeFirestore({
+      alice: { categories: Array.from({ length: 30 }, (_, i) => ({ id: `c${String(i).padStart(2, "0")}`, data: { name: `C${i}` }, updateMs: T0 })) },
+      bob: { expenses: [exp("b1", 75, T0 - H)] },
+    });
+    const m = memorySink();
+    const tables = READ_MODEL_TABLES.filter((t) => ["categories", "expenses"].includes(t.collection));
+    // A clock that moves 1 s per call: the run is out of time after a few pages.
+    let clock = T0;
+    const stopped = await runSync(big.source, m.sink, {
+      ...opts("full", T0), now: () => (clock += 1000), timeLimitMs: 4000, tables, trigger: "push",
+    });
+    expect(stopped.status).toBe("partial");
+    expect(stopped.notes.stoppedBy).toBe("time limit");
+    expect(stopped.notes.resumeFrom).toBeDefined();
+    expect(m.runs).toHaveLength(1); // the run was recorded, never left running
+
+    // The next push run continues from there and finishes.
+    const resumed = await runSync(big.source, m.sink, { ...opts("full", T0 + H), tables, trigger: "push" });
+    expect(resumed.status).toBe("succeeded");
+    expect(m.tables.get("categories")!.size).toBe(30);
+    expect(m.tables.get("expenses")!.size).toBe(1);
+  });
+
+  it("a push run's resume point is never the nightly's, and the reverse (SPENDLY-712)", async () => {
+    const m = memorySink();
+    const tables = READ_MODEL_TABLES.filter((t) => ["categories", "expenses"].includes(t.collection));
+    const seen: (string | undefined)[] = [];
+    const lastRunNotes = m.sink.lastRunNotes.bind(m.sink);
+    m.sink.lastRunNotes = async (mode, trigger) => {
+      seen.push(trigger);
+      return lastRunNotes(mode, trigger);
+    };
+    const big = fakeFirestore({
+      alice: { categories: Array.from({ length: 30 }, (_, i) => ({ id: `c${i}`, data: { name: `C${i}` }, updateMs: T0 })) },
+    });
+    const push = await runSync(big.source, m.sink, { ...opts("full", T0), maxReadsPerRun: 12, tables, trigger: "push" });
+    expect(push.notes.resumeFrom).toBeDefined();
+    expect(await m.sink.lastRunNotes("full")).toBeNull();
+    expect((await m.sink.lastRunNotes("full", "push"))?.resumeFrom).toEqual(push.notes.resumeFrom);
+    await runSync(big.source, m.sink, { ...opts("full", T0 + H), tables });
+    expect(seen).toEqual(["push", undefined, "push", undefined]);
+  });
+
+  it("marks runs abandoned for over two hours failed before it starts; dry runs leave them (SPENDLY-712)", async () => {
+    const m = memorySink();
+    const cutoffs: string[] = [];
+    m.sink.closeAbandonedRuns = async (iso) => {
+      cutoffs.push(iso);
+      return 1;
+    };
+    const run = await runSync(world().source, m.sink, opts("incremental", T0));
+    expect(cutoffs).toEqual([new Date(T0 - ABANDONED_RUN_MS).toISOString()]);
+    expect(ABANDONED_RUN_MS).toBe(2 * H);
+    expect(run.notes.abandonedRunsClosed).toBe(1);
+
+    await runSync(world().source, m.sink, { ...opts("incremental", T0), dryRun: true });
+    expect(cutoffs).toHaveLength(1);
+
+    // A failure to close them never stops the run.
+    m.sink.closeAbandonedRuns = async () => {
+      throw new Error("offline");
+    };
+    expect((await runSync(world().source, m.sink, opts("incremental", T0 + H))).status).toBe("succeeded");
+  });
+
   it("skips the run when the daily budget is already used", async () => {
     const m = memorySink({ reads24h: 12_000 });
     const run = await runSync(world().source, m.sink, { ...opts("incremental", T0), maxReadsPerDay: 12_000 });
@@ -645,5 +711,64 @@ describe("change values in the Firestore reader (SPENDLY-681)", () => {
     const ts = changeValue({ fieldType: "timestamp", sinceMs: 1234 }) as { toMillis(): number };
     expect(ts.toMillis()).toBe(1234);
     expect((changeValue({ sinceMs: 5 }) as { toMillis(): number }).toMillis()).toBe(5);
+  });
+});
+
+describe("sync_runs in the Supabase sink (SPENDLY-712)", () => {
+  /** A supabase-js stand-in that records each query's calls and answers `rows`. */
+  function fakeClient(rows: unknown[]) {
+    const queries: unknown[][][] = [];
+    const client = {
+      from(table: string) {
+        const calls: unknown[][] = [["from", table]];
+        queries.push(calls);
+        const builder: Record<string, unknown> = {};
+        for (const name of ["select", "eq", "is", "lt", "order", "limit", "update", "insert", "single"]) {
+          builder[name] = (...args: unknown[]) => {
+            calls.push([name, ...args]);
+            return builder;
+          };
+        }
+        builder.then = (resolve: (v: unknown) => unknown) => resolve({ data: rows, error: null });
+        return builder;
+      },
+    };
+    return { client, queries };
+  }
+
+  it("resume points: push runs read only push runs, scheduled runs only untriggered ones", async () => {
+    const { supabaseSink } = await import("./readmodel-sync");
+    const { client, queries } = fakeClient([{ status: "partial", notes: { resumeFrom: { uid: "u", collection: "expenses" } } }]);
+    const sink = supabaseSink(client as never);
+    expect(await sink.lastRunNotes("incremental", "push")).toEqual({ resumeFrom: { uid: "u", collection: "expenses" } });
+    await sink.lastRunNotes("incremental");
+    expect(queries[0]).toContainEqual(["eq", "notes->>trigger", "push"]);
+    expect(queries[1]).toContainEqual(["is", "notes->>trigger", null]);
+    expect(queries[1]).toContainEqual(["eq", "mode", "incremental"]);
+  });
+
+  it("closes only runs still running that started before the cutoff, as failed, keeping their trigger", async () => {
+    const { supabaseSink } = await import("./readmodel-sync");
+    const { client, queries } = fakeClient([{ id: 7, notes: { trigger: "push" } }]);
+    const closed = await supabaseSink(client as never).closeAbandonedRuns!("2026-11-06T05:00:00.000Z");
+    expect(closed).toBe(1);
+    const [find, close] = queries;
+    expect(find).toContainEqual(["eq", "status", "running"]);
+    expect(find).toContainEqual(["lt", "started_at", "2026-11-06T05:00:00.000Z"]);
+    expect(close.find((c) => c[0] === "update")?.[1]).toMatchObject({
+      status: "failed", finished_at: expect.any(String), notes: { trigger: "push", abandoned: expect.any(String) },
+    });
+    expect(close).toContainEqual(["eq", "id", 7]);
+    expect(close).toContainEqual(["eq", "status", "running"]); // never a run that finished meanwhile
+  });
+
+  it("a run records its trigger when it starts, so one that never finishes is still a push run", async () => {
+    const { supabaseSink } = await import("./readmodel-sync");
+    const { client, queries } = fakeClient([{ id: 9 }]);
+    const sink = supabaseSink(client as never);
+    await sink.startRun("incremental", 200, "push");
+    await sink.startRun("incremental", 8000);
+    expect(queries[0].find((c) => c[0] === "insert")?.[1]).toEqual({ mode: "incremental", read_budget: 200, notes: { trigger: "push" } });
+    expect(queries[1].find((c) => c[0] === "insert")?.[1]).toEqual({ mode: "incremental", read_budget: 8000, notes: null });
   });
 });

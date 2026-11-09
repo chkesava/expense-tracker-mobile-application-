@@ -128,10 +128,13 @@ export function supabaseSink(client: SupabaseClient): SinkPort {
       const rows = await must("sync_runs", client.from("sync_runs").select("reads_used").gte("started_at", iso));
       return (rows as { reads_used: number }[]).reduce((s, r) => s + (r.reads_used ?? 0), 0);
     },
-    async lastRunNotes(mode) {
+    async lastRunNotes(mode, trigger) {
+      const runs = client.from("sync_runs").select("status, notes").eq("mode", mode);
+      // SPENDLY-712: push runs and scheduled runs keep separate resume points.
+      const ofTrigger = trigger ? runs.eq("notes->>trigger", trigger) : runs.is("notes->>trigger", null);
       const rows = (await must(
         "sync_runs",
-        client.from("sync_runs").select("status, notes").eq("mode", mode).order("started_at", { ascending: false }).limit(1)
+        ofTrigger.order("started_at", { ascending: false }).limit(1)
       )) as { status: string; notes: Record<string, unknown> | null }[];
       return rows[0]?.status === "partial" ? rows[0].notes : null;
     },
@@ -146,9 +149,27 @@ export function supabaseSink(client: SupabaseClient): SinkPort {
         if (rows.length < 1000) return out;
       }
     },
-    async startRun(mode, readBudget) {
-      const row = (await must("sync_runs", client.from("sync_runs").insert({ mode, read_budget: readBudget }).select("id").single())) as { id: number };
+    async startRun(mode, readBudget, trigger) {
+      const row = (await must(
+        "sync_runs",
+        client.from("sync_runs").insert({ mode, read_budget: readBudget, notes: trigger ? { trigger } : null }).select("id").single()
+      )) as { id: number };
       return row.id;
+    },
+    async closeAbandonedRuns(startedBeforeIso) {
+      const stuck = (await must(
+        "sync_runs",
+        client.from("sync_runs").select("id, notes").eq("status", "running").lt("started_at", startedBeforeIso)
+      )) as { id: number; notes: Record<string, unknown> | null }[];
+      for (const run of stuck) {
+        // Keep the trigger, so the health check still tells a push run from a nightly.
+        await must("sync_runs", client.from("sync_runs").update({
+          status: "failed",
+          finished_at: new Date().toISOString(),
+          notes: { ...(run.notes ?? {}), abandoned: "never finished (stopped by a time limit or a cancelled job); closed by a later run" },
+        }).eq("id", run.id).eq("status", "running"));
+      }
+      return stuck.length;
     },
     async upsert(table, rows: ReadModelRow[]) {
       let n = 0;
