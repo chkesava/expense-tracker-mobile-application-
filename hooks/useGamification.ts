@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { doc, onSnapshot, setDoc } from "@/lib/firestore";
+import { useEffect, useMemo, useState } from "react";
+import { doc, onSnapshot } from "@/lib/firestore";
 
 import { useExpenses } from "@/hooks/useExpenses";
 import { getFirestoreDb } from "@/lib/firebase";
 import { snapshotErrorHandler } from "@/lib/firestoreErrors";
-import { commitWrite } from "@/lib/firestoreWrite";
 import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -23,7 +22,6 @@ export function useGamification() {
   const [hydrated, setHydrated] = useState(false);
   const [loading, setLoading] = useState(true);
   const { error, setError, retry, attempt } = useLoadFailure();
-  const persistKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     const db = getFirestoreDb();
@@ -31,7 +29,6 @@ export function useGamification() {
       setStats(null);
       setHydrated(false);
       setLoading(false);
-      persistKeyRef.current = null;
       return;
     }
 
@@ -87,35 +84,8 @@ export function useGamification() {
     return buildLoggingStreakUpdate(stats, expenses, todayKey, defaults);
   }, [defaults, expenses, expensesReady, stats, todayKey]);
 
-  useEffect(() => {
-    const db = getFirestoreDb();
-    if (!uid || !db || !hydrated || !expensesReady || !streakUpdate.shouldPersist) {
-      return;
-    }
-
-    const persistKey = `${streakUpdate.persistPatch.currentStreak}:${streakUpdate.persistPatch.longestStreak}:${streakUpdate.persistPatch.badges.join(",")}:${streakUpdate.persistPatch.lastLoginDate}`;
-    if (persistKeyRef.current === persistKey) return;
-    persistKeyRef.current = persistKey;
-
-    const statsRef = doc(db, "users", uid, "stats", "summary");
-    const payload =
-      stats == null
-        ? streakUpdate.next
-        : streakUpdate.persistPatch;
-
-    void commitWrite(
-      () => setDoc(statsRef, payload, { merge: true }),
-      { label: "logging streak" }
-    );
-  }, [
-    expensesReady,
-    hydrated,
-    stats,
-    streakUpdate.next,
-    streakUpdate.persistPatch,
-    streakUpdate.shouldPersist,
-    uid,
-  ]);
+  // SPENDLY-743 (epic SPENDLY-735): the logging streak is written by the
+  // server's housekeeping-daily job (stats/summary); this shows it live.
 
   const displayStats = streakUpdate.next;
 

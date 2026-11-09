@@ -118,6 +118,8 @@ describe("every server-side writer of a synced collection pushes (SPENDLY-680)",
     "scripts/lib/epfDailyCore.ts": "writes via applyJobWrites; epf-daily.ts creates the push",
     // SPENDLY-741.
     "scripts/lib/snapshotDailyCore.ts": "writes via applyJobWrites; snapshot-daily.ts creates the push",
+    // SPENDLY-743.
+    "scripts/lib/housekeepingDailyCore.ts": "writes via applyJobWrites; housekeeping-daily.ts creates the push",
   };
   const PUSHES = /\bcreateServerPush\(|\breadModel\b[^\n]*serverPushPorts|\bserverPushPorts\(/;
 

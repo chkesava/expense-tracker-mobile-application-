@@ -1,0 +1,85 @@
+name: Housekeeping daily
+
+# SPENDLY-743 (epic SPENDLY-735): small passes moved off the phone:
+# accidental account baselines (balanceAsOfDate of today or later is cleared)
+# and the logging streak (stats/summary). Rules:
+# scripts/lib/housekeepingDailyCore.ts.
+#
+# The Cloudflare Worker `spendly-push-trigger` dispatches this workflow on its
+# daily 03:00 UTC tick (08:30 IST) with `trigger: cron`, which runs only when
+# the repository variable HOUSEKEEPING_DAILY_ENABLED is "true". A manual
+# dispatch always runs (dry run by default).
+#
+# Secrets: FIREBASE_SERVICE_ACCOUNT (or HOUSEKEEPING_FIREBASE_SERVICE_ACCOUNT),
+#          READMODEL_SUPABASE_SERVICE_ROLE_KEY (optional: read-model push)
+# Variables: HOUSEKEEPING_DAILY_ENABLED, READMODEL_SUPABASE_URL, HOUSEKEEPING_MAX_READS_PER_RUN
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Decide and log, write nothing"
+        required: true
+        default: true
+        type: boolean
+      trigger:
+        description: "Who started the run. The Cloudflare Worker sends cron, which obeys HOUSEKEEPING_DAILY_ENABLED."
+        required: false
+        default: manual
+        type: choice
+        options:
+          - manual
+          - cron
+
+concurrency:
+  group: housekeeping-daily
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: Account baselines and logging streak
+    if: vars.HOUSEKEEPING_DAILY_ENABLED == 'true' || inputs.trigger != 'cron'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The job never pushes; don't leave the token in git config.
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run
+        env:
+          HOUSEKEEPING_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.HOUSEKEEPING_FIREBASE_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
+          READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+          HOUSEKEEPING_MAX_READS_PER_RUN: ${{ vars.HOUSEKEEPING_MAX_READS_PER_RUN || '3000' }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ -z "$HOUSEKEEPING_FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT (or HOUSEKEEPING_FIREBASE_SERVICE_ACCOUNT) is not set."
+            exit 1
+          fi
+          args=""
+          if [ "$DRY_RUN" = "true" ]; then args="--dry-run"; fi
+          npx --no-install tsx scripts/housekeeping-daily.ts $args | tee housekeeping-daily.log
+          {
+            echo "## Housekeeping daily"
+            echo '```json'
+            sed -n '/^{/,/^}/p' housekeeping-daily.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

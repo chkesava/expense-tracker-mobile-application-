@@ -118,9 +118,13 @@ describe("provider read switches (SPENDLY-673)", () => {
     }
   });
 
-  it("the account baseline repair confirms on Firestore when accounts come from the copy", () => {
-    const text = readFileSync(join(ROOT, "providers", "FinanceDataProvider.tsx"), "utf8");
-    expect(text).toMatch(/accountsSource\.mode === "supabase"\s*\?\s*getDoc\(doc\(db, "users", uid, "accounts", accountId\)\)/);
+  // SPENDLY-743 (epic SPENDLY-735): the account baseline repair and the
+  // logging streak are written by the server (housekeeping-daily).
+  it("the app writes no baseline repair or logging streak from screen data", () => {
+    const finance = readFileSync(join(ROOT, "providers", "FinanceDataProvider.tsx"), "utf8");
+    expect(finance).not.toMatch(/balanceAsOfDate: null/);
+    const gamification = readFileSync(join(ROOT, "hooks", "useGamification.ts"), "utf8");
+    expect(gamification).not.toMatch(/setDoc\(statsRef/);
   });
 
   // SPENDLY-598 (R4.3a): more writers that write from what the screens read.

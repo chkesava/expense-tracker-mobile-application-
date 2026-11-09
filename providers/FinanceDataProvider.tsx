@@ -67,7 +67,6 @@ import type {
 import { CASHBACK_SOURCE_ID } from "@/shared/types/expense";
 import { voidCreditBillPayment } from "@/services/creditCardBills/billPayment";
 import { cashbackDocId } from "@/shared/utils/cashbackId";
-import { isAccidentalBalanceBaseline } from "@/shared/utils/accountBaseline";
 import {
   buildAccountWritePayload,
   hydrateAccountIdentity,
@@ -661,54 +660,9 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     setGlobalPendingSyncCount(total);
   }, []);
 
-  const repairedTodayBaselinesRef = useRef(new Set<string>());
-
-  useEffect(() => {
-    if (!uid) repairedTodayBaselinesRef.current.clear();
-  }, [uid]);
-
-  useEffect(() => {
-    if (!uid || !db || accountsLoading) return;
-    const today = todayDateKey();
-    for (const account of accounts) {
-      if (!account.id) continue;
-      if (!isAccidentalBalanceBaseline(account.balanceAsOfDate, today)) continue;
-      if (repairedTodayBaselinesRef.current.has(account.id)) continue;
-      repairedTodayBaselinesRef.current.add(account.id);
-      const accountId = account.id;
-      // SPENDLY-597 (R4.3a): a write from what was read: when accounts come
-      // from the on-device copy, confirm on Firestore first (one read).
-      const confirmed =
-        accountsSource.mode === "supabase"
-          ? getDoc(doc(db, "users", uid, "accounts", accountId)).then((snap) =>
-              isAccidentalBalanceBaseline((snap.data() as Partial<Account> | undefined)?.balanceAsOfDate, today)
-            )
-          : Promise.resolve(true);
-      void confirmed.then((stillAccidental) => {
-        if (!stillAccidental) return;
-        return commitMutations(
-        uid,
-        [
-          {
-            op: "update",
-            ref: doc(db, "users", uid, "accounts", accountId),
-            data: { balanceAsOfDate: null },
-          },
-        ],
-        {
-          label: "account baseline",
-          onLateFailure: (error) => {
-            repairedTodayBaselinesRef.current.delete(accountId);
-            logError("financeDataProvider.clearAccidentalBaseline", error);
-          },
-        }
-      );
-      }).catch((error) => {
-        repairedTodayBaselinesRef.current.delete(accountId);
-        logError("financeDataProvider.clearAccidentalBaseline", error);
-      });
-    }
-  }, [accounts, accountsLoading, db, uid, accountsSource.mode]);
+  // SPENDLY-743 (epic SPENDLY-735): an accidental account baseline
+  // (balanceAsOfDate of today or later, SPENDLY-597/603) is cleared by the
+  // server's housekeeping-daily job, not from this provider.
 
   // ─── Critical listeners (First paint) ────────────────────────────────────────
 
