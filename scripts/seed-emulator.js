@@ -120,10 +120,16 @@ const HOLDINGS = [
  * Builds every document for the demo user, as plain data with JS Dates.
  * `today` is injectable for tests.
  */
-function buildDemoData(today = new Date()) {
+/**
+ * `months` (default 3) is how much history to seed. SPENDLY-748 QA needs a
+ * ledger over the 300-row live window: `npm run emulators:seed -- --months=12`.
+ * A longer history also gets one back-dated row (an old date, created today),
+ * the shape that used to hide older months in the Journal.
+ */
+function buildDemoData(today = new Date(), { months = 3 } = {}) {
   const rand = mulberry32(175);
   const between = (min, max) => Math.round(min + rand() * (max - min));
-  const start = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+  const start = new Date(today.getFullYear(), today.getMonth() - (months - 1), 1);
   const baselineDate = new Date(start.getTime() - 24 * 3600 * 1000);
 
   const accountTypes = Object.entries(ACCOUNT_TYPES).map(([key, name]) => ({
@@ -158,10 +164,10 @@ function buildDemoData(today = new Date()) {
 
   const expenses = [];
   const incomes = [];
-  for (let m = 0; m < 3; m++) {
+  for (let m = 0; m < months; m++) {
     const monthStart = new Date(start.getFullYear(), start.getMonth() + m, 1);
     const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
-    const lastDay = m === 2 ? today.getDate() : daysInMonth;
+    const lastDay = m === months - 1 ? today.getDate() : daysInMonth;
 
     incomes.push({
       id: `inc-${ym(monthStart)}-salary`,
@@ -199,6 +205,25 @@ function buildDemoData(today = new Date()) {
       }
     }
   }
+  if (months > 3) {
+    const oldDate = new Date(start.getFullYear(), start.getMonth(), 12);
+    expenses.push({
+      id: 'exp-backdated',
+      data: {
+        amount: 1200,
+        category: 'Shopping',
+        subcategory: '',
+        date: ymd(oldDate),
+        month: ym(oldDate),
+        time: '12:00',
+        accountId: accountId('bank'),
+        note: 'Back-dated receipt',
+        tags: [],
+        createdAt: today,
+      },
+    });
+  }
+
   incomes.push({
     id: 'inc-freelance',
     data: {
@@ -383,7 +408,9 @@ async function seed() {
     return value;
   };
 
-  const data = buildDemoData();
+  const monthsArg = process.argv.find((arg) => arg.startsWith('--months='));
+  const months = monthsArg ? Math.max(3, Math.min(36, Number(monthsArg.slice('--months='.length)) || 3)) : 3;
+  const data = buildDemoData(new Date(), { months });
   const writer = db.bulkWriter();
   writer.set(userRef, toFirestore(data.userDoc));
   for (const [collection, docs] of Object.entries(data.collections)) {

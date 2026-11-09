@@ -21,6 +21,10 @@ You need the Firebase CLI (`npm i -g firebase-tools`), JDK 21 and a phone with U
    ```sh
    npm run emulators:seed
    ```
+   The default is 3 months (about 125 expenses). For a ledger over the 300-row live window (SPENDLY-748), seed 12 months (about 515 expenses, plus one back-dated row):
+   ```sh
+   npm run emulators:seed -- --months=12
+   ```
 3. **Build the test app.** It takes about 8 minutes and produces `dist/Spendly-Test.apk`.
    ```sh
    npm run android:test-build
