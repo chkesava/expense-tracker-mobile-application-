@@ -1,0 +1,86 @@
+name: Snapshot daily
+
+# SPENDLY-741 (epic SPENDLY-735): the daily net-worth point
+# (netWorthHistory) and portfolio snapshot (portfolioSnapshots), recorded by
+# the server instead of the dashboard / Portfolio tab. Rules:
+# scripts/lib/snapshotDailyCore.ts. Prices come from this repo's market
+# functions in-process (no Netlify invocation).
+#
+# The Cloudflare Worker `spendly-push-trigger` dispatches this workflow on its
+# daily 03:00 UTC tick (08:30 IST) with `trigger: cron`, which runs only when
+# the repository variable SNAPSHOT_DAILY_ENABLED is "true". A manual dispatch
+# always runs (dry run by default).
+#
+# Secrets: FIREBASE_SERVICE_ACCOUNT (or SNAPSHOT_FIREBASE_SERVICE_ACCOUNT),
+#          READMODEL_SUPABASE_SERVICE_ROLE_KEY (optional: read-model push)
+# Variables: SNAPSHOT_DAILY_ENABLED, READMODEL_SUPABASE_URL, SNAPSHOT_MAX_READS_PER_RUN
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Decide and log, write nothing"
+        required: true
+        default: true
+        type: boolean
+      trigger:
+        description: "Who started the run. The Cloudflare Worker sends cron, which obeys SNAPSHOT_DAILY_ENABLED."
+        required: false
+        default: manual
+        type: choice
+        options:
+          - manual
+          - cron
+
+concurrency:
+  group: snapshot-daily
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: Record net worth and portfolio snapshots
+    if: vars.SNAPSHOT_DAILY_ENABLED == 'true' || inputs.trigger != 'cron'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The job never pushes; don't leave the token in git config.
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run
+        env:
+          SNAPSHOT_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.SNAPSHOT_FIREBASE_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
+          READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+          SNAPSHOT_MAX_READS_PER_RUN: ${{ vars.SNAPSHOT_MAX_READS_PER_RUN || '4000' }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SNAPSHOT_FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT (or SNAPSHOT_FIREBASE_SERVICE_ACCOUNT) is not set."
+            exit 1
+          fi
+          args=""
+          if [ "$DRY_RUN" = "true" ]; then args="--dry-run"; fi
+          npx --no-install tsx scripts/snapshot-daily.ts $args | tee snapshot-daily.log
+          {
+            echo "## Snapshot daily"
+            echo '```json'
+            sed -n '/^{/,/^}/p' snapshot-daily.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -87,7 +87,6 @@ function PortfolioDashboardInner({
     cashBalance: investmentCashBalance,
     loading,
     saveSettings,
-    saveDailySnapshot,
     addAlert,
     toggleAlert,
     deleteAlert,
@@ -151,25 +150,8 @@ function PortfolioDashboardInner({
       .sort((a, b) => b.value - a.value);
   }, [holdingsWithMetrics, portfolioColors]);
 
-  useEffect(() => {
-    if (loading || !portfolioSettings?.onboardingComplete) return;
-    void saveDailySnapshot({
-      portfolioValue: summary.portfolioValue,
-      investedValue: summary.totalInvested,
-      profit: summary.overallGainLoss,
-      profitPercent: summary.overallGainLossPercent,
-      netWorth: summary.portfolioValue + summary.cashBalance,
-    });
-  }, [
-    loading,
-    portfolioSettings?.onboardingComplete,
-    saveDailySnapshot,
-    summary.cashBalance,
-    summary.overallGainLoss,
-    summary.overallGainLossPercent,
-    summary.portfolioValue,
-    summary.totalInvested,
-  ]);
+  // SPENDLY-741 (epic SPENDLY-735): the daily portfolio snapshot is recorded
+  // by the server's snapshot-daily job, not from this screen.
 
   const sparklineData = useMemo(() => {
     const historical = snapshots.slice(-6).map((snapshot) => snapshot.portfolioValue);

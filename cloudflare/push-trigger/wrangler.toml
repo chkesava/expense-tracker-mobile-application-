@@ -10,6 +10,6 @@ preview_urls = false
 
 [triggers]
 # UTC. Every 15 minutes: push reminders (the hourly event pass runs in minutes
-# 0-14). 03:00 daily (08:30 IST): subscription-daily.yml (SPENDLY-739), sip-daily.yml, epf-daily.yml (SPENDLY-740) and bill-daily.yml, each gated
-# by its own repository variable (SUBSCRIPTION_DAILY_ENABLED, SIP_DAILY_ENABLED, EPF_DAILY_ENABLED, BILL_DAILY_ENABLED).
+# 0-14). 03:00 daily (08:30 IST): subscription-daily.yml (SPENDLY-739), sip-daily.yml, epf-daily.yml (SPENDLY-740), bill-daily.yml and snapshot-daily.yml (SPENDLY-741), each gated
+# by its own repository variable (SUBSCRIPTION_DAILY_ENABLED, SIP_DAILY_ENABLED, EPF_DAILY_ENABLED, BILL_DAILY_ENABLED, SNAPSHOT_DAILY_ENABLED).
 crons = ["*/15 * * * *", "0 3 * * *"]
