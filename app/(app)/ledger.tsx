@@ -377,7 +377,15 @@ export default function LedgerScreen() {
   const hasAnyLedgerRows = expenses.length > 0 || incomes.length > 0;
   const periodEmptyState =
     journal.filtered.length > 0 || !hasAnyLedgerRows ? undefined : monthLoading ? (
-      <EmptyState illustration="general" title={`Loading ${periodLabel}`} description="Fetching this month's transactions." />
+      <EmptyState
+        illustration="general"
+        title={`Loading ${periodLabel}`}
+        description={
+          journal.dateScope.monthOverridden
+            ? "Fetching transactions for this range."
+            : "Fetching this month's transactions."
+        }
+      />
     ) : monthFailed ? (
       <EmptyState
         illustration="general"
@@ -389,7 +397,11 @@ export default function LedgerScreen() {
       <EmptyState
         illustration="general"
         title={`No transactions in ${periodLabel}`}
-        description="Nothing was recorded in this period. Pick another month to see its activity."
+        description={
+          journal.dateScope.monthOverridden
+            ? "Nothing was recorded in this range. Adjust the date filters to see activity."
+            : "Nothing was recorded in this period. Pick another month to see its activity."
+        }
       />
     ) : (
       <EmptyState
