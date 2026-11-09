@@ -13,9 +13,40 @@ Before any task, read **[docs/AGENT_WORKFLOW.md](docs/AGENT_WORKFLOW.md)** and f
 
 It also points to the roadmap (`.claude/spendly_epic_execution_roadmap.md`, context only) and to the active epic's tracker and plan in `docs/`.
 
-# Read-model architecture (SPENDLY-494)
+# Project context (read second)
 
-Firestore is the only write path. Supabase (`supabase-readmodel/`) is a read-only copy kept by a scheduled sync. Any feature that writes or reads user data, adds a collection or field, or deletes user data must follow **[docs/READ_MODEL_RULES.md](docs/READ_MODEL_RULES.md)**. Operations are in `docs/READMODEL_RUNBOOK.md`.
+Read **[docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md)** next. It covers:
+- the current architecture (Firestore + Supabase read model, GitHub Actions jobs, Cloudflare, the Spark plan limits);
+- the owner's standing rules;
+- known traps;
+- a snapshot of where things stand.
+
+`CLAUDE.md` holds the full Spendly and Ganesh Seva rules and applies to every agent, not only Claude Code.
+
+# Read-model architecture (SPENDLY-494, SPENDLY-586)
+
+Firestore is the source of truth. Supabase (`supabase-readmodel/`) is the read model, and Firestore wins any difference.
+
+**Writes:**
+- Every save goes to Firestore first, through `commitMutations`.
+- It then goes to Supabase, only through the on-device outbox and the `rm_client_apply` RPC.
+- Server writers use `trackServerBatch` + `createServerPush`.
+
+**Reads:**
+- Screens read through `useReadModelSource("<collection>")`: `firestore` by default, `shadow` to compare, `supabase` to read the on-device copy.
+- The Firestore fallback always stays.
+
+**Every new feature, collection or field must save to and read from both stores in the same story:**
+- the mapping;
+- the migration with RLS;
+- the allowlist;
+- the purge;
+- the indexes;
+- the guard tests.
+
+**No calculations in the app:** they run as server jobs (SPENDLY-735).
+
+Rules: **[docs/READ_MODEL_RULES.md](docs/READ_MODEL_RULES.md)**. Operations: `docs/READMODEL_RUNBOOK.md`.
 
 # Phase Delivery Protocol
 After completing every phase:
