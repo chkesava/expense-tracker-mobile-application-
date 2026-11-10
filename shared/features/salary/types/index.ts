@@ -204,3 +204,49 @@ export interface SalaryReview {
   createdAt?: unknown;
   updatedAt?: unknown;
 }
+
+/**
+ * A detected salary candidate ready for user confirmation or review.
+ * Produced by the pure salary detection engine (SPENDLY-326).
+ */
+export interface SalaryCandidate {
+  /** The source Income transaction id. */
+  incomeId: string;
+  /** Net salary credited to bank. */
+  amount: number;
+  /** Transaction date (YYYY-MM-DD). */
+  date: string;
+  /** Inferred or extracted wage pay period. */
+  payPeriod: SalaryPayPeriod;
+  /** Extracted or normalized employer metadata. */
+  employer: SalaryEmployer;
+  /** Detection confidence. */
+  confidence: SalaryConfidence;
+  /** Human-readable explanation of signals that triggered this candidate. */
+  evidence: string[];
+  /** Identifier of rule or heuristic that matched. */
+  detectionRule: string;
+  /** Suggested classification (regular salary vs variable/bonus/stipend). */
+  suggestedType: SalaryType;
+  /** Account where payment landed (if known from Income). */
+  accountId?: string;
+  /** Original transaction note / narration. */
+  rawNarration: string;
+  /** Whether this transaction already has a confirmed SalaryRecord or user review. */
+  existingStatus?: "confirmed" | "rejected" | "pending";
+}
+
+/** Options provided to detectSalaryCandidates. */
+export interface SalaryDetectionOptions {
+  /** Existing confirmed or stored salary records to avoid duplicate candidates. */
+  existingRecords?: SalaryRecord[];
+  /** Existing user reviews (confirm / reject / reclassify) to respect previous decisions. */
+  existingReviews?: SalaryReview[];
+  /** Salary profile (if available) with known primary employer and expected payday window. */
+  salaryProfile?: SalaryProfile;
+  /** Minimum amount to consider if no explicit salary keywords are found. Default: 5000. */
+  minAmount?: number;
+  /** Include low confidence candidates (default: true). */
+  includeLowConfidence?: boolean;
+}
+
