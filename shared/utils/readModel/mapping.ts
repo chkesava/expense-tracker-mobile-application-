@@ -945,8 +945,36 @@ export const READ_MODEL_TABLES: TableSpec[] = [
       f("created_at", "createdAt", "timestamp"),
       f("updated_at", "updatedAt", "timestamp"),
     ],
+  },  // SPENDLY-744 (migration 20261113000000): recurring-merchant suggestions,
+  // written only by the server's recurring-weekly job; the app reads them
+  // into its review queue. Never on rm_client_apply's allowlist.
+  {
+    table: "recurring_suggestions",
+    collection: "recurringSuggestions",
+    fields: [
+      f("merchant", "merchant", "text"),
+      f("amount", "amount", "money"),
+      f("category", "category", "text"),
+      f("frequency", "frequency", "text"),
+      f("occurrences", "occurrences", "integer"),
+      f("created_at", "createdAt", "timestamp"),
+      f("updated_at", "updatedAt", "timestamp"),
+    ],
   },
-  // SPENDLY-709 Tax & ITR Readiness (epic SPENDLY-288, migration 20261110000000).
+  // SPENDLY-747 (migration 20261114000000): the insights-daily job's results
+  // (fee rows, the Journal health report), written only by the server; the
+  // app reads them. Never on rm_client_apply's allowlist.
+  {
+    table: "server_results",
+    collection: "serverResults",
+    fields: [
+      f("kind", "kind", "text"),
+      f("run_id", "runId", "text"),
+      f("created_at", "createdAt", "timestamp"),
+      f("updated_at", "updatedAt", "timestamp"),
+    ],
+  },
+  // SPENDLY-709 Tax & ITR Readiness (epic SPENDLY-288, migration 20261115000000).
   // Typed columns are the year and the identifiers reads filter on; every
   // amount stays in `doc` (R2.2): SQL never sums tax figures, the TypeScript
   // lines do (R3.6, shared/features/tax/utils/lines.ts).

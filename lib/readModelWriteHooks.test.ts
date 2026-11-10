@@ -149,7 +149,8 @@ describe("every direct writer of a synced collection calls a read-model hook", (
       "hooks/useCategoryBudgets.ts",
       "services/sip/executeSips.ts",
       // SPENDLY-712: the taxonomy upgrade names what it wrote (no allowlist entry).
-      "lib/ensureCategoryHierarchy.ts",
+      // SPENDLY-742: it moved to shared/ so the server runs the same code.
+      "shared/data/categoryHierarchyMigration.ts",
     ]) {
       expect(writers).toContain(known);
     }

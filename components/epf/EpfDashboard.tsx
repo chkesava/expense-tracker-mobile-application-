@@ -13,9 +13,8 @@ import { EpfProfileCard } from "@/components/epf/EpfProfileCard";
 import { EpfProfileFormModal } from "@/components/epf/EpfProfileFormModal";
 import { Button } from "@/components/ui/Button";
 import { useEpf } from "@/hooks/useEpf";
-import { useEpfCatchUp } from "@/hooks/useEpfCatchUp";
-import { useEpfInterestCatchUp } from "@/hooks/useEpfInterestCatchUp";
-import { useEpfSummarySync } from "@/hooks/useEpfSummarySync";
+import { useEpfLedger } from "@/hooks/useEpfLedger";
+import { epfPortfolioSummary } from "@/shared/features/epf/utils/portfolio";
 import { epfTodayKey } from "@/shared/features/epf/utils/epfClock";
 import type { EpfEstablishment } from "@/shared/features/epf/types";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -54,17 +53,10 @@ export function EpfDashboard() {
 
   const todayKey = useMemo(() => epfTodayKey(), []);
 
-  // Fill in any months the monthly cron has not reached yet (KAN-67).
-  useEpfCatchUp({
-    establishment: activeEstablishment,
-    allEstablishments: establishments,
-    enabled: hasProfile,
-  });
-  // Persist FY interest for every employer that has contributions, so Home
-  // does not stay at ₹0 until someone opens the Balance tab (SPENDLY-71).
-  const ledger = useEpfInterestCatchUp({ enabled: hasProfile });
-  // SPENDLY-653: one derivation for the overview card and the stored summary
-  // net worth reads, from the rows the catch-up already listens to.
+  // SPENDLY-740 (epic SPENDLY-735): the contribution catch-up, FY interest
+  // and the stored EPF summary are the server's (`epf-daily`, 08:30 IST).
+  // This screen only reads the rows and shows the overview.
+  const ledger = useEpfLedger({ enabled: hasProfile });
   const summarySources = useMemo(
     () => ({
       establishments,
@@ -75,13 +67,12 @@ export function EpfDashboard() {
     }),
     [establishments, ledger.contributions, ledger.transfers, ledger.interestEntries, ledger.reconciliations]
   );
-  const portfolio = useEpfSummarySync({
-    enabled: hasProfile,
-    ready: !establishmentsLoading && !establishmentsError && !ledger.loading && !ledger.error,
-    // Display may use cache; the absolute write waits for the server.
-    confirmed: !establishmentsFromCache && !ledger.fromCache,
-    sources: summarySources,
-  });
+  const ready = !establishmentsLoading && !establishmentsError && !ledger.loading && !ledger.error;
+  // Display only (SPENDLY-653's derivation); nothing is written from here.
+  const portfolio = useMemo(
+    () => (hasProfile && ready ? epfPortfolioSummary(summarySources) : null),
+    [hasProfile, ready, summarySources]
+  );
   const load = combineEpfLoad([
     { loading: profileLoading, error: profileError, retry: retryProfile },
     { loading: establishmentsLoading, error: establishmentsError, retry: retryEstablishments },

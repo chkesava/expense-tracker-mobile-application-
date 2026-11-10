@@ -39,6 +39,7 @@ import {
 } from "@/shared/utils/remindersInbox";
 import { unreadRowCount, type NotificationRow } from "@/shared/utils/notificationRows";
 import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
+import type { CalendarReminder } from "@/shared/types/calendarReminder";
 
 type RemindersInboxValue = {
   /** Dues: overdue or due soon, newest occurrence ids. */
@@ -51,6 +52,13 @@ type RemindersInboxValue = {
   markAllSeen: () => void;
   /** Marks one row read (on all devices). */
   markUpdateRead: (id: string) => void;
+  /**
+   * SPENDLY-746: the calendar reminders the inbox already listens to, shared
+   * with CalendarNotificationSync so it opens no second listener.
+   */
+  calendarReminders: CalendarReminder[];
+  /** True once those reminders have loaded (after startup idle). */
+  calendarRemindersReady: boolean;
 };
 
 const RemindersInboxContext = createContext<RemindersInboxValue>({
@@ -59,6 +67,8 @@ const RemindersInboxContext = createContext<RemindersInboxValue>({
   unread: 0,
   markAllSeen: () => undefined,
   markUpdateRead: () => undefined,
+  calendarReminders: [],
+  calendarRemindersReady: false,
 });
 
 const seenKey = (uid: string) => `spendly:remindersInboxSeen:${uid}`;
@@ -81,7 +91,7 @@ export function RemindersInboxProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   useEffect(() => scheduleIdleWork(() => setReady(true)), []);
 
-  const { reminders } = useCalendarReminders({ enabled: ready });
+  const { reminders, loading: remindersLoading } = useCalendarReminders({ enabled: ready });
   const { subscriptions } = useSubscriptions({ enabled: ready });
   const { borrowings } = useBorrowings({ enabled: ready });
   const { receivables } = useReceivables({ enabled: ready });
@@ -164,9 +174,10 @@ export function RemindersInboxProvider({ children }: { children: ReactNode }) {
 
   const markUpdateRead = useCallback((id: string) => void markRead([id]), [markRead]);
 
+  const calendarRemindersReady = ready && !remindersLoading;
   const value = useMemo(
-    () => ({ items, updates, unread, markAllSeen, markUpdateRead }),
-    [items, updates, unread, markAllSeen, markUpdateRead]
+    () => ({ items, updates, unread, markAllSeen, markUpdateRead, calendarReminders: reminders, calendarRemindersReady }),
+    [items, updates, unread, markAllSeen, markUpdateRead, reminders, calendarRemindersReady]
   );
   return <RemindersInboxContext.Provider value={value}>{children}</RemindersInboxContext.Provider>;
 }

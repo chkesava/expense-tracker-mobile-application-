@@ -28,6 +28,8 @@ const MIGRATED = new Set([
   "groupFunds",
   "notifications",
   "taxProfiles", "taxEntries", "taxReviews", "taxDocuments", "taxSnapshots",
+  "recurringSuggestions",
+  "serverResults",
 ]);
 
 /** `file:collection` listeners that stay on Firestore on purpose. */

@@ -12,7 +12,9 @@
  * - **Reconnect:** what was missed comes from `readmodel_changes_since` (ids and
  *   times only, tombstones included: RLS hides those from plain reads), from the
  *   last synced_at seen, less an overlap.
- * - **Down:** the same catch-up, polled every 30 s until the channel is back.
+ * - **Down:** the same catch-up, polled every 30 s until the channel is back,
+ *   skipped while the app is in the background (SPENDLY-745: battery); the
+ *   next tick after it returns catches up from the last change seen.
  * - **Too much to list:** a `resync` event; the consumer refetches the table (or all).
  *
  * Off unless `system_settings/global.readModel.realtime` is true; never in
@@ -40,6 +42,8 @@ export type ReadModelRealtimeDeps = {
   changesSince(since: string, limit: number): Promise<{ data: ChangesSinceRow[] | null; error: unknown }>;
   setInterval(fn: () => void, ms: number): unknown;
   clearInterval(handle: unknown): void;
+  /** SPENDLY-745: false while the app is in the background; the poll skips its tick. */
+  active?(): boolean;
   log?(event: string, detail: unknown): void;
   pollMs?: number;
   limit?: number;
@@ -117,7 +121,10 @@ export function createReadModelRealtime(deps: ReadModelRealtimeDeps) {
 
   function startPolling(forGeneration: number) {
     if (poll !== null) return;
-    poll = deps.setInterval(() => void catchUp(forGeneration), pollMs);
+    poll = deps.setInterval(() => {
+      if (deps.active && !deps.active()) return;
+      void catchUp(forGeneration);
+    }, pollMs);
   }
 
   function stopPolling() {

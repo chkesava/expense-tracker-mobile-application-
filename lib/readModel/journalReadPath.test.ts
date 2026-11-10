@@ -128,3 +128,52 @@ describe("Journal month load through the read path (SPENDLY-511)", () => {
     expect(readLog).toHaveBeenCalled();
   });
 });
+
+describe("Journal month on demand: read-switch paths (SPENDLY-748)", () => {
+  it("scopes the query to exactly the selected month (no full scan, no limit)", async () => {
+    await readJournalMonth({
+      db: {} as never, user, collectionName: "incomes", monthKey: "2024-02",
+      conditions: { setting: undefined, online: true, duress: false }, locallyRemovedIds: new Set(),
+    });
+    expect(calls[1]).toEqual([
+      "query", { path: "users/u1/incomes" }, { where: ["date", ">=", "2024-02-01"] }, { where: ["date", "<=", "2024-02-29"] },
+    ]);
+  });
+
+  it("shadow without the device compares switched on is plain Firestore and never connects", async () => {
+    const connect = vi.fn();
+    await readJournalMonth({
+      db: {} as never, user, collectionName: "expenses", monthKey: "2026-03",
+      conditions: { setting: { journal: "shadow" }, online: true, duress: false }, locallyRemovedIds: new Set(), connect,
+    });
+    expect(connect).not.toHaveBeenCalled();
+    expect(readLog).toHaveBeenCalledTimes(1);
+  });
+
+  it("shadow mode shows the Firestore month and also reads the same month from the read model", async () => {
+    const fake = fakeSupabase([{ doc_id: "e1", doc: { amount: 10, date: "2026-03-04" } }]);
+    const rows = await readJournalMonth({
+      db: {} as never, user, collectionName: "expenses", monthKey: "2026-03",
+      conditions: { setting: { journal: "shadow", deviceShadow: true }, online: true, duress: false }, locallyRemovedIds: new Set(),
+      connect: vi.fn(async () => ({ access: "ok" as const, client: fake.client })),
+    });
+    expect(rows).toEqual([{ amount: 10, date: "2026-03-04", id: "e1" }]);
+    expect(readLog).toHaveBeenCalledWith("users/u1/expenses", 2, "server", expect.objectContaining({ queryShape: "date range 2026-03" }));
+    await vi.waitFor(() => expect(fake.filters).toEqual(expect.arrayContaining([["gte", "date", "2026-03-01"], ["lte", "date", "2026-03-31"]])));
+  });
+
+  it("supabase mode falls back to the Firestore month query when the read model errors", async () => {
+    const builder: Record<string, unknown> = {};
+    for (const m of ["select", "gte", "lte", "eq", "is", "order", "range"]) builder[m] = () => builder;
+    builder.then = (resolve: (v: unknown) => unknown) => resolve({ data: null, error: { message: "down" } });
+    const rows = await readJournalMonth({
+      db: {} as never, user, collectionName: "expenses", monthKey: "2026-03",
+      conditions: { setting: { journal: "supabase" }, online: true, duress: false }, locallyRemovedIds: new Set(),
+      connect: vi.fn(async () => ({ access: "ok" as const, client: { from: () => builder } as never })),
+    });
+    expect(rows).toEqual([{ amount: 10, date: "2026-03-04", id: "e1" }]);
+    expect(calls[1]).toEqual([
+      "query", { path: "users/u1/expenses" }, { where: ["date", ">=", "2026-03-01"] }, { where: ["date", "<=", "2026-03-31"] },
+    ]);
+  });
+});

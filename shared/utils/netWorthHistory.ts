@@ -225,7 +225,8 @@ export function netWorthRecorderMessage(status: NetWorthRecorderStatus): string 
       return `Today's net worth isn't saved: ${BLOCKER_TEXT[status.blockers[0]]}.`;
     }
     default:
-      return "Saving today's net worth…";
+      // SPENDLY-741: the server records the point every morning (08:30 IST).
+      return "Today's net worth is saved each morning.";
   }
 }
 

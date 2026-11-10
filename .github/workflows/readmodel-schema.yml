@@ -81,6 +81,12 @@ jobs:
         # tombstone and un-tombstone, unknown tables refused, no client execute.
         run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/sync_functions.sql
 
+      - name: Bill-run queue (SPENDLY-737)
+        # An app save to a bill input queues its owner; once a minute, with a
+        # Vault token, one dispatch to bill-daily.yml in queue mode (pg_net
+        # stand-in). Server writes and duress never queue; clients can't read
+        # it; a purge clears it.
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/bill_run_queue.sql
       - name: Account purge (SPENDLY-508)
         # Deletes every row and all sync bookkeeping for the uid and its duress
         # twin; idempotent; a late sync cannot resurrect it; client roles can't call it.

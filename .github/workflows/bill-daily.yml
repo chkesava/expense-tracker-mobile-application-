@@ -1,0 +1,99 @@
+name: Bill daily
+
+# SPENDLY-727 (682-C): the daily server credit-card bill pass that replaces the legacy
+# site's `credit-card-bills` cron. Rules: scripts/lib/billDailyCore.ts.
+#
+# Manual dispatch only for now. SPENDLY-729 adds the Cloudflare Worker's daily
+# dispatch (trigger=cron), which runs only when the repository variable
+# BILL_DAILY_ENABLED is "true". A manual dispatch always runs (dry run by
+# default) so a production preview is possible before enabling.
+#
+# Secrets: FIREBASE_SERVICE_ACCOUNT (or BILL_FIREBASE_SERVICE_ACCOUNT),
+#          READMODEL_SUPABASE_SERVICE_ROLE_KEY (optional, read-model push)
+# Variables: BILL_DAILY_ENABLED, READMODEL_SUPABASE_URL, BILL_MAX_READS_PER_RUN,
+#            BILL_READMODEL_FINDER ("off" settles closing cards only)
+#
+# SPENDLY-734: with the read-model settings the job also settles every card
+# whose bill work the read model shows (a payment or cashback after the close,
+# a stale stored settlement). Finding it costs no Firestore reads; each card is
+# then read and written from Firestore.
+#
+# SPENDLY-737: trigger=queue runs (`--queue`) are dispatched by the read model
+# itself (Supabase migration 20261112000000) within about a minute of an app
+# save to a bill input. They settle only the queued users, read from the
+# server-only queue table, so no uid is ever an input. Gated by
+# BILL_DAILY_ENABLED like the Worker's runs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Decide and log every statement, write nothing"
+        required: true
+        default: true
+        type: boolean
+      trigger:
+        description: "Who started the run. The Cloudflare Worker sends cron, the read model sends queue (SPENDLY-737); both obey BILL_DAILY_ENABLED."
+        required: false
+        default: manual
+        type: choice
+        options:
+          - manual
+          - cron
+          - queue
+
+concurrency:
+  group: bill-daily
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: Create and settle card statements
+    if: vars.BILL_DAILY_ENABLED == 'true' || (inputs.trigger != 'cron' && inputs.trigger != 'queue')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The job never pushes; don't leave the token in git config.
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run
+        env:
+          BILL_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.BILL_FIREBASE_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
+          READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+          BILL_MAX_READS_PER_RUN: ${{ vars.BILL_MAX_READS_PER_RUN || '5000' }}
+          BILL_READMODEL_FINDER: ${{ vars.BILL_READMODEL_FINDER || 'on' }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          TRIGGER: ${{ inputs.trigger }}
+        run: |
+          set -euo pipefail
+          if [ -z "$BILL_FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT (or BILL_FIREBASE_SERVICE_ACCOUNT) is not set."
+            exit 1
+          fi
+          args=""
+          if [ "$DRY_RUN" = "true" ]; then args="--dry-run"; fi
+          if [ "$TRIGGER" = "queue" ]; then args="$args --queue"; fi
+          npx --no-install tsx scripts/bill-daily.ts $args | tee bill-daily.log
+          {
+            echo "## Bill daily"
+            echo '```json'
+            sed -n '/^{/,/^}/p' bill-daily.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

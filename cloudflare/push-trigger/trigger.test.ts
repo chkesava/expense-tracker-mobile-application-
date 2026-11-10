@@ -3,7 +3,17 @@ import { join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { DISPATCH_TARGET, dispatchPushReminders, dispatchRequest, type FetchLike } from "./trigger";
+import {
+  DAILY_CRON,
+  DAILY_WORKFLOWS,
+  DISPATCH_TARGET,
+  PUSH_CRON,
+  dispatchForCron,
+  dispatchPushReminders,
+  dispatchRequest,
+  workflowsForCron,
+  type FetchLike,
+} from "./trigger";
 
 const TOKEN = "github_pat_secret_value_123";
 const root = join(__dirname, "..", "..");
@@ -61,8 +71,11 @@ describe("dispatchPushReminders", () => {
 });
 
 describe("contract: Worker, wrangler.toml and the workflow agree", () => {
-  const workflow = readFileSync(join(root, ".github", "workflows", DISPATCH_TARGET.workflow), "utf8");
-  const wrangler = readFileSync(join(__dirname, "wrangler.toml"), "utf8");
+  // SPENDLY-720: normalise line endings, so the regexes below hold on a
+  // Windows (core.autocrlf, CRLF) checkout as well as on CI (LF).
+  const lf = (text: string) => text.replace(/\r\n/g, "\n");
+  const workflow = lf(readFileSync(join(root, ".github", "workflows", DISPATCH_TARGET.workflow), "utf8"));
+  const wrangler = lf(readFileSync(join(__dirname, "wrangler.toml"), "utf8"));
 
   it("the workflow accepts the inputs the Worker sends", () => {
     expect(workflow).toMatch(/workflow_dispatch:\s*\n\s*inputs:/);
@@ -78,9 +91,67 @@ describe("contract: Worker, wrangler.toml and the workflow agree", () => {
     expect(condition).not.toMatch(/^github\.event_name == 'workflow_dispatch' \|\|/);
   });
 
-  it("the Worker fires every 15 minutes and exposes no URL", () => {
-    expect(wrangler).toMatch(/crons = \["\*\/15 \* \* \* \*"\]/);
+  it("the Worker fires every 15 minutes (push) and daily at 03:00 UTC (682 jobs), and exposes no URL", () => {
+    expect(wrangler).toContain(`crons = ["${PUSH_CRON}", "${DAILY_CRON}"]`);
     expect(wrangler).toMatch(/workers_dev = false/);
     expect(wrangler).not.toMatch(/^\s*routes?\s*=/m);
   });
+});
+
+describe("daily jobs (SPENDLY-729)", () => {
+  const respond = (status: number): FetchLike => vi.fn(async () => ({ status, text: async () => "" }));
+
+  it("each cron starts its own workflows; an unknown cron starts nothing", () => {
+    expect(workflowsForCron(PUSH_CRON)).toEqual(["push-reminders.yml"]);
+    expect(workflowsForCron(DAILY_CRON)).toEqual(["category-daily.yml", "subscription-daily.yml", "sip-daily.yml", "epf-daily.yml", "bill-daily.yml", "housekeeping-daily.yml", "snapshot-daily.yml", "recurring-weekly.yml", "insights-daily.yml"]);
+    expect(workflowsForCron("5 4 * * *")).toEqual([]);
+  });
+
+  it("the daily tick dispatches every daily job as a real cron-marked run", async () => {
+    const fetchFn = respond(204);
+    const results = await dispatchForCron(DAILY_CRON, { GITHUB_DISPATCH_TOKEN: TOKEN }, fetchFn, vi.fn());
+    expect(results).toEqual(Array.from({ length: 9 }, () => ({ ok: true, status: 204 })));
+    const calls = (fetchFn as unknown as { mock: { calls: Array<[string, { body: string }]> } }).mock.calls;
+    expect(calls.map(([url]) => url.split("/workflows/")[1])).toEqual(["category-daily.yml/dispatches", "subscription-daily.yml/dispatches", "sip-daily.yml/dispatches", "epf-daily.yml/dispatches", "bill-daily.yml/dispatches", "housekeeping-daily.yml/dispatches", "snapshot-daily.yml/dispatches", "recurring-weekly.yml/dispatches", "insights-daily.yml/dispatches"]);
+    for (const [, init] of calls) expect(JSON.parse(init.body)).toEqual({ ref: "main", inputs: { dry_run: "false", trigger: "cron" } });
+  });
+
+  it("one failing dispatch doesn't stop the others", async () => {
+    let n = 0;
+    const fetchFn: FetchLike = vi.fn(async () => ({ status: n++ === 0 ? 500 : 204, text: async () => "" }));
+    const results = await dispatchForCron(DAILY_CRON, { GITHUB_DISPATCH_TOKEN: TOKEN }, fetchFn, vi.fn());
+    expect(results.map((r) => r.ok).sort()).toEqual([false, true, true, true, true, true, true, true, true]);
+  });
+
+  it("the 15-minute tick still only starts push reminders", async () => {
+    const fetchFn = respond(204);
+    await dispatchForCron(PUSH_CRON, { GITHUB_DISPATCH_TOKEN: TOKEN }, fetchFn, vi.fn());
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  // Line endings normalised, so this holds on a Windows (CRLF) checkout too (cf. SPENDLY-720).
+  for (const [workflow, flag] of [
+    ["category-daily.yml", "CATEGORY_DAILY_ENABLED"],
+    ["subscription-daily.yml", "SUBSCRIPTION_DAILY_ENABLED"],
+    ["sip-daily.yml", "SIP_DAILY_ENABLED"],
+    ["epf-daily.yml", "EPF_DAILY_ENABLED"],
+    ["bill-daily.yml", "BILL_DAILY_ENABLED"],
+    ["housekeeping-daily.yml", "HOUSEKEEPING_DAILY_ENABLED"],
+    ["snapshot-daily.yml", "SNAPSHOT_DAILY_ENABLED"],
+    ["recurring-weekly.yml", "RECURRING_WEEKLY_ENABLED"],
+    ["insights-daily.yml", "INSIGHTS_DAILY_ENABLED"],
+  ] as const) {
+    it(`${workflow} accepts the Worker's inputs and its cron runs obey ${flag}`, () => {
+      expect(DAILY_WORKFLOWS).toContain(workflow);
+      const text = readFileSync(join(root, ".github", "workflows", workflow), "utf8").replace(/\r\n/g, "\n");
+      expect(text).toMatch(/workflow_dispatch:\s*\n\s*inputs:/);
+      expect(text).toMatch(/\n\s{6}dry_run:\s*\n/);
+      expect(text).toMatch(/\n\s{6}trigger:[\s\S]*?options:\s*\n\s*- manual\s*\n\s*- cron/);
+      const condition = text.match(/\n\s{4}if: (.+)\n/)?.[1] ?? "";
+      expect(condition).toContain(`vars.${flag} == 'true'`);
+      expect(condition).toContain("inputs.trigger != 'cron'");
+      // No schedule of its own: the Worker is the only automatic trigger.
+      expect(text).not.toMatch(/\n\s*schedule:/);
+    });
+  }
 });

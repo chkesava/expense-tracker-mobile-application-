@@ -64,7 +64,7 @@
 - **No money columns:** every amount stays in `doc` (R2.2). SQL never sums or computes a tax figure; the TypeScript lines do (R3.6, R4).
 - **Index:** `(uid, fy)` on each table.
 - **Change fields:** `EXTRA_CHANGE_FIELDS` has `createdAtMs`/`updatedAtMs` for each collection (`taxSnapshots` has `createdAtMs` only).
-- **Migration:** `supabase-readmodel/supabase/migrations/20261110000000_readmodel_tax.sql`. It is additive and re-runnable, and holds:
+- **Migration:** `supabase-readmodel/supabase/migrations/20261115000000_readmodel_tax.sql` (written as 20261110; renamed to run after main's 20261112–14 on 2026-11-10). It is additive and re-runnable, and holds:
   - the five tables, with the contract columns plus `written_by` and `client_written_at`;
   - RLS: deny by default, owner-only SELECT, tombstones hidden;
   - realtime ping triggers;
@@ -117,6 +117,6 @@ The effects are written per hook on purpose, so the guards can see each listener
 ## Production (each step needs the user's approval)
 
 1. **Firestore rules and indexes:** diff against live first. The rules must be deployed before any build that writes tax data.
-2. **Supabase migration `20261110000000`:** dry run, then apply, before any build that writes tax data. Coordinate with 222's migrations (see above).
+2. **Supabase migration `20261115000000`:** dry run, then apply, before any build that writes tax data. Coordinate with 222's migrations (see above).
 
 No production step has been run.

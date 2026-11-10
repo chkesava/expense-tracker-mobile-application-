@@ -108,6 +108,20 @@ describe("every server-side writer of a synced collection pushes (SPENDLY-680)",
     // The push core: it is the copy.
     "netlify/functions/_readmodelPushCore.ts": "the push itself",
     "netlify/functions/readmodel-push.ts": "the push itself",
+    // SPENDLY-726: daily job cores write through `applyJobWrites`, which notes
+    // every committed path to the push its CLI creates (pinned below).
+    "scripts/lib/sipDailyCore.ts": "writes via applyJobWrites; sip-daily.ts creates the push",
+    "scripts/lib/billDailyCore.ts": "writes via applyJobWrites; bill-daily.ts creates the push",
+    // SPENDLY-739 (epic SPENDLY-735).
+    "scripts/lib/subscriptionDailyCore.ts": "writes via applyJobWrites; subscription-daily.ts creates the push",
+    // SPENDLY-740.
+    "scripts/lib/epfDailyCore.ts": "writes via applyJobWrites; epf-daily.ts creates the push",
+    // SPENDLY-741.
+    "scripts/lib/snapshotDailyCore.ts": "writes via applyJobWrites; snapshot-daily.ts creates the push",
+    // SPENDLY-743.
+    "scripts/lib/housekeepingDailyCore.ts": "writes via applyJobWrites; housekeeping-daily.ts creates the push",
+    "scripts/lib/recurringWeeklyCore.ts": "writes via applyJobWrites; recurring-weekly.ts creates the push",
+    "scripts/lib/insightsDailyCore.ts": "writes via applyJobWrites; insights-daily.ts creates the push",
   };
   const PUSHES = /\bcreateServerPush\(|\breadModel\b[^\n]*serverPushPorts|\bserverPushPorts\(/;
 
@@ -142,5 +156,21 @@ describe("every server-side writer of a synced collection pushes (SPENDLY-680)",
     for (const known of ["netlify/functions/epf-cron.ts", "scripts/rebaseline-account.ts", "scripts/lib/rebuildRunner.ts"]) {
       expect(writers).toContain(known);
     }
+  });
+
+  // SPENDLY-726: the daily jobs (682) build `JobWrite`s in a pure core and
+  // write them through `applyJobWrites`. The core is allowed above because
+  // its CLI creates the push; this pins that, so the allowance can't hide a
+  // job that doesn't push.
+  it("every daily job CLI (scripts/*-daily.ts) creates the server push", () => {
+    const clis = readdirSync(join(ROOT, "scripts")).filter((n) => /-daily\.ts$/.test(n));
+    expect(clis).toEqual(expect.arrayContaining(["sip-daily.ts", "bill-daily.ts"]));
+    const missing = clis.filter((n) => !/\bcreateServerPush\(serverPushPorts\(/.test(readFileSync(join(ROOT, "scripts", n), "utf8")));
+    expect(missing, `daily jobs that don't push: ${missing.join(", ")}`).toEqual([]);
+  });
+
+  it("the daily job core pushes exactly what it committed", () => {
+    const core = readFileSync(join(ROOT, "scripts", "lib", "dailyJobCore.ts"), "utf8");
+    expect(core).toMatch(/await batch\.commit\(\);[\s\S]*opts\.push\?\.note\(uid, paths\)/);
   });
 });

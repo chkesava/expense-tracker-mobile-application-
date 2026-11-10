@@ -1,0 +1,89 @@
+name: EPF daily
+
+# SPENDLY-740 (epic SPENDLY-735): the daily server EPF job. The app no longer
+# runs the EPF tab's background passes.
+#   1. Contribution catch-up and repairs: the existing epf-cron handler, run
+#      in-process (no Netlify invocation), every page, its log lines masked.
+#   2. FY interest and the stored EPF summary (scripts/lib/epfDailyCore.ts).
+#
+# The Cloudflare Worker `spendly-push-trigger` dispatches this workflow on its
+# daily 03:00 UTC tick (08:30 IST) with `trigger: cron`, which runs only when
+# the repository variable EPF_DAILY_ENABLED is "true". A manual dispatch always
+# runs (dry run by default; a dry run skips step 1).
+#
+# Secrets: FIREBASE_SERVICE_ACCOUNT (or EPF_FIREBASE_SERVICE_ACCOUNT),
+#          READMODEL_SUPABASE_SERVICE_ROLE_KEY (optional: finder + read-model push)
+# Variables: EPF_DAILY_ENABLED, READMODEL_SUPABASE_URL, EPF_MAX_READS_PER_RUN,
+#            EPF_READMODEL_FINDER, EPF_DAILY_CATCHUP ("off" skips step 1)
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Decide and log, write nothing (skips the catch-up)"
+        required: true
+        default: true
+        type: boolean
+      trigger:
+        description: "Who started the run. The Cloudflare Worker sends cron, which obeys EPF_DAILY_ENABLED."
+        required: false
+        default: manual
+        type: choice
+        options:
+          - manual
+          - cron
+
+concurrency:
+  group: epf-daily
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: EPF catch-up, interest and summary
+    if: vars.EPF_DAILY_ENABLED == 'true' || inputs.trigger != 'cron'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The job never pushes; don't leave the token in git config.
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run
+        env:
+          EPF_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.EPF_FIREBASE_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
+          READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+          EPF_MAX_READS_PER_RUN: ${{ vars.EPF_MAX_READS_PER_RUN || '3000' }}
+          EPF_READMODEL_FINDER: ${{ vars.EPF_READMODEL_FINDER || 'on' }}
+          EPF_DAILY_CATCHUP: ${{ vars.EPF_DAILY_CATCHUP || 'on' }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ -z "$EPF_FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT (or EPF_FIREBASE_SERVICE_ACCOUNT) is not set."
+            exit 1
+          fi
+          args=""
+          if [ "$DRY_RUN" = "true" ]; then args="--dry-run"; fi
+          npx --no-install tsx scripts/epf-daily.ts $args | tee epf-daily.log
+          {
+            echo "## EPF daily"
+            echo '```json'
+            sed -n '/^{/,/^}/p' epf-daily.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

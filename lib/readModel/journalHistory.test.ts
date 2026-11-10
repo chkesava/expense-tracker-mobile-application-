@@ -85,7 +85,7 @@ describe("older Journal pages (SPENDLY-512)", () => {
     const connect = vi.fn(async () => ({ access: "ok" as const, client: fakeSupabase([]).client }));
     const page = await readJournalPage({
       db: {} as never, user, collectionName: "incomes", firestoreCursor: cursor, supabaseCursor: null,
-      conditions: { setting: { journal: "shadow" }, online: true, duress: false }, locallyRemovedIds: new Set(), connect,
+      conditions: { setting: { journal: "shadow", deviceShadow: true }, online: true, duress: false }, locallyRemovedIds: new Set(), connect,
     });
     expect(page?.servedBy).toBe("firestore");
   });
@@ -150,7 +150,7 @@ describe("shadow comparison of a whole history (SPENDLY-512)", () => {
       db: {} as never,
       user, collectionName: "expenses",
       loaded: [{ id: "d001", amount: 1, date: row(1).date }, { id: "d002", amount: 99, date: row(2).date }, { id: "local-only", amount: 3, date: "2026-01-03" }],
-      conditions: { setting: { journal: "shadow" }, online: true, duress: false },
+      conditions: { setting: { journal: "shadow", deviceShadow: true }, online: true, duress: false },
       connect: vi.fn(async () => ({ access: "ok" as const, client: fake.client })), log,
     });
     expect(diffs).toEqual(["differs: d002", "missing in read model: local-only"]);

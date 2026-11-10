@@ -210,6 +210,34 @@ describe("reconcileBillReminders orchestration", () => {
     expect(mockCancelScheduled).toHaveBeenCalledWith(existingNotif.identifier);
   });
 
+  it("SPENDLY-738: reads the scheduled list once per pass, not once per bill", async () => {
+    mockGetAllScheduled.mockResolvedValue([{ identifier: "ccbill:bill-1:due_date" }, { identifier: "ccbill:bill-2:due_date" }]);
+    await reconcileBillReminders({
+      bills: [makeBill(), makeBill({ id: "bill-2" }), makeBill({ id: "bill-3" })],
+      accountsById: new Map([["card-1", account]]),
+      globalPrefs,
+    });
+    expect(mockGetAllScheduled).toHaveBeenCalledTimes(1);
+    expect(mockCancelScheduled).toHaveBeenCalledWith("ccbill:bill-1:due_date");
+    expect(mockCancelScheduled).toHaveBeenCalledWith("ccbill:bill-2:due_date");
+  });
+
+  it("SPENDLY-738: uses the caller's permission instead of reading it again", async () => {
+    const logs: Array<{ status: string; reason?: string }> = [];
+    await reconcileBillReminders({
+      bills: [makeBill()],
+      accountsById: new Map([["card-1", account]]),
+      globalPrefs,
+      granted: false,
+      onLog: (e) => {
+        logs.push(e);
+      },
+    });
+    expect(mockGetPermissions).not.toHaveBeenCalled();
+    expect(mockScheduleNotification).not.toHaveBeenCalled();
+    expect(logs).toEqual([expect.objectContaining({ status: "failed", reason: "permission_denied" })]);
+  });
+
   it("silently skips a bill whose account is not in the accountsById map", async () => {
     const logs: unknown[] = [];
     await reconcileBillReminders({

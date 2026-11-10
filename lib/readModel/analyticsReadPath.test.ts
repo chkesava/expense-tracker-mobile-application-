@@ -44,7 +44,8 @@ import { setReadModelPathForTests } from "./screenReadPath";
 const d = (id: string, data: Record<string, unknown>) => ({ id, data: () => data });
 const user = { uid: "u1", getIdToken: async () => "t", getIdTokenResult: async () => ({ claims: {} }) };
 const conditions = (screen: string, mode: string | undefined, extra: Record<string, unknown> = {}) => ({
-  setting: mode ? { [screen]: mode, ...extra } : undefined,
+  // SPENDLY-745: shadow compares only with deviceShadow on.
+  setting: mode ? { [screen]: mode, deviceShadow: true, ...extra } : undefined,
   online: true,
   duress: false,
   localTestMode: true,

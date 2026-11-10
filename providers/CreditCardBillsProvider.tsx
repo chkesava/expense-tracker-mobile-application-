@@ -1,17 +1,13 @@
 import {
-  addDoc,
   arrayUnion,
   collection,
   doc,
-  getDocs,
   increment,
   onSnapshot,
   query,
   serverTimestamp,
   setDoc,
-  runTransaction,
   updateDoc,
-  where,
 } from "@/lib/firestore";
 import {
   createContext,
@@ -26,17 +22,16 @@ import {
 import { AppState } from "react-native";
 
 import { getFirestoreDb } from "@/lib/firebase";
-import { forgetSnapshotPath, logDirectRead, logQuerySnapshot } from "@/lib/firestoreReadDebug";
+import { forgetSnapshotPath, logQuerySnapshot } from "@/lib/firestoreReadDebug";
 import { notifyReadModelSnapshot } from "@/lib/readModelPush";
-import { noteDirectWrites, noteTransactionWrites } from "@/lib/readModelWriteHooks";
+import { noteDirectWrites } from "@/lib/readModelWriteHooks";
 import { commitWrite, writeSavedMessage } from "@/lib/firestoreWrite";
 import { friendlyErrorMessage, logError, logWarning } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useAccounts } from "@/hooks/useAccounts";
-import { useAccountPayments } from "@/hooks/useAccountPayments";
-import { useReadModelMode, useReadModelSource } from "@/hooks/useReadModelSource";
-import { billPassFingerprint, billPassHasWork, billPassReadsCopy, loadAuthoritativeBillInputs, toCreditCardBill, type AuthoritativeReader, type BillPassInputs } from "@/lib/readModelLocal/billPass";
+import { useReadModelSource } from "@/hooks/useReadModelSource";
+import { parseStoredBill } from "@/shared/utils/creditCardBillStatus";
 import { toSourceDocs } from "@/lib/readModelLocal/readSource";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
 import { useExpenses } from "@/hooks/useExpenses";
@@ -44,37 +39,20 @@ import { usePushReminderMode } from "@/hooks/usePushReminderMode";
 import { useSettings } from "@/providers/SettingsProvider";
 import { perfEvent } from "@/lib/perf";
 import {
-  AUTO_CREDIT_CARD_BILL_REMINDER_FREQUENCY,
   DEFAULT_BILL_REMINDER_FREQUENCY,
-  DEFAULT_CREDIT_CARD_BILL_REMINDERS,
   type CreateCreditCardBillInput,
   type CreditCardBill,
-  type CreditCardBillReminderLog,
 } from "@/shared/types/creditCardBill";
-import {
-  computeNextReminderAt,
-} from "@/shared/utils/creditCardBillReminders";
-import {
-  computeCreditCardBillStatus,
-  computeRemainingAmount,
-} from "@/shared/utils/creditCardBillStatus";
 import { validateCreateCreditCardBillInput } from "@/shared/utils/creditCardBillValidate";
-import { getAccountKind } from "@/shared/utils/accountKind";
+import { refreshCreditCardBillDerivedFields } from "@/shared/utils/creditCardBillDerived";
 import {
-  canRunAutoCreditCardBillGeneration,
-  collectAutoCreditCardBillDrafts,
-  collectAutoCreditCardBillRefreshPatches,
   previewSettledAutoBillRecalculation,
   type SettledBillRecalculation,
 } from "@/shared/utils/autoCreditCardBills";
-import {
-  billAllocationBasisUnchanged,
-  collectCreditBillAllocationPatches,
-  collectCreditBillDuplicateResolutions,
-} from "@/shared/utils/creditCardLedger";
-import { createAutoCreditCardBill } from "@/services/creditCardBills/autoBill";
+import { billReminderPlanKey } from "@/shared/utils/creditCardBillReminders";
 import { todayDateKey } from "@/shared/utils/dates";
 import {
+  billNotificationsAllowed,
   cancelAllBillReminders,
   cancelBillReminders,
   reconcileBillReminders,
@@ -125,11 +103,6 @@ type CreditCardBillsContextType = {
   ) => Promise<boolean>;
   cancelBill: (billId: string) => Promise<boolean>;
   /**
-   * SPENDLY-719: settle stored bills against the ledger soon. Call after a
-   * write that moves a card's settlement outside this provider (cashback).
-   */
-  requestBillPass: () => void;
-  /**
    * SPENDLY-99: what a settled auto statement would become if recomputed
    * against full history, or null when there is nothing to correct. Pure —
    * writes nothing, so the UI can show the before/after before asking.
@@ -146,135 +119,34 @@ const CreditCardBillsContext = createContext<
   CreditCardBillsContextType | undefined
 >(undefined);
 
-/**
- * SPENDLY-597: the bill pass's Firestore reads when its inputs are served by
- * the on-device copy (never the copy). Metered like every direct read.
- */
-function firestoreBillReader(db: NonNullable<ReturnType<typeof getFirestoreDb>>, uid: string): AuthoritativeReader {
-  const read = async (run: () => ReturnType<typeof getDocs>, path: string, shape: string) => {
-    const snap = await run();
-    logDirectRead(path, snap.docs.length, snap.metadata.fromCache ? "cache" : "server", { feature: "creditCardBills", queryShape: shape });
-    return snap.docs.map((d) => ({ id: d.id, data: (d.data() ?? {}) as Record<string, unknown> }));
-  };
-  return {
-    all: (name) => read(() => getDocs(query(collection(db, "users", uid, name))), `users/${uid}/${name}`, "bill pass inputs"),
-    where: (name, field, value) =>
-      read(
-        () => getDocs(query(collection(db, "users", uid, name), where(field, "==", value))),
-        `users/${uid}/${name}?${field}`,
-        "bill pass card expenses"
-      ),
-  };
-}
-
-function refreshDerivedFields(
-  bill: Pick<
-    CreditCardBill,
-    | "dueDate"
-    | "statementAmount"
-    | "amountPaid"
-    | "status"
-    | "reminderEnabled"
-    | "reminderFrequency"
-    | "lastReminderSentAt"
-  >,
-  timezone: string,
-  globalEnabled: boolean
-): Pick<
-  CreditCardBill,
-  "status" | "remainingAmount" | "nextReminderAt"
-> {
-  const remainingAmount = computeRemainingAmount(
-    bill.statementAmount,
-    bill.amountPaid
-  );
-  const status =
-    bill.status === "CANCELLED"
-      ? "CANCELLED"
-      : computeCreditCardBillStatus({
-          today: todayDateKey(timezone),
-          dueDate: bill.dueDate,
-          amountPaid: bill.amountPaid,
-          statementAmount: bill.statementAmount,
-        });
-  const nextReminderAt =
-    computeNextReminderAt({
-      bill: {
-        ...bill,
-        status,
-        remainingAmount,
-      },
-      today: todayDateKey(timezone),
-      globalPrefs: {
-        ...DEFAULT_CREDIT_CARD_BILL_REMINDERS,
-        enabled: globalEnabled,
-      },
-    }) ?? undefined;
-  return { status, remainingAmount, nextReminderAt };
-}
+const refreshDerivedFields = refreshCreditCardBillDerivedFields;
 
 export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   // SPENDLY-673: firestore (default) | shadow | supabase, per readModel.creditCardBills.
   const billsSource = useReadModelSource("creditCardBills");
-  // SPENDLY-597: where the bill pass's inputs come from (R4.3a).
-  const expensesMode = useReadModelMode("expenses");
-  const paymentsMode = useReadModelMode("accountPayments");
-  const accountsMode = useReadModelMode("accounts");
-  const accountTypesMode = useReadModelMode("accountTypes");
-  const passInputModesRef = useRef<string[]>([]);
-  passInputModesRef.current = [billsSource.mode, expensesMode, paymentsMode, accountsMode, accountTypesMode];
   const { accounts } = useAccounts();
   const { accountTypes } = useAccountTypes();
   const {
     expenses,
-    loading: expensesLoading,
     complete: expensesComplete,
   } = useExpenses();
-  const { payments, loading: paymentsLoading } = useAccountPayments();
   const { settings } = useSettings();
   const [bills, setBills] = useState<CreditCardBill[]>([]);
   const [billsLoading, setBillsLoading] = useState(true);
   const reconcileTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoGenerateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoGenerateInFlight = useRef(false);
-  // SPENDLY-675: bill ids the pass last ran against. null until it first runs.
-  const passSeenBillIds = useRef<Set<string> | null>(null);
-  const autoGenerateToastShown = useRef(false);
-  const lastAutoBillFingerprintRef = useRef("");
-  const didInitialAutoGenerate = useRef(false);
-  // SPENDLY-719: a pass asked for while one is running runs right after it,
-  // instead of being dropped (the bill stamp it would correct lands mid-pass).
-  const autoGenerateRerun = useRef(false);
-  // An unfinished pass (a skipped compare-and-set, or offline) retries a few
-  // times, then waits for the next trigger rather than looping.
-  const autoGenerateRetries = useRef(0);
-  const generateAutoBillsRef = useRef<(() => Promise<void>) | null>(null);
-
-  /**
-   * SPENDLY-719: run the bill pass soon. Money actions call this so the
-   * stored bill (`amountPaid`, `status`, `remainingAmount`, which the bills
-   * list and the server's reminders read) matches the ledger at once,
-   * cashback included, instead of waiting for the next app focus.
-   */
-  const requestBillPass = useCallback((delayMs = 400) => {
-    if (autoGenerateTimer.current) clearTimeout(autoGenerateTimer.current);
-    autoGenerateTimer.current = setTimeout(() => {
-      void generateAutoBillsRef.current?.();
-    }, delayMs);
-  }, []);
+  // SPENDLY-734/737 (epic SPENDLY-735): the app computes no bill pass. The
+  // server's `bill-daily` job settles stored bills against the ledger,
+  // cashback included. A money action needs no extra call: its save reaches
+  // the read model, which queues this user and starts the job within about a
+  // minute (supabase-readmodel migration 20261112000000); the daily 03:00 UTC
+  // run catches anything else.
 
   const globalPrefs = settings.creditCardBillReminders;
   const timezone = settings.timezone;
   const showAmounts = settings.pushNotifications.showAmounts;
   // SPENDLY-693: when the server delivers reminders as push, this phone doesn't.
   const { mode: reminderMode, loading: reminderModeLoading } = usePushReminderMode();
-
-  useEffect(() => {
-    autoGenerateToastShown.current = false;
-    lastAutoBillFingerprintRef.current = "";
-    didInitialAutoGenerate.current = false;
-  }, [user?.uid]);
 
   const [shouldListen, setShouldListen] = useState(false);
   const subscriberCountRef = useRef(0);
@@ -327,7 +199,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     setBillsLoading(true);
     // SPENDLY-673: the same mapping for either source (Firestore or the on-device copy).
     const apply = (docs: { id: string; data: Record<string, unknown> }[]) => {
-        setBills(docs.map((d) => toCreditCardBill(d, todayDateKey(timezone))));
+        setBills(docs.map((d) => parseStoredBill(d.id, d.data as Record<string, unknown>, todayDateKey(timezone))));
         setBillsLoading(false);
     };
     if (billsSource.mode === "supabase") return billsSource.subscribe(apply);
@@ -356,59 +228,66 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
     };
   }, [user?.uid, timezone, shouldListen, billsSource.mode]);
 
-  const writeReminderLog = useCallback(
-    async (entry: Omit<CreditCardBillReminderLog, "id" | "sentAt" | "channel">) => {
-      const db = getFirestoreDb();
-      if (!user || !db) return;
-      try {
-        // Diagnostic log only — never block the caller on the network for it.
-        await commitWrite(
-          () =>
-            addDoc(
-              collection(db, "users", user.uid, "creditCardBillReminderLogs"),
-              {
-                billId: entry.billId,
-                notificationType: entry.notificationType,
-                daysBefore: entry.daysBefore ?? null,
-                sentAt: new Date().toISOString(),
-                channel: "local",
-                status: entry.status,
-                reason: entry.reason ?? null,
-                createdAt: serverTimestamp(),
-              }
-            ),
-          { graceMs: 0, onLateFailure: () => undefined }
-        );
-      } catch {
-        // soft-fail — logging must not affect bill state
+  // SPENDLY-738 (epic SPENDLY-735): local reminders are re-planned only when
+  // the plan's inputs change (`billReminderPlanKey`), not on every app focus
+  // or snapshot, and the pass writes nothing to Firestore. A device that
+  // can't schedule (no permission, web, an OS error) is a device condition,
+  // not a bill event: one warning per reason per session, counts only. The
+  // server's push job keeps its own reminder logs.
+  const appliedReminderPlan = useRef<string | null>(null);
+  const warnedReminderReasons = useRef(new Set<string>());
+
+  const refreshReminderSchedules = useCallback(
+    async (opts: { force?: boolean } = {}) => {
+      // Never cancel on a guess: wait until the mode is known.
+      if (reminderModeLoading) return;
+      const push = reminderMode === "push";
+      const accountsById = new Map(accounts.map((a) => [a.id, a]));
+      const granted = push ? false : await billNotificationsAllowed();
+      const plan = billReminderPlanKey({
+        uid: user?.uid ?? "",
+        mode: push ? "push" : "local",
+        granted,
+        today: todayDateKey(timezone),
+        timezone,
+        showAmounts,
+        globalPrefs,
+        bills,
+        accountsById,
+      });
+      if (!opts.force && plan === appliedReminderPlan.current) return;
+      if (push) {
+        await cancelAllBillReminders();
+        appliedReminderPlan.current = plan;
+        return;
+      }
+      const failed = new Map<string, number>();
+      await reconcileBillReminders({
+        bills,
+        accountsById,
+        globalPrefs,
+        timezone,
+        showAmounts,
+        granted,
+        onLog: (entry) => {
+          if (entry.status === "failed") failed.set(entry.reason ?? "unknown", (failed.get(entry.reason ?? "unknown") ?? 0) + 1);
+        },
+      });
+      appliedReminderPlan.current = plan;
+      for (const [reason, count] of failed) {
+        if (warnedReminderReasons.current.has(reason)) continue;
+        warnedReminderReasons.current.add(reason);
+        logWarning("creditCardBills.localReminders", new Error(`not scheduled (${reason}) for ${count} bill reminder(s)`));
       }
     },
-    [user]
+    [user?.uid, accounts, bills, globalPrefs, timezone, showAmounts, reminderMode, reminderModeLoading]
   );
 
-  const refreshReminderSchedules = useCallback(async () => {
-    // Never cancel on a guess: wait until the mode is known.
-    if (reminderModeLoading) return;
-    if (reminderMode === "push") {
-      await cancelAllBillReminders();
-      return;
-    }
-    const accountsById = new Map(accounts.map((a) => [a.id, a]));
-    await reconcileBillReminders({
-      bills,
-      accountsById,
-      globalPrefs,
-      timezone,
-      showAmounts,
-      onLog: async (entry) => {
-        // Only persist schedule failures / skips occasionally would be noisy;
-        // log explicit skipped/failed reasons only.
-        if (entry.status === "failed") {
-          await writeReminderLog(entry);
-        }
-      },
-    });
-  }, [accounts, bills, globalPrefs, timezone, showAmounts, writeReminderLog, reminderMode, reminderModeLoading]);
+  /** What the context exposes: a caller asking for a refresh always gets one. */
+  const forceRefreshReminderSchedules = useCallback(
+    () => refreshReminderSchedules({ force: true }),
+    [refreshReminderSchedules]
+  );
 
   const scheduleReconcile = useCallback(() => {
     if (reconcileTimer.current) clearTimeout(reconcileTimer.current);
@@ -427,7 +306,6 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     return () => {
       if (reconcileTimer.current) clearTimeout(reconcileTimer.current);
-      if (autoGenerateTimer.current) clearTimeout(autoGenerateTimer.current);
     };
   }, []);
 
@@ -468,9 +346,9 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         globalPrefs.enabled
       );
 
-      // Manual bills keep a random id. Auto statements use
-      // `createAutoCreditCardBill` (`accountId_statementDate`) so two devices
-      // cannot mint duplicates for the same cycle.
+      // Manual bills keep a random id. Auto statements (created by the
+      // server's bill-daily job, SPENDLY-727/734) use `autoCreditCardBillDocId`
+      // (`accountId_statementDate`), so a replay cannot mint a duplicate.
       const ref = doc(collection(db, "users", user.uid, "creditCardBills"));
       await commitWrite(
         () =>
@@ -510,414 +388,6 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       settings.currency,
     ]
   );
-
-  const generateAutoBills = useCallback(async () => {
-    // SPENDLY-97: the AppState listener below calls this directly, so the gate
-    // cannot live only in the trigger effect — a foreground during a listener
-    // resubscribe would otherwise generate from the staged page.
-    if (!user) return;
-    if (
-      !canRunAutoCreditCardBillGeneration({
-        billsLoading,
-        expensesLoading,
-        paymentsLoading,
-        expensesComplete,
-      })
-    ) {
-      return;
-    }
-    const db = getFirestoreDb();
-    if (!db) return;
-    if (autoGenerateInFlight.current) {
-      autoGenerateRerun.current = true;
-      return;
-    }
-    autoGenerateInFlight.current = true;
-    passSeenBillIds.current = new Set(bills.map((bill) => bill.id));
-
-    // The pass itself, unchanged; it runs on whichever inputs the gate below chose.
-    const runBillPass = async (inputs: BillPassInputs) => {
-      const { accounts, accountTypes, expenses, payments, bills } = inputs;
-      const typeNameById = new Map(
-        accountTypes.map((type) => [type.id, type.name])
-      );
-      const drafts = collectAutoCreditCardBillDrafts({
-        accounts,
-        typeNameById,
-        expenses,
-        existingBills: bills,
-        today: todayDateKey(timezone),
-      });
-      const patches = collectAutoCreditCardBillRefreshPatches({
-        accounts,
-        typeNameById,
-        expenses,
-        existingBills: bills,
-        today: todayDateKey(timezone),
-      });
-      const patchedPreview = new Map(bills.map((bill) => [bill.id, bill]));
-      for (const patch of patches) {
-        const existing = patchedPreview.get(patch.billId);
-        if (!existing) continue;
-        patchedPreview.set(patch.billId, {
-          ...existing,
-          statementAmount: patch.statementAmount,
-          minimumDueAmount: patch.minimumDueAmount,
-          statementDate: patch.statementDate,
-          billingPeriodStart: patch.billingPeriodStart,
-          billingPeriodEnd: patch.billingPeriodEnd,
-          dueDate: patch.dueDate,
-        });
-      }
-      const previewAllocations = collectCreditBillAllocationPatches({
-        accounts,
-        isCreditAccount: (account) =>
-          getAccountKind(typeNameById.get(account.typeId) || "") === "credit",
-        expenses,
-        payments,
-        bills: [...patchedPreview.values()],
-        today: todayDateKey(timezone),
-      });
-      for (const allocation of previewAllocations) {
-        const existing = patchedPreview.get(allocation.billId);
-        if (!existing) continue;
-        patchedPreview.set(allocation.billId, {
-          ...existing,
-          amountPaid: allocation.amountPaid,
-          paymentIds: allocation.paymentIds,
-        });
-      }
-      const previewDuplicateResolutions = collectCreditBillDuplicateResolutions(
-        [...patchedPreview.values()],
-        todayDateKey(timezone)
-      );
-      const fingerprint = billPassFingerprint({
-        drafts,
-        patches,
-        allocations: previewAllocations,
-        duplicates: previewDuplicateResolutions,
-        bills,
-      });
-      if (fingerprint === lastAutoBillFingerprintRef.current) {
-        return;
-      }
-      // SPENDLY-719: a skipped or failed write leaves this pass unfinished, so
-      // its fingerprint is not recorded and the next pass tries again.
-      let incomplete = false;
-
-      let created = 0;
-      for (const draft of drafts) {
-        try {
-          await createAutoCreditCardBill(user.uid, {
-            accountId: draft.accountId,
-            statementAmount: draft.statementAmount,
-            minimumDueAmount: draft.minimumDueAmount,
-            statementDate: draft.statementDate,
-            dueDate: draft.dueDate,
-            billingPeriodStart: draft.billingPeriodStart ?? null,
-            billingPeriodEnd: draft.billingPeriodEnd ?? null,
-            note: draft.note ?? null,
-            currency: draft.currency || settings.currency || "INR",
-            reminderEnabled: draft.reminderEnabled ?? true,
-            reminderFrequency:
-              draft.reminderFrequency ?? AUTO_CREDIT_CARD_BILL_REMINDER_FREQUENCY,
-          });
-          created += 1;
-        } catch (err) {
-          logError("creditCardBills.autoCreate", err);
-        }
-      }
-      if (created > 0 && !autoGenerateToastShown.current) {
-        autoGenerateToastShown.current = true;
-        toast.success(
-          created === 1
-            ? "Credit card statement created"
-            : `${created} credit card statements created`
-        );
-      }
-
-      const patchedBills = new Map(bills.map((bill) => [bill.id, bill]));
-      for (const patch of patches) {
-        const existing = patchedBills.get(patch.billId);
-        if (!existing) continue;
-        const next = {
-          ...existing,
-          statementAmount: patch.statementAmount,
-          minimumDueAmount: patch.minimumDueAmount,
-          statementDate: patch.statementDate,
-          billingPeriodStart: patch.billingPeriodStart,
-          billingPeriodEnd: patch.billingPeriodEnd,
-          dueDate: patch.dueDate,
-        };
-        const derived = refreshDerivedFields(next, timezone, globalPrefs.enabled);
-        patchedBills.set(patch.billId, {
-          ...next,
-          status: derived.status,
-          remainingAmount: derived.remainingAmount,
-        });
-        if (
-          existing.statementAmount === patch.statementAmount &&
-          existing.minimumDueAmount === patch.minimumDueAmount &&
-          existing.statementDate === patch.statementDate &&
-          existing.billingPeriodStart === patch.billingPeriodStart &&
-          existing.billingPeriodEnd === patch.billingPeriodEnd &&
-          existing.dueDate === patch.dueDate &&
-          existing.status === derived.status &&
-          existing.remainingAmount === derived.remainingAmount
-        ) {
-          continue;
-        }
-        try {
-          await commitWrite(
-            () =>
-              updateDoc(
-                doc(db, "users", user.uid, "creditCardBills", patch.billId),
-                {
-                  statementAmount: patch.statementAmount,
-                  minimumDueAmount: patch.minimumDueAmount,
-                  statementDate: patch.statementDate,
-                  billingPeriodStart: patch.billingPeriodStart,
-                  billingPeriodEnd: patch.billingPeriodEnd,
-                  dueDate: patch.dueDate,
-                  status: derived.status,
-                  remainingAmount: derived.remainingAmount,
-                  nextReminderAt: derived.nextReminderAt ?? null,
-                  updatedAt: serverTimestamp(),
-                }
-              ),
-            { label: "credit card bill" }
-          );
-          noteDirectWrites(user.uid, [`users/${user.uid}/creditCardBills/${patch.billId}`]);
-        } catch (err) {
-          logError("creditCardBills.autoRefresh", err);
-        }
-      }
-
-      // Attach payments recorded before statements were linked to the
-      // statement they actually settled, so stored bills match the ledger.
-      const allocations = collectCreditBillAllocationPatches({
-        accounts,
-        isCreditAccount: (account) =>
-          getAccountKind(typeNameById.get(account.typeId) || "") === "credit",
-        expenses,
-        payments,
-        bills: [...patchedBills.values()],
-        today: todayDateKey(timezone),
-      });
-      for (const allocation of allocations) {
-        const existing = patchedBills.get(allocation.billId);
-        if (!existing) continue;
-        if (
-          existing.amountPaid === allocation.amountPaid &&
-          JSON.stringify(existing.paymentIds ?? []) ===
-            JSON.stringify(allocation.paymentIds)
-        ) {
-          continue;
-        }
-        const derived = refreshDerivedFields(
-          { ...existing, amountPaid: allocation.amountPaid },
-          timezone,
-          globalPrefs.enabled
-        );
-        patchedBills.set(allocation.billId, {
-          ...existing,
-          amountPaid: allocation.amountPaid,
-          paymentIds: allocation.paymentIds,
-          status: derived.status,
-          remainingAmount: derived.remainingAmount,
-        });
-        try {
-          // SPENDLY-497: compare-and-set. A payment recorded since this pass
-          // read the bill (increment + arrayUnion) must not be overwritten by
-          // the absolute value computed here; skip and let the next pass
-          // recompute. Transactions need the server, so offline this throws
-          // and the pass simply retries later.
-          const billRef = doc(db, "users", user.uid, "creditCardBills", allocation.billId);
-          const applied = await runTransaction(db, async (tx) => {
-            const snap = await tx.get(billRef);
-            if (!billAllocationBasisUnchanged(snap.data(), existing)) return false;
-            tx.update(billRef, {
-              amountPaid: allocation.amountPaid,
-              paymentIds: allocation.paymentIds,
-              paymentDate: allocation.paymentDate ?? null,
-              status: derived.status,
-              remainingAmount: derived.remainingAmount,
-              nextReminderAt: derived.nextReminderAt ?? null,
-              updatedAt: serverTimestamp(),
-            });
-            return true;
-          });
-          if (applied) noteTransactionWrites(user.uid, [billRef.path]);
-          else {
-            // Keep the in-memory view on the stored doc, not the skipped patch.
-            patchedBills.set(allocation.billId, existing);
-            incomplete = true;
-          }
-        } catch (err) {
-          patchedBills.set(allocation.billId, existing);
-          incomplete = true;
-          logWarning("creditCardBills.allocatePayments", err);
-        }
-      }
-
-      // SPENDLY-417: two docs for the same card+cycle can exist (duplicate
-      // generation, a manual bill alongside an auto one). Reconciliation
-      // above only ever claims one of them, so the other keeps whatever
-      // amountPaid/status it had when created — this is how an already-paid
-      // cycle keeps showing OVERDUE. Merge every duplicate group onto one
-      // canonical doc and cancel the rest; never deletes a doc or a payment.
-      const duplicateResolutions = collectCreditBillDuplicateResolutions(
-        [...patchedBills.values()],
-        todayDateKey(timezone)
-      );
-      for (const resolution of duplicateResolutions) {
-        const canonicalPatch = resolution.canonicalPatch;
-        if (canonicalPatch) {
-          try {
-            await commitWrite(
-              () =>
-                updateDoc(
-                  doc(db, "users", user.uid, "creditCardBills", resolution.canonicalId),
-                  {
-                    amountPaid: canonicalPatch.amountPaid,
-                    paymentIds: canonicalPatch.paymentIds,
-                    status: canonicalPatch.status,
-                    remainingAmount: canonicalPatch.remainingAmount,
-                    updatedAt: serverTimestamp(),
-                  }
-                ),
-              { label: "credit card bill" }
-            );
-            noteDirectWrites(user.uid, [`users/${user.uid}/creditCardBills/${resolution.canonicalId}`]);
-          } catch (err) {
-            logError("creditCardBills.mergeDuplicate", err);
-          }
-        }
-        for (const cancelId of resolution.cancelIds) {
-          try {
-            await commitWrite(
-              () =>
-                updateDoc(doc(db, "users", user.uid, "creditCardBills", cancelId), {
-                  status: "CANCELLED",
-                  updatedAt: serverTimestamp(),
-                }),
-              { label: "credit card bill" }
-            );
-            noteDirectWrites(user.uid, [`users/${user.uid}/creditCardBills/${cancelId}`]);
-          } catch (err) {
-            logError("creditCardBills.cancelDuplicate", err);
-          }
-        }
-      }
-
-      lastAutoBillFingerprintRef.current = incomplete ? "" : fingerprint;
-      if (!incomplete) {
-        autoGenerateRetries.current = 0;
-      } else if (autoGenerateRetries.current < 3) {
-        autoGenerateRetries.current += 1;
-        requestBillPass(1500);
-      }
-    };
-
-    try {
-      // SPENDLY-597 (READ_MODEL_RULES R4.3a): this pass writes statements from
-      // what it reads, so it never writes from the on-device copy. When any
-      // input is served by the copy: check for work on the screen's data
-      // (free), and only if there is some, run on Firestore's inputs.
-      const stateInputs: BillPassInputs = { accounts, accountTypes, expenses, payments, bills };
-      if (!billPassReadsCopy(passInputModesRef.current)) {
-        await runBillPass(stateInputs);
-        return;
-      }
-      const today = todayDateKey(timezone);
-      if (!billPassHasWork(stateInputs, today, (bill) => refreshDerivedFields(bill, timezone, globalPrefs.enabled))) return;
-      await runBillPass(await loadAuthoritativeBillInputs(firestoreBillReader(db, user.uid), today));
-    } catch (err) {
-      logError("creditCardBills.autoPass", err);
-    } finally {
-      autoGenerateInFlight.current = false;
-      if (autoGenerateRerun.current) {
-        autoGenerateRerun.current = false;
-        requestBillPass();
-      }
-    }
-  }, [
-    user,
-    billsLoading,
-    expensesLoading,
-    paymentsLoading,
-    expensesComplete,
-    accountTypes,
-    accounts,
-    expenses,
-    payments,
-    bills,
-    timezone,
-    globalPrefs.enabled,
-    settings.currency,
-    requestBillPass,
-  ]);
-
-  useEffect(() => {
-    generateAutoBillsRef.current = generateAutoBills;
-  }, [generateAutoBills]);
-
-  const scheduleAutoGenerate = useCallback(() => {
-    if (autoGenerateTimer.current) clearTimeout(autoGenerateTimer.current);
-    autoGenerateTimer.current = setTimeout(() => {
-      void generateAutoBills();
-    }, 400);
-  }, [generateAutoBills]);
-
-  // SPENDLY-45: do not run on every bills/expenses/payments snapshot — that
-  // is a write triggered by a read and races across devices. First load plus
-  // app focus is enough; deterministic ids make a replay a merge.
-  // SPENDLY-97: `expensesComplete`, not `expensesLoading` — the latter goes
-  // false on the staged first-paint page, and this pass backfills 12 cycles.
-  // Still one-shot: the ref is only claimed once the ledger is whole.
-  useEffect(() => {
-    if (!user) return;
-    if (
-      !canRunAutoCreditCardBillGeneration({
-        billsLoading,
-        expensesLoading,
-        paymentsLoading,
-        expensesComplete,
-      })
-    ) {
-      return;
-    }
-    if (didInitialAutoGenerate.current) return;
-    didInitialAutoGenerate.current = true;
-    scheduleAutoGenerate();
-  }, [
-    user,
-    billsLoading,
-    expensesLoading,
-    paymentsLoading,
-    expensesComplete,
-    scheduleAutoGenerate,
-  ]);
-
-  // SPENDLY-675: a bill that appears after the pass ran (one created by
-  // another device or the legacy cron, or by this pass itself) kept its
-  // creation-time amountPaid until the next app focus, so the statement
-  // contradicted the card's Total outstanding. Re-run once when a new bill id
-  // shows up. Bounded: each run records the ids it saw, the fingerprint skips
-  // a no-op run, and the allocation write is compare-and-set (SPENDLY-497),
-  // so a second device racing it skips rather than overwrites.
-  useEffect(() => {
-    const seen = passSeenBillIds.current;
-    if (!seen) return;
-    if (bills.some((bill) => !seen.has(bill.id))) scheduleAutoGenerate();
-  }, [bills, scheduleAutoGenerate]);
-
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") scheduleAutoGenerate();
-    });
-    return () => sub.remove();
-  }, [scheduleAutoGenerate]);
 
   const updateBill = useCallback(
     async (id: string, updates: Partial<CreditCardBill>): Promise<boolean> => {
@@ -1028,7 +498,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       if (derived.status === "PAID" || derived.status === "CANCELLED") {
         await cancelBillReminders(billId);
       } else {
-        void refreshReminderSchedules();
+        void refreshReminderSchedules({ force: true });
       }
       return true;
     },
@@ -1076,11 +546,11 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       if (derived.status === "PAID") {
         await cancelBillReminders(billId);
       }
-      // The stamp above counts cash only; the ledger also counts cashback.
-      requestBillPass();
+      // The stamp above counts cash only; the server's bill-daily run, queued
+      // by this save (SPENDLY-737), settles the rest against the ledger.
       return true;
     },
-    [user, bills, timezone, globalPrefs.enabled, requestBillPass]
+    [user, bills, timezone, globalPrefs.enabled]
   );
 
   const recordBillPayment = useCallback(
@@ -1097,9 +567,8 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           await cancelBillReminders(input.bill.id);
         }
         toast.success(writeSavedMessage(result.outcome, "Bill payment recorded"));
-        // SPENDLY-719: the stamp counts this payment only; settle the stored
-        // bill against the ledger (cashback included) now.
-        requestBillPass();
+        // SPENDLY-719/737: the stamp counts this payment only; the server's
+        // bill-daily run, queued by this save, settles the rest (cashback included).
         return result.paymentId;
       } catch (err) {
         logError("creditCardBills.recordBillPayment", err);
@@ -1107,7 +576,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         return null;
       }
     },
-    [user, timezone, requestBillPass]
+    [user, timezone]
   );
 
   const editBillPayment = useCallback(
@@ -1133,11 +602,10 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
           if (result.billStatus === "PAID" || result.billStatus === "CANCELLED") {
             await cancelBillReminders(result.billId);
           } else {
-            void refreshReminderSchedules();
+            void refreshReminderSchedules({ force: true });
           }
         }
         toast.success(writeSavedMessage(result.outcome, "Payment updated"));
-        requestBillPass();
         return true;
       } catch (err) {
         logError("creditCardBills.editBillPayment", err);
@@ -1145,7 +613,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         return false;
       }
     },
-    [user, timezone, refreshReminderSchedules, requestBillPass]
+    [user, timezone, refreshReminderSchedules]
   );
 
   const markBillPaid = useCallback(
@@ -1171,10 +639,9 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
         paymentDate: opts.paymentDate,
         paymentIds,
       });
-      if (ok) requestBillPass();
       return ok;
     },
-    [bills, updateBill, requestBillPass]
+    [bills, updateBill]
   );
 
   const cancelBill = useCallback(
@@ -1209,7 +676,6 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       createBill,
       updateBill,
       applyPaymentToBill,
-      requestBillPass,
       recordBillPayment,
       editBillPayment,
       markBillPaid,
@@ -1217,7 +683,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       previewBillRecalculation,
       recalculateBill,
       snoozeBillReminder,
-      refreshReminderSchedules,
+      refreshReminderSchedules: forceRefreshReminderSchedules,
       registerSubscriber,
     }),
     [
@@ -1226,7 +692,6 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       createBill,
       updateBill,
       applyPaymentToBill,
-      requestBillPass,
       recordBillPayment,
       editBillPayment,
       markBillPaid,
@@ -1234,7 +699,7 @@ export function CreditCardBillsProvider({ children }: { children: ReactNode }) {
       previewBillRecalculation,
       recalculateBill,
       snoozeBillReminder,
-      refreshReminderSchedules,
+      forceRefreshReminderSchedules,
       registerSubscriber,
     ]
   );

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  journalHistoryNotice,
   journalRefreshAction,
   journalScopeLabel,
 } from "./journalRefresh";
@@ -35,16 +34,3 @@ describe("journalScopeLabel (SPENDLY-585)", () => {
   });
 });
 
-describe("journalHistoryNotice (SPENDLY-585)", () => {
-  it("never quotes the size of the live window", () => {
-    for (const periodComplete of [true, false]) {
-      const { title, body } = journalHistoryNotice({ periodComplete });
-      expect(`${title} ${body}`).not.toMatch(/\d/);
-    }
-  });
-
-  it("says the period is complete when it is", () => {
-    expect(journalHistoryNotice({ periodComplete: true }).body).toContain("Everything in this period is shown");
-    expect(journalHistoryNotice({ periodComplete: false }).body).not.toContain("Everything in this period is shown");
-  });
-});

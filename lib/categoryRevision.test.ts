@@ -63,7 +63,7 @@ describe("noteCategoriesWritten (SPENDLY-660)", () => {
  * Guard: categories are no longer watched by a live listener, so a writer that
  * forgets `noteCategoriesWritten` leaves other devices (and the read model) on
  * the old list. Every source file that writes a category document must call it,
- * or bump the revision itself (ensureCategoryHierarchy's stampVersion).
+ * or bump the revision itself (the shared taxonomy migration's stampVersion).
  */
 describe("every category writer bumps the revision", () => {
   const ROOT = join(__dirname, "..");
@@ -94,6 +94,7 @@ describe("every category writer bumps the revision", () => {
         ).toBe(true);
       }
     }
-    expect(writers.sort()).toEqual(["hooks/useCategories.ts", "lib/ensureCategoryHierarchy.ts"]);
+    // SPENDLY-742: the taxonomy migration moved to shared/ (the app seeds, the server upgrades).
+    expect(writers.sort()).toEqual(["hooks/useCategories.ts", "shared/data/categoryHierarchyMigration.ts"]);
   });
 });

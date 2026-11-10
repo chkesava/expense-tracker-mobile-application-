@@ -14,7 +14,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   collection,
-  deleteDoc,
   doc,
   onSnapshot,
   query,
@@ -34,7 +33,6 @@ import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
 import { useReadModelSource } from "@/hooks/useReadModelSource";
 import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
-import { epfCurrentMonth } from "@/shared/features/epf/utils/epfClock";
 import type {
   EpfBackfillRow,
   EpfContribution,
@@ -51,12 +49,6 @@ import {
   normalizeEpfContribution,
   sortContributionsByMonth,
 } from "@/shared/features/epf/utils/contributions";
-import {
-  contributionsMissingCreditWindow,
-  contributionsNeedingLifecycleRepair,
-  contributionsWithFabricatedCredit,
-  creditWindowRepairFor,
-} from "@/shared/features/epf/utils/creditWindowRepair";
 import {
   applyActualCredit,
   applyMissed,
@@ -268,7 +260,7 @@ export function useEpfContributions(
           }
 
           // SPENDLY-653: no summary delta here. `financialSummaries/epf` is
-          // written whole from the ledger by `useEpfSummarySync`; a delta taken
+          // written whole from the ledger by the server (epf-daily, SPENDLY-740); a delta taken
           // against a lagging `byMonth` could be applied twice.
           const outcome = await commitWrite(() => batch.commit(), {
             label: "EPF contributions",
@@ -532,124 +524,8 @@ export function useEpfContributions(
     }
   }, [uid, establishmentId, contributions]);
 
-  /**
-   * Stamp the credit window onto rows that were written without it — SPENDLY-1.
-   *
-   * Only the client catch-up path produced these: `epf-cron` has always spread
-   * the whole row. They cannot self-heal, because `monthsToGenerate` skips any
-   * month that already exists, so the planner never revisits them; without
-   * this they can never read as overdue, because `isCreditWindowPassed` has
-   * nothing to compare against.
-   *
-   * No audit event: nothing about the money changed. Safe to re-run —
-   * deterministic ids, merge, and the selector returns nothing on a second
-   * pass.
-   */
-  const repairCreditWindows = useCallback(async (): Promise<number> => {
-    const db = getFirestoreDb();
-    const stale = contributionsMissingCreditWindow(contributions);
-    if (!uid || !db || !establishmentId || stale.length === 0) return 0;
-
-    try {
-      for (const group of chunk(stale, EPF_BATCH_CHUNK_SIZE)) {
-        const batch = trackedBatch(writeBatch(db));
-        for (const row of group) {
-          batch.set(
-            doc(
-              db,
-              "users",
-              uid,
-              EPF_CONTRIBUTIONS_COLLECTION,
-              contributionDocId(establishmentId, row.month)
-            ),
-            { ...creditWindowRepairFor(row), updatedAt: serverTimestamp() },
-            { merge: true }
-          );
-        }
-        await commitWrite(() => batch.commit(), { label: "EPF credit windows" });
-        noteDirectWrites(uid, batch.writtenPaths());
-      }
-      return stale.length;
-    } catch (err) {
-      // Silent by design: this is background healing the user did not ask for.
-      // The next mount retries, so a failure costs nothing but a delay.
-      logError("epfcontributions.repaircreditwindows", err);
-      return 0;
-    }
-  }, [uid, establishmentId, contributions]);
-
-  /**
-   * Undo credits the pre-SPENDLY-72 scheduler invented, and free drafts the old
-   * Backfill range stranded in the current month — SPENDLY-72.
-   *
-   * Both are status changes, so unlike the window repair each writes an audit
-   * event: an `epfContributionEvent` is the only record that a balance moved
-   * without the user touching anything, and a withdrawn credit lowers what the
-   * app reports. Actor is `system`, with the ticket in the reason.
-   *
-   * Runs in the same background pass as `repairCreditWindows` and is silent
-   * for the same reason. Idempotent — both selectors return nothing once their
-   * rows have been rewritten.
-   */
-  const repairLifecycleStates = useCallback(async (): Promise<number> => {
-    const db = getFirestoreDb();
-    if (!uid || !db || !establishmentId) return 0;
-
-    const withdrawn = contributionsWithFabricatedCredit(contributions);
-    const stranded = contributionsNeedingLifecycleRepair(contributions, epfCurrentMonth());
-    const work: { row: EpfContribution; fields: Record<string, unknown>; reason: string }[] = [
-      ...withdrawn.map((row) => ({
-        row,
-        fields: {},
-        reason: "auto-credit withdrawn (SPENDLY-72)",
-      })),
-      ...stranded.map((row) => ({
-        row,
-        fields: creditWindowRepairFor(row),
-        reason: "current-month draft released to the scheduler (SPENDLY-72)",
-      })),
-    ];
-    if (work.length === 0) return 0;
-
-    try {
-      for (const group of chunk(work, EPF_BATCH_CHUNK_SIZE)) {
-        const batch = trackedBatch(writeBatch(db));
-        for (const item of group) {
-          batch.set(
-            doc(
-              db,
-              "users",
-              uid,
-              EPF_CONTRIBUTIONS_COLLECTION,
-              contributionDocId(establishmentId, item.row.month)
-            ),
-            {
-              ...item.fields,
-              status: "expected",
-              statusUpdatedAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            },
-            { merge: true }
-          );
-          batch.set(doc(collection(db, "users", uid, EPF_CONTRIBUTION_EVENTS_COLLECTION)), {
-            ...withoutUndefined(
-              buildContributionEvent(item.row, item.row.status, "expected", {
-                actor: "system",
-                reason: item.reason,
-              })
-            ),
-            at: serverTimestamp(),
-          });
-        }
-        await commitWrite(() => batch.commit(), { label: "EPF lifecycle repair" });
-        noteDirectWrites(uid, batch.writtenPaths());
-      }
-      return work.length;
-    } catch (err) {
-      logError("epfcontributions.repairlifecyclestates", err);
-      return 0;
-    }
-  }, [uid, establishmentId, contributions]);
+  // SPENDLY-740 (epic SPENDLY-735): the credit-window and lifecycle repairs
+  // run on the server (epf-cron's logic, daily via epf-daily), not in the app.
 
   return {
     contributions,
@@ -668,7 +544,5 @@ export function useEpfContributions(
     recordCredit,
     markMissed,
     markReversed,
-    repairCreditWindows,
-    repairLifecycleStates,
   };
 }

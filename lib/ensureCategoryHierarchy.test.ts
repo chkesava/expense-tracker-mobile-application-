@@ -13,6 +13,13 @@ const setDocs: Array<{ path: string; data: Record<string, unknown> }> = [];
 /** Paths written by committed batches, in commit order. */
 const batchWrites: string[] = [];
 let autoId = 0;
+/** SPENDLY-730: the commit number (1-based) that fails, and a setDoc path that fails. */
+let commits = 0;
+let failCommit = 0;
+let failSetDocPath = "";
+
+/** The upgrade path (SPENDLY-742: the server runs it; the app only seeds). */
+const UPGRADE = { upgradeExisting: true };
 
 vi.mock("firebase/firestore", () => ({
   doc: (base: FakeRef, ...segments: string[]) => {
@@ -36,6 +43,7 @@ vi.mock("firebase/firestore", () => ({
     return { docs: rows, metadata: { fromCache: false } };
   }),
   setDoc: vi.fn(async (ref: FakeRef, data: Record<string, unknown>) => {
+    if (ref.path === failSetDocPath) throw new Error("setDoc failed");
     setDocs.push({ path: ref.path, data });
     docs.set(ref.path, { ...(docs.get(ref.path) ?? {}), ...data });
   }),
@@ -46,7 +54,11 @@ vi.mock("firebase/firestore", () => ({
       set: vi.fn(stage),
       update: vi.fn(stage),
       delete: vi.fn(stage),
-      commit: async () => void batchWrites.push(...staged),
+      commit: async () => {
+        commits += 1;
+        if (commits === failCommit) throw new Error("commit failed");
+        batchWrites.push(...staged);
+      },
     };
   },
   serverTimestamp: () => ({ _methodName: "serverTimestamp" }),
@@ -94,7 +106,7 @@ describe("ensureCategoryHierarchy (SPENDLY-501 early exit)", () => {
       taxonomyFingerprint: taxonomyFingerprint(),
     });
 
-    await ensureCategoryHierarchy(db, UID);
+    await ensureCategoryHierarchy(db, UID, UPGRADE);
 
     expect(collectionReads).toEqual([]);
     expect(setDocs).toEqual([]);
@@ -104,7 +116,7 @@ describe("ensureCategoryHierarchy (SPENDLY-501 early exit)", () => {
     docs.set(META, { categoryHierarchyVersion: CATEGORY_HIERARCHY_VERSION });
     seedCurrentTaxonomy();
 
-    await ensureCategoryHierarchy(db, UID);
+    await ensureCategoryHierarchy(db, UID, UPGRADE);
 
     expect(collectionReads).toEqual([`users/${UID}/categories`]);
     expect(docs.get(META)?.taxonomyFingerprint).toBe(taxonomyFingerprint());
@@ -113,7 +125,7 @@ describe("ensureCategoryHierarchy (SPENDLY-501 early exit)", () => {
     expect(outboxed).toEqual([]);
 
     collectionReads.length = 0;
-    await ensureCategoryHierarchy(db, UID);
+    await ensureCategoryHierarchy(db, UID, UPGRADE);
     expect(collectionReads).toEqual([]);
   });
 
@@ -124,7 +136,7 @@ describe("ensureCategoryHierarchy (SPENDLY-501 early exit)", () => {
     });
     seedCurrentTaxonomy();
 
-    await ensureCategoryHierarchy(db, UID);
+    await ensureCategoryHierarchy(db, UID, UPGRADE);
 
     expect(collectionReads).toContain(`users/${UID}/categories`);
   });
@@ -132,7 +144,7 @@ describe("ensureCategoryHierarchy (SPENDLY-501 early exit)", () => {
   it("still runs the full check when the version is old", async () => {
     docs.set(META, { categoryHierarchyVersion: 1, taxonomyFingerprint: taxonomyFingerprint() });
 
-    await ensureCategoryHierarchy(db, UID);
+    await ensureCategoryHierarchy(db, UID, UPGRADE);
 
     expect(collectionReads).toContain(`users/${UID}/categories`);
   });
@@ -140,7 +152,7 @@ describe("ensureCategoryHierarchy (SPENDLY-501 early exit)", () => {
   it("bumps the categories revision and tells the read model what it wrote (SPENDLY-660)", async () => {
     docs.set(META, { categoryHierarchyVersion: 1, taxonomyFingerprint: taxonomyFingerprint() });
 
-    await ensureCategoryHierarchy(db, UID);
+    await ensureCategoryHierarchy(db, UID, UPGRADE);
 
     const stamp = setDocs.find((w) => w.path === META);
     expect(stamp?.data.categoriesRevision).toEqual({ _methodName: "increment", n: 1 });
@@ -151,7 +163,7 @@ describe("ensureCategoryHierarchy (SPENDLY-501 early exit)", () => {
   it("neither bumps nor notifies on the early exit", async () => {
     docs.set(META, { categoryHierarchyVersion: CATEGORY_HIERARCHY_VERSION, taxonomyFingerprint: taxonomyFingerprint() });
 
-    await ensureCategoryHierarchy(db, UID);
+    await ensureCategoryHierarchy(db, UID, UPGRADE);
 
     expect(setDocs).toEqual([]);
     expect(pushed).toEqual([]);
@@ -183,7 +195,7 @@ describe("a taxonomy upgrade reaches the read model (SPENDLY-712)", () => {
     docs.set(retired, { name: "Retired default", kind: "category", parentId: null, isDefault: true, isArchived: false, semanticKey: "retired.default" });
     docs.set(META, { categoryHierarchyVersion: CATEGORY_HIERARCHY_VERSION, taxonomyFingerprint: "stale000" });
 
-    await ensureCategoryHierarchy(db, UID);
+    await ensureCategoryHierarchy(db, UID, UPGRADE);
 
     const written = [...new Set(batchWrites)].sort();
     expect(written).toContain(renamed);
@@ -199,12 +211,90 @@ describe("a taxonomy upgrade reaches the read model (SPENDLY-712)", () => {
   });
 
   it("a first-time seed of hundreds of defaults names every one of them", async () => {
-    await ensureCategoryHierarchy(db, UID);
+    await ensureCategoryHierarchy(db, UID, UPGRADE);
 
     const created = [...new Set(batchWrites)];
     expect(created.length).toBeGreaterThan(100);
     expect(pushed).toHaveLength(1);
     expect(new Set(pushed[0].paths)).toEqual(new Set(created));
     expect(new Set(outboxed[0].paths)).toEqual(new Set(created));
+  });
+});
+
+describe("a failed upgrade still announces what it committed (SPENDLY-730)", () => {
+  beforeEach(() => {
+    docs.clear();
+    collectionReads.length = 0;
+    setDocs.length = 0;
+    batchWrites.length = 0;
+    pushed.length = 0;
+    outboxed.length = 0;
+    commits = 0;
+    failCommit = 0;
+    failSetDocPath = "";
+  });
+
+  it("a later batch fails: the batches committed before it are announced, and the error still reaches the caller", async () => {
+    // A pre-hierarchy user: the old flat categories are deleted (commit 1),
+    // then the defaults are seeded (commit 2, which fails).
+    for (const id of ["old1", "old2", "old3"]) {
+      docs.set(`users/${UID}/categories/${id}`, { name: id, kind: "category", parentId: null });
+    }
+    docs.set(META, { categoryHierarchyVersion: 1, taxonomyFingerprint: taxonomyFingerprint() });
+    failCommit = 2;
+
+    await expect(ensureCategoryHierarchy(db, UID, UPGRADE)).rejects.toThrow("commit failed");
+
+    const deleted = ["old1", "old2", "old3"].map((id) => `users/${UID}/categories/${id}`);
+    expect(batchWrites).toEqual(deleted);
+    expect(pushed).toEqual([{ uid: UID, paths: deleted }]);
+    expect(outboxed).toEqual([{ uid: UID, paths: deleted }]);
+    expect(setDocs.find((w) => w.path === META)).toBeUndefined(); // never stamped, so the next login retries
+  });
+
+  it("the stamp fails after every batch committed: all of them are announced", async () => {
+    failSetDocPath = META;
+
+    await expect(ensureCategoryHierarchy(db, UID, UPGRADE)).rejects.toThrow("setDoc failed");
+
+    const created = [...new Set(batchWrites)];
+    expect(created.length).toBeGreaterThan(100);
+    expect(pushed).toHaveLength(1);
+    expect(new Set(pushed[0].paths)).toEqual(new Set(created));
+  });
+
+  it("nothing committed before the failure: nothing announced", async () => {
+    docs.set(META, { categoryHierarchyVersion: 1, taxonomyFingerprint: taxonomyFingerprint() });
+    failCommit = 1;
+
+    await expect(ensureCategoryHierarchy(db, UID, UPGRADE)).rejects.toThrow("commit failed");
+
+    expect(pushed).toEqual([]);
+    expect(outboxed).toEqual([]);
+  });
+});
+
+describe("the app only seeds; upgrades run on the server (SPENDLY-742)", () => {
+  beforeEach(() => {
+    docs.clear();
+    collectionReads.length = 0;
+    setDocs.length = 0;
+    batchWrites.length = 0;
+  });
+
+  it("an existing user with an old stamp is deferred: one read, nothing written, no ledger read", async () => {
+    docs.set(META, { categoryHierarchyVersion: 2 });
+    const outcome = await ensureCategoryHierarchy(db, UID);
+    expect(outcome).toBe("deferred");
+    expect(collectionReads).toEqual([]);
+    expect(setDocs).toEqual([]);
+    expect(batchWrites).toEqual([]);
+  });
+
+  it("a new user (no stamp) is still seeded on the phone", async () => {
+    const outcome = await ensureCategoryHierarchy(db, UID);
+    expect(outcome).toBe("migrated");
+    expect(batchWrites.length).toBeGreaterThan(0);
+    expect(docs.get(META)?.categoryHierarchyVersion).toBe(CATEGORY_HIERARCHY_VERSION);
   });
 });

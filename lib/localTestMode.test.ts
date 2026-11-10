@@ -173,7 +173,7 @@ describe("localTestBuildBlocker (release guard)", () => {
 describe("seed-emulator.js", () => {
   const seedModule = require("../scripts/seed-emulator.js") as {
     seedSafetyBlocker: (input: { firestoreHost?: string; authHost?: string; projectId?: string }) => string | null;
-    buildDemoData: (today?: Date) => {
+    buildDemoData: (today?: Date, options?: { months?: number }) => {
       userDoc: Record<string, unknown>;
       collections: Record<string, { id: string; data: Record<string, unknown> }[]>;
     };
@@ -206,6 +206,19 @@ describe("seed-emulator.js", () => {
     }
     const parents = new Set(CATEGORY_TAXONOMY.map((parent) => parent.name));
     for (const [category] of seedModule.BUDGETS) expect(parents).toContain(category);
+  });
+
+  it("seeds a ledger over the 300-row live window for SPENDLY-748 QA (--months=12)", () => {
+    const today = new Date(2026, 10, 9, 12);
+    const { collections } = seedModule.buildDemoData(today, { months: 12 });
+    expect(collections.expenses.length).toBeGreaterThan(300);
+    expect(new Set(collections.expenses.map((row) => row.data.month)).size).toBe(12);
+    // An old date entered today: inside the live window, months behind it.
+    const backdated = collections.expenses.find((row) => row.id === "exp-backdated");
+    expect(backdated?.data.month).toBe("2025-12");
+    expect(backdated?.data.createdAt).toEqual(today);
+    // Stored summaries cover every seeded month.
+    expect(collections.financialSummaries).toHaveLength(12);
   });
 
   it("builds rows the app will actually show", () => {

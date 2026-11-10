@@ -625,8 +625,8 @@ describe("account lifecycle (SPENDLY-508)", () => {
       "expenses", "feeReviews", "feeSignalDismissals", "financialGoals", "financialSummaries", "goalEvents",
       "goalFundingPlans", "groupFundEvents", "groupFunds", "holdings", "incomes", "investmentCashTransactions", "investments",
       "ledgerEvents", "merchantOverrides", "netWorthHistory", "notifications", "portfolioSettings",
-      "portfolioTransactions", "receivableRepayments", "receivables", "recurringDismissals",
-      "runwayOverrides", "runwaySettings", "sipPlans", "sipTransactions", "spaces",
+      "portfolioTransactions", "receivableRepayments", "receivables", "recurringDismissals", "recurringSuggestions",
+      "runwayOverrides", "runwaySettings", "serverResults", "sipPlans", "sipTransactions", "spaces",
       "subscriptions", "taxDocuments", "taxEntries", "taxProfiles", "taxReviews", "taxSnapshots",
       "trips", "userSettings", "virtualPositions", "watchlists", "watchlists/items", "whatIfScenarios",
     ]);

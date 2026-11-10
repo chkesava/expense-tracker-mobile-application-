@@ -34,11 +34,14 @@ export type ReadModelMode = (typeof READ_MODEL_MODES)[number];
 export const READ_MODEL_SCREENS = ["journal", "insights", "cashFlow", "audit", "cashback", "goals", "groupFundHistory"] as const;
 export type ReadModelScreen = (typeof READ_MODEL_SCREENS)[number];
 
-/** The configured mode for a screen; anything missing or unknown is `firestore`. */
+/**
+ * The configured mode for a screen; anything missing or unknown is `firestore`.
+ * SPENDLY-745: `shadow` only while readModel.deviceShadow is on, else `firestore`.
+ */
 export function configuredReadModelMode(readModelSetting: unknown, screen: ReadModelScreen): ReadModelMode {
   if (!readModelSetting || typeof readModelSetting !== "object") return "firestore";
   const value = (readModelSetting as Record<string, unknown>)[screen];
-  return (READ_MODEL_MODES as readonly unknown[]).includes(value) ? (value as ReadModelMode) : "firestore";
+  return (READ_MODEL_MODES as readonly unknown[]).includes(value) ? withDeviceShadow(value as ReadModelMode, readModelSetting) : "firestore";
 }
 
 export type ReadModelConditions = {
@@ -80,4 +83,20 @@ export function realtimeEnabled(readModelSetting: unknown): boolean {
  */
 export function localCopyEnabled(readModelSetting: unknown): boolean {
   return !!readModelSetting && typeof readModelSetting === "object" && (readModelSetting as Record<string, unknown>).localCopy === true;
+}
+
+/**
+ * SPENDLY-745 (epic SPENDLY-735): whether `shadow` mode compares on the device
+ * (`system_settings/global.readModel.deviceShadow`). Off unless exactly true:
+ * then `shadow` serves Firestore with no compare at all (no copy read, no
+ * Supabase fetch), and the server's nightly verify/parity is the check. The
+ * owner turns it on only for a drill.
+ */
+export function deviceShadowEnabled(readModelSetting: unknown): boolean {
+  return !!readModelSetting && typeof readModelSetting === "object" && (readModelSetting as Record<string, unknown>).deviceShadow === true;
+}
+
+/** A configured mode with the device compares applied: `shadow` is `firestore` unless they are on. */
+export function withDeviceShadow<M extends string>(mode: M, readModelSetting: unknown): M {
+  return (mode === "shadow" && !deviceShadowEnabled(readModelSetting) ? "firestore" : mode) as M;
 }

@@ -1,15 +1,12 @@
 /**
- * Phase 14 — queue recurring patterns detected in the expense list for user
- * review.
+ * Phase 14 — queue recurring patterns for user review. SPENDLY-744: the
+ * patterns come from the server (recurring-weekly); the app never detects.
  */
 
-import type { Expense } from "@/shared/types/expense";
 import type { Subscription } from "@/shared/types/subscription";
 import {
-  detectRecurringPatterns,
   filterPatternsForReview,
   recurringMerchantKey,
-  type RecurringExpenseInput,
   type RecurringPattern,
 } from "./recurringDetector";
 import {
@@ -27,18 +24,6 @@ import {
 } from "./recurringStore";
 
 const inFlight = new Set<string>();
-
-function expenseToInput(expense: Expense): RecurringExpenseInput {
-  return {
-    amount: expense.amount,
-    date: expense.date,
-    note: expense.note || "",
-    category: expense.category,
-    subcategory: expense.subcategory,
-    accountId: expense.accountId,
-    subscriptionId: expense.subscriptionId,
-  };
-}
 
 export async function mergeDismissedMerchants(uid: string): Promise<string[]> {
   const local = await loadDismissedRecurringKeys();
@@ -148,13 +133,15 @@ export async function acceptRecurringSuggestion(
   }
 }
 
-/** Dashboard / ledger: detect from the live expense list. */
-export async function syncRecurringFromExpenses(
+/**
+ * SPENDLY-744: queue the server's suggestions (recurring-weekly job, stored
+ * at users/{uid}/recurringSuggestions). The app no longer detects.
+ */
+export async function syncRecurringFromServer(
   uid: string,
-  expenses: Expense[],
+  patterns: RecurringPattern[],
   existing: Subscription[]
 ): Promise<RecurringPattern[]> {
-  const patterns = detectRecurringPatterns(expenses.map(expenseToInput));
   if (!patterns.length) {
     const dismissed = uid ? await mergeDismissedMerchants(uid) : [];
     const current = await loadRecurringSuggestions();

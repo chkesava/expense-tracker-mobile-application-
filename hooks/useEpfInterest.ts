@@ -17,7 +17,6 @@ import {
   doc,
   onSnapshot,
   serverTimestamp,
-  setDoc,
   writeBatch,
 } from "@/lib/firestore";
 
@@ -33,24 +32,16 @@ import { useLoadFailure } from "@/hooks/useLoadFailure";
 import { useAuth } from "@/providers/AuthProvider";
 import { useReadModelSource } from "@/hooks/useReadModelSource";
 import { toSourceDocs, type SourceDoc } from "@/lib/readModelLocal/readSource";
-import { epfCurrentMonth } from "@/shared/features/epf/utils/epfClock";
 import type {
-  EpfContribution,
   EpfInterestEntry,
   EpfReconciliation,
-  EpfTransfer,
 } from "@/shared/features/epf/types";
 import {
   EPF_INTEREST_ENTRIES_COLLECTION,
   EPF_RECONCILIATIONS_COLLECTION,
 } from "@/shared/features/epf/types";
 import {
-  buildInterestEntry,
-  creditableYears,
-  interestEntryId,
-  interestSchedule,
   normalizeInterestEntry,
-  staleInterestEntryIds,
 } from "@/shared/features/epf/utils/interest";
 import {
   buildReconciliation,
@@ -58,7 +49,6 @@ import {
   reconciliationDocId,
   type EpfReconciliationInput,
 } from "@/shared/features/epf/utils/reconciliation";
-import { financialYearOfMonth } from "@/shared/utils/financialYear";
 import { withoutUndefined } from "@/shared/utils/objects";
 
 export function useEpfInterest(options?: { enabled?: boolean; readFrom?: "copy" }) {
@@ -175,80 +165,8 @@ export function useEpfInterest(options?: { enabled?: boolean; readFrom?: "copy" 
     };
   }, [uid, enabled, attempt, entriesSource.mode]);
 
-  /**
-   * Recompute and store the whole interest schedule for one establishment.
-   *
-   * Safe to run repeatedly: the deterministic id means a year is overwritten
-   * rather than duplicated, so "no duplicate interest events" falls out of the
-   * key instead of a guard someone has to remember.
-   *
-   * Years EPFO has not declared a rate for are skipped entirely — writing zero
-   * interest would be indistinguishable from a year that genuinely earned
-   * nothing.
-   */
-  const recomputeInterest = useCallback(
-    async (args: {
-      establishmentId: string;
-      contributions: EpfContribution[];
-      transfers: EpfTransfer[];
-    }): Promise<number> => {
-      const db = getFirestoreDb();
-      if (!uid || !db) return 0;
-
-      const schedule = interestSchedule({
-        contributions: args.contributions,
-        transfers: args.transfers,
-        adjustments: reconciliations,
-        establishmentId: args.establishmentId,
-        throughFinancialYear: financialYearOfMonth(epfCurrentMonth()),
-      });
-      const years = creditableYears(schedule);
-      const staleIds = staleInterestEntryIds(
-        interestEntriesRef.current,
-        args.establishmentId,
-        years.map((year) => year.financialYear)
-      );
-      if (years.length === 0 && staleIds.length === 0) return 0;
-
-      try {
-        const batch = trackedBatch(writeBatch(db));
-        for (const year of years) {
-          batch.set(
-            doc(
-              db,
-              "users",
-              uid,
-              EPF_INTEREST_ENTRIES_COLLECTION,
-              interestEntryId(args.establishmentId, year.financialYear)
-            ),
-            withoutUndefined({
-              ...buildInterestEntry(args.establishmentId, year),
-              computedAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            }),
-            { merge: true }
-          );
-        }
-        for (const staleId of staleIds) {
-          batch.delete(
-            doc(db, "users", uid, EPF_INTEREST_ENTRIES_COLLECTION, staleId)
-          );
-        }
-
-        // SPENDLY-653: the stored summary is derived whole by
-        // `useEpfSummarySync`, not incremented here. This effect re-runs on
-        // every contribution change and `interestEntriesRef` lags its own
-        // write, so a delta could land twice.
-        await commitWrite(() => batch.commit(), { label: "EPF interest" });
-        noteDirectWrites(uid, batch.writtenPaths());
-        return years.length;
-      } catch (err) {
-        logError("epfinterest.recomputeinterest", err);
-        return 0;
-      }
-    },
-    [uid, reconciliations]
-  );
+  // SPENDLY-740 (epic SPENDLY-735): FY interest is computed and written by
+  // the server's epf-daily job (scripts/lib/epfDailyCore.ts), not here.
 
   /**
    * Record what EPFO actually showed.
@@ -311,7 +229,6 @@ export function useEpfInterest(options?: { enabled?: boolean; readFrom?: "copy" 
     interestError,
     retryInterest,
 
-    recomputeInterest,
     recordReconciliation,
   };
 }
