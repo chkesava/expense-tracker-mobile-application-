@@ -1,10 +1,10 @@
 import { useCallback, useState } from "react";
-import * as WebBrowser from "expo-web-browser";
 
 import { friendlyErrorMessage, logError } from "@/lib/errors";
 import { writeSavedMessage } from "@/lib/firestoreWrite";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
+import { shareDocumentFile } from "@/services/documents/documentViewerHelpers";
 import {
   addTaxDocument,
   deleteTaxDocument,
@@ -88,7 +88,8 @@ export function useTaxDocumentActions(fy: FinancialYearKey) {
 
   const open = useCallback(async (document: TaxDocument) => {
     try {
-      await WebBrowser.openBrowserAsync(await taxDocumentUrl(document));
+      const url = await taxDocumentUrl(document);
+      await shareDocumentFile(url, document.mimeType, document.name);
     } catch (err) {
       logError("tax.documents.open", err);
       toast.error(friendlyErrorMessage(err, "Couldn't open this document."));

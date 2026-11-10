@@ -15,6 +15,7 @@ import { PageShell } from "@/components/layout/PageShell";
 import { usePageListBottomPadding } from "@/components/layout/usePageListBottomPadding";
 import { TaxDocumentRow } from "@/components/tax/TaxDocumentRow";
 import { TaxDocumentSheet, type TaxDocumentSheetMode } from "@/components/tax/TaxDocumentSheet";
+import { DocumentViewerModal } from "@/components/documents";
 import { TaxNotice } from "@/components/tax/TaxNotice";
 import { Button } from "@/components/ui/Button";
 import { useTaxCenterFlag } from "@/hooks/useTaxCenterEnabled";
@@ -49,6 +50,7 @@ export default function TaxDocumentsScreen() {
   const [sheet, setSheet] = useState<TaxDocumentSheetMode | null>(null);
   const [menuFor, setMenuFor] = useState<TaxDocument | null>(null);
   const [deleting, setDeleting] = useState<TaxDocument | null>(null);
+  const [viewingDocument, setViewingDocument] = useState<TaxDocument | null>(null);
   const nowMs = Date.now();
 
   const rows = useMemo(() => {
@@ -95,7 +97,7 @@ export default function TaxDocumentsScreen() {
           { label: "Remove", destructive: true, onPress: () => (setDeleting(menuFor), setMenuFor(null)) },
         ]
       : [
-          { label: "View", disabled: !isOnline, disabledReason: isOnline ? undefined : "You're offline.", onPress: () => (void actions.open(menuFor), setMenuFor(null)) },
+          { label: "View", disabled: !isOnline, disabledReason: isOnline ? undefined : "You're offline.", onPress: () => (setViewingDocument(menuFor), setMenuFor(null)) },
           { label: "Edit name or kind", onPress: () => (setSheet({ kind: "edit", document: menuFor }), setMenuFor(null)) },
           { label: "Delete", destructive: true, onPress: () => (setDeleting(menuFor), setMenuFor(null)) },
         ];
@@ -175,6 +177,12 @@ export default function TaxDocumentsScreen() {
             },
           },
         ]}
+      />
+
+      <DocumentViewerModal
+        visible={viewingDocument !== null}
+        document={viewingDocument}
+        onClose={() => setViewingDocument(null)}
       />
     </PageShell>
   );

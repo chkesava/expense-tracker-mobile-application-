@@ -9,8 +9,8 @@ import {
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 import * as DocumentPicker from "expo-document-picker";
+import { DocumentViewerModal } from "@/components/documents";
 import { AccountBalanceCard } from "@/components/accounts/AccountBalanceCard";
 import { AccountActivityFilterModal } from "@/components/accounts/AccountActivityFilterModal";
 import { AccountCreditHero } from "@/components/accounts/AccountCreditHero";
@@ -122,7 +122,6 @@ import {
   updateAccountDocumentMeta,
   type PickedDocumentFile,
 } from "@/services/accounts/accountDocumentsStore";
-import { createDocumentSignedUrl } from "@/services/accounts/spendlyFilesClient";
 import {
   ALLOWED_DOCUMENT_TYPES,
   selectAccountDocuments,
@@ -688,6 +687,7 @@ export default function AccountDetailScreen() {
   const [busyDocumentId, setBusyDocumentId] = useState<string | undefined>();
   const [isDocumentModalOpen, setIsDocumentModalOpen] = useState(false);
   const [editingDocument, setEditingDocument] = useState<AccountDocument | undefined>();
+  const [viewingDocument, setViewingDocument] = useState<AccountDocument | null>(null);
 
   const refreshDocuments = useCallback(async () => {
     if (!user?.uid || !id) {
@@ -754,24 +754,10 @@ export default function AccountDetailScreen() {
     [editingDocument, id, refreshDocuments, user?.uid]
   );
 
-  // Signed URLs are fetched per open rather than cached. They are bearer tokens
-  // for a bank statement, so holding one past the view that needs it only
-  // widens the window in which a leaked link still works.
-  const onOpenDocument = useCallback(
-    async (document: AccountDocument) => {
-      setBusyDocumentId(document.id);
-      try {
-        const signedUrl = await createDocumentSignedUrl(document.storagePath);
-        await WebBrowser.openBrowserAsync(signedUrl);
-      } catch (error) {
-        logWarning("accountDetail.openDocument", error, { accountId: id });
-        appDialog.alert("Couldn't open the document", friendlyErrorMessage(error));
-      } finally {
-        setBusyDocumentId(undefined);
-      }
-    },
-    [id]
-  );
+  // Open the document inside Spendly using the in-app document viewer modal (SPENDLY-124).
+  const onOpenDocument = useCallback((document: AccountDocument) => {
+    setViewingDocument(document);
+  }, []);
 
   // Retrying re-picks the file: the original pick's local URI may well be gone
   // by now, and asking for it again is honest about what is being uploaded.
@@ -1737,6 +1723,12 @@ export default function AccountDetailScreen() {
         }}
         onAdd={onAddDocument}
         onSaveMeta={onSaveDocumentMeta}
+      />
+
+      <DocumentViewerModal
+        visible={viewingDocument !== null}
+        document={viewingDocument}
+        onClose={() => setViewingDocument(null)}
       />
 
       <AccountNoteModal
