@@ -13,7 +13,7 @@
 ## Stories
 | # | Story | Scope | Jira dependencies | State |
 |---|---|---|---|---|
-| 1 | [SPENDLY-325](https://kesavach.atlassian.net/browse/SPENDLY-325) | Define salary domain model, payroll periods and provenance | None | In Progress |
+| 1 | [SPENDLY-325](https://kesavach.atlassian.net/browse/SPENDLY-325) | Define salary domain model, payroll periods and provenance | None | Implemented (Ready for Merge) |
 | 2 | [SPENDLY-326](https://kesavach.atlassian.net/browse/SPENDLY-326) | Build salary detection and payroll transaction recognition | 325 | To Do |
 | 3 | [SPENDLY-327](https://kesavach.atlassian.net/browse/SPENDLY-327) | Build salary review, confirmation and correction workflow | 325, 326 | To Do |
 | 4 | [SPENDLY-328](https://kesavach.atlassian.net/browse/SPENDLY-328) | Build salary history and paycheck timeline | 325, 327 | To Do |

@@ -86,6 +86,9 @@ export const EXTRA_CHANGE_FIELDS: Readonly<Record<string, readonly ChangeField[]
   taxReviews: [ms("createdAtMs"), ms("updatedAtMs")],
   taxDocuments: [ms("createdAtMs"), ms("updatedAtMs")],
   taxSnapshots: [ms("createdAtMs")],
+  salaryProfiles: [ms("createdAtMs"), ms("updatedAtMs")],
+  salaryRecords: [ms("createdAtMs"), ms("updatedAtMs")],
+  salaryReviews: [ms("createdAtMs"), ms("updatedAtMs")],
   goalFundingPlans: [ms("createdAtMs"), ms("updatedAtMs")],
   decisions: [ms("createdAtMs"), ms("updatedAtMs")],
   calendarReminders: [ms("createdAtMs"), ms("updatedAtMs")],
@@ -1029,6 +1032,44 @@ export const READ_MODEL_TABLES: TableSpec[] = [
       f("rule_version", "ruleVersion", "text"),
       f("reason", "reason", "text"),
       f("created_at", "createdAtMs", "timestamp"),
+    ],
+  },
+  // SPENDLY-325 (epic SPENDLY-324, Salary Intelligence): the three salary
+  // collections under users/{uid}.
+  {
+    table: "salary_profiles",
+    collection: "salaryProfiles",
+    fields: [
+      f("primary_employer", "primaryEmployer", "text"),
+      f("frequency", "frequency", "text"),
+      f("created_at", "createdAtMs", "timestamp"),
+      f("updated_at", "updatedAtMs", "timestamp"),
+    ],
+  },
+  {
+    table: "salary_records",
+    collection: "salaryRecords",
+    fields: [
+      f("month", "month", "text"),
+      f("payment_date", "paymentDate", "date"),
+      f("salary_type", "type", "text"),
+      f("status", "status", "text"),
+      f("net_amount", "netAmount", "money"),
+      f("gross_amount", "grossAmount", "money"),
+      f("soft_deleted_at", "deletedAt", "timestamp"),
+      f("created_at", "createdAtMs", "timestamp"),
+      f("updated_at", "updatedAtMs", "timestamp"),
+    ],
+  },
+  {
+    table: "salary_reviews",
+    collection: "salaryReviews",
+    fields: [
+      f("ref_key", "refKey", "text"),
+      f("decision", "decision", "text"),
+      f("salary_type", "salaryType", "text"),
+      f("created_at", "createdAtMs", "timestamp"),
+      f("updated_at", "updatedAtMs", "timestamp"),
     ],
   },
 ];

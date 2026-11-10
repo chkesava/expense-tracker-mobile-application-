@@ -53,6 +53,9 @@ const NOT_YET: Record<string, string> = {
   merchantOverrides: "one-off service reads on screen open; stays on Firestore (674)",
   recurringDismissals: "the recurring sync writes from them; stays on Firestore (674)",
   userSettings: "allowlisted fields only: never a source; the PIN/duress fields keep the users/{uid} listener on Firestore (674)",
+  salaryProfiles: "screen reads wired in SPENDLY-334; stays on Firestore (325)",
+  salaryRecords: "timeline and dashboard reads wired in SPENDLY-328/334; stays on Firestore (325)",
+  salaryReviews: "review workflow wired in SPENDLY-327; stays on Firestore (325)",
 };
 
 function sources(dir: string): string[] {
