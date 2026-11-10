@@ -114,6 +114,8 @@ export function GlobalSearchModal() {
 
   const [query, setQuery] = useState("");
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const recentSearchesRef = useRef(recentSearches);
+  recentSearchesRef.current = recentSearches;
   const [activeIndex, setActiveIndex] = useState(0);
 
   const inputRef = useRef<TextInput>(null);
@@ -140,25 +142,21 @@ export function GlobalSearchModal() {
   }, []);
 
   const saveRecent = useCallback((term: string) => {
-    setRecentSearches((prev) => {
-      const updated = addRecentSearch(prev, term, 8);
-      AsyncStorage.setItem(
-        RECENT_SEARCHES_STORAGE_KEY,
-        JSON.stringify(updated)
-      ).catch(() => undefined);
-      return updated;
-    });
+    const updated = addRecentSearch(recentSearchesRef.current, term, 8);
+    setRecentSearches(updated);
+    AsyncStorage.setItem(
+      RECENT_SEARCHES_STORAGE_KEY,
+      JSON.stringify(updated)
+    ).catch(() => undefined);
   }, []);
 
   const handleRemoveRecent = useCallback((term: string) => {
-    setRecentSearches((prev) => {
-      const updated = removeRecentSearch(prev, term);
-      AsyncStorage.setItem(
-        RECENT_SEARCHES_STORAGE_KEY,
-        JSON.stringify(updated)
-      ).catch(() => undefined);
-      return updated;
-    });
+    const updated = removeRecentSearch(recentSearchesRef.current, term);
+    setRecentSearches(updated);
+    AsyncStorage.setItem(
+      RECENT_SEARCHES_STORAGE_KEY,
+      JSON.stringify(updated)
+    ).catch(() => undefined);
   }, []);
 
   const handleClearAllRecent = useCallback(() => {
@@ -269,14 +267,16 @@ export function GlobalSearchModal() {
 
   // Category items
   const categoryItems = useMemo(() => {
+    if (!isGlobalSearchOpen) return [];
     return parentCategories.map((c) => ({
       name: c.name,
       subcategories: getSubcategories(c.id).map((sub) => sub.name),
     }));
-  }, [parentCategories, getSubcategories]);
+  }, [isGlobalSearchOpen, parentCategories, getSubcategories]);
 
   // Distinct derived merchants from loaded transactions
   const merchantItems = useMemo(() => {
+    if (!isGlobalSearchOpen) return [];
     const profiles = buildMerchantProfiles(
       buildMerchantLedgerItems(expenses, incomes)
     );
@@ -287,16 +287,20 @@ export function GlobalSearchModal() {
       totalAmount: p.totalSpend,
       currency,
     }));
-  }, [expenses, incomes, currency]);
+  }, [isGlobalSearchOpen, expenses, incomes, currency]);
 
   // Transaction items
   const transactionItems = useMemo(() => {
+    if (!isGlobalSearchOpen) return [];
+    const accountById = new Map(
+      accounts.map((a) => [a.id, a.displayName ?? a.name])
+    );
     const list: Array<
       NonNullable<Parameters<typeof searchGlobalItems>[1]["transactions"]>[number]
     > = [];
     for (const exp of expenses) {
       if (!exp.id) continue;
-      const account = accounts.find((a) => a.id === exp.accountId);
+      const accountName = exp.accountId ? accountById.get(exp.accountId) : undefined;
       list.push({
         id: exp.id,
         kind: "expense",
@@ -306,14 +310,14 @@ export function GlobalSearchModal() {
         note: exp.note,
         category: exp.category,
         subcategory: exp.subcategory,
-        accountName: account?.displayName ?? account?.name,
+        accountName,
         accountId: exp.accountId,
         tags: exp.tags,
       });
     }
     for (const inc of incomes) {
       if (!inc.id) continue;
-      const account = accounts.find((a) => a.id === inc.accountId);
+      const accountName = inc.accountId ? accountById.get(inc.accountId) : undefined;
       list.push({
         id: inc.id,
         kind: "income",
@@ -322,15 +326,16 @@ export function GlobalSearchModal() {
         date: inc.date,
         note: inc.note,
         source: inc.source,
-        accountName: account?.displayName ?? account?.name,
+        accountName,
         accountId: inc.accountId,
       });
     }
     return list;
-  }, [expenses, incomes, accounts, currency]);
+  }, [isGlobalSearchOpen, expenses, incomes, accounts, currency]);
 
   // Recurring & Goals items
   const recurringItems = useMemo(() => {
+    if (!isGlobalSearchOpen) return [];
     return (subscriptions ?? [])
       .filter((s): s is typeof s & { id: string } => typeof s.id === "string")
       .map((s) => ({
@@ -340,9 +345,10 @@ export function GlobalSearchModal() {
         currency,
         nextDate: s.dayOfMonth ? `Day ${s.dayOfMonth}` : undefined,
       }));
-  }, [subscriptions, currency]);
+  }, [isGlobalSearchOpen, subscriptions, currency]);
 
   const goalItems = useMemo(() => {
+    if (!isGlobalSearchOpen) return [];
     return (goals ?? []).map((g) => ({
       id: g.id,
       name: g.name,
@@ -350,10 +356,17 @@ export function GlobalSearchModal() {
       currentAmount: g.currentAmount,
       currency,
     }));
-  }, [goals, currency]);
+  }, [isGlobalSearchOpen, goals, currency]);
 
   // Search Results
   const searchResults = useMemo(() => {
+    if (!isGlobalSearchOpen) {
+      return {
+        groups: [],
+        totalMatches: 0,
+        totalTransactionMatches: 0,
+      };
+    }
     return searchGlobalItems(query, {
       actions: actionItems,
       screens: screenItems,
@@ -373,6 +386,7 @@ export function GlobalSearchModal() {
       currentMonth: globalMonth ?? undefined,
     });
   }, [
+    isGlobalSearchOpen,
     query,
     actionItems,
     screenItems,
@@ -937,13 +951,19 @@ export function GlobalSearchModal() {
                                     color: item.isIncome
                                       ? theme.colors.success
                                       : item.kind === "account"
-                                        ? theme.colors.foreground
+                                        ? item.amount < 0
+                                          ? theme.colors.destructive
+                                          : theme.colors.foreground
                                         : theme.colors.destructive,
                                     fontFamily: theme.fontFamily.medium,
                                   },
                                 ]}
                               >
-                                {item.isIncome ? "+ " : item.kind === "transaction" ? "- " : ""}
+                                {item.isIncome
+                                  ? "+ "
+                                  : item.kind === "transaction" || item.amount < 0
+                                    ? "- "
+                                    : ""}
                                 {ghostMoney(Math.abs(item.amount))}
                               </Text>
                             </View>

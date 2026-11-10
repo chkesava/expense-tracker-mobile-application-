@@ -119,20 +119,30 @@ export interface GlobalSearchResultsResult {
   totalTransactionMatches: number;
 }
 
+/**
+ * Normalizes a search term or haystack by trimming whitespace and converting to lowercase.
+ */
 export function normalizeSearchTerm(term: string): string {
   return term.trim().toLowerCase();
 }
 
+/**
+ * Tokenizes a search query into non-empty, whitespace-separated lowercase tokens.
+ */
 export function tokenizeSearchQuery(query: string): string[] {
   return normalizeSearchTerm(query).split(/\s+/).filter(Boolean);
 }
 
+/**
+ * Checks whether a numeric search token matches an amount by magnitude (ignoring currency symbols,
+ * commas, and positive/negative signs so searching for 12000 matches -12000 credit card balances).
+ */
 export function amountMatchesToken(amount: number, token: string): boolean {
   const cleaned = token.replace(/[,\s₹$€£]/g, "");
   if (!/^\d+(\.\d+)?$/.test(cleaned)) return false;
   const value = Number(cleaned);
   if (!Number.isFinite(value)) return false;
-  return Math.abs(amount - value) < 0.005;
+  return Math.abs(Math.abs(amount) - value) < 0.005;
 }
 
 function calculateScore(
@@ -207,6 +217,11 @@ const DEFAULT_GROUP_LIMITS: Partial<Record<GlobalSearchResultKind, number>> = {
   goal: 3,
 };
 
+/**
+ * Searches across all Spendly entities (actions, screens, accounts, categories, merchants,
+ * transactions, recurring items, and goals) purely in memory with multi-token filtering,
+ * relevance scoring, and group truncation.
+ */
 export function searchGlobalItems(
   query: string,
   context: GlobalSearchContext,
@@ -478,7 +493,7 @@ export function searchGlobalItems(
           id: `goal-${goal.id}`,
           kind: "goal",
           title: goal.name,
-          subtitle: goal.targetAmount !== undefined ? `Target: ${goal.targetAmount}` : "Save Goal",
+          subtitle: "Save Goal",
           amount: goal.currentAmount,
           currency: goal.currency,
           href: `/goals/${encodeURIComponent(goal.id)}`,
@@ -514,7 +529,10 @@ export function searchGlobalItems(
   };
 }
 
-/** Recent searches array management */
+/**
+ * Adds a new search term to the recent searches list, deduplicating case-insensitively,
+ * placing it at the front, and limiting to the maximum allowed entries.
+ */
 export function addRecentSearch(
   existing: string[],
   term: string,
@@ -528,6 +546,9 @@ export function addRecentSearch(
   return [clean, ...filtered].slice(0, max);
 }
 
+/**
+ * Removes a search term from the recent searches list case-insensitively.
+ */
 export function removeRecentSearch(
   existing: string[],
   term: string

@@ -20,11 +20,14 @@ describe("globalSearch", () => {
       expect(tokenizeSearchQuery("")).toEqual([]);
     });
 
-    it("matches numeric amounts by token", () => {
+    it("matches numeric amounts by token, including negative balances", () => {
       expect(amountMatchesToken(150, "150")).toBe(true);
       expect(amountMatchesToken(150.5, "150.50")).toBe(true);
       expect(amountMatchesToken(1250, "1,250")).toBe(true);
       expect(amountMatchesToken(500, "₹500")).toBe(true);
+      expect(amountMatchesToken(-12000, "12000")).toBe(true);
+      expect(amountMatchesToken(-12000, "12,000")).toBe(true);
+      expect(amountMatchesToken(-500, "₹500")).toBe(true);
       expect(amountMatchesToken(500, "501")).toBe(false);
       expect(amountMatchesToken(500, "abc")).toBe(false);
     });
@@ -121,6 +124,13 @@ describe("globalSearch", () => {
       expect(accGroup?.items[0].href).toBe("/accounts/acc-icici");
     });
 
+    it("matches accounts with negative balances by positive magnitude", () => {
+      const result = searchGlobalItems("12000", mockContext);
+      const accGroup = result.groups.find((g) => g.kind === "account");
+      expect(accGroup).toBeDefined();
+      expect(accGroup?.items[0].title).toBe("ICICI Sapphiro");
+    });
+
     it("matches categories and subcategories with deep-link hrefs", () => {
       const result = searchGlobalItems("groceries", mockContext);
       const catGroup = result.groups.find((g) => g.kind === "category");
@@ -171,6 +181,7 @@ describe("globalSearch", () => {
       const goalResult = searchGlobalItems("macbook", mockContext);
       const goalGroup = goalResult.groups.find((g) => g.kind === "goal");
       expect(goalGroup?.items[0].title).toBe("MacBook Pro");
+      expect(goalGroup?.items[0].subtitle).toBe("Save Goal");
     });
 
     it("ranks exact matches higher than partial matches", () => {
