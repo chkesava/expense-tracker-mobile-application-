@@ -1,0 +1,11 @@
+{
+  "name": "pdf-renderer",
+  "version": "0.1.0",
+  "description": "Native Android PDF page renderer for Spendly in-app document viewer",
+  "main": "index.ts",
+  "types": "index.ts",
+  "scripts": {},
+  "keywords": ["expo", "pdf-renderer"],
+  "author": "",
+  "license": "UNLICENSED"
+}
