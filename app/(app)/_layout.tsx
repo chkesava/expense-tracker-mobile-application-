@@ -1,4 +1,5 @@
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { useEffect } from "react";
+import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
 import { Redirect, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
@@ -7,6 +8,7 @@ import { AddTransactionModal } from "@/components/AddTransactionModal";
 import { CalendarNotificationSync } from "@/components/calendar/CalendarNotificationSync";
 import { GoalReminderSync } from "@/components/goals/GoalReminderSync";
 import { GlobalAddModals } from "@/components/GlobalAddModals";
+import { GlobalSearchModal } from "@/components/search/GlobalSearchModal";
 import { BottomNav } from "@/components/BottomNav";
 import { Header } from "@/components/Header";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
@@ -37,7 +39,7 @@ import { ExpenseReferenceDataProvider } from "@/providers/ExpenseReferenceDataPr
 import { FinanceDataProvider } from "@/providers/FinanceDataProvider";
 import { CreditCardBillsProvider } from "@/providers/CreditCardBillsProvider";
 import { LedgerStateProvider } from "@/providers/LedgerStateProvider";
-import { ModalProvider } from "@/providers/ModalProvider";
+import { ModalProvider, useModalActions } from "@/providers/ModalProvider";
 import { SetupProgressProvider } from "@/providers/SetupProgressProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
@@ -68,6 +70,21 @@ function AppShellInner() {
 
   // Queue recurring merchants found in the expense list for review.
   useRecurringSync();
+
+  const { setIsGlobalSearchOpen } = useModalActions();
+
+  // SPENDLY-721: global Ctrl+K / ⌘K shortcut on web
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsGlobalSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [setIsGlobalSearchOpen]);
 
   return (
     // The clearance every list pads by has to describe the chrome actually
@@ -438,6 +455,7 @@ function AppShellInner() {
         <AddTransactionModal />
         <AddActionSheet />
         <GlobalAddModals />
+        <GlobalSearchModal />
         {/* SPENDLY-184: keeps calendar notifications in step with the data */}
         <CalendarNotificationSync />
         <GoalReminderSync />
