@@ -50,6 +50,7 @@ export interface GlobalSearchScreenItem {
 export interface GlobalSearchAccountItem {
   id: string;
   name: string;
+  displayName?: string;
   institution?: string;
   type?: string;
   balance?: number;
@@ -81,6 +82,7 @@ export interface GlobalSearchTransactionItem {
   merchant?: string;
   source?: string;
   accountName?: string;
+  accountSearchText?: string;
   accountId?: string;
   tags?: string[];
 }
@@ -145,6 +147,9 @@ export function amountMatchesToken(amount: number, token: string): boolean {
   return Math.abs(Math.abs(amount) - value) < 0.005;
 }
 
+/**
+ * Calculates a search relevance score based on match position and query context.
+ */
 function calculateScore(
   title: string,
   haystack: string,
@@ -171,6 +176,9 @@ function calculateScore(
   return score;
 }
 
+/**
+ * Checks whether an item's search text or numeric amount matches all given query tokens.
+ */
 function itemMatchesTokens(
   haystack: string,
   tokens: string[],
@@ -314,6 +322,7 @@ export function searchGlobalItems(
     for (const acc of context.accounts) {
       const haystack = [
         acc.name,
+        acc.displayName ?? "",
         acc.institution ?? "",
         acc.type ?? "",
       ]
@@ -321,11 +330,12 @@ export function searchGlobalItems(
         .join(" ");
 
       if (itemMatchesTokens(haystack, tokens, acc.balance)) {
-        const score = calculateScore(acc.name, haystack, normQuery, tokens, 90);
+        const title = acc.displayName ?? acc.name;
+        const score = calculateScore(title, haystack, normQuery, tokens, 90);
         matchedAccounts.push({
           id: `acc-${acc.id}`,
           kind: "account",
-          title: acc.name,
+          title,
           subtitle: acc.institution || acc.type,
           amount: acc.balance,
           currency: acc.currency,
@@ -422,6 +432,7 @@ export function searchGlobalItems(
         tx.subcategory ?? "",
         tx.source ?? "",
         tx.accountName ?? "",
+        tx.accountSearchText ?? "",
         ...(tx.tags ?? []),
       ]
         .map(normalizeSearchTerm)

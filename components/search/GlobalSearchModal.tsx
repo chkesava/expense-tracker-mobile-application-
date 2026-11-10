@@ -292,15 +292,21 @@ export function GlobalSearchModal() {
   // Transaction items
   const transactionItems = useMemo(() => {
     if (!isGlobalSearchOpen) return [];
-    const accountById = new Map(
-      accounts.map((a) => [a.id, a.displayName ?? a.name])
+    const accountInfoById = new Map(
+      accounts.map((a) => [
+        a.id,
+        {
+          displayName: a.displayName ?? a.name,
+          searchText: [a.name, a.displayName].filter(Boolean).join(" "),
+        },
+      ])
     );
     const list: Array<
       NonNullable<Parameters<typeof searchGlobalItems>[1]["transactions"]>[number]
     > = [];
     for (const exp of expenses) {
       if (!exp.id) continue;
-      const accountName = exp.accountId ? accountById.get(exp.accountId) : undefined;
+      const accInfo = exp.accountId ? accountInfoById.get(exp.accountId) : undefined;
       list.push({
         id: exp.id,
         kind: "expense",
@@ -310,14 +316,15 @@ export function GlobalSearchModal() {
         note: exp.note,
         category: exp.category,
         subcategory: exp.subcategory,
-        accountName,
+        accountName: accInfo?.displayName,
+        accountSearchText: accInfo?.searchText,
         accountId: exp.accountId,
         tags: exp.tags,
       });
     }
     for (const inc of incomes) {
       if (!inc.id) continue;
-      const accountName = inc.accountId ? accountById.get(inc.accountId) : undefined;
+      const accInfo = inc.accountId ? accountInfoById.get(inc.accountId) : undefined;
       list.push({
         id: inc.id,
         kind: "income",
@@ -326,7 +333,8 @@ export function GlobalSearchModal() {
         date: inc.date,
         note: inc.note,
         source: inc.source,
-        accountName,
+        accountName: accInfo?.displayName,
+        accountSearchText: accInfo?.searchText,
         accountId: inc.accountId,
       });
     }
@@ -372,7 +380,8 @@ export function GlobalSearchModal() {
       screens: screenItems,
       accounts: accounts.map((a) => ({
         id: a.id,
-        name: a.displayName ?? a.name,
+        name: a.name,
+        displayName: a.displayName,
         institution: a.institutionName ?? a.institutionId,
         type: a.accountTypeId,
         balance: a.currentBalance ?? a.openingBalance,

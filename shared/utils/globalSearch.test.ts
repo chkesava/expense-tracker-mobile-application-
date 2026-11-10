@@ -46,7 +46,7 @@ describe("globalSearch", () => {
         { id: "settings_privacy", title: "Settings › Privacy", subtitle: "App security", href: "/settings/privacy", keywords: ["ghost mode", "pin"] },
       ],
       accounts: [
-        { id: "acc-hdfc", name: "HDFC Salary", institution: "HDFC Bank", balance: 50000, currency: "INR" },
+        { id: "acc-hdfc", name: "HDFC-1234", displayName: "HDFC Salary", institution: "HDFC Bank", balance: 50000, currency: "INR" },
         { id: "acc-icici", name: "ICICI Sapphiro", institution: "ICICI Bank", type: "Credit Card", balance: -12000, currency: "INR" },
       ],
       categories: [
@@ -68,6 +68,7 @@ describe("globalSearch", () => {
           subcategory: "Restaurants",
           note: "Biryani with team",
           accountName: "HDFC Salary",
+          accountSearchText: "HDFC-1234 HDFC Salary",
           accountId: "acc-hdfc",
           tags: ["lunch", "work"],
         },
@@ -90,6 +91,7 @@ describe("globalSearch", () => {
           category: "Salary",
           note: "Monthly salary",
           accountName: "HDFC Salary",
+          accountSearchText: "HDFC-1234 HDFC Salary",
           accountId: "acc-hdfc",
         },
       ],
@@ -129,6 +131,19 @@ describe("globalSearch", () => {
       const accGroup = result.groups.find((g) => g.kind === "account");
       expect(accGroup).toBeDefined();
       expect(accGroup?.items[0].title).toBe("ICICI Sapphiro");
+    });
+
+    it("matches accounts by either name or displayName", () => {
+      const byName = searchGlobalItems("HDFC-1234", mockContext);
+      expect(byName.groups.find((g) => g.kind === "account")?.items[0].title).toBe("HDFC Salary");
+
+      const byDisplay = searchGlobalItems("Salary", mockContext);
+      expect(byDisplay.groups.find((g) => g.kind === "account")?.items[0].title).toBe("HDFC Salary");
+    });
+
+    it("matches transactions by accountSearchText when displayName differs", () => {
+      const result = searchGlobalItems("HDFC-1234 biryani", mockContext);
+      expect(result.totalTransactionMatches).toBe(1);
     });
 
     it("matches categories and subcategories with deep-link hrefs", () => {
