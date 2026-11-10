@@ -38,6 +38,7 @@ import { transactionHref } from "@/shared/utils/transactionRef";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import type { Expense, Income } from "@/shared/types/expense";
 import { currentMonthKey, toLocalDateKey } from "@/shared/utils/dates";
+import { amountMatchesToken } from "@/shared/utils/globalSearch";
 import { useTheme } from "@/theme/ThemeProvider";
 
 export interface UnifiedTransaction {
@@ -78,6 +79,10 @@ export interface AnalysisLabViewProps {
   listHeader?: ReactNode;
 }
 
+/**
+ * Search & Lab view providing unified multi-filter exploration,
+ * aggregated metrics, and deep transaction search.
+ */
 export function AnalysisLabView({
   initialQuery = "",
   listHeader,
@@ -115,7 +120,15 @@ export function AnalysisLabView({
 
   const accountMap = useMemo(() => {
     const map = new Map<string, string>();
-    accounts.forEach((a) => map.set(a.id, a.name));
+    accounts.forEach((a) => map.set(a.id, a.displayName ?? a.name));
+    return map;
+  }, [accounts]);
+
+  const accountSearchTextMap = useMemo(() => {
+    const map = new Map<string, string>();
+    accounts.forEach((a) => {
+      map.set(a.id, [a.name, a.displayName].filter(Boolean).join(" "));
+    });
     return map;
   }, [accounts]);
 
@@ -213,23 +226,36 @@ export function AnalysisLabView({
         return false;
       }
 
-      // Text query match
+      // Text query match: every token must match across note, category, subcategory, account, tags, or amount
       if (queryLower) {
-        const matchNote = item.note?.toLowerCase().includes(queryLower);
-        const matchCat = item.category.toLowerCase().includes(queryLower);
-        const matchSub = item.subcategory?.toLowerCase().includes(queryLower);
-        const matchAcc = item.accountId && accountMap.get(item.accountId)?.toLowerCase().includes(queryLower);
-        const matchTag = item.tags?.some((t) => t.toLowerCase().includes(queryLower));
-        const matchAmount = String(item.amount).includes(queryLower);
+        const queryTokens = queryLower.split(/\s+/).filter(Boolean);
+        const noteLower = item.note?.toLowerCase() ?? "";
+        const catLower = item.category.toLowerCase();
+        const subLower = item.subcategory?.toLowerCase() ?? "";
+        const accLower = item.accountId ? (accountSearchTextMap.get(item.accountId)?.toLowerCase() ?? "") : "";
+        const tagsLower = item.tags?.map((t) => t.toLowerCase()) ?? [];
+        const amountStr = String(item.amount);
 
-        if (!matchNote && !matchCat && !matchSub && !matchAcc && !matchTag && !matchAmount) {
+        const allTokensMatch = queryTokens.every((token) => {
+          return (
+            noteLower.includes(token) ||
+            catLower.includes(token) ||
+            subLower.includes(token) ||
+            accLower.includes(token) ||
+            tagsLower.some((t) => t.includes(token)) ||
+            amountStr.includes(token) ||
+            amountMatchesToken(item.amount, token)
+          );
+        });
+
+        if (!allTokensMatch) {
           return false;
         }
       }
 
       return true;
     });
-  }, [allTransactions, filters, accountMap]);
+  }, [allTransactions, filters, accountSearchTextMap]);
 
   /** Client-side ordering of the already-filtered set. */
   const sortedTransactions = useMemo(() => {
