@@ -38,11 +38,14 @@ const SECURITY = {
 /** A healthy backup: the real router over fake static files and fake handlers. */
 function backupSite(overrides: Record<string, (event: NetlifyEvent) => Promise<NetlifyResult>> = {}) {
   const files = new Map<string, { body: string; type: string; immutable?: boolean }>();
+  const fontPath = "/expense/assets/vendor_modules/@expo-google-fonts/inter/400Regular/Inter_400Regular.51b6ad87261f18b6433ec52871ddfabc.ttf";
+  files.set(fontPath, { body: "font", type: "font/ttf", immutable: true });
   for (const base of ["", "/expense", "/nutrition", "/ganesh"]) {
     files.set(`${base}/`, { body: `<html><script src="${base}/_expo/static/js/web/entry-abc.js"></script></html>`, type: "text/html" });
     files.set(`${base}/manifest.webmanifest`, { body: JSON.stringify({ start_url: `${base}/` }), type: "application/manifest+json" });
     files.set(`${base}/pwa-192.png`, { body: "png", type: "image/png" });
-    files.set(`${base}/_expo/static/js/web/entry-abc.js`, { body: "js", type: "application/javascript", immutable: true });
+    const jsBody = base === "/expense" ? `var font = "${fontPath}";` : "js";
+    files.set(`${base}/_expo/static/js/web/entry-abc.js`, { body: jsBody, type: "application/javascript", immutable: true });
   }
   const env: Env = {
     ASSETS: {
@@ -98,6 +101,32 @@ describe("smoke test", () => {
     const { failures, lines } = await run(broken);
     expect(failures).toBe(1);
     expect(lines.find((l) => l.startsWith("FAIL"))).toContain("/api/stock");
+  });
+
+  it("fails when the inter font asset returns 404", async () => {
+    const site = backupSite();
+    const broken = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).includes("Inter_400Regular") && String(input).endsWith(".ttf")) {
+        return new Response("Not found", { status: 404 });
+      }
+      return site(input, init);
+    }) as typeof fetch;
+    const { failures, lines } = await run(broken);
+    expect(failures).toBe(1);
+    expect(lines.find((l) => l.startsWith("FAIL"))).toContain("inter font asset");
+  });
+
+  it("fails when the inter font asset returns HTML instead of font", async () => {
+    const site = backupSite();
+    const broken = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).includes("Inter_400Regular") && String(input).endsWith(".ttf")) {
+        return new Response("<html>Fallback</html>", { status: 200, headers: { "Content-Type": "text/html" } });
+      }
+      return site(input, init);
+    }) as typeof fetch;
+    const { failures, lines } = await run(broken);
+    expect(failures).toBe(1);
+    expect(lines.find((l) => l.startsWith("FAIL"))).toContain("expected font MIME type");
   });
 
   it("only warns when market data upstream is down", async () => {

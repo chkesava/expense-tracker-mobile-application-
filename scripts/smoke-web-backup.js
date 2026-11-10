@@ -84,7 +84,9 @@ function smokeChecks(mode) {
       return missing.length ? `missing ${missing.join(', ')}` : null;
     }),
     // The bundle path comes from the expense app's HTML; see runSmoke.
-    check('content-hashed bundle', '/expense/', undefined, null)
+    check('content-hashed bundle', '/expense/', undefined, null),
+    // SPENDLY-750: ensure the Inter font asset is present, served as font, and immutable.
+    check('inter font asset', '/expense/', undefined, null)
   );
 
   for (const [name, query] of Object.entries(MARKET_PROBES)) {
@@ -150,6 +152,22 @@ async function runCheck(origin, c, fetchImpl) {
     await js.text();
     if (js.status !== 200) return `bundle ${bundle[0]}: ${js.status}`;
     return (js.headers.get('cache-control') || '').includes('immutable') ? null : 'bundle is not cached as immutable';
+  }
+  if (c.name === 'inter font asset') {
+    const bundle = /\/expense\/_expo\/static\/js\/web\/[^"']+\.js/.exec(body);
+    if (!bundle) return 'no bundle link in /expense/';
+    const js = await fetchImpl(origin + bundle[0]);
+    const jsText = await js.text();
+    if (js.status !== 200) return `bundle ${bundle[0]}: ${js.status}`;
+    const font = /\/expense\/assets\/[^"'\s`]+\/Inter_400Regular\.[a-f0-9]+\.ttf/.exec(jsText);
+    if (!font) return 'no Inter_400Regular font link in expense bundle';
+    const fontRes = await fetchImpl(origin + font[0]);
+    if (fontRes.status !== 200) return `font ${font[0]}: ${fontRes.status}`;
+    const ct = fontRes.headers.get('content-type') || '';
+    if (ct.includes('text/html')) return `font ${font[0]}: expected font MIME type, got ${ct}`;
+    return (fontRes.headers.get('cache-control') || '').includes('immutable')
+      ? null
+      : `font ${font[0]}: not cached as immutable`;
   }
   return c.verify(res, body);
 }

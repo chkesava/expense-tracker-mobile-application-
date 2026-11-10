@@ -159,6 +159,11 @@ jobs:
         run: |
           npm run build:cloudflare-pages
           npm run build:cloudflare-worker
+          # SPENDLY-750: ensure font and vendor assets are relocated out of node_modules so Wrangler uploads them
+          if find dist-cloudflare -type d -name "node_modules" | grep -q .; then
+            echo "::error::dist-cloudflare contains un-relocated node_modules directory. Assets would be ignored by Wrangler."
+            exit 1
+          fi
           # The backup's own origin must be inlined, and Netlify's must not be
           # what the app calls for its functions.
           if ! grep -rqF "${CLOUDFLARE_BACKUP_ORIGIN%/}" dist-cloudflare/_expo dist-cloudflare/expense/_expo; then

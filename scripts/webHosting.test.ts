@@ -20,8 +20,10 @@ const hosting = req(path.join(root, "scripts", "lib", "webHosting.js")) as {
   cloudflareRoutes(): { version: number; include: string[]; exclude: string[] };
   spaIndexFor(pathname: string): string | null;
 };
-const { buildCloudflarePages } = req(path.join(root, "scripts", "build-cloudflare-pages.js")) as {
+const { buildCloudflarePages, VENDOR_ASSETS_DIR, assertNoIgnoredNodeModules } = req(path.join(root, "scripts", "build-cloudflare-pages.js")) as {
   buildCloudflarePages(from: string, to: string, limits?: { maxFiles: number; maxFileBytes: number }): void;
+  VENDOR_ASSETS_DIR: string;
+  assertNoIgnoredNodeModules(dir: string): void;
 };
 
 const NETLIFY_REDIRECTS_BEFORE = [
@@ -203,5 +205,46 @@ describe("build-cloudflare-pages", () => {
     const from = fakeWebExport();
     rmSync(path.join(from, "nutrition"), { recursive: true });
     expect(() => buildCloudflarePages(from, path.join(dir, "dist-cloudflare"))).toThrow(/nutrition.*build:web:all/);
+  });
+
+  it("relocates assets/node_modules to vendor_modules and rewrites bundle references", () => {
+    const from = fakeWebExport();
+    // Simulate npm font assets exported by Metro under expense/assets/node_modules
+    for (const w of ["400Regular", "500Medium", "600SemiBold", "700Bold"]) {
+      const fontRelDir = path.join("expense", "assets", "node_modules", "@expo-google-fonts", "inter", w);
+      mkdirSync(path.join(from, fontRelDir), { recursive: true });
+      writeFileSync(path.join(from, fontRelDir, `Inter_${w}.hash.ttf`), "font-bytes");
+    }
+    // Bundle referencing the asset path
+    writeFileSync(
+      path.join(from, "expense", "_expo", "entry.js"),
+      'exports = "/expense/assets/node_modules/@expo-google-fonts/inter/400Regular/Inter_400Regular.hash.ttf";'
+    );
+
+    const to = path.join(dir, "dist-cloudflare");
+    buildCloudflarePages(from, to);
+
+    // In dist-cloudflare: assets/node_modules is gone, assets/vendor_modules is present
+    expect(existsSync(path.join(to, "expense", "assets", "node_modules"))).toBe(false);
+    expect(
+      existsSync(path.join(to, "expense", "assets", VENDOR_ASSETS_DIR, "@expo-google-fonts", "inter", "400Regular", "Inter_400Regular.hash.ttf"))
+    ).toBe(true);
+
+    // References inside the bundle are rewritten
+    const rewrittenBundle = readFileSync(path.join(to, "expense", "_expo", "entry.js"), "utf8");
+    expect(rewrittenBundle).toContain(`/expense/assets/${VENDOR_ASSETS_DIR}/@expo-google-fonts`);
+    expect(rewrittenBundle).not.toContain("assets/node_modules");
+
+    // In dist-web: untouched, still has assets/node_modules
+    expect(existsSync(path.join(from, "expense", "assets", "node_modules", "@expo-google-fonts", "inter", "400Regular", "Inter_400Regular.hash.ttf"))).toBe(true);
+    expect(readFileSync(path.join(from, "expense", "_expo", "entry.js"), "utf8")).toContain("assets/node_modules");
+  });
+
+  it("assertNoIgnoredNodeModules catches any remaining node_modules folder", () => {
+    const from = fakeWebExport();
+    const to = path.join(dir, "dist-cloudflare");
+    buildCloudflarePages(from, to);
+    mkdirSync(path.join(to, "stray", "node_modules"), { recursive: true });
+    expect(() => assertNoIgnoredNodeModules(to)).toThrow(/Wrangler would drop/);
   });
 });
