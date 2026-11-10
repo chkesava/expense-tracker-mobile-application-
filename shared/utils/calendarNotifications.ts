@@ -14,7 +14,7 @@ import type { CalendarReminder } from "../types/calendarReminder";
 import { shiftDateKey } from "./dates";
 
 /** Notification `data.source` values the tap handler may route. */
-export const NOTIFICATION_ROUTE_SOURCES = ["credit_card_bill", "calendar", "goal"] as const;
+export const NOTIFICATION_ROUTE_SOURCES = ["credit_card_bill", "calendar", "goal", "salary"] as const;
 
 export function isRoutableNotification(data: unknown): data is { source: string; url: string } {
   const d = data as { source?: unknown; url?: unknown } | null | undefined;
@@ -43,6 +43,9 @@ export interface CalendarNotificationPrefs {
   /** SPENDLY-297: tax deadlines (advance tax, Form 16, filing dates). */
   taxEnabled?: boolean;
   taxDaysBefore?: TaxDaysBefore;
+  /** SPENDLY-333: salary payday and late salary reminders. */
+  salaryEnabled?: boolean;
+  salaryDaysBefore?: 0 | 1 | 3;
 }
 
 export const TAX_DAYS_BEFORE = [1, 3, 7] as const;
@@ -82,6 +85,11 @@ function copy(e: CalendarEvent, kind: CalendarNotificationKind, lead: number, fo
     case "tax":
       // No amounts in tax notices.
       return { title: e.title, body: kind === "overdue" ? "Still open in your tax center" : kind === "due" ? "Today" : `In ${lead} days` };
+    case "salary":
+      return {
+        title: e.title,
+        body: kind === "overdue" ? `Payday was expected ${when}${money}` : `Expected payday ${when}${money}`,
+      };
     default:
       return { title: e.title, body: kind === "overdue" ? `Payment ${when}${money}` : `Due ${when}${money}` };
   }
@@ -121,6 +129,17 @@ export function planCalendarNotifications(input: {
       } else if (e.state === "scheduled") {
         const lead = prefs.taxDaysBefore ?? 3;
         add(e, "before", shiftDateKey(e.date, -lead), lead);
+        add(e, "due", e.date, 0);
+      }
+      continue;
+    }
+    if (e.source === "salary") {
+      if (prefs.salaryEnabled === false) continue;
+      if (e.state === "overdue") {
+        add(e, "overdue", shiftDateKey(e.date, 1), 0);
+      } else if (e.state === "expected") {
+        const lead = prefs.salaryDaysBefore ?? 1;
+        if (lead > 0) add(e, "before", shiftDateKey(e.date, -lead), lead);
         add(e, "due", e.date, 0);
       }
       continue;

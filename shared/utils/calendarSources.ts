@@ -18,7 +18,7 @@ import type { Receivable } from "../types/receivable";
 import { subscriptionFrequency, type Subscription } from "../types/subscription";
 import type { EpfContribution } from "../features/epf/types";
 import type { SipPlan } from "../features/sip/types";
-import { daysBetweenDateKeys, isValidDateKey, parseLocalDate } from "./dates";
+import { daysBetweenDateKeys, isValidDateKey, parseLocalDate, shiftMonthKey } from "./dates";
 import { goalStatus } from "./goalModel";
 import { getInvestmentValuation } from "./investmentInterest";
 import { isActiveLedgerRow } from "./ledgerRow";
@@ -195,10 +195,11 @@ export function receivableEvents(receivables: readonly Receivable[], ctx: Calend
 
 // ── Income (recorded only) ──────────────────────────────────────────────────
 
-export function incomeEvents(incomes: readonly Income[], ctx: CalendarContext): CalendarEvent[] {
+export function incomeEvents(incomes: readonly Income[], ctx: CalendarContext, salaryIncomeIds?: ReadonlySet<string>): CalendarEvent[] {
   const out: CalendarEvent[] = [];
   for (const inc of incomes) {
     if (!inc.id || !isActiveLedgerRow(inc) || !isValidDateKey(inc.date) || !inRange(inc.date, ctx.range)) continue;
+    if (salaryIncomeIds && salaryIncomeIds.has(inc.id)) continue;
     out.push(
       event(ctx, {
         source: "income",
@@ -452,3 +453,125 @@ export function feeEvents(patterns: readonly FeePattern[], ctx: CalendarContext)
 
   return out;
 }
+
+// ── Salary ──────────────────────────────────────────────────────────────────
+
+import type { SalaryProfile, SalaryRecord } from "../features/salary/types";
+import type { SalarySignal } from "../features/salary/utils/irregularity";
+import { buildSalaryForecast } from "../features/salary/utils/forecast";
+
+export function salaryEvents(
+  records: readonly SalaryRecord[],
+  profiles: readonly SalaryProfile[],
+  ctx: CalendarContext,
+  signals?: readonly SalarySignal[]
+): CalendarEvent[] {
+  const out: CalendarEvent[] = [];
+
+  // Track signals by employer:wageMonth to let active irregularity alerts take precedence over default forecasts
+  const signalKeySet = new Set<string>();
+  if (signals) {
+    for (const sig of signals) {
+      if (sig.kind === "late_paycheck" || sig.kind === "missing_paycheck") {
+        signalKeySet.add(`${sig.employerName}:${sig.month}`);
+      }
+    }
+  }
+
+  // 1. Confirmed / recorded salary paychecks
+  for (const r of records) {
+    if (r.status === "rejected" || r.deletedAt) continue;
+    const date = r.paymentDate;
+    if (!r.id || !isValidDateKey(date) || !inRange(date, ctx.range)) continue;
+    const isBonus = r.type === "bonus" || r.type === "incentive";
+    const employerName = r.employer?.name || "Salary";
+    const month = r.payPeriod?.month || r.month;
+
+    out.push(
+      event(ctx, {
+        source: "salary",
+        refId: r.id,
+        date,
+        title: isBonus ? `Bonus · ${employerName}` : `Salary · ${employerName}`,
+        subtitle: month ? `Wage month ${month}` : undefined,
+        amount: roundMoney(r.netAmount),
+        currency: r.currency || ctx.currency,
+        direction: "in",
+        state: "actual",
+        actionable: false,
+        href: `/salary?recordId=${r.id}`,
+      })
+    );
+  }
+
+  // 2. Expected / forecasted paydays
+  if (records.length > 0 || profiles.length > 0) {
+    const primaryProfile = profiles.find((p) => p.primaryEmployer) || profiles[0];
+    const forecast = buildSalaryForecast(records as SalaryRecord[], {
+      profile: primaryProfile,
+      todayKey: ctx.today,
+      monthsAhead: 6,
+    });
+    if (forecast.hasSufficientData) {
+      for (const proj of forecast.upcomingProjections) {
+        if (!inRange(proj.expectedDate, ctx.range)) continue;
+        const key = `${proj.employerName}:${proj.wageMonth}`;
+        // If an irregularity signal (e.g. late/missing) is active for this paycheck, let the signal represent it
+        if (signalKeySet.has(key)) continue;
+
+        const isPastDue = proj.expectedDate < ctx.today;
+        const state: CalendarEventState = isPastDue ? "overdue" : "expected";
+
+        out.push(
+          event(ctx, {
+            source: "salary",
+            refId: `forecast:${proj.employerName}:${proj.wageMonth}`,
+            date: proj.expectedDate,
+            title: `Expected salary · ${proj.employerName}`,
+            subtitle: `Estimated ~₹${roundMoney(proj.projectedTotalNet)} · Month ${proj.wageMonth}`,
+            amount: roundMoney(proj.projectedTotalNet),
+            direction: "in",
+            state,
+            actionable: isPastDue,
+            href: `/salary?month=${proj.wageMonth}`,
+          })
+        );
+      }
+    }
+  }
+
+  // 3. Irregularity signals (late or missing paychecks)
+  if (signals && signals.length > 0) {
+    for (const sig of signals) {
+      if (sig.kind !== "late_paycheck" && sig.kind !== "missing_paycheck") continue;
+      const timing = sig.expectedWindow?.timing ?? "same_month";
+      const payMonth = timing === "next_month" ? shiftMonthKey(sig.month, 1) : sig.month;
+      const typicalDay = sig.supportingHistory?.typicalDay ?? sig.expectedWindow?.endDay ?? 28;
+      const date = `${payMonth}-${String(Math.min(31, Math.max(1, typicalDay))).padStart(2, "0")}`;
+
+      if (!isValidDateKey(date) || !inRange(date, ctx.range)) continue;
+
+      const isMissing = sig.kind === "missing_paycheck";
+      const title = isMissing ? `Missing paycheck · ${sig.employerName}` : `Late paycheck · ${sig.employerName}`;
+      const amount = typeof sig.expectedAmount === "number" ? roundMoney(sig.expectedAmount) : null;
+
+      out.push(
+        event(ctx, {
+          source: "salary",
+          refId: `signal:${sig.id}`,
+          date,
+          title,
+          subtitle: sig.description || (isMissing ? "Paycheck expected window elapsed" : "Payment overdue"),
+          amount,
+          direction: "in",
+          state: "overdue",
+          actionable: true,
+          href: "/salary",
+        })
+      );
+    }
+  }
+
+  return out;
+}
+

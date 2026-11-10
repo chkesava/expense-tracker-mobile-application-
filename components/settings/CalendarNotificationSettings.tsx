@@ -61,6 +61,26 @@ export function CalendarNotificationSettings() {
             />
           </View>
         ) : null}
+        <RowSwitch
+          label="Salary & expected paydays"
+          description="Remind me before and on expected paydays, and alert me if a paycheck appears late."
+          value={prefs.salaryEnabled}
+          onValueChange={(v) => (v ? void enable({ salaryEnabled: true }) : setCalendarNotifications({ salaryEnabled: false }))}
+        />
+        {prefs.salaryEnabled ? (
+          <View style={{ gap: 6 }}>
+            <Text style={muted}>Notify before expected payday</Text>
+            <ChipRow<string>
+              options={[
+                { value: "0", label: "On the day" },
+                { value: "1", label: "1 day before" },
+                { value: "3", label: "3 days before" },
+              ]}
+              selected={String(prefs.salaryDaysBefore)}
+              onSelect={(v) => setCalendarNotifications({ salaryDaysBefore: Number(v) as 0 | 1 | 3 })}
+            />
+          </View>
+        ) : null}
         {taxCenter ? (
           <>
             <RowSwitch

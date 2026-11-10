@@ -33,6 +33,7 @@ import {
   incomeEvents,
   investmentEvents,
   receivableEvents,
+  salaryEvents,
   sipEvents,
   subscriptionEvents,
   type CalendarContext,
@@ -69,6 +70,10 @@ export interface CalendarData {
   reminders?: readonly CalendarReminder[];
   /** SPENDLY-297: tax records behind the tax deadlines; absent when the tax center is off. */
   taxFacts?: TaxCalendarFacts | null;
+  /** SPENDLY-333: salary records, profiles, and irregularity signals. */
+  salaryRecords?: readonly import("../features/salary/types").SalaryRecord[];
+  salaryProfiles?: readonly import("../features/salary/types").SalaryProfile[];
+  salarySignals?: readonly import("../features/salary/utils/irregularity").SalarySignal[];
   /** Events from other features (later fee/decision/runway sources). */
   extraEvents?: readonly CalendarEvent[];
 }
@@ -105,13 +110,14 @@ const SOURCE_ORDER: Record<CalendarSource, number> = {
   sip: 4,
   receivable: 5,
   income: 6,
-  investment: 7,
-  epf: 8,
-  fee: 9,
-  goal: 10,
-  decision: 11,
-  reminder: 12,
-  tax: 13,
+  salary: 7,
+  investment: 8,
+  epf: 9,
+  fee: 10,
+  goal: 11,
+  decision: 12,
+  reminder: 13,
+  tax: 14,
 };
 const DIRECTION_ORDER = { out: 0, in: 1, neutral: 2 } as const;
 
@@ -138,12 +144,19 @@ export function normalizeCalendarRange(range: CalendarRange, today: string): Cal
 }
 
 function collect(ctx: CalendarContext, data: CalendarData): CalendarEvent[] {
+  const salaryIncomeIds = new Set(
+    (data.salaryRecords ?? [])
+      .map((r) => r.transactionId)
+      .filter((id): id is string => Boolean(id))
+  );
+
   return [
     ...cardBillEvents(data.bills, data.cardNames, ctx),
     ...subscriptionEvents(data.subscriptions, ctx),
     ...borrowingEvents(data.borrowings, ctx),
     ...receivableEvents(data.receivables, ctx),
-    ...incomeEvents(data.incomes, ctx),
+    ...incomeEvents(data.incomes, ctx, salaryIncomeIds),
+    ...salaryEvents(data.salaryRecords ?? [], data.salaryProfiles ?? [], ctx, data.salarySignals ?? []),
     ...goalEvents(data.goals, ctx),
     ...investmentEvents(data.investments, ctx),
     ...sipEvents(data.sipPlans, ctx),
