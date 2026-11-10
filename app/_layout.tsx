@@ -166,6 +166,14 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
   const fontsSettled = fontsLoaded || Boolean(fontError);
 
   useEffect(() => {
+    if (fontError) {
+      logWarning("app.fonts", fontError, {
+        message: "Failed to load custom fonts, falling back to system typography",
+      });
+    }
+  }, [fontError]);
+
+  useEffect(() => {
     perfMark("app_module");
   }, []);
 
