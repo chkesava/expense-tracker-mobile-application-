@@ -431,6 +431,13 @@ function AppShellInner() {
                 animation: "slide_from_right",
               }}
             />
+            {/* SPENDLY-334: Salary Intelligence dashboard. */}
+            <Stack.Screen
+              name="salary/index"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
             <Stack.Screen
               name="add"
               options={{
