@@ -43,7 +43,9 @@ function latestRestatement(name: string): string {
 const quotedNames = (text: string) => new Set([...text.matchAll(/'([a-zA-Z_/]+)'/g)].map((m) => m[1]));
 
 /** Server-only tables: copied by the sync, never written by the app (`rm_client_apply`). */
-const SERVER_ONLY = new Set(["user_settings"]);
+// SPENDLY-744/747: recurring suggestions and server results are written only by the
+// server jobs (Firestore rules: write false), so they're off the client allowlist too.
+const SERVER_ONLY = new Set(["user_settings", "recurring_suggestions", "server_results"]);
 
 // SPENDLY-709: two epics each restated these lists from an older migration;
 // the later one silently dropped the other's tables. The latest restatement

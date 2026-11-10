@@ -217,8 +217,11 @@ describe("seed-emulator.js", () => {
     const backdated = collections.expenses.find((row) => row.id === "exp-backdated");
     expect(backdated?.data.month).toBe("2025-12");
     expect(backdated?.data.createdAt).toEqual(today);
-    // Stored summaries cover every seeded month.
-    expect(collections.financialSummaries).toHaveLength(12);
+    // Stored summaries cover every seeded month: the 12 ledger months plus the
+    // older months of the tax-demo incomes (SPENDLY-290, the year that ended last).
+    const rowMonths = new Set([...collections.expenses, ...collections.incomes].map((row) => row.data.month as string));
+    expect(rowMonths.size).toBeGreaterThanOrEqual(12);
+    expect(collections.financialSummaries.map((s) => s.id).sort()).toEqual([...rowMonths].sort().map((m) => `dashboard_${m}`));
   });
 
   it("builds rows the app will actually show", () => {
