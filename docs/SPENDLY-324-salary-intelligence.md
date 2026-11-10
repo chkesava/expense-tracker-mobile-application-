@@ -18,7 +18,7 @@
 | 3 | [SPENDLY-327](https://kesavach.atlassian.net/browse/SPENDLY-327) | Build salary review, confirmation and correction workflow | 325, 326 | Merged to Epic |
 | 4 | [SPENDLY-328](https://kesavach.atlassian.net/browse/SPENDLY-328) | Build salary history and paycheck timeline | 325, 327 | Merged to Epic |
 | 5 | [SPENDLY-329](https://kesavach.atlassian.net/browse/SPENDLY-329) | Build salary breakdown and deduction analysis | 325, 328 | Merged to Epic |
-| 6 | [SPENDLY-330](https://kesavach.atlassian.net/browse/SPENDLY-330) | Build salary trend, growth and stability analytics | 328 | To Do |
+| 6 | [SPENDLY-330](https://kesavach.atlassian.net/browse/SPENDLY-330) | Build salary trend, growth and stability analytics | 328 | Implemented (Pending Approval) |
 | 7 | [SPENDLY-331](https://kesavach.atlassian.net/browse/SPENDLY-331) | Build salary irregularity and missing-paycheck intelligence | 326, 328, 330 | To Do |
 | 8 | [SPENDLY-332](https://kesavach.atlassian.net/browse/SPENDLY-332) | Build salary forecast and expected-income planning | 328, 330 | To Do |
 | 9 | [SPENDLY-333](https://kesavach.atlassian.net/browse/SPENDLY-333) | Integrate salary events with Financial Calendar and notifications | 328, 331, 332 | To Do |
