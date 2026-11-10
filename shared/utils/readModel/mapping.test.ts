@@ -389,6 +389,75 @@ describe("read-model mapping (SPENDLY-506)", () => {
     expect(changeFieldsOf({ collection: "taxSnapshots" }).map((f) => f.field)).toEqual(["createdAt", "updatedAt", "createdAtMs"]);
   });
 
+  it("SPENDLY-325: maps salary profiles, records, and reviews into read-model rows", () => {
+    const at = { createdAtMs: 1_790_000_000_000, updatedAtMs: 1_790_000_100_000 };
+
+    const profileRow = mapDocument(SPEC_BY_COLLECTION.get("salaryProfiles")!, "u1", {
+      id: "primary",
+      updateTime: UPDATE_TIME,
+      data: { primaryEmployer: "Acme Corp", frequency: "monthly", ...at },
+    });
+    expect(profileRow).toMatchObject({
+      source_path: "users/u1/salaryProfiles/primary",
+      mapping_status: "mapped",
+      primary_employer: "Acme Corp",
+      frequency: "monthly",
+    });
+
+    const recordRow = mapDocument(SPEC_BY_COLLECTION.get("salaryRecords")!, "u1", {
+      id: "rec_1",
+      updateTime: UPDATE_TIME,
+      data: {
+        month: "2026-10",
+        paymentDate: "2026-10-31",
+        type: "regular",
+        status: "confirmed",
+        netAmount: 125000,
+        grossAmount: 150000,
+        deletedAt: "2026-11-01",
+        ...at,
+      },
+    });
+    expect(recordRow).toMatchObject({
+      source_path: "users/u1/salaryRecords/rec_1",
+      mapping_status: "mapped",
+      month: "2026-10",
+      payment_date: "2026-10-31",
+      salary_type: "regular",
+      status: "confirmed",
+      net_amount: 125000,
+      gross_amount: 150000,
+      soft_deleted_at: "2026-11-01T00:00:00.000Z",
+    });
+
+    const reviewRow = mapDocument(SPEC_BY_COLLECTION.get("salaryReviews")!, "u1", {
+      id: "income__i1",
+      updateTime: UPDATE_TIME,
+      data: {
+        refKey: "income:i1",
+        decision: "reject",
+        salaryType: "reimbursement",
+        ...at,
+      },
+    });
+    expect(reviewRow).toMatchObject({
+      source_path: "users/u1/salaryReviews/income__i1",
+      mapping_status: "mapped",
+      ref_key: "income:i1",
+      decision: "reject",
+      salary_type: "reimbursement",
+    });
+
+    for (const c of ["salaryProfiles", "salaryRecords", "salaryReviews"]) {
+      expect(changeFieldsOf({ collection: c }).map((f) => f.field)).toEqual([
+        "createdAt",
+        "updatedAt",
+        "createdAtMs",
+        "updatedAtMs",
+      ]);
+    }
+  });
+
   it("derives month from the date when the row has none", () => {
     const row = mapDocument(expenses, "u1", { id: "e", updateTime: UPDATE_TIME, data: { amount: 1, date: "2026-08-15" } });
     expect(row.month).toBe("2026-08");
