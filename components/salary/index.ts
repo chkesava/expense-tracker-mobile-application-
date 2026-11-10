@@ -3,5 +3,6 @@ export * from "./PaycheckTimeline";
 export * from "./SalaryReviewModal";
 export * from "./SalaryTrendCard";
 export * from "./SalaryIrregularityAlert";
+export * from "./SalaryForecastCard";
 
 

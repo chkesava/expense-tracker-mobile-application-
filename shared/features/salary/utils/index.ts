@@ -7,6 +7,8 @@ export * from "./timeline";
 export * from "./breakdown";
 export * from "./analytics";
 export * from "./irregularity";
+export * from "./forecast";
+
 
 
 
