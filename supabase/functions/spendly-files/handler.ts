@@ -96,9 +96,13 @@ const SAFE_FILE = /^[A-Za-z0-9._-]{1,80}$/;
 
 /**
  * Who a path belongs to, and which Firestore document proves it:
- * an account's documents (SPENDLY-88), or a Save Goals image (SPENDLY-614).
+ * an account's documents (SPENDLY-88), a Save Goals image (SPENDLY-614), or a
+ * tax document (SPENDLY-298), whose own metadata row is the proof.
  */
-export type PathOwner = { uid: string; accountId: string } | { uid: string; goalId: string };
+export type PathOwner =
+  | { uid: string; accountId: string }
+  | { uid: string; goalId: string }
+  | { uid: string; taxDocumentId: string };
 
 /** Goal images are images only — a goal never holds a PDF (SPENDLY-614). */
 export const GOAL_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -106,11 +110,20 @@ export const GOAL_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
 /**
  * users/{uid}/accounts/{accountId}/{documentId}/{fileName}
  * users/{uid}/goals/{goalId}/{imageId}/{fileName}
+ * users/{uid}/tax/{taxDocumentId}/{fileName}
  */
 export function ownerForPath(path: unknown): PathOwner | null {
   if (typeof path !== "string" || path.length === 0 || path.length > 512) return null;
   if (path.includes("..") || path.startsWith("/")) return null;
   const parts = path.split("/");
+  // SPENDLY-298: a tax document has no parent record; its own metadata row
+  // (`taxDocuments/{id}`, written before the upload) proves ownership.
+  if (parts.length === 5 && parts[0] === "users" && parts[2] === "tax") {
+    if (!SAFE_SEGMENT.test(parts[1] ?? "")) return null;
+    if (!SAFE_SEGMENT.test(parts[3] ?? "")) return null;
+    if (!SAFE_FILE.test(parts[4] ?? "")) return null;
+    return { uid: parts[1], taxDocumentId: parts[3] };
+  }
   if (parts.length !== 6) return null;
   if (parts[0] !== "users" || (parts[2] !== "accounts" && parts[2] !== "goals")) return null;
   if (!SAFE_SEGMENT.test(parts[1] ?? "")) return null;
@@ -121,10 +134,10 @@ export function ownerForPath(path: unknown): PathOwner | null {
 }
 
 /** The Firestore document whose readability proves ownership of the path. */
-function ownerDocumentPath(owner: PathOwner): string {
-  return "goalId" in owner
-    ? `users/${owner.uid}/financialGoals/${owner.goalId}`
-    : `users/${owner.uid}/accounts/${owner.accountId}`;
+export function ownerDocumentPath(owner: PathOwner): string {
+  if ("goalId" in owner) return `users/${owner.uid}/financialGoals/${owner.goalId}`;
+  if ("taxDocumentId" in owner) return `users/${owner.uid}/taxDocuments/${owner.taxDocumentId}`;
+  return `users/${owner.uid}/accounts/${owner.accountId}`;
 }
 
 /**

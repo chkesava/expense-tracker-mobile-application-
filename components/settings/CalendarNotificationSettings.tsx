@@ -5,6 +5,7 @@ import { CalendarDays } from "lucide-react-native";
 import { ChipRow, RowSwitch } from "@/components/settings/SettingsControls";
 import { Card } from "@/components/ui/Card";
 import { useSettings } from "@/providers/SettingsProvider";
+import { useTaxCenterFlag } from "@/hooks/useTaxCenterEnabled";
 import { askForNotifications } from "@/lib/notificationPermission";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -17,6 +18,7 @@ export function CalendarNotificationSettings() {
   const { settings, setCalendarNotifications } = useSettings();
   const prefs = settings.calendarNotifications;
   const [hint, setHint] = useState<string | null>(null);
+  const { enabled: taxCenter } = useTaxCenterFlag();
   const muted = { color: theme.colors.mutedForeground, fontSize: theme.typography.xs };
 
   const enable = async (patch: Parameters<typeof setCalendarNotifications>[0]) => {
@@ -58,6 +60,30 @@ export function CalendarNotificationSettings() {
               onSelect={(v) => setCalendarNotifications({ duesDaysBefore: Number(v) as 0 | 1 | 3 })}
             />
           </View>
+        ) : null}
+        {taxCenter ? (
+          <>
+            <RowSwitch
+              label="Tax deadlines"
+              description="Advance-tax instalments, Form 16 and return dates from your tax center. No amounts are shown."
+              value={prefs.taxEnabled}
+              onValueChange={(v) => (v ? void enable({ taxEnabled: true }) : setCalendarNotifications({ taxEnabled: false }))}
+            />
+            {prefs.taxEnabled ? (
+              <View style={{ gap: 6 }}>
+                <Text style={muted}>Notify before a tax deadline</Text>
+                <ChipRow<string>
+                  options={[
+                    { value: "1", label: "1 day before" },
+                    { value: "3", label: "3 days before" },
+                    { value: "7", label: "A week before" },
+                  ]}
+                  selected={String(prefs.taxDaysBefore)}
+                  onSelect={(v) => setCalendarNotifications({ taxDaysBefore: Number(v) as 1 | 3 | 7 })}
+                />
+              </View>
+            ) : null}
+          </>
         ) : null}
         <Text style={muted}>Sent inside your notification window (Notifications, above). One notice before, one on the day, and one the day after if it's still open. Done or cancelled items stop notifying.</Text>
         {hint ? <Text style={[muted, { color: theme.colors.destructive }]}>{hint}</Text> : null}

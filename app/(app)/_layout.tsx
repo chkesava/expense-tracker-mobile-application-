@@ -200,6 +200,61 @@ function AppShellInner() {
                 animation: "slide_from_right",
               }}
             />
+            {/* SPENDLY-290: Tax & ITR Readiness Center (flagged; the screens redirect when off). */}
+            <Stack.Screen
+              name="tax/index"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="tax/[fy]/income"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            {/* SPENDLY-294: advance-tax and self-assessment payments. */}
+            <Stack.Screen
+              name="tax/[fy]/payments"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            {/* SPENDLY-295: informational estimate, old vs new regime. */}
+            <Stack.Screen
+              name="tax/[fy]/estimate"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            {/* SPENDLY-293: capital gains from portfolio sales and statements. */}
+            <Stack.Screen
+              name="tax/[fy]/capital-gains"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            {/* SPENDLY-292: deductions and tax-saving investments. */}
+            <Stack.Screen
+              name="tax/[fy]/deductions"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            {/* SPENDLY-291: TDS, Form 16 and the AIS/26AS comparison. */}
+            <Stack.Screen
+              name="tax/[fy]/tds"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
+            {/* SPENDLY-298: the year's tax documents. */}
+            <Stack.Screen
+              name="tax/[fy]/documents"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
             <Stack.Screen
               name="app-selector"
               options={{

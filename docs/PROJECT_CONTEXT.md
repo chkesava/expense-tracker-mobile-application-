@@ -134,7 +134,7 @@ Read `docs/PUSH_DEVELOPER_GUIDE.md` before adding one. Operations are in `docs/P
 - **Latest builds:** SPENDLY-748 (Journal month on demand) is on main (`424e185a`). Expense release run 42658879131 and Netlify deploy run 42658871155 were triggered on 2026-11-09. Device QA is pending.
 - **Open work:**
   - **SPENDLY-749:** fixed Journal custom range incomplete period; on branch `fix/SPENDLY-749-journal-custom-range`.
-  - **SPENDLY-288 Tax & ITR epic:** in worktree `spendly-288`, not on main. Its migration `20261110` sorts before `20261112`–`14` and restates the table lists, so add `recurring_suggestions` and `server_results` before it merges.
+  - **SPENDLY-288 Tax & ITR epic:** in worktree `spendly-288`, PR to main open. Its migration is now `20261115000000_readmodel_tax.sql` (was `20261110`): it runs after `20261112`–`14` and restates the table lists including `recurring_suggestions` and `server_results` plus the five tax tables.
   - **SPENDLY-625 price alerts:** planned, not started.
   - **SPENDLY-633 native Firestore cache:** done; Nutrition and Ganesh releases pending.
 - **Push rollout:** testers are enabled. "Everyone" (C4b) waits on tester QA. Local reminders stand down in push mode (SPENDLY-746).

@@ -43,6 +43,8 @@ export const SWITCHED_COLLECTIONS: readonly string[] = [
   "groupFunds",
   // SPENDLY-230: the unified inbox's notification rows.
   "notifications",
+  // SPENDLY-709: Tax & ITR Readiness (display only; writers load from Firestore).
+  "taxProfiles", "taxEntries", "taxReviews", "taxDocuments", "taxSnapshots",
   // SPENDLY-744: the server's recurring-merchant suggestions (display only).
   "recurringSuggestions",
   // SPENDLY-747: the server's fee rows and Journal health report (display only).

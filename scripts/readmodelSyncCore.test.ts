@@ -627,7 +627,8 @@ describe("account lifecycle (SPENDLY-508)", () => {
       "ledgerEvents", "merchantOverrides", "netWorthHistory", "notifications", "portfolioSettings",
       "portfolioTransactions", "receivableRepayments", "receivables", "recurringDismissals", "recurringSuggestions",
       "runwayOverrides", "runwaySettings", "serverResults", "sipPlans", "sipTransactions", "spaces",
-      "subscriptions", "trips", "userSettings", "virtualPositions", "watchlists", "watchlists/items", "whatIfScenarios",
+      "subscriptions", "taxDocuments", "taxEntries", "taxProfiles", "taxReviews", "taxSnapshots",
+      "trips", "userSettings", "virtualPositions", "watchlists", "watchlists/items", "whatIfScenarios",
     ]);
     for (const excluded of ["meta", "stats", "daily_logs", "weight_history", "pandalMemberships", "goalNames"]) {
       expect(collections.has(excluded)).toBe(false);

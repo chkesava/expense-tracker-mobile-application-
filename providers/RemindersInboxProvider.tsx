@@ -13,6 +13,9 @@ import { useSaveGoalsEnabled } from "@/hooks/useSaveGoalsEnabled";
 import { goalInboxItems } from "@/shared/utils/goalReminders";
 import { useReceivables } from "@/hooks/useReceivables";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
+import { useTaxCalendarFacts } from "@/hooks/useTaxCalendarFacts";
+import { useTaxCenterFlag } from "@/hooks/useTaxCenterEnabled";
+import { actionableTaxEvents, taxEvents } from "@/shared/features/tax/utils/taxCalendar";
 import { logError } from "@/lib/errors";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -101,6 +104,9 @@ export function RemindersInboxProvider({ children }: { children: ReactNode }) {
   // SPENDLY-230: the stored notification rows; read state is on the row, so
   // it's the same on every device.
   const { rows: updates, markRead } = useNotificationRows({ enabled: ready });
+  // SPENDLY-297: tax deadlines due soon or overdue, while the tax center is on.
+  const { enabled: taxCenter } = useTaxCenterFlag();
+  const { facts: taxFacts } = useTaxCalendarFacts({ enabled: ready && taxCenter });
 
   const cardNames = useMemo(() => {
     const typeName = new Map(accountTypes.map((t) => [t.id, t.name]));
@@ -118,6 +124,7 @@ export function RemindersInboxProvider({ children }: { children: ReactNode }) {
       ...subscriptionEvents(subscriptions, ctx),
       ...borrowingEvents(borrowings, ctx),
       ...receivableEvents(receivables, ctx),
+      ...(taxFacts ? actionableTaxEvents(taxEvents(taxFacts, ctx), today) : []),
     ];
     const goalItems: InboxItem[] = saveGoals
       ? goalInboxItems(goals, today).map((g) => ({
@@ -134,7 +141,7 @@ export function RemindersInboxProvider({ children }: { children: ReactNode }) {
         }))
       : [];
     return [...dueInboxItems(events, today), ...goalItems];
-  }, [ready, today, currency, reminders, bills, cardNames, subscriptions, borrowings, receivables, saveGoals, goals]);
+  }, [ready, today, currency, reminders, bills, cardNames, subscriptions, borrowings, receivables, saveGoals, goals, taxFacts]);
 
   const [seenIds, setSeenIds] = useState<string[]>([]);
   useEffect(() => {

@@ -96,6 +96,9 @@ export type CalendarNotificationSettings = {
   /** Loan, receivable and recurring-item due dates. Off by default to avoid noise. */
   duesEnabled: boolean;
   duesDaysBefore: 0 | 1 | 3;
+  /** SPENDLY-297: tax deadlines. Off by default; shown only with the tax center. */
+  taxEnabled: boolean;
+  taxDaysBefore: 1 | 3 | 7;
   quietHoursStart: string;
   quietHoursEnd: string;
 };
@@ -104,6 +107,8 @@ export const DEFAULT_CALENDAR_NOTIFICATIONS: CalendarNotificationSettings = {
   remindersEnabled: true,
   duesEnabled: false,
   duesDaysBefore: 1,
+  taxEnabled: false,
+  taxDaysBefore: 3,
   quietHoursStart: "08:00",
   quietHoursEnd: "21:00",
 };
@@ -407,6 +412,8 @@ export function normalizeCalendarNotifications(raw: Record<string, unknown> | nu
     remindersEnabled: typeof r.remindersEnabled === "boolean" ? r.remindersEnabled : d.remindersEnabled,
     duesEnabled: typeof r.duesEnabled === "boolean" ? r.duesEnabled : d.duesEnabled,
     duesDaysBefore: r.duesDaysBefore === 0 || r.duesDaysBefore === 1 || r.duesDaysBefore === 3 ? r.duesDaysBefore : d.duesDaysBefore,
+    taxEnabled: typeof r.taxEnabled === "boolean" ? r.taxEnabled : d.taxEnabled,
+    taxDaysBefore: r.taxDaysBefore === 1 || r.taxDaysBefore === 3 || r.taxDaysBefore === 7 ? r.taxDaysBefore : d.taxDaysBefore,
     quietHoursStart: hm(r.quietHoursStart, d.quietHoursStart),
     quietHoursEnd: hm(r.quietHoursEnd, d.quietHoursEnd),
   };

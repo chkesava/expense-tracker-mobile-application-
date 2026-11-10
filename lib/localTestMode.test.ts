@@ -217,8 +217,11 @@ describe("seed-emulator.js", () => {
     const backdated = collections.expenses.find((row) => row.id === "exp-backdated");
     expect(backdated?.data.month).toBe("2025-12");
     expect(backdated?.data.createdAt).toEqual(today);
-    // Stored summaries cover every seeded month.
-    expect(collections.financialSummaries).toHaveLength(12);
+    // Stored summaries cover every seeded month: the 12 ledger months plus the
+    // older months of the tax-demo incomes (SPENDLY-290, the year that ended last).
+    const rowMonths = new Set([...collections.expenses, ...collections.incomes].map((row) => row.data.month as string));
+    expect(rowMonths.size).toBeGreaterThanOrEqual(12);
+    expect(collections.financialSummaries.map((s) => s.id).sort()).toEqual([...rowMonths].sort().map((m) => `dashboard_${m}`));
   });
 
   it("builds rows the app will actually show", () => {
@@ -264,6 +267,37 @@ describe("seed-emulator.js", () => {
       const plan = planAccountRebuild(account, typeName.get(data.typeId as string) ?? "", sources, "2026-09-26");
       expect(plan.variances, id).toEqual([]);
       expect(plan.needsWrite, id).toBe(false);
+    }
+  });
+
+  it("seeds valid tax records, and portfolio sales the capital-gains screen can trace (SPENDLY-293)", async () => {
+    const { validateTaxEntry } = await import("@/shared/features/tax/utils/validation");
+    const { taxEntryDedupeKey } = await import("@/shared/features/tax/utils/dedupe");
+    const { assembleCapitalGains } = await import("@/shared/features/tax/utils/capitalGains");
+    const today = new Date(2026, 8, 26, 12);
+    const { collections } = seedModule.buildDemoData(today);
+    for (const { id, data } of collections.taxEntries) {
+      const draft = data as never as Parameters<typeof validateTaxEntry>[0];
+      expect(validateTaxEntry(draft, { todayKey: "2026-09-26" }), id).toEqual([]);
+      expect(data.dedupeKey, id).toBe(taxEntryDedupeKey(draft));
+    }
+    const transactions = collections.portfolioTransactions.map((row) => ({ id: row.id, ...row.data })) as never[];
+    const holdings = collections.holdings.map((row) => ({ id: row.id, ...row.data })) as never[];
+    const summary = assembleCapitalGains({ fy: "2025-26", transactions, holdings, entries: [], reviews: [] });
+    const rows = summary.classes.flatMap((c) => c.rows);
+    expect(rows.map((r) => [r.assetName, r.term, r.cost === null])).toEqual(
+      expect.arrayContaining([
+        ["Infosys", "long_term", false],
+        ["Nippon India Nifty 50 BeES", "short_term", false],
+        ["TATAMOTORS", "unknown", true],
+      ])
+    );
+    // What's left after the sales is what each holding says.
+    for (const { id, data } of collections.holdings) {
+      const own = collections.portfolioTransactions.filter((t) => t.data.holdingId === id);
+      if (own.length === 0) continue;
+      const qty = own.reduce((q, t) => q + (t.data.type === "BUY" ? 1 : -1) * (t.data.quantity as number), 0);
+      expect(qty, id).toBe(data.quantity);
     }
   });
 

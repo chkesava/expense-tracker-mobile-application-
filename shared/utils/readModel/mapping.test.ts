@@ -26,6 +26,57 @@ function tableColumns(table: string): string[] {
     .filter((c): c is string => !!c && c !== "primary");
 }
 
+/**
+ * The body of the LAST `create or replace` of a function or view across all
+ * migrations, in order: the one production ends up with.
+ */
+function latestRestatement(name: string): string {
+  const marker = new RegExp(`create or replace (?:function|view) public\\.${name}\\b`, "g");
+  let last = -1;
+  for (const m of sql.matchAll(marker)) last = m.index ?? last;
+  if (last < 0) return "";
+  const end = sql.indexOf("\n$$;", last);
+  const viewEnd = sql.indexOf(";\n", last);
+  return sql.slice(last, end > 0 && name !== "v_data_quality" ? end : viewEnd);
+}
+
+const quotedNames = (text: string) => new Set([...text.matchAll(/'([a-zA-Z_/]+)'/g)].map((m) => m[1]));
+
+/** Server-only tables: copied by the sync, never written by the app (`rm_client_apply`). */
+// SPENDLY-744/747: recurring suggestions and server results are written only by the
+// server jobs (Firestore rules: write false), so they're off the client allowlist too.
+const SERVER_ONLY = new Set(["user_settings", "recurring_suggestions", "server_results"]);
+
+// SPENDLY-709: two epics each restated these lists from an older migration;
+// the later one silently dropped the other's tables. The latest restatement
+// must always name every synced table.
+describe("the latest migration restates every synced table", () => {
+  const tables = READ_MODEL_TABLES.map((s) => s.table);
+
+  it("on the server sync allowlist", () => {
+    expect([...quotedNames(latestRestatement("readmodel_sync_table_ok"))].sort()).toEqual([...tables].sort());
+  });
+
+  it("on the rm_client_apply allowlist (all but the server-only tables)", () => {
+    const expected = tables.filter((t) => !SERVER_ONLY.has(t)).sort();
+    expect([...quotedNames(latestRestatement("readmodel_client_table_ok"))].sort()).toEqual(expected);
+  });
+
+  it("in the account purge", () => {
+    const purged = quotedNames(latestRestatement("readmodel_purge_user"));
+    for (const t of tables) expect(purged, t).toContain(t);
+  });
+
+  it("in the count parity and data-quality views", () => {
+    const counted = quotedNames(latestRestatement("readmodel_live_counts"));
+    const quality = quotedNames(latestRestatement("v_data_quality"));
+    for (const spec of READ_MODEL_TABLES) {
+      expect(counted, spec.collection).toContain(spec.collection);
+      expect(quality, spec.collection).toContain(spec.collection);
+    }
+  });
+});
+
 const UPDATE_TIME = { seconds: 1_790_000_000, nanoseconds: 0 };
 const expenses = SPEC_BY_COLLECTION.get("expenses")!;
 
@@ -282,6 +333,60 @@ describe("read-model mapping (SPENDLY-506)", () => {
     const bad = mapDocument(events, "u1", { id: "c2", updateTime: UPDATE_TIME, data: { fundId: "f1", kind: "contribution", amount: "lots" } });
     expect(bad).toMatchObject({ mapping_status: "unmapped", amount: null, fund_id: null });
     expect(bad.doc).toMatchObject({ amount: "lots" });
+  });
+
+  it("SPENDLY-709: maps a tax entry; amounts stay in doc, a soft delete is typed", () => {
+    const entries = SPEC_BY_COLLECTION.get("taxEntries")!;
+    const fields = { deductorName: "State Bank of India", tan: "MUMS98765C", section: "194A", form: "16A", amountPaid: 48250.4, tdsAmount: 4825.04 };
+    const row = mapDocument(entries, "u1", {
+      id: "e1",
+      updateTime: UPDATE_TIME,
+      data: {
+        fy: "2025-26", kind: "tds", fields, dedupeKey: "k", revision: 2, schemaVersion: 1,
+        deletedAt: "2026-01-02T03:04:05.000Z", createdAtMs: 1_790_000_000_000, updatedAtMs: 1_790_000_100_000,
+      },
+    });
+    expect(row).toMatchObject({
+      source_path: "users/u1/taxEntries/e1", mapping_status: "mapped", fy: "2025-26", kind: "tds",
+      soft_deleted_at: "2026-01-02T03:04:05.000Z",
+      created_at: new Date(1_790_000_000_000).toISOString(), updated_at: new Date(1_790_000_100_000).toISOString(),
+    });
+    expect(row.doc).toMatchObject({ fields });
+    expect(row).not.toHaveProperty("amount");
+  });
+
+  it("SPENDLY-709: maps the other tax collections by year and identifiers only", () => {
+    const at = { createdAtMs: 1_790_000_000_000, updatedAtMs: 1_790_000_000_000 };
+    expect(
+      mapDocument(SPEC_BY_COLLECTION.get("taxProfiles")!, "u1", {
+        id: "2025-26", updateTime: UPDATE_TIME, data: { fy: "2025-26", residentialStatus: "resident", ageBand: "below_60", ...at },
+      })
+    ).toMatchObject({ fy: "2025-26", mapping_status: "mapped" });
+    expect(
+      mapDocument(SPEC_BY_COLLECTION.get("taxReviews")!, "u1", {
+        id: "2025-26__income__i1", updateTime: UPDATE_TIME,
+        data: { fy: "2025-26", sourceKind: "income", sourceId: "i1", decision: "exclude", sourceAmount: 1200, revision: 1, ...at },
+      })
+    ).toMatchObject({ fy: "2025-26", source_kind: "income", source_id: "i1", decision: "exclude" });
+    expect(
+      mapDocument(SPEC_BY_COLLECTION.get("taxDocuments")!, "u1", {
+        id: "d1", updateTime: UPDATE_TIME,
+        data: { fy: "2025-26", category: "form16", status: "pending", storagePath: "users/u1/tax/d1/f.pdf", ...at },
+      })
+    ).toMatchObject({ fy: "2025-26", category: "form16", status: "pending" });
+    const snapshot = mapDocument(SPEC_BY_COLLECTION.get("taxSnapshots")!, "u1", {
+      id: "2025-26__1790000000000", updateTime: UPDATE_TIME,
+      data: { fy: "2025-26", law: "ITA1961", reason: "export", ruleVersion: "FY2025-26.v1", outputs: { taxNew: 12345 }, createdAtMs: at.createdAtMs },
+    });
+    expect(snapshot).toMatchObject({ fy: "2025-26", rule_version: "FY2025-26.v1", reason: "export" });
+    expect(snapshot.doc).toMatchObject({ outputs: { taxNew: 12345 } });
+  });
+
+  it("SPENDLY-709: the tax collections are found by their millisecond stamps too", () => {
+    for (const c of ["taxProfiles", "taxEntries", "taxReviews", "taxDocuments"]) {
+      expect(changeFieldsOf({ collection: c }).map((f) => f.field)).toEqual(["createdAt", "updatedAt", "createdAtMs", "updatedAtMs"]);
+    }
+    expect(changeFieldsOf({ collection: "taxSnapshots" }).map((f) => f.field)).toEqual(["createdAt", "updatedAt", "createdAtMs"]);
   });
 
   it("derives month from the date when the row has none", () => {

@@ -34,6 +34,7 @@ service cloud.firestore {
     //   decisionEvents, decisions, epfTransfers, expenses, feeReviews,
     //   feeSignalDismissals, financialGoals, focus, goalEvents, goalNames,
     //   groupFundEvents, groupFunds,
+    //   taxDocuments, taxEntries, taxProfiles, taxReviews, taxSnapshots,
     //   holdings, incomes, investments, meta, portfolioOrders,
     //   portfolioSettings, portfolioSnapshots, portfolioTransactions,
     //   receivableRepayments, receivables, calendarReminders, goalFundingPlans, runwayOverrides, runwaySettings, spaces,
@@ -1672,6 +1673,366 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // ---------------------------------------------------------------------
+      // SPENDLY-709 Tax & ITR Readiness (epic SPENDLY-288)
+      //
+      // Five owner-only collections, every field validated. The builders in
+      // shared/features/tax (SPENDLY-289) produce exactly these shapes; the
+      // contract test shared/features/tax/utils/taxRules.contract.test.ts
+      // keeps the lists below in step with them, and firestore/tax.rules.test.ts
+      // runs the app's own ops against these rules.
+      //
+      // Year boundaries (a date inside its financial year) can't be checked
+      // here; the builders check them. Rules hold the shape, the enums, the
+      // bounds, ownership and the immutable fields.
+      // ---------------------------------------------------------------------
+      function taxEntryKinds() {
+        return ['income', 'form16', 'tds', 'ais_value', 'deduction', 'capital_gain', 'tax_payment'];
+      }
+
+      function taxSourceKinds() {
+        return ['income', 'expense', 'epf_contribution', 'epf_interest', 'investment',
+                'portfolio_transaction', 'sip_transaction', 'tax_entry', 'checklist',
+                'reconciliation'];
+      }
+
+      function taxIncomeCategories() {
+        return ['salary', 'pension', 'rental', 'interest_savings', 'interest_deposit',
+                'interest_other', 'dividend', 'professional', 'business', 'capital_gain',
+                'gift', 'other', 'not_income'];
+      }
+
+      function taxReviewDecisions() {
+        return ['confirm', 'exclude', 'recategorize', 'replace', 'defer', 'resolve'];
+      }
+
+      function taxDocumentCategories() {
+        return ['form16', 'form16a', 'ais', 'tis', 'form26as', 'investment_proof',
+                'interest_certificate', 'capital_gains_statement', 'tax_payment_receipt', 'other'];
+      }
+
+      function taxFy(v) {
+        return v is string && v.matches('^[0-9]{4}-[0-9]{2}$');
+      }
+
+      function taxYmd(v) {
+        return v is string && v.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+      }
+
+      // Rupees, 0 or more, under 1,000,000,000 (TAX_LIMITS.maxAmount).
+      function taxMoney(v) {
+        return v is number && v >= 0 && v < 1000000000;
+      }
+
+      function taxPositive(v) {
+        return taxMoney(v) && v > 0;
+      }
+
+      // Absent, `null` ("not known") or money.
+      function taxOptMoney(m, key) {
+        return !m.keys().hasAny([key]) || m.get(key, 0) == null || taxMoney(m.get(key, 0));
+      }
+
+      // Required key whose value may be `null` (an amount stated as unknown).
+      function taxNullableMoney(m, key) {
+        return m.keys().hasAny([key]) && (m.get(key, 0) == null || taxMoney(m.get(key, 0)));
+      }
+
+      function taxName(v) {
+        return v is string && v.size() > 0 && v.size() <= 120;
+      }
+
+      function taxId(v) {
+        return v is string && v.size() > 0 && v.size() <= 200 && !v.matches('.*/.*');
+      }
+
+      function taxOptPattern(m, key, pattern) {
+        return !m.keys().hasAny([key]) || (m.get(key, '') is string && m.get(key, '').matches(pattern));
+      }
+
+      function taxIdList(m, key) {
+        return !m.keys().hasAny([key]) || (m.get(key, []) is list && m.get(key, []).size() <= 20);
+      }
+
+      function taxHistory(d) {
+        return !d.keys().hasAny(['history']) || (d.history is list && d.history.size() <= 20);
+      }
+
+      function taxStamps(d) {
+        return d.schemaVersion == 1
+          && d.createdAtMs is int && d.createdAtMs > 0
+          && d.createdAt is timestamp && d.updatedAt is timestamp;
+      }
+
+      function taxIncomeFields(f) {
+        return f.keys().hasOnly(['category', 'amount', 'date', 'payer'])
+          && f.keys().hasAll(['category', 'amount'])
+          && f.category in taxIncomeCategories()
+          && taxPositive(f.amount)
+          && optionalYmd(f, 'date')
+          && optionalText(f, 'payer', 120);
+      }
+
+      function taxForm16Fields(f) {
+        return f.keys().hasOnly(['employerName', 'tan', 'periodFrom', 'periodTo', 'grossSalary',
+                                 'exemptAllowances', 'standardDeduction', 'professionalTax',
+                                 'taxableSalary', 'tdsDeducted'])
+          && f.keys().hasAll(['employerName', 'grossSalary', 'tdsDeducted'])
+          && taxName(f.employerName)
+          && taxOptPattern(f, 'tan', '^[A-Z]{4}[0-9]{5}[A-Z]$')
+          && optionalYmd(f, 'periodFrom')
+          && optionalYmd(f, 'periodTo')
+          && taxPositive(f.grossSalary)
+          && taxOptMoney(f, 'exemptAllowances')
+          && taxOptMoney(f, 'standardDeduction')
+          && taxOptMoney(f, 'professionalTax')
+          && taxOptMoney(f, 'taxableSalary')
+          && taxMoney(f.tdsDeducted);
+      }
+
+      function taxTdsFields(f) {
+        return f.keys().hasOnly(['deductorName', 'tan', 'section', 'form', 'quarter', 'amountPaid', 'tdsAmount'])
+          && f.keys().hasAll(['deductorName', 'section', 'form', 'amountPaid', 'tdsAmount'])
+          && taxName(f.deductorName)
+          && taxOptPattern(f, 'tan', '^[A-Z]{4}[0-9]{5}[A-Z]$')
+          && f.section is string && f.section.size() > 0 && f.section.size() <= 24
+          && f.form in ['16A', '16B', '16C', 'other']
+          && (!f.keys().hasAny(['quarter']) || f.quarter in ['Q1', 'Q2', 'Q3', 'Q4'])
+          && taxNullableMoney(f, 'amountPaid')
+          && taxPositive(f.tdsAmount);
+      }
+
+      function taxAisFields(f) {
+        return f.keys().hasOnly(['statement', 'infoCategory', 'sourceName', 'tan', 'section', 'reportedAmount', 'tdsAmount'])
+          && f.keys().hasAll(['statement', 'infoCategory', 'reportedAmount'])
+          && f.statement in ['AIS', 'TIS', '26AS']
+          && f.infoCategory in ['salary', 'interest', 'dividend', 'rent', 'securities_sale',
+                                'mutual_fund_sale', 'tds', 'tcs', 'tax_paid', 'other']
+          && optionalText(f, 'sourceName', 120)
+          && taxOptPattern(f, 'tan', '^[A-Z]{4}[0-9]{5}[A-Z]$')
+          && optionalText(f, 'section', 24)
+          && taxMoney(f.reportedAmount)
+          && taxOptMoney(f, 'tdsAmount');
+      }
+
+      function taxDeductionFields(f) {
+        return f.keys().hasOnly(['category', 'amount', 'proofStatus', 'sourceRef'])
+          && f.keys().hasAll(['category', 'amount', 'proofStatus'])
+          && f.category is string && f.category.matches('^[a-z0-9_]{2,40}$')
+          && taxPositive(f.amount)
+          && f.proofStatus in ['attached', 'missing', 'not_needed']
+          && (!f.keys().hasAny(['sourceRef'])
+              || (f.sourceRef is map
+                  && f.sourceRef.keys().hasOnly(['kind', 'id'])
+                  && f.sourceRef.kind in taxSourceKinds()
+                  && taxId(f.sourceRef.id)));
+      }
+
+      function taxCapitalGainFields(f) {
+        return f.keys().hasOnly(['mode', 'assetClass', 'assetName', 'isin', 'quantity', 'acquiredDate',
+                                 'soldDate', 'costOfAcquisition', 'saleValue', 'transferExpenses', 'term'])
+          && f.keys().hasAll(['mode', 'assetClass', 'assetName', 'soldDate', 'costOfAcquisition', 'saleValue'])
+          && f.mode in ['row', 'statement_total']
+          && f.assetClass in ['listed_equity', 'equity_mutual_fund', 'debt_mutual_fund', 'other_securities',
+                              'gold', 'property', 'virtual_digital_asset', 'other']
+          && taxName(f.assetName)
+          && taxOptPattern(f, 'isin', '^[A-Z]{2}[A-Z0-9]{9}[0-9]$')
+          && (!f.keys().hasAny(['quantity']) || f.quantity == null
+              || (f.quantity is number && f.quantity > 0 && f.quantity < 1000000000000))
+          && optionalYmd(f, 'acquiredDate')
+          && taxYmd(f.soldDate)
+          && taxNullableMoney(f, 'costOfAcquisition')
+          && taxMoney(f.saleValue)
+          && taxOptMoney(f, 'transferExpenses')
+          // SPENDLY-293: a statement total names its term; a sale's term is calculated, never stored.
+          && (f.mode == 'statement_total'
+              ? f.get('term', '') in ['short_term', 'long_term']
+              : !f.keys().hasAny(['term']));
+      }
+
+      function taxPaymentFields(f) {
+        return f.keys().hasOnly(['paymentType', 'date', 'amount', 'bsrCode', 'challanSerial', 'cin'])
+          && f.keys().hasAll(['paymentType', 'date', 'amount'])
+          && f.paymentType in ['advance_tax', 'self_assessment', 'other']
+          && taxYmd(f.date)
+          && taxPositive(f.amount)
+          && taxOptPattern(f, 'bsrCode', '^[0-9]{7}$')
+          && taxOptPattern(f, 'challanSerial', '^[0-9]{5}$')
+          && taxOptPattern(f, 'cin', '^[0-9]{20}$');
+      }
+
+      function taxEntryFieldsOk(kind, f) {
+        return f is map && (
+          (kind == 'income' && taxIncomeFields(f))
+          || (kind == 'form16' && taxForm16Fields(f))
+          || (kind == 'tds' && taxTdsFields(f))
+          || (kind == 'ais_value' && taxAisFields(f))
+          || (kind == 'deduction' && taxDeductionFields(f))
+          || (kind == 'capital_gain' && taxCapitalGainFields(f))
+          || (kind == 'tax_payment' && taxPaymentFields(f)));
+      }
+
+      function taxEntryWellFormed() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['fy', 'kind', 'fields', 'label', 'note', 'documentIds', 'dedupeKey',
+                                 'duplicateConfirmed', 'revision', 'history', 'deletedAt',
+                                 'schemaVersion', 'createdAtMs', 'updatedAtMs', 'createdAt', 'updatedAt'])
+          && d.keys().hasAll(['fy', 'kind', 'fields', 'dedupeKey', 'revision', 'schemaVersion',
+                              'createdAtMs', 'updatedAtMs', 'createdAt', 'updatedAt'])
+          && taxFy(d.fy)
+          && d.kind in taxEntryKinds()
+          && taxEntryFieldsOk(d.kind, d.fields)
+          && optionalText(d, 'label', 80)
+          && optionalText(d, 'note', 500)
+          && taxIdList(d, 'documentIds')
+          && d.dedupeKey is string && d.dedupeKey.size() > 0 && d.dedupeKey.size() <= 400
+          && (!d.keys().hasAny(['duplicateConfirmed']) || d.duplicateConfirmed == true)
+          && (!d.keys().hasAny(['deletedAt']) || d.deletedAt is string)
+          && taxHistory(d)
+          && d.revision is int
+          && d.updatedAtMs is int && d.updatedAtMs >= d.createdAtMs
+          && taxStamps(d)
+          && (resource == null
+              ? (d.revision == 1 && !d.keys().hasAny(['deletedAt']))
+              // A correction keeps the year, kind and creation; a deleted entry is frozen.
+              : (d.fy == resource.data.fy
+                 && d.kind == resource.data.kind
+                 && d.createdAtMs == resource.data.createdAtMs
+                 && d.revision > resource.data.revision
+                 && !resource.data.keys().hasAny(['deletedAt'])));
+      }
+
+      function taxReviewWellFormed(reviewId) {
+        let d = request.resource.data;
+        let checklist = d.sourceKind == 'checklist';
+        return d.keys().hasOnly(['fy', 'sourceKind', 'sourceId', 'decision', 'category', 'replacedBy',
+                                 'sourceAmount', 'engineVersion', 'note', 'revision', 'history',
+                                 'schemaVersion', 'createdAtMs', 'updatedAtMs', 'createdAt', 'updatedAt'])
+          && d.keys().hasAll(['fy', 'sourceKind', 'sourceId', 'decision', 'sourceAmount', 'revision',
+                              'schemaVersion', 'createdAtMs', 'updatedAtMs', 'createdAt', 'updatedAt'])
+          && taxFy(d.fy)
+          && d.sourceKind in taxSourceKinds()
+          && taxId(d.sourceId)
+          // One review per item per year: the id is derived (taxReviewDocId).
+          && reviewId == d.fy + '__' + d.sourceKind + '__' + d.sourceId
+          && d.decision in taxReviewDecisions()
+          && (!checklist || (d.decision in ['confirm', 'defer', 'resolve'] && d.sourceAmount == null))
+          // SPENDLY-291: a reconciliation row can only have its difference accepted.
+          && (d.sourceKind != 'reconciliation' || d.decision == 'confirm')
+          && (checklist || (!(d.decision in ['defer', 'resolve'])
+                            && (d.sourceAmount == null || taxMoney(d.sourceAmount))))
+          && (d.decision == 'recategorize'
+              ? (d.category is string && d.category.matches('^[a-z0-9_]{2,40}$'))
+              : !d.keys().hasAny(['category']))
+          && (d.decision == 'replace' ? taxId(d.replacedBy) : !d.keys().hasAny(['replacedBy']))
+          && (!d.keys().hasAny(['engineVersion']) || d.engineVersion is int)
+          && optionalText(d, 'note', 500)
+          && taxHistory(d)
+          && d.revision is int && d.revision >= 1
+          && d.updatedAtMs is int && d.updatedAtMs >= d.createdAtMs
+          && taxStamps(d)
+          && (resource == null
+              || (d.fy == resource.data.fy
+                  && d.sourceKind == resource.data.sourceKind
+                  && d.sourceId == resource.data.sourceId
+                  && d.createdAtMs == resource.data.createdAtMs
+                  && d.revision > resource.data.revision));
+      }
+
+      function taxProfileWellFormed(profileId) {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['fy', 'residentialStatus', 'ageBand', 'employerCount', 'regimeNote', 'note',
+                                 'schemaVersion', 'createdAtMs', 'updatedAtMs', 'createdAt', 'updatedAt'])
+          && d.keys().hasAll(['fy', 'residentialStatus', 'ageBand', 'schemaVersion',
+                              'createdAtMs', 'updatedAtMs', 'createdAt', 'updatedAt'])
+          && taxFy(d.fy)
+          && profileId == d.fy
+          && d.residentialStatus in ['resident', 'rnor', 'non_resident', 'unknown']
+          // An age band, never a date of birth.
+          && d.ageBand in ['below_60', '60_to_79', '80_plus', 'unknown']
+          && (!d.keys().hasAny(['employerCount'])
+              || (d.employerCount is int && d.employerCount >= 0 && d.employerCount <= 10))
+          && (!d.keys().hasAny(['regimeNote']) || d.regimeNote in ['old', 'new', 'undecided'])
+          && optionalText(d, 'note', 500)
+          && d.updatedAtMs is int && d.updatedAtMs >= d.createdAtMs
+          && taxStamps(d)
+          && (resource == null || d.createdAtMs == resource.data.createdAtMs);
+      }
+
+      function taxDocumentWellFormed(documentId) {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['fy', 'category', 'name', 'note', 'storagePath', 'fileName', 'mimeType',
+                                 'sizeBytes', 'status', 'entryIds', 'uploadedAtMs',
+                                 'schemaVersion', 'createdAtMs', 'updatedAtMs', 'createdAt', 'updatedAt'])
+          && d.keys().hasAll(['fy', 'category', 'name', 'storagePath', 'fileName', 'mimeType', 'sizeBytes',
+                              'status', 'schemaVersion', 'createdAtMs', 'updatedAtMs', 'createdAt', 'updatedAt'])
+          && taxFy(d.fy)
+          && d.category in taxDocumentCategories()
+          && taxName(d.name)
+          && optionalText(d, 'note', 500)
+          && taxId(d.fileName) && d.fileName.size() <= 120
+          // Only this user's own folder for this document in spendly-files.
+          && d.storagePath == 'users/' + uid + '/tax/' + documentId + '/' + d.fileName
+          && d.mimeType in ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
+          && d.sizeBytes is int && d.sizeBytes > 0 && d.sizeBytes <= 10485760
+          && d.status in ['pending', 'ready']
+          && taxIdList(d, 'entryIds')
+          && (!d.keys().hasAny(['uploadedAtMs']) || d.uploadedAtMs is int)
+          && d.updatedAtMs is int && d.updatedAtMs >= d.createdAtMs
+          && taxStamps(d)
+          && (resource == null
+              || (d.fy == resource.data.fy
+                  && d.storagePath == resource.data.storagePath
+                  && d.createdAtMs == resource.data.createdAtMs));
+      }
+
+      function taxSnapshotWellFormed(snapshotId) {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['fy', 'law', 'reason', 'ruleVersion', 'inputHash', 'outputs',
+                                 'unresolvedCount', 'schemaVersion', 'createdAtMs', 'createdAt', 'updatedAt'])
+          && d.keys().hasAll(['fy', 'law', 'reason', 'ruleVersion', 'inputHash', 'outputs',
+                              'unresolvedCount', 'schemaVersion', 'createdAtMs', 'createdAt', 'updatedAt'])
+          && taxFy(d.fy)
+          && snapshotId == d.fy + '__' + string(d.createdAtMs)
+          && d.law in ['ITA1961', 'ITA2025']
+          && d.reason in ['marked_reviewed', 'export']
+          && d.ruleVersion is string && d.ruleVersion.size() > 0 && d.ruleVersion.size() <= 40
+          && d.inputHash is string && d.inputHash.size() > 0 && d.inputHash.size() <= 128
+          && d.outputs is map && d.outputs.size() <= 100
+          && d.unresolvedCount is int && d.unresolvedCount >= 0
+          && taxStamps(d);
+      }
+
+      match /taxProfiles/{profileId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && taxProfileWellFormed(profileId);
+      }
+
+      // Soft delete only (`deletedAt`): the app never removes an entry.
+      match /taxEntries/{entryId} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid) && taxEntryWellFormed();
+        allow delete: if false;
+      }
+
+      // Deleting a review puts the item back to what Spendly derives.
+      match /taxReviews/{reviewId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && taxReviewWellFormed(reviewId);
+      }
+
+      match /taxDocuments/{documentId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && taxDocumentWellFormed(documentId);
+      }
+
+      // Append-only: the app never changes or removes a frozen calculation.
+      match /taxSnapshots/{snapshotId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && taxSnapshotWellFormed(snapshotId);
+        allow update, delete: if false;
+      }
+      // END SPENDLY-709 tax
       // SPENDLY-744 (epic SPENDLY-735): recurring-merchant suggestions are
       // written only by the server's recurring-weekly job (Admin SDK); the app
       // reads them. Kept off the catch-all list below.

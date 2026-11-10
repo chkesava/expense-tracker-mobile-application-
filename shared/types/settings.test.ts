@@ -222,6 +222,8 @@ describe("calendar notification settings (SPENDLY-184)", () => {
       remindersEnabled: true,
       duesEnabled: false,
       duesDaysBefore: 1,
+      taxEnabled: false,
+      taxDaysBefore: 3,
       quietHoursStart: "08:00",
       quietHoursEnd: "21:00",
     });
@@ -231,8 +233,12 @@ describe("calendar notification settings (SPENDLY-184)", () => {
     const s = mergeSettingsFromDoc({
       calendarNotifications: { remindersEnabled: false, duesEnabled: true, duesDaysBefore: 3, quietHoursStart: "7am", quietHoursEnd: "22:00" },
     });
-    expect(s.calendarNotifications).toEqual({ remindersEnabled: false, duesEnabled: true, duesDaysBefore: 3, quietHoursStart: "08:00", quietHoursEnd: "22:00" });
+    expect(s.calendarNotifications).toEqual({ remindersEnabled: false, duesEnabled: true, duesDaysBefore: 3, taxEnabled: false, taxDaysBefore: 3, quietHoursStart: "08:00", quietHoursEnd: "22:00" });
     expect(mergeSettingsFromDoc({ calendarNotifications: { duesDaysBefore: 5 } }).calendarNotifications.duesDaysBefore).toBe(1);
+    // SPENDLY-297: tax deadline prefs.
+    const tax = mergeSettingsFromDoc({ calendarNotifications: { taxEnabled: true, taxDaysBefore: 7 } }).calendarNotifications;
+    expect([tax.taxEnabled, tax.taxDaysBefore]).toEqual([true, 7]);
+    expect(mergeSettingsFromDoc({ calendarNotifications: { taxEnabled: "yes", taxDaysBefore: 2 } }).calendarNotifications).toMatchObject({ taxEnabled: false, taxDaysBefore: 3 });
   });
 });
 

@@ -5,8 +5,22 @@ import {
   financialYearBounds,
   financialYearLabel,
   financialYearMonths,
+  financialYearOfDate,
   financialYearOfMonth,
 } from "@/shared/utils/financialYear";
+
+describe("financialYearOfDate", () => {
+  it("puts 31 March and 1 April in different years", () => {
+    expect(financialYearOfDate("2026-03-31")).toBe("2025-26");
+    expect(financialYearOfDate("2026-04-01")).toBe("2026-27");
+  });
+
+  it("is empty for a malformed or impossible date", () => {
+    expect(financialYearOfDate("2026-02-30")).toBe("");
+    expect(financialYearOfDate("2026-04")).toBe("");
+    expect(financialYearOfDate("")).toBe("");
+  });
+});
 
 describe("financialYearOfMonth", () => {
   it("starts a new financial year in April", () => {

@@ -7,6 +7,7 @@ import {
   LEDGER_GROUPS,
   LEDGER_HUB_TAB_IDS,
   LEDGER_SECTIONS,
+  visibleLedgerSections,
   isAccountDetailRoute,
   isDashboardRoute,
   isNavItemActive,
@@ -47,6 +48,15 @@ describe("resolveAndroidBackAction", () => {
     expect(resolveAndroidBackAction("/goals")).toBe("pop");
     expect(resolveAndroidBackAction("/goals/abc")).toBe("pop");
     expect(resolveAndroidBackAction("/group-funds/f1")).toBe("pop");
+    // SPENDLY-290: the tax center and a year's section.
+    expect(resolveAndroidBackAction("/tax")).toBe("pop");
+    expect(resolveAndroidBackAction("/tax/2025-26/income")).toBe("pop");
+    expect(resolveAndroidBackAction("/tax/2025-26/documents")).toBe("pop");
+    expect(resolveAndroidBackAction("/tax/2025-26/tds")).toBe("pop");
+    expect(resolveAndroidBackAction("/tax/2025-26/deductions")).toBe("pop");
+    expect(resolveAndroidBackAction("/tax/2025-26/payments")).toBe("pop");
+    expect(resolveAndroidBackAction("/tax/2025-26/capital-gains")).toBe("pop");
+    expect(resolveAndroidBackAction("/tax/2025-26/estimate")).toBe("pop");
     expect(resolveAndroidBackAction("/goals/analytics")).toBe("pop");
     // SPENDLY-574 spending drill-downs.
     expect(resolveAndroidBackAction("/spending?month=2026-10")).toBe("pop");
@@ -248,6 +258,17 @@ describe("Money hub sections", () => {
       );
       expect(members.length).toBeGreaterThan(0);
     }
+  });
+
+  it("shows Tax & ITR only while the tax center is on (SPENDLY-733)", () => {
+    const on = visibleLedgerSections({ taxCenter: true }).map((s) => s.id);
+    const off = visibleLedgerSections({ taxCenter: false }).map((s) => s.id);
+    expect(on).toContain("tax");
+    expect(off).not.toContain("tax");
+    expect(off).toEqual(on.filter((id) => id !== "tax"));
+    expect(LEDGER_SECTIONS.find((s) => s.id === "tax")).toMatchObject({ group: "tax", label: "Tax & ITR" });
+    // The year screens are stack screens over the hub: back pops to it.
+    expect(resolveAndroidBackAction("/tax/2025-26/income")).toBe("pop");
   });
 });
 

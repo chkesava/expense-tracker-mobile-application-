@@ -237,6 +237,136 @@ function buildDemoData(today = new Date(), { months = 3 } = {}) {
     },
   });
 
+  // SPENDLY-290: tax-relevant income in the financial year that ended last
+  // (April–March), the year the Tax center opens on. One of each kind the
+  // income screen treats differently: counted, confirm-to-count, an older label.
+  const lastFyStart = (today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1) - 1;
+  for (const [key, source, amount, monthIndex, day, note] of [
+    ['dividend', 'Dividend', 3120, 7, 12, 'Infosys final dividend'],
+    ['interest', 'Interest', 1840.5, 8, 30, 'Savings account interest'],
+    ['rent', 'Rental Income', 18000, 10, 5, 'Flat rent'],
+    ['gift', 'Gift Received', 25000, 11, 25, 'From uncle'],
+    ['legacy', 'Cashback / Refund', 450, 12, 10, 'Older label'],
+  ]) {
+    const date = new Date(lastFyStart, monthIndex, day);
+    incomes.push({
+      id: `inc-tax-${key}`,
+      // No account: these predate the demo accounts' balance baseline, and the
+      // stored balances must stay what an in-app Rebuild computes (SPENDLY-620).
+      data: { amount, source, date: ymd(date), month: ym(date), note, createdAt: date },
+    });
+  }
+
+  // SPENDLY-290: a fixed deposit open through that year, so the Tax center
+  // lists its credited interest as "calculated by Spendly".
+  const investments = [
+    {
+      id: 'inv-tax-fd',
+      data: {
+        name: 'SBI FD',
+        kind: 'fixed_deposit',
+        principal: 100000,
+        startDate: ymd(new Date(lastFyStart, 5, 1)),
+        annualInterestRate: 7.1,
+        interestMethod: 'simple',
+        creditFrequency: 'monthly',
+        maturityDate: ymd(new Date(lastFyStart + 2, 5, 1)),
+        status: 'active',
+        createdAt: new Date(lastFyStart, 5, 1),
+      },
+    },
+  ];
+
+  // SPENDLY-298: two tax documents for that year, one finished and one whose
+  // upload never landed, so the Documents screen shows both states. There is
+  // no file behind them: local test mode never reaches Supabase Storage.
+  const fyKey = `${lastFyStart}-${String((lastFyStart + 1) % 100).padStart(2, '0')}`;
+  const taxDocument = (id, category, name, fileName, status, sizeBytes, at) => ({
+    id,
+    data: {
+      fy: fyKey,
+      category,
+      name,
+      storagePath: `users/${DEMO_UID}/tax/${id}/${fileName}`,
+      fileName,
+      mimeType: 'application/pdf',
+      sizeBytes,
+      status,
+      schemaVersion: 1,
+      createdAtMs: at.getTime(),
+      updatedAtMs: at.getTime(),
+      ...(status === 'ready' ? { uploadedAtMs: at.getTime() } : {}),
+      createdAt: at,
+      updatedAt: at,
+    },
+  });
+  const taxDocuments = [
+    taxDocument('taxdoc-form16', 'form16', 'Form 16 – Employer', 'Form16.pdf', 'ready', 184000, new Date(lastFyStart + 1, 5, 12)),
+    taxDocument('taxdoc-ais', 'ais', 'AIS download', 'AIS.pdf', 'pending', 96000, new Date(lastFyStart + 1, 5, 20)),
+  ];
+
+  // SPENDLY-291: TDS records for that year, so the comparison shows each state:
+  // a Form 16 whose 26AS line differs by ₹340, an interest certificate that
+  // matches, and a 26AS line with no certificate. The dedupe keys follow
+  // shared/features/tax/utils/dedupe.ts.
+  const taxAt = new Date(lastFyStart + 1, 5, 15);
+  const taxEntry = (id, kind, fields, dedupeKey) => ({
+    id,
+    data: {
+      fy: fyKey,
+      kind,
+      fields,
+      dedupeKey: `${fyKey}|${kind}|${dedupeKey}`,
+      revision: 1,
+      schemaVersion: 1,
+      createdAtMs: taxAt.getTime(),
+      updatedAtMs: taxAt.getTime(),
+      createdAt: taxAt,
+      updatedAt: taxAt,
+    },
+  });
+  const taxEntries = [
+    taxEntry('taxentry-form16', 'form16', { employerName: 'Acme Software Pvt Ltd', tan: 'BLRA12345B', grossSalary: 1176000, standardDeduction: 75000, tdsDeducted: 92340 }, 'BLRA12345B||'),
+    taxEntry('taxentry-26as-salary', 'ais_value', { statement: '26AS', infoCategory: 'salary', sourceName: 'ACME SOFTWARE PVT LTD', tan: 'BLRA12345B', section: '192', reportedAmount: 1176000, tdsAmount: 92000 }, '26AS|salary|BLRA12345B|192|1176000.00'),
+    taxEntry('taxentry-16a-sbi', 'tds', { deductorName: 'State Bank of India', tan: 'MUMS98765C', section: '194A', form: '16A', quarter: 'Q3', amountPaid: 18405, tdsAmount: 1840.5 }, 'MUMS98765C|194a|Q3|1840.50'),
+    taxEntry('taxentry-26as-sbi', 'ais_value', { statement: '26AS', infoCategory: 'interest', sourceName: 'STATE BANK OF INDIA', tan: 'MUMS98765C', section: '194A', reportedAmount: 18405, tdsAmount: 1840.5 }, '26AS|interest|MUMS98765C|194a|18405.00'),
+    taxEntry('taxentry-26as-other', 'ais_value', { statement: '26AS', infoCategory: 'dividend', sourceName: 'INFOSYS LTD', tan: 'BLRI11111I', section: '194', reportedAmount: 3120, tdsAmount: 312 }, '26AS|dividend|BLRI11111I|194|3120.00'),
+    // SPENDLY-292: claims, one of them eligibility-sensitive and not yet confirmed.
+    taxEntry('taxentry-ded-elss', 'deduction', { category: 'elss', amount: 50000, proofStatus: 'missing' }, 'elss|50000.00'),
+    taxEntry('taxentry-ded-ppf', 'deduction', { category: 'ppf', amount: 30000, proofStatus: 'not_needed' }, 'ppf|30000.00'),
+    taxEntry('taxentry-ded-health', 'deduction', { category: 'health_parents', amount: 32000, proofStatus: 'missing' }, 'health_parents|32000.00'),
+    // SPENDLY-294: two advance-tax instalments (one also in the 26AS), a
+    // self-assessment payment without challan details, and a 26AS tax-paid
+    // line nothing accounts for.
+    taxEntry('taxentry-pay-sep', 'tax_payment', { paymentType: 'advance_tax', date: ymd(new Date(lastFyStart, 8, 15)), amount: 15000, bsrCode: '0510308', challanSerial: '00412' }, `challan|0510308|00412|${ymd(new Date(lastFyStart, 8, 15))}`),
+    taxEntry('taxentry-pay-dec', 'tax_payment', { paymentType: 'advance_tax', date: ymd(new Date(lastFyStart, 11, 15)), amount: 15000, bsrCode: '0510308', challanSerial: '00977' }, `challan|0510308|00977|${ymd(new Date(lastFyStart, 11, 15))}`),
+    taxEntry('taxentry-pay-sat', 'tax_payment', { paymentType: 'self_assessment', date: ymd(new Date(lastFyStart + 1, 6, 20)), amount: 3460 }, `self_assessment|${ymd(new Date(lastFyStart + 1, 6, 20))}|3460.00`),
+    taxEntry('taxentry-26as-paid', 'ais_value', { statement: '26AS', infoCategory: 'tax_paid', sourceName: 'Advance tax (challan 00412)', reportedAmount: 15000 }, '26AS|tax_paid|advance tax challan 00412||15000.00'),
+    taxEntry('taxentry-26as-paid2', 'ais_value', { statement: '26AS', infoCategory: 'tax_paid', sourceName: 'Advance tax (challan 01123)', reportedAmount: 12000 }, '26AS|tax_paid|advance tax challan 01123||12000.00'),
+    // SPENDLY-293: a sale the user added (gold, long-term) and a fund
+    // house's statement total, which stands in for any fund sales Spendly finds.
+    taxEntry('taxentry-cg-gold', 'capital_gain', { mode: 'row', assetClass: 'gold', assetName: 'Gold coins', quantity: 20, acquiredDate: ymd(new Date(lastFyStart - 4, 2, 1)), soldDate: ymd(new Date(lastFyStart, 9, 2)), costOfAcquisition: 48000, saleValue: 71500 }, `row|gold coins|${ymd(new Date(lastFyStart, 9, 2))}|20|71500.00`),
+    taxEntry('taxentry-cg-cams', 'capital_gain', { mode: 'statement_total', term: 'long_term', assetClass: 'equity_mutual_fund', assetName: 'CAMS capital gains statement', soldDate: ymd(new Date(lastFyStart + 1, 2, 31)), costOfAcquisition: 48000, saleValue: 60000 }, 'total|equity_mutual_fund|long_term'),
+  ];
+
+  // SPENDLY-293: trades behind the holdings, with sales in the year that ended
+  // last. What's left of each matches its holding's quantity and average cost.
+  // INFY: one sale from a lot held over 12 months (long-term). NIFTYBEES: a
+  // sale held under 12 months (short-term). TATAMOTORS: a sale with no
+  // recorded buy, so its cost is unknown.
+  const trade = (id, holdingId, symbol, type, quantity, price, fees, date) => ({
+    id,
+    data: { holdingId, symbol, type, quantity, price, fees, broker: 'Zerodha', date, orderStatus: 'executed', createdAt: baselineDate },
+  });
+  const portfolioTransactions = [
+    trade('ptx-infy-buy1', 'hold-infy', 'INFY', 'BUY', 20, 1300, 0, ymd(new Date(lastFyStart - 2, 5, 10))),
+    trade('ptx-infy-buy2', 'hold-infy', 'INFY', 'BUY', 20, 1525, 0, ymd(new Date(lastFyStart, 4, 5))),
+    trade('ptx-infy-sell', 'hold-infy', 'INFY', 'SELL', 15, 1700, 25, ymd(new Date(lastFyStart, 10, 20))),
+    trade('ptx-nifty-buy', 'hold-niftybees', 'NIFTYBEES', 'BUY', 200, 238, 0, ymd(new Date(lastFyStart, 3, 15))),
+    trade('ptx-nifty-sell', 'hold-niftybees', 'NIFTYBEES', 'SELL', 50, 255, 10, ymd(new Date(lastFyStart, 11, 26))),
+    trade('ptx-tatamotors-sell', 'hold-tatamotors', 'TATAMOTORS', 'SELL', 10, 950, 15, ymd(new Date(lastFyStart + 1, 1, 10))),
+  ];
+
   const currentMonth = ym(today);
   const categoryBudgets = BUDGETS.map(([category, amount], i) => ({
     id: `budget-${i + 1}`,
@@ -357,6 +487,10 @@ function buildDemoData(today = new Date(), { months = 3 } = {}) {
       subscriptions,
       financialGoals,
       holdings,
+      portfolioTransactions,
+      investments,
+      taxDocuments,
+      taxEntries,
     },
     portfolioSettings,
   };
@@ -422,7 +556,8 @@ async function seed() {
   // SPENDLY-608: Spendly Test (a release build) shows the Save Goals screens
   // only when the admin flag is on. The seeded goals stay in the legacy shape
   // on purpose, so the first edit exercises the upgrade path.
-  writer.set(db.collection('system_settings').doc('global'), { enableSaveGoals: true }, { merge: true });
+  // SPENDLY-290: the Tax center is flagged the same way (dev builds always show it).
+  writer.set(db.collection('system_settings').doc('global'), { enableSaveGoals: true, enableTaxCenter: true }, { merge: true });
   await writer.close();
 
   const counts = Object.entries(data.collections).map(([name, docs]) => `${name}: ${docs.length}`);
