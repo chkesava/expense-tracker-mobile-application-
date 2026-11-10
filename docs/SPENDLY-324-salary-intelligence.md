@@ -15,8 +15,8 @@
 |---|---|---|---|---|
 | 1 | [SPENDLY-325](https://kesavach.atlassian.net/browse/SPENDLY-325) | Define salary domain model, payroll periods and provenance | None | Merged to Epic |
 | 2 | [SPENDLY-326](https://kesavach.atlassian.net/browse/SPENDLY-326) | Build salary detection and payroll transaction recognition | 325 | Merged to Epic |
-| 3 | [SPENDLY-327](https://kesavach.atlassian.net/browse/SPENDLY-327) | Build salary review, confirmation and correction workflow | 325, 326 | Implemented (Ready for Merge) |
-| 4 | [SPENDLY-328](https://kesavach.atlassian.net/browse/SPENDLY-328) | Build salary history and paycheck timeline | 325, 327 | To Do |
+| 3 | [SPENDLY-327](https://kesavach.atlassian.net/browse/SPENDLY-327) | Build salary review, confirmation and correction workflow | 325, 326 | Merged to Epic |
+| 4 | [SPENDLY-328](https://kesavach.atlassian.net/browse/SPENDLY-328) | Build salary history and paycheck timeline | 325, 327 | In Progress |
 | 5 | [SPENDLY-329](https://kesavach.atlassian.net/browse/SPENDLY-329) | Build salary breakdown and deduction analysis | 325, 328 | To Do |
 | 6 | [SPENDLY-330](https://kesavach.atlassian.net/browse/SPENDLY-330) | Build salary trend, growth and stability analytics | 328 | To Do |
 | 7 | [SPENDLY-331](https://kesavach.atlassian.net/browse/SPENDLY-331) | Build salary irregularity and missing-paycheck intelligence | 326, 328, 330 | To Do |
