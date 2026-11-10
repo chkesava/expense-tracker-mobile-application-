@@ -77,6 +77,15 @@ describe("planning", () => {
     expect(plan([ev({})], { duesEnabled: false })).toEqual([]);
     expect(plan([ev({ source: "reminder", refId: "m1" })], { remindersEnabled: false })).toEqual([]);
     expect(plan([ev({})], { duesDaysBefore: 0 }).map((n) => n.kind)).toEqual(["due", "overdue"]);
+    // SPENDLY-333: salary notifications switch
+    const salEv = ev({ source: "salary", refId: "sal_next", date: "2026-10-20", title: "Expected salary · Acme Corp", state: "expected", direction: "in", amount: 75000 });
+    expect(plan([salEv], { salaryEnabled: false })).toEqual([]);
+    const salPlan = plan([salEv], { salaryEnabled: true, salaryDaysBefore: 1 });
+    expect(salPlan.map((n) => [n.kind, n.fireDate])).toEqual([
+      ["before", "2026-10-19"],
+      ["due", "2026-10-20"],
+    ]);
+    expect(salPlan[0]).toMatchObject({ title: "Expected salary · Acme Corp", body: "Expected payday tomorrow · ₹75000" });
   });
 
   it("moves with a rescheduled item instead of duplicating", () => {
@@ -100,6 +109,8 @@ describe("tap routing", () => {
     expect(isRoutableNotification({ source: "credit_card_bill", url: "/credit-card-bills/b" })).toBe(true);
     // SPENDLY-612: goal reminders open the goal.
     expect(isRoutableNotification({ source: "goal", url: "/goals/g1" })).toBe(true);
+    // SPENDLY-333: salary payday notifications route to salary screen.
+    expect(isRoutableNotification({ source: "salary", url: "/salary" })).toBe(true);
     expect(isRoutableNotification({ source: "goal", url: "https://evil" })).toBe(false);
     expect(isRoutableNotification({ source: "calendar", url: "https://evil" })).toBe(false);
     expect(isRoutableNotification({ source: "other", url: "/x" })).toBe(false);

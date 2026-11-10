@@ -43,6 +43,8 @@ export function calendarEventActions(event: CalendarEvent | null | undefined): C
       return one("Open goals");
     case "tax":
       return one("Open tax center");
+    case "salary":
+      return one(open ? "View salary details" : "View salary record");
     case "reminder":
       // Edit/complete actions live in the reminder sheet (SPENDLY-183).
       return [];

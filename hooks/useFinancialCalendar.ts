@@ -18,6 +18,7 @@ import { useSipPlans } from "@/hooks/useSipPlans";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
 import { useTaxCalendarFacts } from "@/hooks/useTaxCalendarFacts";
 import { useTaxCenterFlag } from "@/hooks/useTaxCenterEnabled";
+import { useSalaryIntelligenceData } from "@/hooks/useSalaryIntelligenceData";
 import { useSettings } from "@/providers/SettingsProvider";
 import type { CalendarEvent, CalendarRange, CalendarSource } from "@/shared/types/calendar";
 import { getAccountKind } from "@/shared/utils/accountKind";
@@ -55,6 +56,15 @@ export function useFinancialCalendar(range: CalendarRange, options?: { includeCa
   const { enabled: taxEnabled } = useTaxCenterFlag();
   const { facts: taxFacts, loading: taxLoading, error: taxError } = useTaxCalendarFacts({ enabled: taxEnabled });
 
+  // SPENDLY-333: Salary records, expected paydays and irregularity signals
+  const {
+    records: salaryRecords,
+    profiles: salaryProfiles,
+    activeSignals: salarySignals,
+    loading: salaryLoading,
+    error: salaryError,
+  } = useSalaryIntelligenceData();
+
   // SPENDLY-320: Known fees from derived intelligence
   const { result: feeResult, loading: feeLoading, error: feeError } = useFeeIntelligence();
   const feePatterns = useMemo(() => (feeResult ? detectFeePatterns(feeResult.records, today) : []), [feeResult, today]);
@@ -79,6 +89,7 @@ export function useFinancialCalendar(range: CalendarRange, options?: { includeCa
     decision: status(decisionsLoading, decisionsError),
     fee: status(feeLoading, feeError),
     reminder: status(remindersLoading, remindersError),
+    salary: status(salaryLoading, salaryError),
     ...(taxEnabled ? { tax: status(taxLoading, taxError) } : {}),
   };
   const statusKey = JSON.stringify(sourceStatus);
@@ -101,9 +112,12 @@ export function useFinancialCalendar(range: CalendarRange, options?: { includeCa
       feePatterns,
       reminders,
       taxFacts,
+      salaryRecords,
+      salaryProfiles,
+      salarySignals,
       extraEvents: options?.extraEvents,
     }),
-    [bills, cardNames, subscriptions, borrowingsCtx.borrowings, receivablesCtx.receivables, incomes, goals, investments, plans, contributions, employerNames, decisions, feePatterns, reminders, taxFacts, options?.extraEvents]
+    [bills, cardNames, subscriptions, borrowingsCtx.borrowings, receivablesCtx.receivables, incomes, goals, investments, plans, contributions, employerNames, decisions, feePatterns, reminders, taxFacts, salaryRecords, salaryProfiles, salarySignals, options?.extraEvents]
   );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const stableStatus = useMemo(() => sourceStatus, [statusKey]);

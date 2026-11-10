@@ -134,6 +134,7 @@ export const CALENDAR_SOURCE_LABELS: Record<CalendarEvent["source"], string> = {
   fee: "Fee",
   reminder: "Reminder",
   tax: "Tax",
+  salary: "Salary",
 };
 
 export function eventAccessibilityLabel(e: CalendarEvent, format: (n: number) => string): string {

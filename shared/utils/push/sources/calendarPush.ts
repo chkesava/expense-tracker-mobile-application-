@@ -50,6 +50,8 @@ export function calendarPushSlots(input: {
     remindersEnabled: settings.calendarNotifications.remindersEnabled,
     duesEnabled: settings.calendarNotifications.duesEnabled,
     duesDaysBefore: settings.calendarNotifications.duesDaysBefore,
+    salaryEnabled: settings.calendarNotifications.salaryEnabled,
+    salaryDaysBefore: settings.calendarNotifications.salaryDaysBefore,
   };
   const currency = settings.currency || "INR";
   return planCalendarNotifications({

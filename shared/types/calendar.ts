@@ -24,6 +24,8 @@ export const CALENDAR_SOURCES = [
   "reminder",
   /** SPENDLY-297: tax deadlines (derived from versioned data, never stored). */
   "tax",
+  /** SPENDLY-333: salary paydays, credits, and irregularity signals. */
+  "salary",
 ] as const;
 export type CalendarSource = (typeof CALENDAR_SOURCES)[number];
 

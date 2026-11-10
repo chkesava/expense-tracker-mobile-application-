@@ -99,6 +99,9 @@ export type CalendarNotificationSettings = {
   /** SPENDLY-297: tax deadlines. Off by default; shown only with the tax center. */
   taxEnabled: boolean;
   taxDaysBefore: 1 | 3 | 7;
+  /** SPENDLY-333: salary paydays and late salary alerts. On by default. */
+  salaryEnabled: boolean;
+  salaryDaysBefore: 0 | 1 | 3;
   quietHoursStart: string;
   quietHoursEnd: string;
 };
@@ -109,6 +112,8 @@ export const DEFAULT_CALENDAR_NOTIFICATIONS: CalendarNotificationSettings = {
   duesDaysBefore: 1,
   taxEnabled: false,
   taxDaysBefore: 3,
+  salaryEnabled: true,
+  salaryDaysBefore: 1,
   quietHoursStart: "08:00",
   quietHoursEnd: "21:00",
 };
@@ -414,6 +419,8 @@ export function normalizeCalendarNotifications(raw: Record<string, unknown> | nu
     duesDaysBefore: r.duesDaysBefore === 0 || r.duesDaysBefore === 1 || r.duesDaysBefore === 3 ? r.duesDaysBefore : d.duesDaysBefore,
     taxEnabled: typeof r.taxEnabled === "boolean" ? r.taxEnabled : d.taxEnabled,
     taxDaysBefore: r.taxDaysBefore === 1 || r.taxDaysBefore === 3 || r.taxDaysBefore === 7 ? r.taxDaysBefore : d.taxDaysBefore,
+    salaryEnabled: typeof r.salaryEnabled === "boolean" ? r.salaryEnabled : d.salaryEnabled,
+    salaryDaysBefore: r.salaryDaysBefore === 0 || r.salaryDaysBefore === 1 || r.salaryDaysBefore === 3 ? r.salaryDaysBefore : d.salaryDaysBefore,
     quietHoursStart: hm(r.quietHoursStart, d.quietHoursStart),
     quietHoursEnd: hm(r.quietHoursEnd, d.quietHoursEnd),
   };
