@@ -51,6 +51,9 @@ const RESTORABLE_ROUTES = [
   // SPENDLY-334: salary dashboard.
   "/salary",
   "/salary/",
+  // SPENDLY-334: Intelligence hub.
+  "/intelligence",
+  "/intelligence/",
 ] as const;
 
 /**

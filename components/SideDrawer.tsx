@@ -34,6 +34,7 @@ import {
   Receipt,
   Settings,
   Shield,
+  Sparkles,
   TrendingUp,
   X,
 } from "lucide-react-native";
@@ -127,6 +128,7 @@ function SideDrawerPanel({ onClose }: { onClose: () => void }) {
     investments: TrendingUp,
     vaults: Shield,
     insights: BarChart3,
+    intelligence: Sparkles,
     calendar: CalendarDays,
     whatIf: FlaskConical,
     settings: Settings,
