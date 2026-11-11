@@ -177,7 +177,7 @@ function buildDemoData(today = new Date(), { months = 3 } = {}) {
         date: ymd(monthStart),
         month: ym(monthStart),
         accountId: accountId('bank'),
-        note: 'Monthly salary',
+        note: 'SALARY ACME TECHNOLOGIES INDIA PVT LTD',
         createdAt: new Date(monthStart.getTime() + 10 * 3600 * 1000),
       },
     });
@@ -472,6 +472,96 @@ function buildDemoData(today = new Date(), { months = 3 } = {}) {
     },
   };
 
+  // SPENDLY-325: Salary Intelligence demo configuration and confirmed paychecks
+  const salaryProfiles = [
+    {
+      id: 'default',
+      data: {
+        primaryEmployer: 'Acme Technologies India Pvt Ltd',
+        expectedPaydayWindow: { startDay: 28, endDay: 31 },
+        frequency: 'monthly',
+        primaryAccountId: accountId('bank'),
+        notificationEnabled: true,
+        notes: 'Monthly direct deposit salary',
+        schemaVersion: 1,
+        createdAtMs: baselineDate.getTime(),
+        updatedAtMs: baselineDate.getTime(),
+        createdAt: baselineDate,
+        updatedAt: baselineDate,
+      },
+    },
+  ];
+
+  const salaryRecords = [];
+  // For historical months (m < months - 1), seed confirmed salary records.
+  // The latest month (m === months - 1) is left without a salaryRecord so it surfaces
+  // as a pending candidate in the UI for review.
+  for (let m = 0; m < months - 1; m++) {
+    const monthStart = new Date(start.getFullYear(), start.getMonth() + m, 1);
+    const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
+    const monthStr = ym(monthStart);
+    const payDate = new Date(monthStart.getTime() + 10 * 3600 * 1000);
+    const payDateStr = ymd(monthStart);
+
+    salaryRecords.push({
+      id: `sal-${monthStr}`,
+      data: {
+        month: monthStr,
+        payPeriod: {
+          month: monthStr,
+          startDate: `${monthStr}-01`,
+          endDate: `${monthStr}-${pad(daysInMonth)}`,
+        },
+        employer: {
+          name: 'Acme Technologies India Pvt Ltd',
+          rawName: 'ACME TECHNOLOGIES INDIA PVT LTD',
+          normalizedName: 'Acme Technologies',
+          epfEstablishmentId: 'KN/BNG/0012345/000',
+        },
+        netAmount: 98000,
+        grossAmount: 120000,
+        currency: 'INR',
+        paymentDate: payDateStr,
+        transactionId: `inc-${monthStr}-salary`,
+        accountId: accountId('bank'),
+        type: 'regular',
+        status: 'confirmed',
+        confidence: 'high',
+        evidence: [
+          'Exact keyword match: SALARY',
+          'Known recurring employer',
+          'Month-end payroll cluster',
+        ],
+        breakdown: {
+          grossSalary: 120000,
+          allowances: {
+            basic: 60000,
+            hra: 30000,
+            special: 30000,
+          },
+          deductions: {
+            epf: 7200,
+            tds: 14600,
+            professionalTax: 200,
+          },
+          netSalary: 98000,
+          reconciled: true,
+        },
+        provenance: {
+          source: 'user_confirmed',
+          detectionRule: 'rule_keyword_salary',
+          reviewedAtMs: payDate.getTime(),
+        },
+        notes: 'Monthly direct deposit salary',
+        schemaVersion: 1,
+        createdAtMs: payDate.getTime(),
+        updatedAtMs: payDate.getTime(),
+        createdAt: payDate,
+        updatedAt: payDate,
+      },
+    });
+  }
+
   const financialSummaries = buildDashboardSummaries(expenses, incomes, today);
   applyStoredBalances(accounts, expenses, incomes);
 
@@ -491,6 +581,8 @@ function buildDemoData(today = new Date(), { months = 3 } = {}) {
       investments,
       taxDocuments,
       taxEntries,
+      salaryProfiles,
+      salaryRecords,
     },
     portfolioSettings,
   };
