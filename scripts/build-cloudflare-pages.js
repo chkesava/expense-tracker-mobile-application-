@@ -10,6 +10,9 @@
  *   allows only one `*` per rule. The security headers are Netlify's.
  * - `_routes.json` sends everything but the content-hashed folders to the
  *   Worker.
+ * - SPENDLY-750: `assets/node_modules/` is renamed to `assets/vendor_modules/`
+ *   and references rewritten because Wrangler Pages deployment excludes
+ *   `**\/node_modules\/**`, which would cause font and icon assets to be dropped.
  *
  * dist-web/ is never modified, so the same build can still go to Netlify.
  * The backup needs its own `build:web:all` run with EXPO_PUBLIC_SHARE_URL set
@@ -25,6 +28,16 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 
 /** Files Netlify reads that mean something else, or nothing, on Pages. */
 const NETLIFY_ONLY_FILES = ['_redirects'];
+
+/** Destination subfolder under `assets/` for npm-derived assets on Cloudflare Pages. */
+const VENDOR_ASSETS_DIR = 'vendor_modules';
+
+const REQUIRED_INTER_WEIGHTS = [
+  'Inter_400Regular',
+  'Inter_500Medium',
+  'Inter_600SemiBold',
+  'Inter_700Bold',
+];
 
 function assertWebExport(fromDir) {
   const missing = ['', ...PRODUCT_BASE_PATHS]
@@ -62,17 +75,145 @@ function assertWithinPagesLimits(dir, limits = PAGES_LIMITS) {
   }
 }
 
+/**
+ * Wrangler's Pages deployment logic (`wrangler pages deploy`) uses a hardcoded
+ * exclusion pattern that ignores any directory named `node_modules` when uploading
+ * static files to Cloudflare Pages. Metro exports web font and icon assets from
+ * npm dependencies into `<base>/assets/node_modules/...`.
+ *
+ * This function:
+ * 1. Renames any `assets/node_modules` directory under `dir` to `assets/vendor_modules`.
+ * 2. Rewrites all occurrences of `assets/node_modules` to `assets/vendor_modules`
+ *    in all compiled web bundles, markup, and stylesheets.
+ */
+function relocateVendorAssets(dir) {
+  function renameAssets(current) {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === 'node_modules' && path.basename(current) === 'assets') {
+          const dest = path.join(current, VENDOR_ASSETS_DIR);
+          if (fs.existsSync(dest)) fs.rmSync(dest, { recursive: true, force: true });
+          fs.renameSync(full, dest);
+          renameAssets(dest);
+        } else {
+          renameAssets(full);
+        }
+      }
+    }
+  }
+  renameAssets(dir);
+
+  function rewriteReferences(current) {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        rewriteReferences(full);
+      } else if (/\.(js|html|json|css|map)$/.test(entry.name)) {
+        let content = fs.readFileSync(full, 'utf8');
+        if (
+          content.includes('assets/node_modules') ||
+          content.includes('assets\\/node_modules') ||
+          content.includes('assets%2Fnode_modules')
+        ) {
+          content = content
+            .replace(/assets\/node_modules/g, `assets/${VENDOR_ASSETS_DIR}`)
+            .replace(/assets\\\/node_modules/g, `assets\\/${VENDOR_ASSETS_DIR}`)
+            .replace(/assets%2Fnode_modules/g, `assets%2F${VENDOR_ASSETS_DIR}`);
+          fs.writeFileSync(full, content, 'utf8');
+        }
+      }
+    }
+  }
+  rewriteReferences(dir);
+}
+
+/** Verifies that no node_modules directories remain anywhere in the Pages output. */
+function assertNoIgnoredNodeModules(dir) {
+  const ignored = [];
+  function scan(current) {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === 'node_modules') ignored.push(path.relative(dir, full));
+        scan(full);
+      }
+    }
+  }
+  scan(dir);
+  if (ignored.length > 0) {
+    throw new Error(
+      `Found node_modules directories in Pages output which Wrangler would drop during deployment: ${ignored.join(', ')}`
+    );
+  }
+}
+
+/**
+ * Verifies that required Inter font assets exist on disk in the relocated
+ * vendor_modules directory and are referenced by the expense app JS bundle.
+ */
+function assertInterFontAssets(dir) {
+  const expenseDir = path.join(dir, 'expense');
+  if (!fs.existsSync(expenseDir)) return;
+
+  const interFontDir = path.join(expenseDir, 'assets', VENDOR_ASSETS_DIR, '@expo-google-fonts', 'inter');
+  if (!fs.existsSync(interFontDir)) {
+    // If the source build had no Inter fonts (e.g. lightweight mock), skip
+    return;
+  }
+
+  for (const weight of REQUIRED_INTER_WEIGHTS) {
+    const weightDir = path.join(interFontDir, weight.replace('Inter_', ''));
+    if (!fs.existsSync(weightDir)) {
+      throw new Error(`Required Inter font weight directory "${weight}" is missing in ${weightDir}.`);
+    }
+    const ttfFiles = fs.readdirSync(weightDir).filter((f) => f.endsWith('.ttf'));
+    if (ttfFiles.length === 0) {
+      throw new Error(`Required Inter font TTF for "${weight}" is missing in ${weightDir}.`);
+    }
+  }
+
+  const jsDir = path.join(expenseDir, '_expo', 'static', 'js', 'web');
+  if (fs.existsSync(jsDir)) {
+    const entryFiles = fs.readdirSync(jsDir).filter((f) => f.startsWith('entry-') && f.endsWith('.js'));
+    for (const entryFile of entryFiles) {
+      const content = fs.readFileSync(path.join(jsDir, entryFile), 'utf8');
+      if (content.includes('assets/node_modules/@expo-google-fonts/inter')) {
+        throw new Error(
+          `Bundle ${entryFile} still contains un-relocated assets/node_modules/@expo-google-fonts/inter font reference.`
+        );
+      }
+      if (!content.includes(`assets/${VENDOR_ASSETS_DIR}/@expo-google-fonts/inter`)) {
+        throw new Error(
+          `Bundle ${entryFile} is missing required relocated assets/${VENDOR_ASSETS_DIR}/@expo-google-fonts/inter font reference.`
+        );
+      }
+    }
+  }
+}
+
 function buildCloudflarePages(fromDir, toDir, limits = PAGES_LIMITS) {
   assertWebExport(fromDir);
   fs.rmSync(toDir, { recursive: true, force: true });
   fs.cpSync(fromDir, toDir, { recursive: true });
   for (const name of NETLIFY_ONLY_FILES) fs.rmSync(path.join(toDir, name), { force: true });
+  relocateVendorAssets(toDir);
+  assertNoIgnoredNodeModules(toDir);
+  assertInterFontAssets(toDir);
   fs.writeFileSync(path.join(toDir, '_headers'), cloudflareHeaders());
   fs.writeFileSync(path.join(toDir, '_routes.json'), `${JSON.stringify(cloudflareRoutes(), null, 2)}\n`);
   assertWithinPagesLimits(toDir, limits);
 }
 
-module.exports = { buildCloudflarePages, PAGES_LIMITS };
+module.exports = {
+  buildCloudflarePages,
+  PAGES_LIMITS,
+  VENDOR_ASSETS_DIR,
+  REQUIRED_INTER_WEIGHTS,
+  relocateVendorAssets,
+  assertNoIgnoredNodeModules,
+  assertInterFontAssets,
+};
 
 if (require.main === module) {
   const arg = (name, fallback) => {

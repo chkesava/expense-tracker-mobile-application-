@@ -243,7 +243,7 @@ export const INVESTMENT_HUB_TAB_IDS = [
  * `/investments?tab=portfolio&sub=<id>` (SPENDLY-645: the Markets tab links
  * straight to the watchlist and alerts).
  */
-export const PORTFOLIO_SUB_TAB_IDS = ["holdings", "watchlist", "orders", "alerts", "charts"] as const;
+export const PORTFOLIO_SUB_TAB_IDS = ["holdings", "history", "watchlist", "orders", "alerts", "charts"] as const;
 export type PortfolioSubTabId = (typeof PORTFOLIO_SUB_TAB_IDS)[number];
 
 export function parsePortfolioSubTab(raw: string | undefined): PortfolioSubTabId | null {

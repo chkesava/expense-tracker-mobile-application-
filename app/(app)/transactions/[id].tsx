@@ -63,8 +63,7 @@ import {
 } from "@/shared/utils/transactionActions";
 import type { Subscription } from "@/shared/types/subscription";
 import { listAccountDocuments } from "@/services/accounts/accountDocumentsStore";
-import { createDocumentSignedUrl } from "@/services/accounts/spendlyFilesClient";
-import * as WebBrowser from "expo-web-browser";
+import { DocumentViewerModal, type DocumentViewerItem } from "@/components/documents";
 import { currencySymbol, formatAmount } from "@/shared/utils/formatCurrency";
 import { ledgerRowEditability } from "@/shared/utils/ledgerRow";
 import {
@@ -161,8 +160,10 @@ export default function TransactionDetailsScreen() {
     [journalRow, expense, income, payments, entries, spaces]
   );
 
-  // The statement an imported row came from. Documents are listed only on tap,
-  // and the signed URL is fetched per open, as on the account screen.
+  const [viewingDocument, setViewingDocument] = useState<DocumentViewerItem | null>(null);
+
+  // The statement an imported row came from. Documents are opened inside Spendly
+  // using the in-app document viewer modal (SPENDLY-124).
   const openSourceDocument = async (accountId: string, documentId: string) => {
     if (!user?.uid) return;
     setOpeningDocument(true);
@@ -173,7 +174,7 @@ export default function TransactionDetailsScreen() {
         appDialog.alert("Document not available", "The statement this came from has been removed.");
         return;
       }
-      await WebBrowser.openBrowserAsync(await createDocumentSignedUrl(document.storagePath));
+      setViewingDocument(document);
     } catch (error) {
       logError("transactionDetail.openDocument", error);
       appDialog.alert("Couldn't open the document", friendlyErrorMessage(error));
@@ -793,6 +794,12 @@ export default function TransactionDetailsScreen() {
           }
         />
       ) : null}
+
+      <DocumentViewerModal
+        visible={viewingDocument !== null}
+        document={viewingDocument}
+        onClose={() => setViewingDocument(null)}
+      />
     </View>
   );
 }
