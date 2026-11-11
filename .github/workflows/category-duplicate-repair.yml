@@ -1,0 +1,77 @@
+name: Category duplicate repair
+
+# SPENDLY-753 — repairs the duplicate category/subcategory groups
+# scripts/categoryDuplicateAudit.ts finds, for one account. Rules:
+# scripts/lib/categoryDuplicateRepairCore.ts. Dry run by default: logs every
+# write it would make and writes nothing. A duplicate is archived, never
+# deleted — reversible. Run the "Category duplicate audit" workflow first
+# and review its report before ever setting dry_run to false here.
+#
+# Secrets: FIREBASE_SERVICE_ACCOUNT (or CATEGORY_AUDIT_FIREBASE_SERVICE_ACCOUNT)
+# Optional: READMODEL_SUPABASE_SERVICE_ROLE_KEY + READMODEL_SUPABASE_URL
+#           (pushes the change to the read model right away on a real apply;
+#           without them the next nightly sync catches up instead)
+
+on:
+  workflow_dispatch:
+    inputs:
+      uid:
+        description: "The account's Firebase uid (not email) to repair"
+        required: true
+        type: string
+      dry_run:
+        description: "Log what would be written, write nothing. Leave on unless you've reviewed the dry run."
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: Repair one account's duplicate categories
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run
+        env:
+          CATEGORY_AUDIT_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.CATEGORY_AUDIT_FIREBASE_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
+          READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CATEGORY_AUDIT_FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT (or CATEGORY_AUDIT_FIREBASE_SERVICE_ACCOUNT) is not set."
+            exit 1
+          fi
+          args="--uid=${{ inputs.uid }}"
+          if [ "$DRY_RUN" != "false" ]; then
+            echo "::notice::Dry run — nothing will be written."
+          else
+            args="$args --apply"
+          fi
+          npx --no-install tsx scripts/categoryDuplicateRepair.ts $args | tee category-repair.log
+          {
+            echo "## Category duplicate repair"
+            echo ""
+            echo "Dry run: **${{ inputs.dry_run }}**"
+            echo '```json'
+            cat category-repair.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
