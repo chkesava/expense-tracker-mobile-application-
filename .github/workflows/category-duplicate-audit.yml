@@ -1,0 +1,70 @@
+name: Category duplicate audit
+
+# SPENDLY-753: the ticket's mandatory read-only investigation gate. Reads one
+# user's categories from Firestore (and, if the Supabase secrets are set,
+# Supabase) and reports duplicate groups, cross-store gaps and a dry-run
+# repair mapping. Writes nothing, ever — scripts/categoryDuplicateAudit.ts.
+#
+# Secrets: FIREBASE_SERVICE_ACCOUNT (or CATEGORY_AUDIT_FIREBASE_SERVICE_ACCOUNT),
+#          READMODEL_SUPABASE_SERVICE_ROLE_KEY (optional: Supabase comparison)
+# Variables: READMODEL_SUPABASE_URL (optional: Supabase comparison)
+
+on:
+  workflow_dispatch:
+    inputs:
+      uid:
+        description: "The account's Firebase uid (not email) to audit"
+        required: true
+        type: string
+      plan:
+        description: "Also include a dry-run repair mapping (still read-only)"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: Audit one account's categories
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run
+        env:
+          CATEGORY_AUDIT_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.CATEGORY_AUDIT_FIREBASE_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
+          READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CATEGORY_AUDIT_FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT (or CATEGORY_AUDIT_FIREBASE_SERVICE_ACCOUNT) is not set."
+            exit 1
+          fi
+          args="--uid=${{ inputs.uid }}"
+          if [ "${{ inputs.plan }}" = "true" ]; then args="$args --plan"; fi
+          npx --no-install tsx scripts/categoryDuplicateAudit.ts $args | tee category-audit.log
+          {
+            echo "## Category duplicate audit"
+            echo ""
+            echo "Read-only. Nothing was written to Firestore or Supabase."
+            echo '```json'
+            cat category-audit.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

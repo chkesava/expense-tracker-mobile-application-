@@ -61,6 +61,13 @@ export interface Category {
   /** Stable taxonomy identity for default docs; expenses still store display names. */
   semanticKey?: string;
   createdAt?: unknown;
+  /**
+   * SPENDLY-753 — the `categoryNames`/`categorySubNames` lock key this doc
+   * currently claims (parents use `nameKey`, subcategories `subNameKey`;
+   * see shared/utils/categoryModel.ts). firestore.rules cross-checks it.
+   */
+  nameKey?: string;
+  subNameKey?: string;
 }
 
 export interface AccountType {

@@ -2,13 +2,12 @@ import { useCallback, useMemo } from "react";
 import {
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDocs,
-  limit,
   query,
   type Firestore,
   serverTimestamp,
-  setDoc,
   updateDoc,
   where,
   writeBatch,
@@ -16,6 +15,15 @@ import {
 import { noteCategoriesWritten } from "@/lib/categoryRevision";
 import { stageMutationOps } from "@/lib/stageMutationOps";
 import { dashboardOpsForRelabel, type DashboardRelabel } from "@/shared/utils/dashboardMutations";
+import {
+  categoryNameKey,
+  cleanCategoryName,
+  dedupeByNormalizedName,
+  isCategoryNameTaken,
+  isSubcategoryNameTaken,
+  normalizeCategoryName,
+  subcategoryNameKey,
+} from "@/shared/utils/categoryModel";
 
 import { logError } from "@/lib/errors";
 import { getFirestoreDb } from "@/lib/firebase";
@@ -26,7 +34,47 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/providers/AuthProvider";
 import { useExpenseReferenceData } from "@/providers/ExpenseReferenceDataProvider";
 import type { Category } from "@/shared/types/expense";
-import { noteDirectWrites, trackedBatch } from "@/lib/readModelWriteHooks";
+import { noteDirectWrites, trackedBatch, type TrackedBatch } from "@/lib/readModelWriteHooks";
+
+/**
+ * SPENDLY-753 — claim the renamed doc's new name-lock key and release its old
+ * one (only if it had actually claimed one: a legacy doc predating this
+ * change has neither field, and there is nothing to release). Mirrors
+ * `buildEditGoal`'s claim/release for `goalNames`. Returns the field to stamp
+ * on the category doc itself (`nameKey` for a parent, `subNameKey` for a sub).
+ */
+function applyCategoryNameLockRename(
+  batch: TrackedBatch,
+  db: Firestore,
+  uid: string,
+  cat: Pick<Category, "id" | "kind" | "parentId" | "nameKey" | "subNameKey">,
+  trimmed: string
+): Partial<Pick<Category, "nameKey" | "subNameKey">> {
+  const isSub = cat.kind === "subcategory";
+  const newKey = isSub ? subcategoryNameKey(cat.parentId ?? "", trimmed) : categoryNameKey(trimmed);
+  const lockCollection = isSub ? "categorySubNames" : "categoryNames";
+  const oldKey = isSub ? cat.subNameKey : cat.nameKey;
+  if (oldKey && oldKey !== newKey) {
+    batch.delete(doc(db, "users", uid, lockCollection, oldKey));
+  }
+  if (oldKey !== newKey) {
+    batch.set(doc(db, "users", uid, lockCollection, newKey), {
+      categoryId: cat.id,
+      createdAtMs: Date.now(),
+    });
+  }
+  return isSub ? { subNameKey: newKey } : { nameKey: newKey };
+}
+
+function isCategoryRenameTaken(
+  cat: Pick<Category, "id" | "kind" | "parentId">,
+  trimmed: string,
+  categories: readonly Pick<Category, "id" | "name" | "kind" | "parentId" | "isArchived">[]
+): boolean {
+  return cat.kind === "subcategory"
+    ? isSubcategoryNameTaken(cat.parentId ?? "", trimmed, categories, cat.id)
+    : isCategoryNameTaken(trimmed, categories, cat.id);
+}
 
 /** The expense fields a category relabel needs for its dashboard delta. */
 type RelabelSource = {
@@ -72,24 +120,26 @@ export const useCategories = () => {
   const expensesInMemory = expensesComplete && expensesMode !== "supabase";
   const categoriesForWrite = async (db: Firestore): Promise<Category[]> => {
     if (categoriesMode !== "supabase" || !uid) return categories;
-    const snap = await getDocs(query(collection(db, "users", uid, "categories"), limit(500)));
+    // SPENDLY-753: no `limit` — a truncated read here risks an incomplete
+    // rename/merge/delete (R4.3a: verify on Firestore before writing).
+    const snap = await getDocs(query(collection(db, "users", uid, "categories")));
     return snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) } as Category));
   };
 
-  const parentCategories = useMemo(
-    () =>
-      categories
-        .filter((c) => (c.kind ?? "category") === "category" && !c.parentId)
-        .filter((c) => !c.isArchived)
-        .sort((a, b) => {
-          if (!!b.isFavorite !== !a.isFavorite) return a.isFavorite ? -1 : 1;
-          return (
-            (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
-            a.name.localeCompare(b.name)
-          );
-        }),
-    [categories]
-  );
+  const parentCategories = useMemo(() => {
+    const active = categories
+      .filter((c) => (c.kind ?? "category") === "category" && !c.parentId)
+      .filter((c) => !c.isArchived);
+    // SPENDLY-753: legacy duplicate parent docs (same name, different ids)
+    // collapse to one canonical row. No Firestore doc is touched.
+    return dedupeByNormalizedName(active, (c) => normalizeCategoryName(c.name)).sort((a, b) => {
+      if (!!b.isFavorite !== !a.isFavorite) return a.isFavorite ? -1 : 1;
+      return (
+        (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+        a.name.localeCompare(b.name)
+      );
+    });
+  }, [categories]);
 
   /** Parents shown in expense pickers (excludes hidden and income sink). */
   const visibleParents = useMemo(
@@ -107,24 +157,32 @@ export const useCategories = () => {
 
   const getSubcategories = useCallback(
     (parentIdOrName: string, opts?: { includeHidden?: boolean }) => {
-      const parent =
-        categories.find((c) => c.id === parentIdOrName) ||
-        categories.find(
-          (c) =>
-            c.name === parentIdOrName &&
-            (c.kind ?? "category") === "category"
-        );
+      // SPENDLY-753: resolve by id first (legacy references may point at a
+      // duplicate), then fold in every OTHER active parent doc sharing that
+      // normalized name — a prior exact-id/name lookup could silently land
+      // on the "wrong" duplicate and show only its (possibly empty) subs.
+      const byId = categories.find(
+        (c) => c.id === parentIdOrName && (c.kind ?? "category") === "category"
+      );
+      const targetKey = normalizeCategoryName(byId ? byId.name : parentIdOrName);
+      const parentIds = new Set(
+        categories
+          .filter((c) => (c.kind ?? "category") === "category" && !c.isArchived)
+          .filter((c) => normalizeCategoryName(c.name) === targetKey)
+          .map((c) => c.id)
+      );
+      if (parentIds.size === 0) return [];
 
-      if (!parent) return [];
+      const subs = categories.filter(
+        (c) =>
+          c.kind === "subcategory" &&
+          c.parentId != null &&
+          parentIds.has(c.parentId) &&
+          !c.isArchived &&
+          (opts?.includeHidden || !c.isHidden)
+      );
 
-      return categories
-        .filter(
-          (c) =>
-            c.kind === "subcategory" &&
-            c.parentId === parent.id &&
-            !c.isArchived &&
-            (opts?.includeHidden || !c.isHidden)
-        )
+      return dedupeByNormalizedName(subs, (s) => normalizeCategoryName(s.name))
         .sort((a, b) => {
           if (!!b.isFavorite !== !a.isFavorite) return a.isFavorite ? -1 : 1;
           return (
@@ -153,34 +211,46 @@ export const useCategories = () => {
     options?: { createDefaultSub?: boolean; icon?: string; color?: string }
   ) => {
     const db = getFirestoreDb();
-    if (!uid || !db || !name.trim()) return;
+    const cleaned = cleanCategoryName(name);
+    if (!uid || !db || !cleaned) return;
+    if (isCategoryNameTaken(cleaned, categories)) {
+      toast.error("That category already exists");
+      return;
+    }
     try {
-      // SPENDLY-660: ids are made up front so the writes can be announced
-      // (noteCategoriesWritten) before they're awaited.
+      // SPENDLY-753: the category doc and its categoryNames/{nameKey} lock
+      // land in one batch. A concurrent/retried duplicate name fails the
+      // whole batch (the lock create is rejected as an update by rules) —
+      // this check is just a fast local pre-check for a clear toast.
       const parentRef = doc(collection(db, "users", uid, "categories"));
-      const writes: Promise<void>[] = [];
-      writes.push(setDoc(
-        parentRef,
-        {
-          name: name.trim(),
-          kind: "category",
-          parentId: null,
-          icon: options?.icon || "📦",
-          color: options?.color || "#64748b",
-          isDefault: false,
-          isArchived: false,
-          isHidden: false,
-          isFavorite: false,
-          sortOrder: 1000,
-          createdAt: serverTimestamp(),
-        }
-      ));
+      const nameKey = categoryNameKey(cleaned);
+      let batch = trackedBatch(writeBatch(db));
+      batch.set(parentRef, {
+        name: cleaned,
+        kind: "category",
+        parentId: null,
+        icon: options?.icon || "📦",
+        color: options?.color || "#64748b",
+        isDefault: false,
+        isArchived: false,
+        isHidden: false,
+        isFavorite: false,
+        sortOrder: 1000,
+        nameKey,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      batch.set(doc(db, "users", uid, "categoryNames", nameKey), {
+        categoryId: parentRef.id,
+        createdAtMs: Date.now(),
+      });
       const ids = [parentRef.id];
 
       if (options?.createDefaultSub !== false) {
         const subRef = doc(collection(db, "users", uid, "categories"));
+        const subNameKey = subcategoryNameKey(parentRef.id, "Other");
         ids.push(subRef.id);
-        writes.push(setDoc(subRef, {
+        batch.set(subRef, {
           name: "Other",
           kind: "subcategory",
           parentId: parentRef.id,
@@ -189,27 +259,43 @@ export const useCategories = () => {
           isHidden: false,
           isFavorite: false,
           sortOrder: 0,
+          subNameKey,
           createdAt: serverTimestamp(),
-        }));
+          updatedAt: serverTimestamp(),
+        });
+        batch.set(doc(db, "users", uid, "categorySubNames", subNameKey), {
+          categoryId: subRef.id,
+          createdAtMs: Date.now(),
+        });
       }
+      // SPENDLY-660: announce before awaiting, same ordering guarantee as before.
       noteCategoriesWritten(db, uid, ids);
-      await Promise.all(writes);
+      await batch.commit();
 
       toast.success("Category added");
       return parentRef.id;
     } catch (err) {
       logError("categories.addCategory", err);
-      toast.error("Failed to add category");
+      toast.error(
+        isCategoryNameTaken(cleaned, categories) ? "That category already exists" : "Failed to add category"
+      );
     }
   };
 
   const addSubcategory = async (parentId: string, name: string) => {
     const db = getFirestoreDb();
-    if (!uid || !db || !name.trim() || !parentId) return;
+    const cleaned = cleanCategoryName(name);
+    if (!uid || !db || !cleaned || !parentId) return;
+    if (isSubcategoryNameTaken(parentId, cleaned, categories)) {
+      toast.error("That subcategory already exists");
+      return;
+    }
     try {
       const subRef = doc(collection(db, "users", uid, "categories"));
-      const write = setDoc(subRef, {
-        name: name.trim(),
+      const subNameKey = subcategoryNameKey(parentId, cleaned);
+      const batch = trackedBatch(writeBatch(db));
+      batch.set(subRef, {
+        name: cleaned,
         kind: "subcategory",
         parentId,
         isDefault: false,
@@ -217,31 +303,50 @@ export const useCategories = () => {
         isHidden: false,
         isFavorite: false,
         sortOrder: 100,
+        subNameKey,
         createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      batch.set(doc(db, "users", uid, "categorySubNames", subNameKey), {
+        categoryId: subRef.id,
+        createdAtMs: Date.now(),
       });
       noteCategoriesWritten(db, uid, [subRef.id]);
-      await write;
+      await batch.commit();
       toast.success("Subcategory added");
     } catch (err) {
       logError("categories.addSubcategory", err);
-      toast.error("Failed to add subcategory");
+      toast.error(
+        isSubcategoryNameTaken(parentId, cleaned, categories) ? "That subcategory already exists" : "Failed to add subcategory"
+      );
     }
   };
 
   const updateCategory = async (id: string, newName: string) => {
     const db = getFirestoreDb();
-    if (!uid || !db || !newName.trim()) return;
+    const trimmed = cleanCategoryName(newName);
+    if (!uid || !db || !trimmed) return;
+    const all = await categoriesForWrite(db);
+    const cat = all.find((c) => c.id === id);
+    if (!cat) return;
+    if (cat.name !== trimmed && isCategoryRenameTaken(cat, trimmed, all)) {
+      toast.error("That name already exists");
+      return;
+    }
     try {
-      const write = updateDoc(doc(db, "users", uid, "categories", id), {
-        name: newName.trim(),
+      const batch = trackedBatch(writeBatch(db));
+      const lockField = applyCategoryNameLockRename(batch, db, uid, cat, trimmed);
+      batch.update(doc(db, "users", uid, "categories", id), {
+        name: trimmed,
         updatedAt: serverTimestamp(),
+        ...lockField,
       });
       noteCategoriesWritten(db, uid, [id]);
-      await write;
+      await batch.commit();
       toast.success("Category updated");
     } catch (err) {
       logError("categories.updateCategory", err);
-      toast.error("Failed to update category");
+      toast.error(isCategoryRenameTaken(cat, trimmed, all) ? "That name already exists" : "Failed to update category");
     }
   };
 
@@ -252,21 +357,28 @@ export const useCategories = () => {
     rewriteExpenses = true
   ) => {
     const db = getFirestoreDb();
-    if (!uid || !db || !newName.trim()) return;
+    const trimmed = cleanCategoryName(newName);
+    if (!uid || !db || !trimmed) return;
     const all = await categoriesForWrite(db);
     const cat = all.find((c) => c.id === id);
     if (!cat) return;
     const oldName = cat.name;
-    const trimmed = newName.trim();
     if (oldName === trimmed) return;
+    if (isCategoryRenameTaken(cat, trimmed, all)) {
+      toast.error("That name already exists");
+      return;
+    }
 
     try {
-      const write = updateDoc(doc(db, "users", uid, "categories", id), {
+      const renameBatch = trackedBatch(writeBatch(db));
+      const lockField = applyCategoryNameLockRename(renameBatch, db, uid, cat, trimmed);
+      renameBatch.update(doc(db, "users", uid, "categories", id), {
         name: trimmed,
         updatedAt: serverTimestamp(),
+        ...lockField,
       });
       noteCategoriesWritten(db, uid, [id]);
-      await write;
+      await renameBatch.commit();
 
       if (rewriteExpenses) {
         // SPENDLY-98: only skip the read when the in-memory ledger is the
@@ -385,12 +497,24 @@ export const useCategories = () => {
     const db = getFirestoreDb();
     if (!uid || !db) return;
     try {
-      const write = updateDoc(doc(db, "users", uid, "categories", id), {
-        isArchived,
-        updatedAt: serverTimestamp(),
-      });
+      // SPENDLY-753: archiving releases the name lock (clearing the field the
+      // lock's delete rule checks, in the same batch) so the name is
+      // immediately free for a new active category/subcategory. Restoring
+      // doesn't reclaim one — a later edit/add will claim fresh.
+      const cat = isArchived ? (await categoriesForWrite(db)).find((c) => c.id === id) : undefined;
+      const batch = trackedBatch(writeBatch(db));
+      const lockFieldClear: Record<string, unknown> = {};
+      if (cat) {
+        const isSub = cat.kind === "subcategory";
+        const lockKey = isSub ? cat.subNameKey : cat.nameKey;
+        if (lockKey) {
+          batch.delete(doc(db, "users", uid, isSub ? "categorySubNames" : "categoryNames", lockKey));
+          lockFieldClear[isSub ? "subNameKey" : "nameKey"] = deleteField();
+        }
+      }
+      batch.update(doc(db, "users", uid, "categories", id), { ...lockFieldClear, isArchived, updatedAt: serverTimestamp() });
       noteCategoriesWritten(db, uid, [id]);
-      await write;
+      await batch.commit();
       toast.success(isArchived ? "Category archived" : "Category restored");
     } catch (err) {
       logError("categories.updateCategoryStatus", err);
