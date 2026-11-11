@@ -23,7 +23,7 @@
 | 8 | [SPENDLY-332](https://kesavach.atlassian.net/browse/SPENDLY-332) | Build salary forecast and expected-income planning | 328, 330 | Merged to Epic |
 | 9 | [SPENDLY-333](https://kesavach.atlassian.net/browse/SPENDLY-333) | Integrate salary events with Financial Calendar and notifications | 328, 331, 332 | Merged to Epic |
 | 10 | [SPENDLY-334](https://kesavach.atlassian.net/browse/SPENDLY-334) | Build Salary Intelligence dashboard and financial context insights | 327–333 | Merged to Epic |
-| 11 | [SPENDLY-335](https://kesavach.atlassian.net/browse/SPENDLY-335) | Salary Intelligence QA, privacy, accuracy, performance and rollout | 325–334 | Implemented (Pending Approval) |
+| 11 | [SPENDLY-335](https://kesavach.atlassian.net/browse/SPENDLY-335) | Salary Intelligence QA, privacy, accuracy, performance and rollout | 325–334 | Merged to Epic |
 
 ## Key Decisions
 - **Base branch:** origin/main.
