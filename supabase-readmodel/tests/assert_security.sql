@@ -19,6 +19,7 @@ begin
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
     'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications', 'recurring_suggestions', 'server_results', 'tax_profiles', 'tax_entries', 'tax_reviews', 'tax_documents', 'tax_snapshots',
+    'salary_profiles', 'salary_records', 'salary_reviews',
     'sync_runs', 'sync_status', 'sync_checkpoints', 'sync_failures'
   ]) as t
   where not exists (select 1 from pg_tables where schemaname = 'public' and tablename = t);
@@ -67,7 +68,8 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications', 'recurring_suggestions', 'server_results', 'tax_profiles', 'tax_entries', 'tax_reviews', 'tax_documents', 'tax_snapshots', 'sync_status',
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications', 'recurring_suggestions', 'server_results', 'tax_profiles', 'tax_entries', 'tax_reviews', 'tax_documents', 'tax_snapshots',
+    'salary_profiles', 'salary_records', 'salary_reviews', 'sync_status',
           'v_active_expenses', 'v_active_incomes', 'v_cash_flow_by_month'
         )
       ))
@@ -169,7 +171,8 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications', 'recurring_suggestions', 'server_results', 'tax_profiles', 'tax_entries', 'tax_reviews', 'tax_documents', 'tax_snapshots'
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications', 'recurring_suggestions', 'server_results', 'tax_profiles', 'tax_entries', 'tax_reviews', 'tax_documents', 'tax_snapshots',
+    'salary_profiles', 'salary_records', 'salary_reviews'
   ]) as t
   where (
     select count(*) from information_schema.columns c
@@ -243,7 +246,8 @@ begin
     'category_budgets', 'decisions', 'calendar_reminders', 'fee_reviews', 'fee_signal_dismissals',
     'merchant_overrides', 'recurring_dismissals', 'spaces', 'categorization_rules', 'trips',
     'runway_settings', 'runway_overrides', 'what_if_scenarios', 'goal_funding_plans', 'sip_plans',
-    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications', 'recurring_suggestions', 'server_results', 'tax_profiles', 'tax_entries', 'tax_reviews', 'tax_documents', 'tax_snapshots'
+    'sip_transactions', 'virtual_positions', 'net_worth_history', 'watchlists', 'watchlist_items', 'user_settings', 'financial_summaries', 'group_funds', 'group_fund_events', 'devices', 'notifications', 'recurring_suggestions', 'server_results', 'tax_profiles', 'tax_entries', 'tax_reviews', 'tax_documents', 'tax_snapshots',
+    'salary_profiles', 'salary_records', 'salary_reviews'
   ]) as t
   where (
     select count(*) from information_schema.columns c

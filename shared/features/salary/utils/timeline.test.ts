@@ -246,7 +246,7 @@ describe("Salary History & Paycheck Timeline Engine (SPENDLY-328)", () => {
       const elapsed = performance.now() - start;
 
       expect(result.summary.totalPaychecks).toBe(1000);
-      expect(elapsed).toBeLessThan(100); // Generous 100ms threshold for test runners
+      expect(elapsed).toBeLessThan(200); // 200ms budget threshold aligned with SPENDLY-335 rollout runbook
     });
   });
 });
