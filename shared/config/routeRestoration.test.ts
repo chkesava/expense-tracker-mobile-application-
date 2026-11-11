@@ -96,6 +96,8 @@ describe("isRestorableRoute", () => {
     expect(isRestorableRoute("/screener")).toBe(true);
     // SPENDLY-334: salary dashboard.
     expect(isRestorableRoute("/salary")).toBe(true);
+    // SPENDLY-334: intelligence hub.
+    expect(isRestorableRoute("/intelligence")).toBe(true);
     expect(isRestorableRoute("/recurring")).toBe(true);
     expect(isRestorableRoute("/recurring/sub-1")).toBe(true);
   });

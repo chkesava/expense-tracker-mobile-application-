@@ -12,6 +12,7 @@ import {
   Receipt,
   Settings,
   Shield,
+  Sparkles,
   TrendingUp,
 } from "lucide-react-native";
 
@@ -40,6 +41,7 @@ const ICON_MAP: Record<NavSectionId, React.ComponentType<{ size: number; color: 
   investments: TrendingUp,
   vaults: Shield,
   insights: BarChart3,
+  intelligence: Sparkles,
   calendar: CalendarDays,
   whatIf: FlaskConical,
   settings: Settings,

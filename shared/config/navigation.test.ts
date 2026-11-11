@@ -75,6 +75,8 @@ describe("resolveAndroidBackAction", () => {
     expect(resolveAndroidBackAction("/screener")).toBe("pop");
     // SPENDLY-334: salary dashboard.
     expect(resolveAndroidBackAction("/salary")).toBe("pop");
+    // SPENDLY-334: intelligence hub.
+    expect(resolveAndroidBackAction("/intelligence")).toBe("pop");
     // SPENDLY-582 recurring expenses.
     expect(resolveAndroidBackAction("/recurring")).toBe("pop");
     expect(resolveAndroidBackAction("/recurring/sub-1")).toBe("pop");
@@ -110,6 +112,8 @@ describe("isNavItemActive", () => {
     expect(isNavItemActive("/what-if", "whatIf")).toBe(true);
     expect(isNavItemActive("/what-if/abc", "whatIf")).toBe(true);
     expect(isNavItemActive("/what-if", "calendar")).toBe(false);
+    expect(isNavItemActive("/intelligence", "intelligence")).toBe(true);
+    expect(isNavItemActive("/intelligence", "insights")).toBe(false);
     expect(isNavItemActive("/(app)/dashboard", "home")).toBe(true);
     expect(isNavItemActive("/", "home")).toBe(true);
     expect(isNavItemActive("/(app)", "home")).toBe(true);
