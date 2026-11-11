@@ -43,6 +43,8 @@ const INTEGRATED = [
   "recurringSuggestions",
   // SPENDLY-747: the server's fee rows and Journal health report (display only).
   "serverResults",
+  // SPENDLY-325: Salary Intelligence (display only; writers commit through Firestore first).
+  "salaryProfiles", "salaryRecords", "salaryReviews",
 ].sort();
 
 const NOT_YET: Record<string, string> = {

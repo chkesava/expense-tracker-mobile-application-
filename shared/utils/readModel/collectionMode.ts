@@ -49,6 +49,8 @@ export const SWITCHED_COLLECTIONS: readonly string[] = [
   "recurringSuggestions",
   // SPENDLY-747: the server's fee rows and Journal health report (display only).
   "serverResults",
+  // SPENDLY-325: Salary Intelligence (display only; writers commit through Firestore first).
+  "salaryProfiles", "salaryRecords", "salaryReviews",
 ];
 
 /** SPENDLY-745: `shadow` only while readModel.deviceShadow is on, else `firestore` (no on-device compare). */

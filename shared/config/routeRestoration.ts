@@ -48,6 +48,9 @@ const RESTORABLE_ROUTES = [
   "/recurring/",
   // SPENDLY-651: stock screener.
   "/screener",
+  // SPENDLY-334: salary dashboard.
+  "/salary",
+  "/salary/",
 ] as const;
 
 /**

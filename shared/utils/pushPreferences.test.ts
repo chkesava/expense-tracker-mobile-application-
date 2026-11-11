@@ -81,6 +81,8 @@ describe("isPushCategoryEnabled", () => {
     expect(isPushCategoryEnabled({}, "dues")).toBe(false);
     expect(isPushCategoryEnabled({ calendarNotifications: { duesEnabled: true } }, "dues")).toBe(true);
     expect(isPushCategoryEnabled({}, "goals")).toBe(true);
+    expect(isPushCategoryEnabled({}, "salary")).toBe(true);
+    expect(isPushCategoryEnabled({ calendarNotifications: { salaryEnabled: false } }, "salary")).toBe(false);
   });
 
   it("reads the new event switches, on by default", () => {

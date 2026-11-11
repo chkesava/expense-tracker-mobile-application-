@@ -9,6 +9,8 @@ import type { Receivable } from "../types/receivable";
 import type { Subscription } from "../types/subscription";
 import type { EpfContribution } from "../features/epf/types";
 import type { SipPlan } from "../features/sip/types";
+import type { SalaryProfile, SalaryRecord } from "../features/salary/types";
+import type { SalarySignal } from "../features/salary/utils/irregularity";
 import {
   borrowingEvents,
   calendarEventId,
@@ -19,6 +21,7 @@ import {
   incomeEvents,
   investmentEvents,
   receivableEvents,
+  salaryEvents,
   sipEvents,
   subscriptionEvents,
   type CalendarContext,
@@ -38,7 +41,7 @@ describe("contract", () => {
   });
 
   it("documents every source and state", () => {
-    expect(CALENDAR_SOURCES).toHaveLength(14);
+    expect(CALENDAR_SOURCES).toHaveLength(15);
     expect(CALENDAR_STATES).toContain("projected");
   });
 
@@ -191,5 +194,117 @@ describe("boundaries", () => {
   it("respects inclusive range edges across a leap February", () => {
     const events = cardBillEvents([bill({ dueDate: "2028-02-29" }), bill({ id: "b2", dueDate: "2028-03-01" })], new Map(), ctx("2028-02-01", "2028-02-29", "2028-02-01"));
     expect(events.map((e) => e.date)).toEqual(["2028-02-29"]);
+  });
+});
+
+describe("salary events (SPENDLY-333)", () => {
+  const mockRecord = (over: Partial<SalaryRecord> = {}): SalaryRecord => ({
+    id: "sal_1",
+    month: "2026-09",
+    payPeriod: { month: "2026-09" },
+    employer: { name: "Acme Corp" },
+    netAmount: 75000,
+    currency: "INR",
+    paymentDate: "2026-10-01",
+    type: "regular",
+    status: "confirmed",
+    provenance: { source: "user_confirmed" },
+    createdAtMs: 1,
+    updatedAtMs: 1,
+    ...over,
+  });
+
+  const mockProfile: SalaryProfile = {
+    id: "prof_1",
+    primaryEmployer: "Acme Corp",
+    expectedPaydayWindow: { startDay: 28, endDay: 30 },
+    frequency: "monthly",
+    notificationEnabled: true,
+    createdAtMs: 1,
+    updatedAtMs: 1,
+  };
+
+  it("maps confirmed salary and bonus records to actual events", () => {
+    const records = [
+      mockRecord({ id: "s1", paymentDate: "2026-10-01", netAmount: 80000, type: "regular" }),
+      mockRecord({ id: "s2", paymentDate: "2026-10-15", netAmount: 25000, type: "bonus" }),
+      mockRecord({ id: "s_out", paymentDate: "2026-11-01" }),
+      mockRecord({ id: "s_del", paymentDate: "2026-10-05", deletedAt: "2026-10-06" }),
+      mockRecord({ id: "s_rej", paymentDate: "2026-10-05", status: "rejected" }),
+    ];
+
+    const events = salaryEvents(records, [], ctx("2026-10-01", "2026-10-31", "2026-10-15"));
+    const actual = events.filter((e) => e.state === "actual");
+    expect(actual.map((e) => [e.refId, e.state, e.direction, e.amount, e.title])).toEqual([
+      ["s1", "actual", "in", 80000, "Salary · Acme Corp"],
+      ["s2", "actual", "in", 25000, "Bonus · Acme Corp"],
+    ]);
+  });
+
+  it("maps expected upcoming paydays within range", () => {
+    // With past records and profile, expected next payday in late Oct 2026
+    const records = [
+      mockRecord({ id: "s0", month: "2026-08", payPeriod: { month: "2026-08" }, paymentDate: "2026-08-28" }),
+      mockRecord({ id: "s1", month: "2026-09", payPeriod: { month: "2026-09" }, paymentDate: "2026-09-28" }),
+    ];
+
+    const events = salaryEvents(records, [mockProfile], ctx("2026-10-01", "2026-10-31", "2026-10-15"));
+    const expected = events.filter((e) => e.state === "expected");
+    expect(expected).toHaveLength(1);
+    expect(expected[0]).toMatchObject({
+      source: "salary",
+      direction: "in",
+      state: "expected",
+      date: "2026-10-28",
+      title: "Expected salary · Acme Corp",
+      amount: 75000,
+    });
+  });
+
+  it("maps missing and late paycheck signals to overdue events", () => {
+    const signal: SalarySignal = {
+      id: "sig_late",
+      kind: "late_paycheck",
+      severity: "attention",
+      title: "Paycheck late",
+      description: "Expected around 2026-10-10",
+      employerName: "Acme Corp",
+      month: "2026-09",
+      expectedAmount: 75000,
+      expectedWindow: { startDay: 10, endDay: 10, timing: "next_month" },
+      confidence: "high",
+      supportingHistory: {
+        sampleCount: 3,
+        typicalDay: 10,
+        baselineAmount: 75000,
+        expectedWindow: { startDay: 10, endDay: 10, timing: "next_month" },
+      },
+      suggestedActions: [],
+    };
+
+    const events = salaryEvents([], [], ctx("2026-10-01", "2026-10-31", "2026-10-15"), [signal]);
+    expect(events).toEqual([
+      expect.objectContaining({
+        source: "salary",
+        refId: "signal:sig_late",
+        date: "2026-10-10",
+        state: "overdue",
+        direction: "in",
+        title: "Late paycheck · Acme Corp",
+        amount: 75000,
+        actionable: true,
+      }),
+    ]);
+  });
+
+  it("deduplicates income events when matching salary records exist", () => {
+    const incomes: Income[] = [
+      { id: "inc_sal", amount: 75000, source: "Acme Payroll", date: "2026-10-01", month: "2026-10", createdAt: 1 } as Income,
+      { id: "inc_other", amount: 5000, source: "Freelance", date: "2026-10-05", month: "2026-10", createdAt: 1 } as Income,
+    ];
+
+    const salaryIncomeIds = new Set(["inc_sal"]);
+    const events = incomeEvents(incomes, ctx("2026-10-01", "2026-10-31", "2026-10-15"), salaryIncomeIds);
+    expect(events.map((e) => e.refId)).toEqual(["inc_other"]);
   });
 });

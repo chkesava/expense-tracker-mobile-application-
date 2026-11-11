@@ -14,7 +14,7 @@
  * accounts that never saved one). A window may cross midnight (22:00–07:00).
  */
 
-export type PushCategory = "bills" | "calendar" | "dues" | "goals" | "investments" | "shared" | "priceAlerts";
+export type PushCategory = "bills" | "calendar" | "dues" | "goals" | "investments" | "shared" | "priceAlerts" | "salary";
 
 /** Categories whose only switch lives in `pushNotifications.categories`. */
 export type PushEventCategory = "investments" | "shared" | "priceAlerts";
@@ -57,6 +57,7 @@ export const PUSH_CHANNELS: Record<PushCategory, { id: string; name: string; imp
   investments: { id: "investments", name: "SIP and EPF updates", importance: "default" },
   shared: { id: "shared-money", name: "Shared splits and vaults", importance: "default" },
   priceAlerts: { id: "price-alerts", name: "Price alerts", importance: "high" },
+  salary: { id: "salary-payday", name: "Salary & Payday reminders", importance: "default" },
 };
 
 const TIME = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -98,7 +99,7 @@ export function parsePushNotificationSettings(raw: unknown): PushNotificationSet
 export type PushPreferenceSource = {
   pushNotifications?: PushNotificationSettings;
   creditCardBillReminders?: { enabled?: boolean; quietHoursStart?: string; quietHoursEnd?: string };
-  calendarNotifications?: { remindersEnabled?: boolean; duesEnabled?: boolean; quietHoursStart?: string; quietHoursEnd?: string };
+  calendarNotifications?: { remindersEnabled?: boolean; duesEnabled?: boolean; salaryEnabled?: boolean; quietHoursStart?: string; quietHoursEnd?: string };
 };
 
 /** The one window every Spendly notification is delivered in. */
@@ -137,6 +138,8 @@ export function isPushCategoryEnabled(s: PushPreferenceSource, category: PushCat
       return s.calendarNotifications?.remindersEnabled !== false;
     case "dues":
       return s.calendarNotifications?.duesEnabled === true;
+    case "salary":
+      return s.calendarNotifications?.salaryEnabled !== false;
     case "goals":
       return true;
     default: {

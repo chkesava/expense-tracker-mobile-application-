@@ -73,6 +73,8 @@ describe("resolveAndroidBackAction", () => {
     // SPENDLY-580 highest spending categories.
     expect(resolveAndroidBackAction("/top-categories?month=2026-10&period=this_year")).toBe("pop");
     expect(resolveAndroidBackAction("/screener")).toBe("pop");
+    // SPENDLY-334: salary dashboard.
+    expect(resolveAndroidBackAction("/salary")).toBe("pop");
     // SPENDLY-582 recurring expenses.
     expect(resolveAndroidBackAction("/recurring")).toBe("pop");
     expect(resolveAndroidBackAction("/recurring/sub-1")).toBe("pop");

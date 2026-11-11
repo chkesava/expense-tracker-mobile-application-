@@ -35,6 +35,7 @@ service cloud.firestore {
     //   feeSignalDismissals, financialGoals, focus, goalEvents, goalNames,
     //   groupFundEvents, groupFunds,
     //   taxDocuments, taxEntries, taxProfiles, taxReviews, taxSnapshots,
+    //   salaryProfiles, salaryRecords, salaryReviews,
     //   holdings, incomes, investments, meta, portfolioOrders,
     //   portfolioSettings, portfolioSnapshots, portfolioTransactions,
     //   receivableRepayments, receivables, calendarReminders, goalFundingPlans, runwayOverrides, runwaySettings, spaces,
@@ -2056,6 +2057,127 @@ service cloud.firestore {
         allow read: if isOwner(uid);
         allow write: if false;
       }
+
+      // -----------------------------------------------------------------------
+      // SPENDLY-325 Salary Intelligence (epic SPENDLY-324)
+      // -----------------------------------------------------------------------
+      function salaryMonth(v) {
+        return v is string && v.matches('^[0-9]{4}-[0-9]{2}$');
+      }
+
+      function salaryYmd(v) {
+        return v is string && v.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+      }
+
+      function salaryMoney(v) {
+        return v is number && v > 0 && v < 1000000000;
+      }
+
+      function salaryStamps(d) {
+        return d.createdAt is timestamp
+          && d.updatedAt is timestamp
+          && d.createdAtMs is int && d.createdAtMs > 0
+          && d.updatedAtMs is int && d.updatedAtMs >= d.createdAtMs;
+      }
+
+      function salaryProfileWellFormed(profileId) {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['primaryEmployer', 'expectedPaydayWindow', 'frequency', 'primaryAccountId', 'notificationEnabled', 'notes',
+                                 'schemaVersion', 'createdAtMs', 'updatedAtMs', 'createdAt', 'updatedAt'])
+          && d.keys().hasAll(['primaryEmployer', 'expectedPaydayWindow', 'frequency', 'notificationEnabled',
+                              'createdAtMs', 'updatedAtMs', 'createdAt', 'updatedAt'])
+          && d.primaryEmployer is string && d.primaryEmployer.size() > 0 && d.primaryEmployer.size() <= 120
+          && d.expectedPaydayWindow is map
+          && d.expectedPaydayWindow.keys().hasOnly(['startDay', 'endDay'])
+          && d.expectedPaydayWindow.startDay is int && d.expectedPaydayWindow.startDay >= 1 && d.expectedPaydayWindow.startDay <= 31
+          && d.expectedPaydayWindow.endDay is int && d.expectedPaydayWindow.endDay >= 1 && d.expectedPaydayWindow.endDay <= 31
+          && d.frequency == 'monthly'
+          && d.notificationEnabled is bool
+          && (!d.keys().hasAny(['primaryAccountId']) || (d.primaryAccountId is string && d.primaryAccountId.size() <= 80))
+          && optionalText(d, 'notes', 500)
+          && salaryStamps(d)
+          && (resource == null || d.createdAtMs == resource.data.createdAtMs);
+      }
+
+      function salaryRecordWellFormed(recordId) {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['month', 'payPeriod', 'employer', 'netAmount', 'grossAmount', 'currency', 'paymentDate',
+                                 'transactionId', 'accountId', 'type', 'status', 'confidence', 'evidence',
+                                 'breakdown', 'provenance', 'notes', 'deletedAt',
+                                 'schemaVersion', 'createdAtMs', 'updatedAtMs', 'createdAt', 'updatedAt'])
+          && d.keys().hasAll(['month', 'payPeriod', 'employer', 'netAmount', 'currency', 'paymentDate', 'type', 'status', 'provenance',
+                              'createdAtMs', 'updatedAtMs', 'createdAt', 'updatedAt'])
+          && salaryMonth(d.month)
+          && d.payPeriod is map
+          && d.payPeriod.keys().hasAll(['month'])
+          && salaryMonth(d.payPeriod.month)
+          && d.month == d.payPeriod.month
+          && (!d.payPeriod.keys().hasAny(['startDate']) || salaryYmd(d.payPeriod.startDate))
+          && (!d.payPeriod.keys().hasAny(['endDate']) || salaryYmd(d.payPeriod.endDate))
+          && d.employer is map
+          && d.employer.keys().hasAll(['name'])
+          && d.employer.name is string && d.employer.name.size() > 0 && d.employer.name.size() <= 120
+          && (!d.employer.keys().hasAny(['rawName']) || (d.employer.rawName is string && d.employer.rawName.size() <= 160))
+          && (!d.employer.keys().hasAny(['normalizedName']) || (d.employer.normalizedName is string && d.employer.normalizedName.size() <= 120))
+          && (!d.employer.keys().hasAny(['epfEstablishmentId']) || (d.employer.epfEstablishmentId is string && d.employer.epfEstablishmentId.size() <= 80))
+          && (!d.employer.keys().hasAny(['uanOrMemberId']) || (d.employer.uanOrMemberId is string && d.employer.uanOrMemberId.size() <= 40))
+          && salaryMoney(d.netAmount)
+          && (!d.keys().hasAny(['grossAmount']) || d.grossAmount == null || salaryMoney(d.grossAmount))
+          && d.currency is string && d.currency.size() == 3
+          && salaryYmd(d.paymentDate)
+          && d.type in ['regular', 'bonus', 'incentive', 'reimbursement', 'severance', 'stipend', 'other_variable']
+          && d.status in ['detected', 'confirmed', 'manual', 'rejected']
+          && (!d.keys().hasAny(['confidence']) || d.confidence in ['high', 'medium', 'low'])
+          && (!d.keys().hasAny(['evidence']) || (d.evidence is list && d.evidence.size() <= 10))
+          && (!d.keys().hasAny(['breakdown']) || (d.breakdown is map && d.breakdown.keys().hasAll(['netSalary']) && d.breakdown.netSalary is number))
+          && d.provenance is map
+          && d.provenance.keys().hasAll(['source'])
+          && d.provenance.source in ['detection', 'user_confirmed', 'user_created', 'user_corrected']
+          && (!d.keys().hasAny(['transactionId']) || d.transactionId == null || (d.transactionId is string && d.transactionId.size() <= 80))
+          && (!d.keys().hasAny(['accountId']) || d.accountId == null || (d.accountId is string && d.accountId.size() <= 80))
+          && optionalText(d, 'notes', 500)
+          && (!d.keys().hasAny(['deletedAt']) || salaryYmd(d.deletedAt))
+          && salaryStamps(d)
+          && (resource == null || d.createdAtMs == resource.data.createdAtMs);
+      }
+
+      function salaryReviewWellFormed(reviewId) {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['refKey', 'decision', 'salaryType', 'correctedEmployerName', 'correctedPayPeriodMonth',
+                                 'rejectionReason', 'sourceAmount', 'sourceDate',
+                                 'schemaVersion', 'createdAtMs', 'updatedAtMs', 'createdAt', 'updatedAt'])
+          && d.keys().hasAll(['refKey', 'decision', 'sourceAmount', 'sourceDate',
+                              'createdAtMs', 'updatedAtMs', 'createdAt', 'updatedAt'])
+          && d.refKey is string && d.refKey.size() > 7 && d.refKey.matches('^income:[a-zA-Z0-9_-]+$')
+          && d.decision in ['confirm', 'reject', 'reclassify']
+          && (!d.keys().hasAny(['salaryType']) || d.salaryType in ['regular', 'bonus', 'incentive', 'reimbursement', 'severance', 'stipend', 'other_variable'])
+          && (!d.keys().hasAny(['correctedEmployerName']) || (d.correctedEmployerName is string && d.correctedEmployerName.size() <= 120))
+          && (!d.keys().hasAny(['correctedPayPeriodMonth']) || salaryMonth(d.correctedPayPeriodMonth))
+          && (!d.keys().hasAny(['rejectionReason']) || d.rejectionReason in ['not_salary', 'transfer', 'reimbursement', 'loan', 'other'])
+          && salaryMoney(d.sourceAmount)
+          && salaryYmd(d.sourceDate)
+          && salaryStamps(d)
+          && (resource == null || d.createdAtMs == resource.data.createdAtMs);
+      }
+
+      match /salaryProfiles/{profileId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && salaryProfileWellFormed(profileId);
+      }
+
+      // Soft delete only (`deletedAt`): the app never removes a salary record.
+      match /salaryRecords/{recordId} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid) && salaryRecordWellFormed(recordId);
+        allow delete: if false;
+      }
+
+      // Deleting a review restores inference for that transaction candidate.
+      match /salaryReviews/{reviewId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && salaryReviewWellFormed(reviewId);
+      }
+      // END SPENDLY-325 salary
 
       // `collection` is only bound inside this match. Helpers declared on
       // `users/{uid}` cannot read it (null → list/create denied). Validated
