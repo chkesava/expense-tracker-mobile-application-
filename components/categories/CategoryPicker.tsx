@@ -94,6 +94,22 @@ export function CategoryPicker({
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
+  // SPENDLY-753: `autoFocus` alone doesn't reliably focus a RN-Web TextInput
+  // that mounts inside a conditionally-rendered block — a ref + an effect
+  // that fires after the node has actually mounted does.
+  const newParentInputRef = useRef<TextInput>(null);
+  const newSubInputRef = useRef<TextInput>(null);
+  useEffect(() => {
+    if (!showAddParent) return;
+    const frame = requestAnimationFrame(() => newParentInputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [showAddParent]);
+  useEffect(() => {
+    if (!showAddSub) return;
+    const frame = requestAnimationFrame(() => newSubInputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [showAddSub]);
+
   const activeParent = useMemo(
     () =>
       visibleParents.find((c) => c.name === (selectedParentName || category)),
@@ -294,6 +310,7 @@ export function CategoryPicker({
           {showAddParent ? (
             <View style={styles.inlineAddBox}>
               <TextInput
+                ref={newParentInputRef}
                 value={newParentName}
                 onChangeText={setNewParentName}
                 placeholder="Category name"
@@ -448,6 +465,7 @@ export function CategoryPicker({
           {showAddSub ? (
             <View style={styles.inlineAddBox}>
               <TextInput
+                ref={newSubInputRef}
                 value={newSubName}
                 onChangeText={setNewSubName}
                 placeholder="Subcategory name"

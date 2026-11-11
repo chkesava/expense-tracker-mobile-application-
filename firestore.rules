@@ -33,6 +33,7 @@ service cloud.firestore {
     //   epfInterestEntries, epfReconciliations, epfTransferEvents,
     //   decisionEvents, decisions, epfTransfers, expenses, feeReviews,
     //   feeSignalDismissals, financialGoals, focus, goalEvents, goalNames,
+    //   categoryNames, categorySubNames,
     //   groupFundEvents, groupFunds,
     //   taxDocuments, taxEntries, taxProfiles, taxReviews, taxSnapshots,
     //   salaryProfiles, salaryRecords, salaryReviews,
@@ -531,6 +532,15 @@ service cloud.firestore {
 
       function goalNameDocPath(key) {
         return /databases/$(database)/documents/users/$(uid)/goalNames/$(key);
+      }
+
+      // SPENDLY-753 — categoryNames/{key} and categorySubNames/{key} are the
+      // same create-only unique-name lock pattern as goalNames, so a
+      // duplicate category/subcategory name fails the whole write batch
+      // instead of depending on a (possibly truncated) read-before-write
+      // check. See shared/utils/categoryModel.ts for the key derivation.
+      function categoryDocPath(id) {
+        return /databases/$(database)/documents/users/$(uid)/categories/$(id);
       }
 
       // Two-decimal amounts added with increment() can leave binary float dust.
@@ -1230,6 +1240,36 @@ service cloud.firestore {
       match /categoryBudgets/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && personalMoneyWellFormed();
+      }
+      // SPENDLY-753 — create-only unique-name locks, written in the same
+      // batch as the category/subcategory doc they protect (categories
+      // itself stays in the generic owner catch-all below). A duplicate
+      // name's lock create is evaluated as an `update` (the doc already
+      // exists) and `allow update: if false` fails the whole batch.
+      match /categoryNames/{key} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(['categoryId', 'createdAtMs'])
+          && request.resource.data.categoryId is string
+          && request.resource.data.createdAtMs is number
+          && getAfter(categoryDocPath(request.resource.data.categoryId)).data.get('nameKey', '') == key;
+        allow update: if false;
+        // Released only by the rename/archive that moves the category off this key.
+        allow delete: if isOwner(uid)
+          && (!existsAfter(categoryDocPath(resource.data.categoryId))
+              || getAfter(categoryDocPath(resource.data.categoryId)).data.get('nameKey', '') != key);
+      }
+      match /categorySubNames/{key} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(['categoryId', 'createdAtMs'])
+          && request.resource.data.categoryId is string
+          && request.resource.data.createdAtMs is number
+          && getAfter(categoryDocPath(request.resource.data.categoryId)).data.get('subNameKey', '') == key;
+        allow update: if false;
+        allow delete: if isOwner(uid)
+          && (!existsAfter(categoryDocPath(resource.data.categoryId))
+              || getAfter(categoryDocPath(resource.data.categoryId)).data.get('subNameKey', '') != key);
       }
       match /subscriptions/{id} {
         allow read, delete: if isOwner(uid);

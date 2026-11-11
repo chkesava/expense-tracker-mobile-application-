@@ -242,7 +242,10 @@ describe("provider read switches (SPENDLY-673)", () => {
     expect(text).toMatch(/const expensesInMemory = expensesComplete && expensesMode !== "supabase";/);
     expect(text).not.toMatch(/= expensesComplete\s*\?/);
     expect(text).toMatch(/if \(categoriesMode !== "supabase" \|\| !uid\) return categories;/);
-    expect(count(text, "await categoriesForWrite(db)")).toBe(3);
+    // SPENDLY-753: updateCategory and archiveCategory now also verify on
+    // Firestore before claiming/releasing a name lock (5 call sites total:
+    // updateCategory, renameCategory, deleteCategory, mergeCategories, archiveCategory).
+    expect(count(text, "await categoriesForWrite(db)")).toBe(5);
   });
 
   it("in supabase mode categories come from the copy; the revision listener stays for firestore mode", () => {

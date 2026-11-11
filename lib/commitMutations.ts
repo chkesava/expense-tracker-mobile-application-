@@ -85,7 +85,15 @@ function serializeOp(op: MutationOp): SerializedMutationOp {
  * already landed would be an update there and fail the whole batch — with a
  * misleading "not saved" toast — so replay checks the ack first (SPENDLY-608).
  */
-const CREATE_ONLY_SEGMENTS = ["/ledgerEvents/", "/goalEvents/", "/goalNames/", "/groupFundEvents/", "/taxSnapshots/"];
+const CREATE_ONLY_SEGMENTS = [
+  "/ledgerEvents/",
+  "/goalEvents/",
+  "/goalNames/",
+  "/groupFundEvents/",
+  "/taxSnapshots/",
+  "/categoryNames/",
+  "/categorySubNames/",
+];
 
 function opsAreNonIdempotent(ops: SerializedMutationOp[]): boolean {
   return ops.some((op) => {

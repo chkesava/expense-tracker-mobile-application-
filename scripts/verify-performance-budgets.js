@@ -182,7 +182,14 @@ function verifyReferenceQueriesBounded() {
   if (!fs.existsSync(filePath)) return violations;
   const content = fs.readFileSync(filePath, 'utf8');
 
-  const boundedCollections = ['categories', 'subscriptions', 'spaces', 'categorizationRules'];
+  // SPENDLY-753: "categories" was removed from this list on purpose. The
+  // `limit(500)` SPENDLY-412 added here turned out to be exactly the
+  // "runaway account" this guard worried about — in production one user
+  // had 1,665 category docs (SPENDLY-712) and the cap silently truncated
+  // the catalogue instead of guarding anything. The read is revision-gated
+  // (meta/categories) and cached, not a live/looping read, so it's read in
+  // full once per change — see providers/ExpenseReferenceDataProvider.tsx.
+  const boundedCollections = ['subscriptions', 'spaces', 'categorizationRules'];
   for (const col of boundedCollections) {
     if (!isCollectionQueryBounded(content, col)) {
       violations.push({

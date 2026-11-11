@@ -51,6 +51,15 @@ import { scheduleIdleWork } from "@/shared/utils/scheduleIdle";
 import { perfEvent } from "@/lib/perf";
 import { readCategoriesLoadRecord, writeCategoriesLoadRecord } from "@/lib/categoryRevision";
 import { categoriesRevisionOf, loadCategoriesByRevision } from "@/shared/utils/categoryRevision";
+import { logWarning } from "@/lib/errors";
+
+/** SPENDLY-753: the catalogue has no hard ceiling; this only flags a future regression. */
+const CATEGORIES_SANITY_CAP = 3000;
+function warnIfCategoriesCountIsImplausible(count: number): void {
+  if (count > CATEGORIES_SANITY_CAP) {
+    logWarning("categories.countImplausible", new Error(`categories count ${count} exceeds sanity cap`));
+  }
+}
 
 export type ExpenseReferenceData = {
   categories: Category[];
@@ -265,20 +274,21 @@ export function ExpenseReferenceDataProvider({
     }
     setCategoriesLoading(true);
     if (categoriesSource.mode === "supabase") {
-      // SPENDLY-674: the copy and realtime replace the revision listener.
-      // Writers keep bumping the revision, so a fallback to Firestore stays correct.
-      return categoriesSource.subscribe(
-        (docs) => {
-          setCategories(docs.map((d) => ({ id: d.id, ...d.data } as Category)));
-          setCategoriesError(null);
-          setCategoriesLoading(false);
-        },
-        { limit: 500 }
-      );
+      // SPENDLY-674/753: the copy (already complete, no `limit`) and realtime
+      // replace the revision listener; a fallback to Firestore stays correct.
+      return categoriesSource.subscribe((docs) => {
+        warnIfCategoriesCountIsImplausible(docs.length);
+        setCategories(docs.map((d) => ({ id: d.id, ...d.data } as Category)));
+        setCategoriesError(null);
+        setCategoriesLoading(false);
+      });
     }
     const path = `users/${uid}/categories`;
     const metaPath = `users/${uid}/meta/categories`;
-    const categoriesQuery = query(collection(db, "users", uid, "categories"), limit(500));
+    // SPENDLY-753: no `limit` — `getDocs`/`onSnapshot` already returns every
+    // matching doc in one call; a hard cap here silently truncated the
+    // catalogue (prod case: 1,665 category docs for one user, SPENDLY-712).
+    const categoriesQuery = query(collection(db, "users", uid, "categories"));
     // A retry (categoriesAttempt > 0) skips the cache once.
     let force = categoriesAttempt > 0;
     let cancelled = false;
@@ -296,6 +306,7 @@ export function ExpenseReferenceDataProvider({
     const apply = (seq: number, revision: number, loaded: Category[], fromCache: boolean) => {
       if (cancelled || seq !== loadSeq) return;
       perfEvent("firestore_first_snapshot", { collection: "categories", docCount: loaded.length, fromCache });
+      warnIfCategoriesCountIsImplausible(loaded.length);
       loadedRevision = revision;
       setCategories(loaded);
       setCategoriesError(null);
