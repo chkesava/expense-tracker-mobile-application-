@@ -9,6 +9,7 @@ import {
   buildCreateGroupFund,
   buildEditGroupFund,
   buildOpening,
+  buildPastPayout,
   buildPayout,
   buildPurposeTransfer,
   buildReversal,
@@ -472,5 +473,98 @@ describe("groupFundWritePlanToOps", () => {
     const a = groupFundWritePlanToOps(UID, plan(contribution("ev9")({ fund: baseFund() })), sentinels);
     const b = groupFundWritePlanToOps(UID, plan(contribution("ev9")({ fund: baseFund() })), sentinels);
     expect(b).toEqual(a);
+  });
+});
+
+describe("SPENDLY-752: payouts draw held money across the fund's accounts", () => {
+  // The ticket: 500 collected into cash, 500 into SBI, then 1,000 paid from SBI.
+  const collected = () =>
+    run(
+      contribution("c1", { amount: 500, accountId: "cash" }),
+      contribution("c2", { memberId: "m2", amount: 500, accountId: "sbi" })
+    );
+  const payFromSbi = (eventId: string, amount: number) => (s: { fund: GroupFund }) =>
+    buildPayout(ctx(eventId), s.fund, { purposeId: "appu", amount, date: "2026-11-30", accountId: "sbi" });
+
+  it("cross account: nothing stays held anywhere, and only SBI's balance moves", () => {
+    const before = collected();
+    const p = plan(payFromSbi("p1", 1000)(before));
+    expect(p.events[0].heldDraw).toEqual({ sbi: 500, cash: 500 });
+    expect(p.increments).toMatchObject({ "heldByAccount.sbi": -500, "heldByAccount.cash": -500 });
+    expect(p.balanceLegs).toEqual([{ accountId: "sbi", amountDelta: -1000, date: "2026-11-30" }]);
+    const after = apply(before, p);
+    expect(after.fund.heldByAccount).toEqual({ cash: 0, sbi: 0 });
+    expect(after.fund.totals.held).toBe(0);
+    expect(reconcileGroupFund(after.fund, after.events)).toEqual([]);
+  });
+
+  it("same account and partial: only the paying account's share moves", () => {
+    const after = run(...[contribution("c1", { amount: 500, accountId: "cash" }), contribution("c2", { memberId: "m2", amount: 500, accountId: "sbi" })], payFromSbi("p1", 300));
+    expect(after.events[2].heldDraw).toEqual({ sbi: 300 });
+    expect(after.fund.heldByAccount).toEqual({ cash: 500, sbi: 200 });
+    const more = apply(after, plan(payFromSbi("p2", 400)(after)));
+    expect(more.fund.heldByAccount).toEqual({ cash: 300, sbi: 0 });
+    expect(reconcileGroupFund(more.fund, more.events)).toEqual([]);
+  });
+
+  it("overpayment is still refused against what the purpose holds", () => {
+    expect(payFromSbi("p1", 1000.01)(collected())).toMatchObject({ ok: false, issues: ["exceeds_held"] });
+  });
+
+  it("from an account that holds nothing for the fund", () => {
+    const before = run(contribution("c1", { amount: 500, accountId: "cash" }));
+    const after = apply(before, plan(payFromSbi("p1", 200)(before)));
+    expect(after.events[1].heldDraw).toEqual({ cash: 200 });
+    expect(after.fund.heldByAccount).toEqual({ cash: 300 });
+  });
+
+  it("money held in no account: the draw is stored empty, so no account goes below zero", () => {
+    const before = run((s) => buildOpening(ctx("o1"), s.fund, { purposeId: "appu", amount: 1000, date: "2026-11-01" }));
+    const p = plan(payFromSbi("p1", 400)(before));
+    expect(p.events[0].heldDraw).toEqual({});
+    const after = apply(before, p);
+    expect(after.fund.heldByAccount).toEqual({});
+    expect(reconcileGroupFund(after.fund, after.events)).toEqual([]);
+  });
+
+  it("a past payout draws the same way", () => {
+    const before = collected();
+    const p = plan(buildPastPayout(ctx("pp"), before.fund, { purposeId: "appu", amount: 1000, date: "2026-10-30", accountId: "sbi" }));
+    expect(p.events[0].heldDraw).toEqual({ sbi: 500, cash: 500 });
+    expect(p.balanceLegs).toEqual([]);
+    const unattributed = plan(buildPastPayout(ctx("pp2"), before.fund, { purposeId: "appu", amount: 100, date: "2026-10-30" }));
+    expect(unattributed.events[0].heldDraw).toBeUndefined();
+  });
+
+  it("the undo gives back exactly the draw, and credits only the paying account", () => {
+    const paid = apply(collected(), plan(payFromSbi("p1", 1000)(collected())));
+    const p = plan(buildReversal(ctx("x"), paid.fund, { target: paid.events[2], knownEvents: paid.events, date: "2026-12-01" }));
+    expect(p.events[0].heldDraw).toEqual({ sbi: 500, cash: 500 });
+    expect(p.balanceLegs).toEqual([{ accountId: "sbi", amountDelta: 1000, date: "2026-12-01" }]);
+    const undone = apply(paid, p);
+    expect(undone.fund.heldByAccount).toEqual({ cash: 500, sbi: 500 });
+    expect(reconcileGroupFund(undone.fund, undone.events)).toEqual([]);
+  });
+
+  it("the undo of a pre-752 payout gives everything back to its own account, as before", () => {
+    const legacy: GroupFundEvent = {
+      id: "old", fundId: "f1", kind: "payout", amount: 300, purposeId: "appu", date: "2026-11-01",
+      accountId: "sbi", accountEntryIds: ["gf_old"], actorUid: UID, createdAtMs: 1,
+    };
+    const p = plan(buildReversal(ctx("x"), collected().fund, { target: legacy, knownEvents: [legacy], date: "2026-12-01" }));
+    expect(p.events[0].heldDraw).toEqual({ sbi: 300 });
+    expect(p.increments["heldByAccount.sbi"]).toBe(300);
+  });
+
+  it("a retry builds the same plan with the same ids (create-only events refuse the replay)", () => {
+    const before = collected();
+    const a = plan(payFromSbi("p1", 1000)(before));
+    const b = plan(payFromSbi("p1", 1000)(before));
+    expect(b).toEqual(a);
+    expect(groupFundWritePlanToOps(UID, a, sentinels).map((o) => o.ref.path)).toEqual([
+      "users/u1/groupFunds/f1",
+      "users/u1/groupFundEvents/p1",
+      "users/u1/accountEntries/gf_p1",
+    ]);
   });
 });

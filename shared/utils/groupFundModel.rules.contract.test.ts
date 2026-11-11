@@ -63,6 +63,9 @@ function allOps() {
     note: "n",
   });
   if (!contribution.ok) throw new Error(contribution.issues.join(","));
+  const payout = buildPayout(ctx("pay"), fund, { purposeId: "a", amount: 10, date: "2026-11-05", accountId: "acc2" });
+  if (!payout.ok) throw new Error(payout.issues.join(","));
+  expect(payout.plan.events[0].heldDraw).toEqual({ acc: 10 });
   const results = [
     buildCreateGroupFund(ctx(), "f", { name: "Dokra", notes: "n", startPeriod: "2026-09", purposes: fund.purposes, members: fund.members }),
     buildEditGroupFund(ctx(), fund, { name: "Dokra 2", notes: "x", status: "archived", startPeriod: "2026-08" }),
@@ -87,6 +90,12 @@ function allOps() {
       knownEvents: contribution.plan.events,
       date: "2026-11-06",
       note: "n",
+    }),
+    // SPENDLY-752: a payout's undo carries its heldDraw.
+    buildReversal(ctx("xp"), fund, {
+      target: payout.plan.events[0],
+      knownEvents: payout.plan.events,
+      date: "2026-11-06",
     }),
   ];
   return results.flatMap((r) => {
@@ -138,6 +147,7 @@ describe("Group Funds rules ↔ builders contract", () => {
     const event = fn("groupFundEventWellFormed");
     expect(event).toContain(`optionalText(d, 'note', ${GROUP_FUND_LIMITS.noteMax})`);
     expect(event).toContain(`optionalText(d, 'recipient', ${GROUP_FUND_LIMITS.recipientMax})`);
+    expect(event).toContain(`d.heldDraw.size() <= ${GROUP_FUND_LIMITS.maxHeldDrawAccounts}`);
     expect(event).toContain(`optionalText(d, 'reference', ${GROUP_FUND_LIMITS.referenceMax})`);
   });
 

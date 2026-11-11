@@ -115,6 +115,7 @@ Group money lives in the user's real accounts, so the real balance must move. It
   - Opening balance is an event, not a stored field, so every number comes from the history.
   - Transfers between funds are out of the first version; only transfers between purposes of one fund are supported.
   - A payout may come from any account (no per-account check). Reconciliation (S6) shows where held money sits against each balance.
+  - **SPENDLY-752:** a payout first takes held money from the paying account, then from the fund's other accounts (largest first), and stores that split as `heldDraw` on the event. No account's held amount goes below zero. See docs/SPENDLY-752-held-funds-cross-account-payout.md.
 - **S2:**
   - Group-fund account entries can't be edited or deleted; only a reversal undoes them.
   - Contributions and payouts must use cash or a bank account. A credit card or a missing account is refused.

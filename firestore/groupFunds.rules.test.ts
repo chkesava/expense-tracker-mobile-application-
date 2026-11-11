@@ -476,3 +476,39 @@ describe("reversals and immutability", () => {
     await assertFails(getDoc(doc(other, "users", OWNER, "groupFundEvents", "c1")));
   });
 });
+
+describe("SPENDLY-752: a payout's held draw across accounts", () => {
+  async function collectedThenPaid() {
+    await createFund();
+    await commit(ownerDb(), contribution(await readFund(), "c1", 500, "cash"));
+    await commit(ownerDb(), contribution(await readFund(), "c2", 500, "hdfc"));
+    const p = plan(buildPayout(ctx("p1"), await readFund(), { purposeId: "appu", amount: 1000, date: "2026-11-06", accountId: "hdfc" }));
+    await assertSucceeds(commit(ownerDb(), p));
+  }
+
+  it("records 500 cash + 500 bank paid out from the bank with nothing left held in either", async () => {
+    await collectedThenPaid();
+    const fund = await readFund();
+    expect(fund.heldByAccount).toEqual({ cash: 0, hdfc: 0 });
+    expect(fund.totals.held).toBe(0);
+    expect((await readEvent("p1")).heldDraw).toEqual({ hdfc: 500, cash: 500 });
+    expect(reconcileGroupFund(fund, [await readEvent("c1"), await readEvent("c2"), await readEvent("p1")])).toEqual([]);
+  });
+
+  it("undoes the payout with exactly its draw, and refuses an undo that gives back a different one", async () => {
+    await collectedThenPaid();
+    const target = await readEvent("p1");
+    const forged = plan(buildReversal(ctx("x"), await readFund(), { target: { ...target, id: "p1", heldDraw: { hdfc: 1000 } }, knownEvents: [], date: "2026-11-09" }));
+    await assertFails(commit(ownerDb(), forged));
+    const rev = plan(buildReversal(ctx("x"), await readFund(), { target: { ...target, id: "p1" }, knownEvents: [], date: "2026-11-09" }));
+    await assertSucceeds(commit(ownerDb(), rev));
+    expect((await readFund()).heldByAccount).toEqual({ cash: 500, hdfc: 500 });
+  });
+
+  it("refuses a held draw on anything but a payout or its undo", async () => {
+    await createFund();
+    const p = contribution(await readFund(), "c1", 500, "cash");
+    p.events[0] = { ...p.events[0], heldDraw: { cash: 1 } };
+    await assertFails(commit(ownerDb(), p));
+  });
+});
