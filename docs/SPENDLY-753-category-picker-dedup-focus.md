@@ -51,6 +51,15 @@ Web category/subcategory picker diverges from Android: duplicate category names 
 
 **No live data was mutated** at any point — both runs were read-only against the emulator; the 5 synthetic docs were written and deleted by a throwaway script against the *local emulator only*, never production.
 
+**Run 3 — the real affected account, read-only, via the `Category duplicate audit` GitHub Actions workflow (run 43069672928, 2026-11-11):**
+- **571 total categories** (32 parents, 539 subcategories). Firestore and Supabase agree exactly: same total, same breakdown, `missingFromSupabase: []`, `missingFromFirestore: []` — no cross-store parity issue on this account today.
+- **571 > 500** — this account was concretely being truncated by the old `limit(500)` cap before this fix, losing roughly 70 docs from view. Direct confirmation of the root cause on the actually-reported account, not just the general prod precedent (SPENDLY-712).
+- **By status:** 343 active, 228 archived, 1 hidden, 515 default, 56 custom.
+- **2 duplicate parent groups:** "Maintenance and Repair Services" — **3 copies** (`AVazrTBbDdQVGuOdGEw7`, `HkGeRLPxTpASND9UHdJA`, `lmn2JILiVJeo1Mq2HW3M`), the exact example named in the ticket; "Devotional" — 2 copies (`PgJDyeOFaleLXr98Jwv5`, `m9412N4JhCX0DtglhCii`).
+- **7 duplicate subcategory groups**, all parent-scoped: "Soda", "Fruits", "Biriyani", "Sweets", "Water bottle" under one parent (`ansX9y8FSTbxVH6RLn5f`), and "Flowers" under one of the duplicated "Devotional" parents (`m9412N4JhCX0DtglhCii`).
+- **8 default docs flagged with no `semanticKey`** — a real but separate data-quality note, not part of this ticket's symptom.
+- **Dry-run repair plan** (read-only, not applied): proposes the oldest doc in each group as canonical, e.g. "Maintenance and Repair Services" → keep `lmn2JILiVJeo1Mq2HW3M`, review `AVazrTBbDdQVGuOdGEw7`/`HkGeRLPxTpASND9UHdJA`. **Nothing was merged, archived, or deleted.**
+
 ## Verification
 - `npm test` — **662/662 test files pass** (9,061 tests; includes the new `shared/utils/categoryModel.test.ts`, `scripts/lib/categoryDuplicateAuditCore.test.ts`, and the updated `lib/readModelLocal/providerSwitch.test.ts` count/regex assertions).
 - `npx tsc -p tsconfig.json --noEmit` — 0 errors.
@@ -59,6 +68,9 @@ Web category/subcategory picker diverges from Android: duplicate category names 
 - `scripts/verify-performance-budgets.js`'s `verifyReferenceQueriesBounded` guard updated: `categories` removed from its `boundedCollections` list with an inline explanation (the `limit(500)` it was protecting *was* the bug).
 - Manual Expo web check: **not done in this session** — no browser available here. Per the project's convention (`[User does UI review]`), this is for the user to check on local Expo web with demo data before merge: new parent/subcategory add input receives focus and accepts typing; a duplicate name is rejected with a toast; Add/Edit expense category flows still work; SPENDLY-722's no-flip behavior still holds.
 - No automated Playwright exists in this repo (`package.json` has no `playwright` dependency) — the ticket's "verify in Playwright" (AC8) can't be fulfilled by CI here; flagged as a known gap rather than silently skipped.
+
+## Deploy status
+- **Firestore rules deployed to production** 2026-11-11 (dry run 43068569873, then live run 43070214971) — the `categoryNames`/`categorySubNames` locks are now enforced; the ticket's "mandatory investigation" gate is closed with real data (Run 3 above).
 
 ## Repairing existing duplicates (the actual fix for already-duplicated data)
 `scripts/categoryDuplicateAudit.ts` is read-only and never was meant to repair anything. The repair itself is `scripts/categoryDuplicateRepair.ts` (rules: `scripts/lib/categoryDuplicateRepairCore.ts`), dry run by default (`--apply` to write), wired through `scripts/lib/dailyJobCore.ts`'s `applyJobWrites` — the same server-writer contract every other daily job in this repo uses (`users/{uid}/…` only, stamped, chunked, pushed to the read model after commit) — and a `Category duplicate repair` GitHub Actions workflow (`dry_run` default `true`).
@@ -69,9 +81,11 @@ For each duplicate group it finds (reusing the audit's own grouping + canonical-
 
 Proven end-to-end against the local emulator: a duplicate-parent-with-colliding-children scenario (mirroring the real account's "Maintenance and Repair Services" / "Plumbing" shape) and a plain duplicate-subcategory scenario, both dry-run then `--apply`, verified the resulting Firestore state field-by-field, then confirmed a re-run is a no-op (idempotent — archived docs are excluded from active-duplicate detection, so nothing is repaired twice).
 
-**Not yet run against the real account.** This needs the same uid as the audit, a review of what it would do (dry run), and explicit approval before ever passing `--apply` / setting `dry_run: false` — per the ticket's own data-safety rules and CLAUDE.md's migration-safety rule. Nothing in this PR runs it against production.
+**Not yet run against the real account.** This needs the same uid as the audit, a review of what it would do (dry run), and explicit approval before ever passing `--apply` / setting `dry_run: false` — per the ticket's own data-safety rules and CLAUDE.md's migration-safety rule. The real account has 2 duplicate parent groups and 7 duplicate subcategory groups today (Run 3 above); nothing has been merged, archived, or deleted there yet.
 
 ## Unresolved risks
-1. **Manual web verification (focus, toast, picker rendering) hasn't been done in this session** — needs the user's own check on local Expo web.
-2. **`CategoryManager.tsx`'s add-subcategory input was deliberately left unfocused-on-expand** (see table above) — flagging in case the actual reported screenshot was from this screen rather than the expense-entry picker; if so, a different, narrower fix (e.g. its own explicit "+" toggle) would be needed there.
-3. **Category budgets aren't relabeled for a subcategory-level merge's parent string** (only `category`/`subcategory` fields it directly matches) — matches the scope of the existing `mergeCategories`, not a new gap introduced here.
+1. **The real account's duplicates haven't been repaired yet.** The tool above is built and proven against the emulator; it hasn't been run against production. Needs a reviewed dry run and explicit approval before `--apply` / `dry_run: false`.
+2. **Manual web verification (focus, toast, picker rendering) hasn't been done in this session** — needs the user's own check on local Expo web.
+3. **`CategoryManager.tsx`'s add-subcategory input was deliberately left unfocused-on-expand** (see table above) — flagging in case the actual reported screenshot was from this screen rather than the expense-entry picker; if so, a different, narrower fix (e.g. its own explicit "+" toggle) would be needed there.
+4. **8 default category docs on the real account have no `semanticKey`** — found by the audit, unrelated to this ticket's symptom; worth its own look if confirmed elsewhere.
+5. **Category budgets aren't relabeled for a subcategory-level merge's parent string** (only `category`/`subcategory` fields it directly matches) — matches the scope of the existing `mergeCategories`, not a new gap introduced here.
