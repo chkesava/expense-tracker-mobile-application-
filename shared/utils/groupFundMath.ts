@@ -7,12 +7,13 @@
  * the stored totals; they do not call the rebuild.
  */
 
-import type {
-  GroupFund,
-  GroupFundEvent,
-  GroupFundEventKind,
-  GroupFundPurpose,
-  GroupFundTotals,
+import {
+  GROUP_FUND_LIMITS,
+  type GroupFund,
+  type GroupFundEvent,
+  type GroupFundEventKind,
+  type GroupFundPurpose,
+  type GroupFundTotals,
 } from "../types/groupFund";
 import { emptyGroupFundTotals, fundStartPeriod, memberOwesIn } from "./groupFundModel";
 import { roundMoney } from "./money";
@@ -28,13 +29,66 @@ export type GroupFundEffect = {
   accountDeltas: Record<string, number>;
 };
 
-type EffectInput = Pick<GroupFundEvent, "kind" | "amount" | "accountId" | "toAccountId" | "reversedKind">;
+type EffectInput = Pick<GroupFundEvent, "kind" | "amount" | "accountId" | "toAccountId" | "reversedKind" | "heldDraw">;
+
+/**
+ * SPENDLY-752 — which accounts a payout takes the fund's held money from.
+ *
+ * A payout may come from any account (docs/SPENDLY-678-group-funds.md). The
+ * paying account gives up what it holds for the fund first. When it pays more
+ * than that, the user fronted their own money, so the same amount held in the
+ * fund's other accounts becomes theirs: it is drawn from those accounts,
+ * largest holding first (ties by account id, so every device agrees). Whatever
+ * is still left came from held money not recorded in any account (an opening
+ * balance with no account) and is drawn from no account. At most
+ * `maxHeldDrawAccounts` accounts are drawn from (the rules' bound).
+ *
+ * No account's held amount goes below zero, and the drawn amounts never add up
+ * to more than `amount`. Account balances are not touched: only the held /
+ * yours split moves.
+ */
+export function allocatePayoutDraw(
+  heldByAccount: Readonly<Record<string, number>> | undefined,
+  accountId: string,
+  amount: number
+): Record<string, number> {
+  const held = heldByAccount ?? {};
+  const draw: Record<string, number> = {};
+  let left = roundMoney(amount);
+  const take = (id: string, available: number) => {
+    const taken = roundMoney(Math.min(left, available));
+    if (taken <= 0.005) return;
+    draw[id] = roundMoney((draw[id] ?? 0) + taken);
+    left = roundMoney(left - taken);
+  };
+  take(accountId, held[accountId] ?? 0);
+  const others = Object.entries(held)
+    .filter(([id, v]) => id !== accountId && v > 0.005)
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  for (const [id, v] of others) {
+    if (left <= 0.005 || Object.keys(draw).length >= GROUP_FUND_LIMITS.maxHeldDrawAccounts) break;
+    take(id, v);
+  }
+  return draw;
+}
+
+function payoutDeltas(accountId: string | undefined, amount: number, heldDraw: Record<string, number> | undefined) {
+  const accountDeltas: Record<string, number> = {};
+  if (heldDraw) {
+    for (const [id, v] of Object.entries(heldDraw)) if (v) accountDeltas[id] = -v;
+  } else if (accountId) {
+    // Before SPENDLY-752: the paying account alone (it could go below zero).
+    accountDeltas[accountId] = -amount;
+  }
+  return accountDeltas;
+}
 
 function baseEffect(
   kind: Exclude<GroupFundEventKind, "reversal">,
   amount: number,
   accountId: string | undefined,
-  toAccountId: string | undefined
+  toAccountId: string | undefined,
+  heldDraw?: Record<string, number>
 ): GroupFundEffect {
   const accountDeltas: Record<string, number> = {};
   switch (kind) {
@@ -45,8 +99,7 @@ function baseEffect(
       if (accountId) accountDeltas[accountId] = amount;
       return { buckets: { contributions: amount }, heldDelta: amount, accountDeltas };
     case "payout":
-      if (accountId) accountDeltas[accountId] = -amount;
-      return { buckets: { payouts: amount }, heldDelta: -amount, accountDeltas };
+      return { buckets: { payouts: amount }, heldDelta: -amount, accountDeltas: payoutDeltas(accountId, amount, heldDraw) };
     case "transfer_out":
       return { buckets: { transfersOut: amount }, heldDelta: -amount, accountDeltas };
     case "transfer_in":
@@ -66,13 +119,16 @@ function negate(effect: GroupFundEffect): GroupFundEffect {
   return { buckets, heldDelta: -effect.heldDelta, accountDeltas };
 }
 
-/** What one event does to its fund. A reversal is the exact negation of what it undoes. */
+/**
+ * What one event does to its fund. A reversal is the exact negation of what it
+ * undoes: a payout's reversal carries the payout's `heldDraw` and gives it back.
+ */
 export function groupFundEventEffect(event: EffectInput): GroupFundEffect {
   if (event.kind === "reversal") {
     if (!event.reversedKind) return { buckets: {}, heldDelta: 0, accountDeltas: {} };
-    return negate(baseEffect(event.reversedKind, event.amount, event.accountId, event.toAccountId));
+    return negate(baseEffect(event.reversedKind, event.amount, event.accountId, event.toAccountId, event.heldDraw));
   }
-  return baseEffect(event.kind, event.amount, event.accountId, event.toAccountId);
+  return baseEffect(event.kind, event.amount, event.accountId, event.toAccountId, event.heldDraw);
 }
 
 function applyToTotals(totals: GroupFundTotals, effect: GroupFundEffect): GroupFundTotals {
@@ -90,13 +146,31 @@ export type GroupFundRebuild = {
   heldByAccount: Record<string, number>;
 };
 
-/** The totals a fund should store, from its full event history. */
+/**
+ * The totals a fund should store, from its full event history (in the order it
+ * happened).
+ *
+ * SPENDLY-752: a payout saved before 752 has no `heldDraw`; it is replayed
+ * with `allocatePayoutDraw` against the held money at that point, and an old
+ * reversal of it gives back that same draw. This is the corrected per-account
+ * split the repair script writes (scripts/repair-group-fund-held.ts).
+ */
 export function rebuildGroupFundTotals(events: readonly GroupFundEvent[]): GroupFundRebuild {
   let totals = emptyGroupFundTotals();
   const byPurpose: Record<string, GroupFundTotals> = {};
   const heldByAccount: Record<string, number> = {};
+  const replayedDraws = new Map<string, Record<string, number>>();
   for (const event of events) {
-    const effect = groupFundEventEffect(event);
+    let input: GroupFundEvent = event;
+    if (!event.heldDraw && event.kind === "payout" && event.accountId) {
+      const heldDraw = allocatePayoutDraw(heldByAccount, event.accountId, event.amount);
+      replayedDraws.set(event.id, heldDraw);
+      input = { ...event, heldDraw };
+    } else if (!event.heldDraw && event.kind === "reversal" && event.reversedKind === "payout" && event.reversalOf) {
+      const heldDraw = replayedDraws.get(event.reversalOf);
+      if (heldDraw) input = { ...event, heldDraw };
+    }
+    const effect = groupFundEventEffect(input);
     totals = applyToTotals(totals, effect);
     byPurpose[event.purposeId] = applyToTotals(byPurpose[event.purposeId] ?? emptyGroupFundTotals(), effect);
     for (const [accountId, delta] of Object.entries(effect.accountDeltas)) {

@@ -42,7 +42,12 @@ import {
 } from "../types/groupFund";
 import type { MutationOp } from "../types/mutations";
 import type { BalanceLeg } from "./ledgerAccountDeltas";
-import { groupFundEventEffect, reversedGroupFundEventIds, type GroupFundEffect } from "./groupFundMath";
+import {
+  allocatePayoutDraw,
+  groupFundEventEffect,
+  reversedGroupFundEventIds,
+  type GroupFundEffect,
+} from "./groupFundMath";
 import {
   cleanGroupFundText,
   emptyGroupFundTotals,
@@ -156,6 +161,28 @@ function purposeHeld(fund: GroupFund, purposeId: string): number {
 
 function accountHeld(fund: GroupFund, accountId: string): number {
   return fund.heldByAccount?.[accountId] ?? 0;
+}
+
+/**
+ * SPENDLY-752: the accounts a payout takes held money from, as this device
+ * sees the fund (`allocatePayoutDraw`). Stored on the event so the fund's
+ * increments, a rebuild and a later reversal all use the same split. Always
+ * stored, even empty (no account holds anything for the fund): a payout
+ * without `heldDraw` is read as a pre-752 one.
+ */
+function heldDrawFor(fund: GroupFund, accountId: string, amount: number): Record<string, number> {
+  return allocatePayoutDraw(fund.heldByAccount, accountId, amount);
+}
+
+/**
+ * A payout's reversal gives back exactly what the payout drew. A payout saved
+ * before SPENDLY-752 has no draw; it took everything from its own account, so
+ * its reversal gives everything back there (stated, so a rebuild agrees).
+ */
+function reversalHeldDraw(target: GroupFundEvent): Record<string, number> | undefined {
+  if (target.kind !== "payout") return undefined;
+  if (target.heldDraw) return { ...target.heldDraw };
+  return target.accountId ? { [target.accountId]: target.amount } : undefined;
 }
 
 function moneyPlan(
@@ -480,6 +507,7 @@ export function buildPayout(ctx: GroupFundWriteContext, fund: GroupFund, input: 
     purposeId: purpose.id,
     date: input.date,
     accountId: input.accountId,
+    heldDraw: heldDrawFor(fund, input.accountId, amount),
     accountEntryIds: [entry.id],
     recipient,
     reference: optionalText(input.reference),
@@ -746,12 +774,14 @@ export function buildPastPayout(ctx: GroupFundWriteContext, fund: GroupFund, inp
     issues.push("exceeds_held");
   }
   if (issues.length > 0) return { ok: false, issues };
+  const amount = roundMoney(input.amount);
   const event = newEvent(ctx, fund.id, {
     kind: "payout",
-    amount: roundMoney(input.amount),
+    amount,
     purposeId: input.purposeId,
     date: input.date,
     accountId: input.accountId,
+    heldDraw: input.accountId ? heldDrawFor(fund, input.accountId, amount) : undefined,
     attributionOnly: true,
     recipient: optionalText(input.recipient),
     reference: optionalText(input.reference),
@@ -818,6 +848,7 @@ function reversalOf(
     date,
     accountId: target.accountId,
     toAccountId: target.toAccountId,
+    heldDraw: reversalHeldDraw(target),
     accountEntryIds: entries.length > 0 ? entries.map((e) => e.id) : undefined,
     transferPairId: target.transferPairId,
     note,

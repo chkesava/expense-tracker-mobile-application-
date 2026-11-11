@@ -866,7 +866,7 @@ service cloud.firestore {
         let d = request.resource.data;
         return d.keys().hasOnly([
             'fundId', 'kind', 'amount', 'purposeId', 'date', 'period', 'memberId',
-            'accountId', 'toAccountId', 'accountEntryIds', 'attributionOnly', 'recipient',
+            'accountId', 'toAccountId', 'heldDraw', 'accountEntryIds', 'attributionOnly', 'recipient',
             'reference', 'note', 'transferPairId', 'reversalOf', 'reversedKind', 'actorUid',
             'createdAtMs', 'createdAt', 'updatedAt'])
           && d.keys().hasAll(['fundId', 'kind', 'amount', 'purposeId', 'date',
@@ -886,6 +886,12 @@ service cloud.firestore {
           && optionalText(d, 'transferPairId', 160)
           && (!d.keys().hasAny(['accountEntryIds'])
               || (d.accountEntryIds is list && d.accountEntryIds.size() <= 2))
+          // SPENDLY-752: which accounts a payout drew held money from (and its
+          // undo gives back). Only on a payout or a payout's reversal.
+          && (!d.keys().hasAny(['heldDraw'])
+              || (d.heldDraw is map && d.heldDraw.size() <= 20
+                  && (d.kind == 'payout'
+                      || (d.kind == 'reversal' && d.get('reversedKind', '') == 'payout'))))
           // SPENDLY-700: a backfilled event for money already in (or out of) the
           // balance writes no account entry; it can't also list one.
           && (!d.keys().hasAny(['attributionOnly'])
@@ -937,7 +943,10 @@ service cloud.firestore {
           && target.fundId == d.fundId
           && target.kind == d.reversedKind
           && target.amount == d.amount
-          && target.purposeId == d.purposeId;
+          && target.purposeId == d.purposeId
+          // SPENDLY-752: a payout's undo gives back exactly what it drew.
+          && (!target.keys().hasAny(['heldDraw'])
+              || d.get('heldDraw', null) == target.heldDraw);
       }
 
       // A group-fund account entry is created only with the new event that lists it.

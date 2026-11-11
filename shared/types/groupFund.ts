@@ -62,6 +62,8 @@ export const GROUP_FUND_LIMITS = {
   referenceMax: 80,
   maxPurposes: 20,
   maxMembers: 200,
+  /** SPENDLY-752: accounts one payout may draw held money from (rules mirror it). */
+  maxHeldDrawAccounts: 20,
 } as const;
 
 export interface GroupFundPurpose {
@@ -139,6 +141,13 @@ export interface GroupFundEvent {
   accountId?: string;
   /** account_move only: the destination account. */
   toAccountId?: string;
+  /**
+   * SPENDLY-752 — payout, and the reversal of one: how much of the fund's held
+   * money each account gave up (positive amounts). The paying account gives
+   * up what it holds first; the rest comes from the fund's other accounts
+   * (`allocatePayoutDraw`). Missing on payouts saved before 752.
+   */
+  heldDraw?: Record<string, number>;
   /** Ids of the `accountEntries` rows this event wrote. */
   accountEntryIds?: string[];
   /**

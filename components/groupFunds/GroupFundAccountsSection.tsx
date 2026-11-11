@@ -75,7 +75,7 @@ export function GroupFundAccountsSection({ fund, allFunds, accounts, currency }:
           <View style={styles.row}>
             <View style={styles.flex}>
               <Text style={[styles.name, { color: theme.colors.foreground }]}>Not in a tracked account</Text>
-              <Text style={[styles.detail, muted]}>Opening money with no account, or paid out from an account that held none of it</Text>
+              <Text style={[styles.detail, muted]}>Opening money recorded without an account</Text>
             </View>
             <FinancialAmount value={unattributed} currency={currency} size="sm" weight="bold" tone="muted" />
           </View>

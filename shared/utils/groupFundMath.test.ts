@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { GroupFund, GroupFundEvent } from "../types/groupFund";
 import {
+  allocatePayoutDraw,
   groupFundEventEffect,
   memberContributionStatus,
   rebuildGroupFundTotals,
@@ -90,7 +91,9 @@ describe("rebuildGroupFundTotals (AC7)", () => {
     });
     expect(r.byPurpose.appu.held).toBe(50);
     expect(r.byPurpose.podupu.held).toBe(50);
-    expect(r.heldByAccount).toEqual({ hdfc: -1000, cash: 100 });
+    // SPENDLY-752: hdfc paid 1,000 more than it held; that came out of cash's
+    // 100 and then the 900 opening money that sits in no account.
+    expect(r.heldByAccount).toEqual({ hdfc: 0, cash: 0 });
   });
 
   it("a reversed contribution nets out of every total", () => {
@@ -208,5 +211,72 @@ describe("memberContributionStatus (AC9)", () => {
     );
     expect(sita?.pending).toBe(0);
     expect(sita?.received).toBe(150);
+  });
+});
+
+describe("SPENDLY-752: a payout draws held money across the fund's accounts", () => {
+  it("same account: takes only from the paying account", () => {
+    expect(allocatePayoutDraw({ cash: 500, sbi: 500 }, "sbi", 300)).toEqual({ sbi: 300 });
+  });
+
+  it("cross account: the ticket's 500 cash + 500 SBI, then 1,000 paid from SBI", () => {
+    expect(allocatePayoutDraw({ cash: 500, sbi: 500 }, "sbi", 1000)).toEqual({ sbi: 500, cash: 500 });
+  });
+
+  it("partial: takes the excess only, largest holding first, ties by id", () => {
+    expect(allocatePayoutDraw({ a: 100, b: 300, c: 300, x: 50 }, "x", 400)).toEqual({ x: 50, b: 300, c: 50 });
+  });
+
+  it("from an account that holds nothing, or less than nothing", () => {
+    expect(allocatePayoutDraw({ cash: 500, sbi: 0 }, "sbi", 200)).toEqual({ cash: 200 });
+    expect(allocatePayoutDraw({ cash: 500, sbi: -300 }, "sbi", 200)).toEqual({ cash: 200 });
+  });
+
+  it("more than the accounts hold: the rest is drawn from no account, nothing goes below zero", () => {
+    expect(allocatePayoutDraw({ cash: 100 }, "sbi", 1000)).toEqual({ cash: 100 });
+    expect(allocatePayoutDraw(undefined, "sbi", 1000)).toEqual({});
+  });
+
+  it("a stored draw sets the account deltas, and its reversal gives it back", () => {
+    const heldDraw = { sbi: 500, cash: 500 };
+    expect(groupFundEventEffect(ev({ kind: "payout", amount: 1000, accountId: "sbi", heldDraw })).accountDeltas).toEqual({
+      sbi: -500,
+      cash: -500,
+    });
+    expect(
+      groupFundEventEffect(ev({ kind: "reversal", reversedKind: "payout", amount: 1000, accountId: "sbi", heldDraw }))
+        .accountDeltas
+    ).toEqual({ sbi: 500, cash: 500 });
+    expect(groupFundEventEffect(ev({ kind: "payout", amount: 1000, accountId: "sbi", heldDraw: {} })).accountDeltas).toEqual({});
+  });
+
+  it("rebuild replays a pre-752 payout with the draw, and an old reversal gives that draw back", () => {
+    const p = ev({ kind: "payout", amount: 1000, accountId: "sbi" });
+    const history = [
+      ev({ kind: "contribution", amount: 500, accountId: "cash" }),
+      ev({ kind: "contribution", amount: 500, accountId: "sbi" }),
+      p,
+    ];
+    expect(rebuildGroupFundTotals(history).heldByAccount).toEqual({ cash: 0, sbi: 0 });
+    const undone = rebuildGroupFundTotals([
+      ...history,
+      ev({ kind: "reversal", reversalOf: p.id, reversedKind: "payout", amount: 1000, accountId: "sbi" }),
+    ]);
+    expect(undone.heldByAccount).toEqual({ cash: 500, sbi: 500 });
+    expect(undone.totals.held).toBe(1000);
+  });
+
+  it("flags a fund stored with the pre-752 split, and only on heldByAccount", () => {
+    const history = [
+      ev({ kind: "contribution", amount: 500, accountId: "cash" }),
+      ev({ kind: "contribution", amount: 500, accountId: "sbi" }),
+      ev({ kind: "payout", amount: 1000, accountId: "sbi" }),
+    ];
+    const rebuilt = rebuildGroupFundTotals(history);
+    const stored = { ...rebuilt, heldByAccount: { cash: 500, sbi: -500 } };
+    expect(reconcileGroupFund(stored, history)).toEqual([
+      { field: "heldByAccount.cash", stored: 500, expected: 0 },
+      { field: "heldByAccount.sbi", stored: -500, expected: 0 },
+    ]);
   });
 });
