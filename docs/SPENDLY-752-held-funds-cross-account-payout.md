@@ -83,6 +83,14 @@ A payout may still come from **any** account.
 - Events, account entries and balances are never written.
 - The report shows owners as a hash and never prints a uid.
 
+### GitHub workflow
+
+**Repair group fund held split** (`.github/workflows/repair-group-fund-held.yml`) runs the same script with the repository's `FIREBASE_SERVICE_ACCOUNT`, `READMODEL_SUPABASE_URL` and `READMODEL_SUPABASE_SERVICE_ROLE_KEY`, so the repaired funds reach Supabase right away.
+
+- Manual dispatch only, dry run by default. Untick "dry run" to apply.
+- **Counts only (`--counts`):** the repository is public, so the job's log shows the funds checked, already correct, to repair, needing manual review, repaired and skipped. It never shows names, ids or amounts.
+- Review the detailed report locally before applying.
+
 ### Emulator rehearsal (2026-11-11, project `demo-spendly-752`)
 
 Seeded the ticket's case as stored before 752, plus a fund whose totals don't match its history:

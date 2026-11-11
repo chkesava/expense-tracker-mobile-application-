@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { GroupFund, GroupFundEvent } from "../../shared/types/groupFund";
 import { rebuildGroupFundTotals } from "../../shared/utils/groupFundMath";
-import { accountImpact, planHeldRepair, renderHeldRepairReport, replayOrder } from "./groupFundHeldRepairCore";
+import { accountImpact, heldRepairCounts, planHeldRepair, renderHeldRepairReport, replayOrder } from "./groupFundHeldRepairCore";
 
 let seq = 0;
 const ev = (over: Partial<GroupFundEvent>): GroupFundEvent => ({
@@ -91,6 +91,15 @@ describe("SPENDLY-752 held-by-account repair", () => {
       "a",
       "b",
     ]);
+  });
+
+  it("counts mode (the public GitHub log) has counts only: no names, ids or amounts", () => {
+    const { fund, events } = ticketFund();
+    const plan = planHeldRepair("k1", fund, events);
+    const counts = heldRepairCounts([plan], new Map([["k1/f1", "repaired"]]));
+    expect(counts).toEqual({ checked: 1, ok: 0, toRepair: 1, manual: 0, repaired: 1, skipped: 0 });
+    const text = JSON.stringify(counts);
+    for (const leak of ["k1", "f1", "Dokra", "cash", "sbi", "500"]) expect(text).not.toContain(leak);
   });
 
   it("reports names, stored → proposed and what the card shows, never a uid", () => {

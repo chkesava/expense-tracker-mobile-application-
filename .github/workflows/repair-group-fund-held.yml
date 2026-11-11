@@ -1,0 +1,79 @@
+name: Repair group fund held split
+
+# SPENDLY-752: runs scripts/repair-group-fund-held.ts against production.
+# It corrects a group fund's stored per-account held split (`heldByAccount`)
+# only where the fund's own history proves it, version-guarded and safe to
+# rerun. Events, account entries and balances are never written. Full
+# description: docs/SPENDLY-752-held-funds-cross-account-payout.md.
+#
+# Manual dispatch only. Dry run by default; untick it to apply. Review the
+# detailed report locally first (`npx tsx scripts/repair-group-fund-held.ts`):
+# this repository is public, so the job prints counts only (`--counts`),
+# never fund or account names, ids or amounts.
+#
+# Secrets: FIREBASE_SERVICE_ACCOUNT,
+#          READMODEL_SUPABASE_SERVICE_ROLE_KEY (optional, read-model push)
+# Variables: READMODEL_SUPABASE_URL (optional; without it the nightly sync
+#            copies the repaired funds)
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report what would change, write nothing. Untick to apply."
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: repair-group-fund-held
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    name: Repair heldByAccount
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The job never pushes; don't leave the token in git config.
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
+          READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT is not set."
+            exit 1
+          fi
+          args="--counts"
+          if [ "$DRY_RUN" != "true" ]; then args="$args --apply"; fi
+          npx --no-install tsx scripts/repair-group-fund-held.ts $args | tee repair.log
+          {
+            echo "## Group fund held split repair"
+            echo ""
+            echo "- Dry run: **$DRY_RUN**"
+            echo '```'
+            cat repair.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

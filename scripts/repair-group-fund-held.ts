@@ -7,6 +7,11 @@
  *
  *   npx tsx scripts/repair-group-fund-held.ts [--uid=<uid>] [--out=report.md]
  *   npx tsx scripts/repair-group-fund-held.ts --apply [--uid=<uid>] [--out=report.md]
+ *   npx tsx scripts/repair-group-fund-held.ts [--apply] --counts
+ *
+ * --counts prints one JSON line of counts and nothing else: no fund or account
+ * names, ids or amounts. The GitHub workflow (repair-group-fund-held.yml) uses
+ * it because the repository's Actions logs are public.
  *
  * --apply writes only `heldByAccount` (and `updatedAt`) on funds the dry run
  * classes as "repair", each in a transaction that first checks the fund's
@@ -31,7 +36,7 @@ import { serverPushPorts } from "../netlify/functions/readmodel-push";
 import type { GroupFund, GroupFundEvent } from "../shared/types/groupFund";
 import { isDuressUid } from "../shared/utils/duress";
 import { groupFundEventFromDoc, groupFundFromDoc } from "../shared/utils/groupFundDocs";
-import { planHeldRepair, renderHeldRepairReport, type HeldRepairFund } from "./lib/groupFundHeldRepairCore";
+import { heldRepairCounts, planHeldRepair, renderHeldRepairReport, type HeldRepairFund } from "./lib/groupFundHeldRepairCore";
 
 function initApp() {
   if (process.env.FIRESTORE_EMULATOR_HOST) {
@@ -55,12 +60,16 @@ function arg(name: string): string | undefined {
 const APPLY = process.argv.includes("--apply");
 const ONLY_UID = arg("uid");
 const OUT = arg("out");
+const COUNTS_ONLY = process.argv.includes("--counts");
 
 const ownerKey = (uid: string) => createHash("sha256").update(uid).digest("hex").slice(0, 8);
 
 async function main() {
   const db = getFirestore(initApp());
-  const log = (line: string) => console.log(line);
+  // In --counts mode nothing that names a fund, account or owner is printed.
+  const log = (line: string) => {
+    if (!COUNTS_ONLY) console.log(line);
+  };
 
   const fundSnaps = ONLY_UID
     ? (await db.collection(`users/${ONLY_UID}/groupFunds`).get()).docs
@@ -111,6 +120,12 @@ async function main() {
     }
     const pushed = await push.flush();
     log(`[repair] read model push: ${JSON.stringify(pushed)}`);
+    if (COUNTS_ONLY) console.log(`readModelPush=${JSON.stringify(pushed)}`);
+  }
+
+  if (COUNTS_ONLY) {
+    console.log(JSON.stringify({ mode: APPLY ? "apply" : "dry-run", ...heldRepairCounts(plans, applied) }));
+    return;
   }
 
   const text = renderHeldRepairReport(plans, (key, id) => names.get(`${key}/${id}`) ?? id, {
@@ -125,6 +140,9 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err);
+  // A Firestore error can quote a document path (with the uid): counts mode
+  // prints only its code.
+  if (COUNTS_ONLY) console.error(`repair failed: ${(err as { code?: unknown })?.code ?? "error"}`);
+  else console.error(err);
   process.exit(1);
 });

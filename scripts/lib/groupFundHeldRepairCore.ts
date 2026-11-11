@@ -161,3 +161,28 @@ export function renderHeldRepairReport(
   }
   return lines.join("\n");
 }
+
+export type HeldRepairCounts = {
+  checked: number;
+  ok: number;
+  toRepair: number;
+  manual: number;
+  repaired: number;
+  skipped: number;
+};
+
+/**
+ * Counts only: no names, account ids, amounts or owners. The GitHub workflow
+ * prints this, because the repository (and so its Actions logs) is public.
+ */
+export function heldRepairCounts(funds: readonly HeldRepairFund[], applied?: ReadonlyMap<string, string>): HeldRepairCounts {
+  const outcomes = [...(applied?.values() ?? [])];
+  return {
+    checked: funds.length,
+    ok: funds.filter((f) => f.status === "ok").length,
+    toRepair: funds.filter((f) => f.status === "repair").length,
+    manual: funds.filter((f) => f.status === "manual").length,
+    repaired: outcomes.filter((o) => o === "repaired").length,
+    skipped: outcomes.filter((o) => o !== "repaired").length,
+  };
+}
