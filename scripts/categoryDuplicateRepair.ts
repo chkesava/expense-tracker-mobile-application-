@@ -110,20 +110,25 @@ async function main() {
     return;
   }
 
+  // A matched expense/budget isn't always a real change: a duplicate and its
+  // canonical can share the exact same name string already (only an id
+  // differs), so only emit a write when a field's value actually changes —
+  // otherwise this would touch updatedAt on documents nothing changed about.
+  const changedFields = (before: { category?: string; subcategory?: string }, after: { category?: string; subcategory?: string }) => {
+    const data: Record<string, unknown> = {};
+    if (after.category !== before.category) data.category = after.category;
+    if (after.subcategory !== before.subcategory) data.subcategory = after.subcategory;
+    return data;
+  };
+
   const writes: JobWrite[] = [
     ...plan.categoryWrites.map((w): JobWrite => ({ kind: "update", path: `users/${uid}/categories/${w.id}`, data: translateDeleteField(w.data) })),
-    ...plan.expenseWrites.map((w): JobWrite => {
-      const data: Record<string, unknown> = {};
-      if (w.after.category !== w.before.category) data.category = w.after.category;
-      if (w.after.subcategory !== w.before.subcategory) data.subcategory = w.after.subcategory;
-      return { kind: "update", path: `users/${uid}/expenses/${w.id}`, data };
-    }),
-    ...plan.budgetWrites.map((w): JobWrite => {
-      const data: Record<string, unknown> = {};
-      if (w.after.category !== w.before.category) data.category = w.after.category;
-      if (w.after.subcategory !== w.before.subcategory) data.subcategory = w.after.subcategory;
-      return { kind: "update", path: `users/${uid}/categoryBudgets/${w.id}`, data };
-    }),
+    ...plan.expenseWrites
+      .map((w): JobWrite => ({ kind: "update", path: `users/${uid}/expenses/${w.id}`, data: changedFields(w.before, w.after) }))
+      .filter((w) => Object.keys(w.data).length > 0),
+    ...plan.budgetWrites
+      .map((w): JobWrite => ({ kind: "update", path: `users/${uid}/categoryBudgets/${w.id}`, data: changedFields(w.before, w.after) }))
+      .filter((w) => Object.keys(w.data).length > 0),
     ...plan.lockDeletes.map((d): JobWrite => ({ kind: "delete", path: `users/${uid}/${d.collection}/${d.key}` })),
   ];
 

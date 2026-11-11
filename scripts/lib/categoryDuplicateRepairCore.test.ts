@@ -25,6 +25,23 @@ describe("planCategoryDuplicateRepair — parent groups", () => {
     expect(plan.lockDeletes).toContainEqual({ collection: "categoryNames", key: "c_shopping2" });
   });
 
+  it("doesn't plan an expense/budget write when the duplicate's exact name string already matches the canonical's (real account shape: two docs, byte-identical name)", () => {
+    const categories = [
+      cat({ id: "p1", name: "Maintenance and Repair Services" }),
+      cat({ id: "p2", name: "Maintenance and Repair Services", createdAt: { seconds: 5 } }),
+    ];
+    const expenses = [{ id: "e1", category: "Maintenance and Repair Services", subcategory: "Other" }];
+    const budgets = [{ id: "b1", category: "Maintenance and Repair Services" }];
+    const plan = planCategoryDuplicateRepair("u1", categories, expenses, budgets);
+    const [g] = plan.groups;
+    // Matched (counted against the duplicate's name), but nothing to write —
+    // the string was already correct.
+    expect(g.expensesRelabeled).toBe(0);
+    expect(g.budgetsRelabeled).toBe(0);
+    expect(plan.expenseWrites).toEqual([]);
+    expect(plan.budgetWrites).toEqual([]);
+  });
+
   it("reparents the duplicate's subcategories onto the canonical parent", () => {
     const categories = [
       cat({ id: "p1", name: "Shopping" }),

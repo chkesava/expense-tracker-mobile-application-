@@ -101,20 +101,30 @@ export function planCategoryDuplicateRepair(
   const lockDeletes: LockDelete[] = [];
   const groups: GroupRepairSummary[] = [];
 
-  const relabelExpense = (id: string, patch: { category?: string; subcategory?: string }) => {
+  // A matched expense/budget isn't always a real change — a duplicate can
+  // share the exact same name string as its canonical (only the id differs).
+  // Returns whether THIS patch changed anything, so a group's counts (and
+  // the eventual write list) only reflect fields that actually move.
+  const relabelExpense = (id: string, patch: { category?: string; subcategory?: string }): boolean => {
     const existing = expenseWrites.get(id);
     const expense = expenses.find((e) => e.id === id)!;
     const before = existing?.before ?? { category: expense.category, subcategory: expense.subcategory };
-    const after = { category: existing?.after.category ?? expense.category, subcategory: existing?.after.subcategory ?? expense.subcategory, ...patch };
-    expenseWrites.set(id, { id, before, after });
+    const current = existing?.after ?? before;
+    const after = { ...current, ...patch };
+    const changed = after.category !== current.category || after.subcategory !== current.subcategory;
+    if (changed) expenseWrites.set(id, { id, before, after });
+    return changed;
   };
 
-  const relabelBudget = (id: string, patch: { category?: string; subcategory?: string }) => {
+  const relabelBudget = (id: string, patch: { category?: string; subcategory?: string }): boolean => {
     const existing = budgetWrites.get(id);
     const budget = budgets.find((b) => b.id === id)!;
     const before = existing?.before ?? { category: budget.category, subcategory: budget.subcategory };
-    const after = { category: existing?.after.category ?? budget.category, subcategory: existing?.after.subcategory ?? budget.subcategory, ...patch };
-    budgetWrites.set(id, { id, before, after });
+    const current = existing?.after ?? before;
+    const after = { ...current, ...patch };
+    const changed = after.category !== current.category || after.subcategory !== current.subcategory;
+    if (changed) budgetWrites.set(id, { id, before, after });
+    return changed;
   };
 
   const activeAuditDocs = () => [...working.values()].map(toAuditDoc);
@@ -151,14 +161,12 @@ export function planCategoryDuplicateRepair(
       for (const expense of expenses) {
         if (expense.category !== dup.name) continue;
         const reparentedChild = reparented.find((r) => r.fromParentId === dupId && r.beforeName === (expense.subcategory ?? ""));
-        relabelExpense(expense.id, { category: canonical.name, ...(reparentedChild ? { subcategory: reparentedChild.afterName } : {}) });
-        expensesRelabeled++;
+        if (relabelExpense(expense.id, { category: canonical.name, ...(reparentedChild ? { subcategory: reparentedChild.afterName } : {}) })) expensesRelabeled++;
       }
       for (const budget of budgets) {
         if (budget.category !== dup.name) continue;
         const reparentedChild = reparented.find((r) => r.fromParentId === dupId && r.beforeName === (budget.subcategory ?? ""));
-        relabelBudget(budget.id, { category: canonical.name, ...(reparentedChild ? { subcategory: reparentedChild.afterName } : {}) });
-        budgetsRelabeled++;
+        if (relabelBudget(budget.id, { category: canonical.name, ...(reparentedChild ? { subcategory: reparentedChild.afterName } : {}) })) budgetsRelabeled++;
       }
 
       categoryWrites.push({
@@ -198,13 +206,11 @@ export function planCategoryDuplicateRepair(
       const dup = working.get(dupId)!;
       for (const expense of expenses) {
         if (expense.category !== parent?.name || expense.subcategory !== dup.name) continue;
-        relabelExpense(expense.id, { subcategory: canonical.name });
-        expensesRelabeled++;
+        if (relabelExpense(expense.id, { subcategory: canonical.name })) expensesRelabeled++;
       }
       for (const budget of budgets) {
         if (budget.category !== parent?.name || budget.subcategory !== dup.name) continue;
-        relabelBudget(budget.id, { subcategory: canonical.name });
-        budgetsRelabeled++;
+        if (relabelBudget(budget.id, { subcategory: canonical.name })) budgetsRelabeled++;
       }
       categoryWrites.push({
         kind: "archiveCategory",
