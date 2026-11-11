@@ -88,6 +88,7 @@ export function PaycheckTimeline({
             Total Net Salary Received
           </Text>
           <Amount
+            ghostable
             value={summary.totalNetReceived}
             currency="INR"
             style={[styles.totalNetValue, { color: colors.foreground }]}
@@ -100,6 +101,7 @@ export function PaycheckTimeline({
               Regular Pay
             </Text>
             <Amount
+              ghostable
               value={summary.totalRegularNet}
               currency="INR"
               style={[styles.metricValue, { color: colors.foreground }]}
@@ -111,6 +113,7 @@ export function PaycheckTimeline({
               Variable / Bonus
             </Text>
             <Amount
+              ghostable
               value={summary.totalVariableNet}
               currency="INR"
               style={[
@@ -130,6 +133,7 @@ export function PaycheckTimeline({
               Monthly Average
             </Text>
             <Amount
+              ghostable
               value={summary.averageMonthlyNet}
               currency="INR"
               style={[styles.metricValue, { color: colors.foreground }]}
@@ -149,6 +153,7 @@ export function PaycheckTimeline({
               Total Reported Gross:
             </Text>
             <Amount
+              ghostable
               value={summary.totalGrossReported}
               currency="INR"
               style={[styles.grossValue, { color: colors.foreground }]}
@@ -249,6 +254,7 @@ export function PaycheckTimeline({
                   {formatMonthName(group.month)}
                 </Text>
                 <Amount
+                  ghostable
                   value={group.totalNet}
                   currency="INR"
                   style={[styles.groupTotalNet, { color: colors.foreground }]}
@@ -372,6 +378,7 @@ function TimelineItemCard({
             Net Pay
           </Text>
           <Amount
+            ghostable
             value={item.netAmount ?? 0}
             currency="INR"
             style={[styles.netAmountText, { color: colors.foreground }]}
@@ -406,9 +413,17 @@ function TimelineItemCard({
         ]}
       >
         <Text style={[styles.grossFooterText, { color: colors.mutedForeground }]}>
-          {item.isGrossKnown && item.grossAmount != null
-            ? `Gross Pay: ₹${item.grossAmount.toLocaleString("en-IN")}`
-            : "Gross Pay: Not specified"}
+          Gross Pay:{" "}
+          {item.isGrossKnown && item.grossAmount != null ? (
+            <Amount
+              ghostable
+              value={item.grossAmount}
+              currency="INR"
+              style={[styles.grossFooterText, { color: colors.mutedForeground }]}
+            />
+          ) : (
+            "Not specified"
+          )}
         </Text>
         {item.hasBreakdown ? (
           <Text style={[styles.breakdownLink, { color: colors.primary }]}>

@@ -5,6 +5,8 @@ import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { usePushReminderMode } from "@/hooks/usePushReminderMode";
 import { useReceivables } from "@/hooks/useReceivables";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
+import { useSalaryRecords } from "@/hooks/useSalaryRecords";
+import { useSalaryProfiles } from "@/hooks/useSalaryProfiles";
 import { useTaxCalendarFacts } from "@/hooks/useTaxCalendarFacts";
 import { useTaxCenterFlag } from "@/hooks/useTaxCenterEnabled";
 import { useRemindersInbox } from "@/providers/RemindersInboxProvider";
@@ -13,7 +15,7 @@ import { cancelCalendarNotifications, reconcileCalendarNotifications } from "@/s
 import { planCalendarNotifications, CALENDAR_NOTIFICATION_HORIZON_DAYS } from "@/shared/utils/calendarNotifications";
 import { localReminderSourcesEnabled } from "@/shared/utils/push/reminderMode";
 import { reminderEvents } from "@/shared/utils/calendarReminders";
-import { borrowingEvents, receivableEvents, subscriptionEvents, type CalendarContext } from "@/shared/utils/calendarSources";
+import { borrowingEvents, receivableEvents, salaryEvents, subscriptionEvents, type CalendarContext } from "@/shared/utils/calendarSources";
 import { shiftDateKey, todayDateKey } from "@/shared/utils/dates";
 import { taxEvents } from "@/shared/features/tax/utils/taxCalendar";
 import { formatAmount } from "@/shared/utils/formatCurrency";
@@ -35,7 +37,8 @@ export function CalendarNotificationSync() {
   // SPENDLY-297: tax deadlines notify only with the tax center on and their own switch.
   const { enabled: taxCenter } = useTaxCenterFlag();
   const taxOn = taxCenter && prefs.taxEnabled;
-  const active = prefs.remindersEnabled || prefs.duesEnabled || taxOn;
+  const salaryOn = Boolean(prefs.salaryEnabled);
+  const active = prefs.remindersEnabled || prefs.duesEnabled || taxOn || salaryOn;
   // SPENDLY-693: when the server delivers reminders as push, this phone doesn't.
   const { mode, loading: modeLoading } = usePushReminderMode();
   const currency = useDisplayCurrency();
@@ -47,6 +50,9 @@ export function CalendarNotificationSync() {
   const { receivables } = useReceivables({ enabled: Boolean(prefs.duesEnabled) && local });
   // SPENDLY-297: tax deadlines, like the other local sources, only when this phone schedules.
   const { facts: taxFacts } = useTaxCalendarFacts({ enabled: taxOn && local });
+  // SPENDLY-333: salary payday and late salary reminders.
+  const { records: salaryRecords } = useSalaryRecords({ enabled: salaryOn && local });
+  const { profiles: salaryProfiles } = useSalaryProfiles({ enabled: salaryOn && local });
 
   const plan = useMemo(() => {
     if (!active) return [];
@@ -55,9 +61,10 @@ export function CalendarNotificationSync() {
       ...(prefs.remindersEnabled ? reminderEvents(reminders, ctx) : []),
       ...(prefs.duesEnabled ? [...subscriptionEvents(subscriptions, ctx), ...borrowingEvents(borrowings, ctx), ...receivableEvents(receivables, ctx)] : []),
       ...(taxOn && taxFacts ? taxEvents(taxFacts, ctx) : []),
+      ...(salaryOn ? salaryEvents(salaryRecords, salaryProfiles, ctx) : []),
     ];
-    return planCalendarNotifications({ events, reminders, today, prefs: { ...prefs, taxEnabled: taxOn }, format: (n) => formatAmount(n, currency) });
-  }, [active, today, currency, prefs, reminders, subscriptions, borrowings, receivables, taxOn, taxFacts]);
+    return planCalendarNotifications({ events, reminders, today, prefs: { ...prefs, taxEnabled: taxOn, salaryEnabled: salaryOn }, format: (n) => formatAmount(n, currency) });
+  }, [active, today, currency, prefs, reminders, subscriptions, borrowings, receivables, taxOn, taxFacts, salaryOn, salaryRecords, salaryProfiles]);
 
   const planKey = useMemo(() => JSON.stringify(plan.map((n) => [n.id, n.fireDate, n.body])), [plan]);
 

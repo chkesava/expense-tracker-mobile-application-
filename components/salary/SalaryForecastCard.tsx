@@ -157,6 +157,7 @@ export function SalaryForecastCard({
               Expected Next Net Pay (Est.)
             </Text>
             <Amount
+              ghostable
               value={nextExpectedPaycheck.projectedRegularNet}
               currency="INR"
               style={[styles.heroAmount, { color: colors.foreground }]}
@@ -223,6 +224,7 @@ export function SalaryForecastCard({
 
                 <View style={styles.seriesRight}>
                   <Amount
+                    ghostable
                     value={proj.projectedRegularNet}
                     currency="INR"
                     style={[styles.seriesAmount, { color: colors.foreground }]}
@@ -262,7 +264,13 @@ export function SalaryForecastCard({
           ))}
           {historicalBonusAverageMonthly > 0 ? (
             <Text style={[styles.assumptionItem, { color: "#f59e0b" }]}>
-              • Historical variable pay averaged ₹{historicalBonusAverageMonthly}
+              • Historical variable pay averaged{" "}
+              <Amount
+                ghostable
+                value={historicalBonusAverageMonthly}
+                currency="INR"
+                style={{ color: "#f59e0b", fontSize: 12 }}
+              />
               /month over the past year (excluded from guaranteed base forecast).
             </Text>
           ) : null}

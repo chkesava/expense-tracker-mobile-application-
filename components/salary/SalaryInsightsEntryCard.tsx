@@ -8,6 +8,7 @@ import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useGhostMoney } from "@/hooks/useGhostMoney";
 import { useSurfaces } from "@/theme/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
+import { ordinal } from "@/shared/features/salary";
 
 /**
  * Entry card for Salary Intelligence placed on the Insights screen (SPENDLY-334).
@@ -41,7 +42,7 @@ export function SalaryInsightsEntryCard() {
     : toReview > 0
     ? `${toReview} salary ${toReview === 1 ? "deposit" : "deposits"} to review`
     : netAmount > 0
-    ? `${employer} · ${money(netAmount)}/mo${nextPayday ? ` · Next ${nextPayday.slice(8, 10)}th` : ""}`
+    ? `${employer} · ${money(netAmount)}/mo${nextPayday ? ` · Next ${ordinal(Number(nextPayday.slice(8, 10)))}` : ""}`
     : "Track net salary, deductions, stability and payday timeline";
 
   return (

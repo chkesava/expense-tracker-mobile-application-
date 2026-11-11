@@ -18,7 +18,7 @@ import type { Receivable } from "../types/receivable";
 import { subscriptionFrequency, type Subscription } from "../types/subscription";
 import type { EpfContribution } from "../features/epf/types";
 import type { SipPlan } from "../features/sip/types";
-import { daysBetweenDateKeys, isValidDateKey, parseLocalDate, shiftMonthKey } from "./dates";
+import { daysBetweenDateKeys, daysInMonth, isValidDateKey, parseLocalDate, shiftMonthKey } from "./dates";
 import { goalStatus } from "./goalModel";
 import { getInvestmentValuation } from "./investmentInterest";
 import { isActiveLedgerRow } from "./ledgerRow";
@@ -547,7 +547,9 @@ export function salaryEvents(
       const timing = sig.expectedWindow?.timing ?? "same_month";
       const payMonth = timing === "next_month" ? shiftMonthKey(sig.month, 1) : sig.month;
       const typicalDay = sig.supportingHistory?.typicalDay ?? sig.expectedWindow?.endDay ?? 28;
-      const date = `${payMonth}-${String(Math.min(31, Math.max(1, typicalDay))).padStart(2, "0")}`;
+      const maxDaysInPayMonth = daysInMonth(Number(payMonth.slice(0, 4)), Number(payMonth.slice(5, 7)) - 1);
+      const clampedDay = Math.min(maxDaysInPayMonth, Math.max(1, typicalDay));
+      const date = `${payMonth}-${String(clampedDay).padStart(2, "0")}`;
 
       if (!isValidDateKey(date) || !inRange(date, ctx.range)) continue;
 

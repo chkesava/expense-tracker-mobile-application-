@@ -262,7 +262,7 @@ export function SalaryTrendCard({
                 style={[styles.legendDot, { backgroundColor: colors.primary }]}
               />
               <Text style={[styles.legendLabel, { color: colors.mutedForeground }]}>
-                Base: <Amount value={totalRegularNet} currency="INR" style={styles.boldText} />
+                Base: <Amount ghostable value={totalRegularNet} currency="INR" style={styles.boldText} />
               </Text>
             </View>
             <View style={styles.legendItem}>
@@ -271,7 +271,7 @@ export function SalaryTrendCard({
               />
               <Text style={[styles.legendLabel, { color: colors.mutedForeground }]}>
                 Bonus / Var:{" "}
-                <Amount value={totalVariableNet} currency="INR" style={styles.boldText} />
+                <Amount ghostable value={totalVariableNet} currency="INR" style={styles.boldText} />
               </Text>
             </View>
           </View>
@@ -292,6 +292,7 @@ export function SalaryTrendCard({
               <Text style={[styles.baselineTitle, { color: colors.foreground }]}>
                 6-Month Rolling Baseline:{" "}
                 <Amount
+                  ghostable
                   value={baseline.rolling6MonthAvg}
                   currency="INR"
                   style={styles.boldText}
@@ -345,13 +346,14 @@ export function SalaryTrendCard({
                     </Text>
                     {point.variableNet > 0 ? (
                       <Text style={[styles.seriesBonusTag, { color: "#f59e0b" }]}>
-                        +<Amount value={point.variableNet} currency="INR" /> variable
+                        +<Amount ghostable value={point.variableNet} currency="INR" /> variable
                       </Text>
                     ) : null}
                   </View>
 
                   <View style={styles.seriesAmountCol}>
                     <Amount
+                      ghostable
                       value={point.totalNet}
                       currency="INR"
                       style={[

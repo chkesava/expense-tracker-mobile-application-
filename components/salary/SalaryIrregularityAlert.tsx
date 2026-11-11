@@ -133,6 +133,7 @@ export function SalaryIrregularityAlert({
                   </Text>
                   {signal.expectedAmount != null ? (
                     <Amount
+                      ghostable
                       value={signal.expectedAmount}
                       currency="INR"
                       style={[styles.metricVal, { color: colors.foreground }]}
@@ -152,6 +153,7 @@ export function SalaryIrregularityAlert({
                   </Text>
                   {signal.actualAmount != null ? (
                     <Amount
+                      ghostable
                       value={signal.actualAmount}
                       currency="INR"
                       style={[

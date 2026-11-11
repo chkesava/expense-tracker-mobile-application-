@@ -16,6 +16,7 @@ import type {
   SalaryCandidate,
   SalaryRecord,
   SalaryRejectionReason,
+  SalaryReview,
 } from "@/shared/features/salary/types";
 import { softDeleteSalaryRecord } from "@/shared/features/salary/utils/builders";
 import {
@@ -51,7 +52,8 @@ export async function confirmSalaryCandidate(
   uid: string,
   candidate: SalaryCandidate,
   overrides?: SalaryConfirmOverrides,
-  previousRecord?: SalaryRecord
+  previousRecord?: SalaryRecord,
+  previousReview?: SalaryReview
 ): Promise<WriteOutcome> {
   const nowMs = Date.now();
   const record = buildConfirmedRecordFromCandidate(
@@ -77,8 +79,15 @@ export async function confirmSalaryCandidate(
     nowMs
   );
 
-  const recordOps = salaryRecordWriteOps(uid, record, previousRecord, SENTINELS);
-  const reviewOps = salaryReviewWriteOps(uid, review, undefined, SENTINELS);
+  const stampedRecord = previousRecord
+    ? { ...record, createdAtMs: previousRecord.createdAtMs }
+    : record;
+  const stampedReview = previousReview
+    ? { ...review, createdAtMs: previousReview.createdAtMs }
+    : review;
+
+  const recordOps = salaryRecordWriteOps(uid, stampedRecord, previousRecord, SENTINELS);
+  const reviewOps = salaryReviewWriteOps(uid, stampedReview, previousReview, SENTINELS);
 
   return commitMutations(uid, [...recordOps, ...reviewOps], {
     label: "confirm salary candidate",
@@ -95,7 +104,8 @@ export async function rejectSalaryCandidate(
     | SalaryCandidate
     | { incomeId: string; amount: number; date: string },
   reason: SalaryRejectionReason,
-  existingRecord?: SalaryRecord
+  existingRecord?: SalaryRecord,
+  previousReview?: SalaryReview
 ): Promise<WriteOutcome> {
   const nowMs = Date.now();
   const review = buildSalaryReviewDoc(
@@ -110,14 +120,18 @@ export async function rejectSalaryCandidate(
     nowMs
   );
 
+  const stampedReview = previousReview
+    ? { ...review, createdAtMs: previousReview.createdAtMs }
+    : review;
+
   const ops: MutationOp[] = [
-    ...salaryReviewWriteOps(uid, review, undefined, SENTINELS),
+    ...salaryReviewWriteOps(uid, stampedReview, previousReview, SENTINELS),
   ];
 
   if (existingRecord && !existingRecord.deletedAt) {
     const deletedRecord = softDeleteSalaryRecord(
       existingRecord,
-      new Date(nowMs).toISOString(),
+      new Date(nowMs).toISOString().slice(0, 10),
       nowMs
     );
     ops.push(
@@ -136,13 +150,15 @@ export async function rejectSalaryCandidate(
 export async function correctSalaryRecord(
   uid: string,
   existing: SalaryRecord,
-  correction: SalaryRecordCorrection
+  correction: SalaryRecordCorrection,
+  previousReview?: SalaryReview
 ): Promise<WriteOutcome> {
   const nowMs = Date.now();
   const updated = applySalaryRecordCorrection(existing, correction, nowMs);
+  const stampedRecord = { ...updated, createdAtMs: existing.createdAtMs };
 
   const ops: MutationOp[] = [
-    ...salaryRecordWriteOps(uid, updated, existing, SENTINELS),
+    ...salaryRecordWriteOps(uid, stampedRecord, existing, SENTINELS),
   ];
 
   if (existing.transactionId) {
@@ -161,7 +177,10 @@ export async function correctSalaryRecord(
       uid,
       nowMs
     );
-    ops.push(...salaryReviewWriteOps(uid, review, undefined, SENTINELS));
+    const stampedReview = previousReview
+      ? { ...review, createdAtMs: previousReview.createdAtMs }
+      : review;
+    ops.push(...salaryReviewWriteOps(uid, stampedReview, previousReview, SENTINELS));
   }
 
   return commitMutations(uid, ops, {
@@ -179,7 +198,7 @@ export async function deleteSalaryRecord(
   const nowMs = Date.now();
   const deleted = softDeleteSalaryRecord(
     existing,
-    new Date(nowMs).toISOString(),
+    new Date(nowMs).toISOString().slice(0, 10),
     nowMs
   );
 

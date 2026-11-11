@@ -85,8 +85,8 @@ export const SalaryFinancialContextCard = memo(function SalaryFinancialContextCa
             </View>
           </View>
           <Text style={[styles.sectionBody, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
-            Your monthly budget of <Amount value={monthlyBudget} style={{ fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm, color: theme.colors.foreground }} /> leaves approximately{" "}
-            <Amount value={unallocatedAmount} style={{ fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm, color: theme.colors.foreground }} /> uncommitted for savings, investments, or goal contributions.
+            Your monthly budget of <Amount ghostable value={monthlyBudget} style={{ fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm, color: theme.colors.foreground }} /> leaves approximately{" "}
+            <Amount ghostable value={unallocatedAmount} style={{ fontFamily: theme.fontFamily.semibold, fontSize: theme.typography.sm, color: theme.colors.foreground }} /> uncommitted for savings, investments, or goal contributions.
           </Text>
         </View>
       ) : null}
@@ -95,7 +95,7 @@ export const SalaryFinancialContextCard = memo(function SalaryFinancialContextCa
       <View style={styles.linksGrid}>
         {/* EPF Link */}
         <Pressable
-          onPress={() => router.push(epfEstablishmentId ? (`/epf/${epfEstablishmentId}` as never) : ("/epf" as never))}
+          onPress={() => router.push(epfEstablishmentId ? (`/epf/${epfEstablishmentId}` as never) : ("/investments?tab=epf" as never))}
           style={({ pressed }) => [
             styles.linkCard,
             {

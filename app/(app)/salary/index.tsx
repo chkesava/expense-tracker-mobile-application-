@@ -121,40 +121,53 @@ export default function SalaryDashboardScreen() {
     setIsReviewOpen(true);
   }, []);
 
+  const activeReview = useMemo(() => {
+    if (activeCandidate) {
+      const byIncome = reviews.find((r) => r.refKey === `income:${activeCandidate.incomeId}`);
+      if (byIncome) return byIncome;
+    }
+    if (activeRecord) {
+      return reviews.find(
+        (r) => r.refKey === `income:${activeRecord.transactionId || activeRecord.id}`
+      );
+    }
+    return undefined;
+  }, [activeCandidate, activeRecord, reviews]);
+
   const handleConfirmCandidate = useCallback(
     async (candidate: SalaryCandidate, overrides?: SalaryConfirmOverrides) => {
-      const ok = await confirm(candidate, overrides, activeRecord ?? undefined);
+      const ok = await confirm(candidate, overrides, activeRecord ?? undefined, activeReview);
       if (ok) {
         setIsReviewOpen(false);
         setActiveCandidate(null);
         setActiveRecord(null);
       }
     },
-    [confirm, activeRecord]
+    [confirm, activeRecord, activeReview]
   );
 
   const handleRejectCandidate = useCallback(
     async (candidate: SalaryCandidate, reason: SalaryRejectionReason) => {
-      const ok = await reject(candidate, reason, activeRecord ?? undefined);
+      const ok = await reject(candidate, reason, activeRecord ?? undefined, activeReview);
       if (ok) {
         setIsReviewOpen(false);
         setActiveCandidate(null);
         setActiveRecord(null);
       }
     },
-    [reject, activeRecord]
+    [reject, activeRecord, activeReview]
   );
 
   const handleCorrectRecord = useCallback(
     async (record: SalaryRecord, correction: SalaryRecordCorrection) => {
-      const ok = await correct(record, correction);
+      const ok = await correct(record, correction, activeReview);
       if (ok) {
         setIsReviewOpen(false);
         setActiveCandidate(null);
         setActiveRecord(null);
       }
     },
-    [correct]
+    [correct, activeReview]
   );
 
   const handleDismissSignal = useCallback(
@@ -164,15 +177,6 @@ export default function SalaryDashboardScreen() {
     },
     []
   );
-
-  const activeReview = useMemo(() => {
-    if (!activeCandidate) return undefined;
-    return reviews.find(
-      (r) =>
-        r.refKey === `income:${activeCandidate.incomeId}` ||
-        (activeRecord && r.refKey === `income:${activeRecord.transactionId || activeRecord.id}`)
-    );
-  }, [activeCandidate, activeRecord, reviews]);
 
   const header = (
     <PageHeader
@@ -235,9 +239,25 @@ export default function SalaryDashboardScreen() {
           <SalaryIrregularityAlert
             signals={visibleSignals}
             onDismissSignal={handleDismissSignal}
-            onReviewSignal={() => {
+            onReviewSignal={(sig) => {
               if (pendingCandidates.length > 0) {
                 handleOpenPendingCandidate(pendingCandidates[0]);
+              } else {
+                router.push("/transactions" as never);
+              }
+            }}
+            onAddManualPaycheck={() => {
+              if (pendingCandidates.length > 0) {
+                handleOpenPendingCandidate(pendingCandidates[0]);
+              } else {
+                router.push("/add" as never);
+              }
+            }}
+            onReclassifySignal={(sig) => {
+              if (pendingCandidates.length > 0) {
+                handleOpenPendingCandidate(pendingCandidates[0]);
+              } else if (records.length > 0) {
+                handleOpenRecordDetail(records[0]);
               }
             }}
           />

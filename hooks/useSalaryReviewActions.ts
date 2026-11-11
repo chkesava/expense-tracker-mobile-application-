@@ -16,6 +16,7 @@ import type {
   SalaryCandidate,
   SalaryRecord,
   SalaryRejectionReason,
+  SalaryReview,
 } from "@/shared/features/salary/types";
 import type {
   SalaryConfirmOverrides,
@@ -54,14 +55,16 @@ export function useSalaryReviewActions() {
     (
       candidate: SalaryCandidate,
       overrides?: SalaryConfirmOverrides,
-      previousRecord?: SalaryRecord
+      previousRecord?: SalaryRecord,
+      previousReview?: SalaryReview
     ) =>
       run("salary.review.confirm", "Could not confirm salary.", async (u) => {
         const outcome = await confirmSalaryCandidate(
           u,
           candidate,
           overrides,
-          previousRecord
+          previousRecord,
+          previousReview
         );
         const label = overrides ? "Salary corrected & confirmed" : "Salary confirmed";
         return writeSavedMessage(outcome, label);
@@ -75,14 +78,16 @@ export function useSalaryReviewActions() {
         | SalaryCandidate
         | { incomeId: string; amount: number; date: string },
       reason: SalaryRejectionReason,
-      existingRecord?: SalaryRecord
+      existingRecord?: SalaryRecord,
+      previousReview?: SalaryReview
     ) =>
       run("salary.review.reject", "Could not reject salary candidate.", async (u) => {
         const outcome = await rejectSalaryCandidate(
           u,
           candidate,
           reason,
-          existingRecord
+          existingRecord,
+          previousReview
         );
         return writeSavedMessage(outcome, "Marked as not salary");
       }),
@@ -90,9 +95,13 @@ export function useSalaryReviewActions() {
   );
 
   const correct = useCallback(
-    (existing: SalaryRecord, correction: SalaryRecordCorrection) =>
+    (
+      existing: SalaryRecord,
+      correction: SalaryRecordCorrection,
+      previousReview?: SalaryReview
+    ) =>
       run("salary.review.correct", "Could not update salary record.", async (u) => {
-        const outcome = await correctSalaryRecord(u, existing, correction);
+        const outcome = await correctSalaryRecord(u, existing, correction, previousReview);
         return writeSavedMessage(outcome, "Salary record updated");
       }),
     [run]

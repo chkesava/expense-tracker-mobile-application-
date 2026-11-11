@@ -78,6 +78,8 @@ export interface SalaryTimelineOptions {
   salaryProfile?: SalaryProfile;
   /** Reference month for gap calculation (defaults to current month). */
   referenceMonth?: string;
+  /** Only include confirmed or manual records (default: true). Set false to include unreviewed detected records. */
+  canonicalOnly?: boolean;
 }
 
 export interface SalaryTimelineResult {
@@ -115,7 +117,12 @@ export function buildSalaryTimeline(
   records: SalaryRecord[],
   options?: SalaryTimelineOptions
 ): SalaryTimelineResult {
-  const activeRecords = (records || []).filter((r) => !r.deletedAt);
+  const canonicalOnly = options?.canonicalOnly ?? true;
+  const activeRecords = (records || []).filter((r) => {
+    if (r.deletedAt || r.status === "rejected") return false;
+    if (canonicalOnly && r.status === "detected") return false;
+    return true;
+  });
   const filters = options?.filters;
   const profile = options?.salaryProfile;
 
@@ -124,7 +131,7 @@ export function buildSalaryTimeline(
   const allEmployersSet = new Set<string>();
 
   for (const r of activeRecords) {
-    const yr = (r.month || r.payPeriod.month || r.paymentDate || "").slice(0, 4);
+    const yr = (r.payPeriod?.month || r.month || r.paymentDate || "").slice(0, 4);
     if (yr) yearSet.add(yr);
     if (r.employer?.name) allEmployersSet.add(r.employer.name);
   }
@@ -135,7 +142,7 @@ export function buildSalaryTimeline(
   const items: SalaryPaycheckTimelineItem[] = [];
 
   for (const r of activeRecords) {
-    const wageMonth = r.month || r.payPeriod.month;
+    const wageMonth = r.payPeriod?.month || r.month;
     const isGrossKnown =
       r.grossAmount !== null &&
       r.grossAmount !== undefined &&
@@ -157,7 +164,7 @@ export function buildSalaryTimeline(
       isGrossKnown,
       classification: r.type,
       isVariablePay,
-      status: r.status === "confirmed" ? "confirmed" : "detected",
+      status: r.status === "detected" ? "detected" : "confirmed",
       confidence: r.confidence,
       record: r,
       hasBreakdown: Boolean(r.breakdown && (r.breakdown.grossSalary || r.breakdown.deductions)),

@@ -103,6 +103,7 @@ export function SalaryBreakdownCard({
           </Text>
           {waterfall.grossSalary != null ? (
             <Amount
+              ghostable
               value={waterfall.grossSalary}
               currency="INR"
               style={[styles.summaryValue, { color: colors.foreground }]}
@@ -122,6 +123,7 @@ export function SalaryBreakdownCard({
           </Text>
           {waterfall.totalDeductions > 0 ? (
             <Amount
+              ghostable
               value={waterfall.totalDeductions}
               currency="INR"
               style={[styles.summaryValue, { color: colors.destructive }]}
@@ -140,6 +142,7 @@ export function SalaryBreakdownCard({
             Net Take-Home
           </Text>
           <Amount
+            ghostable
             value={waterfall.netSalary}
             currency="INR"
             style={[styles.summaryValueNet, { color: colors.primary }]}
@@ -159,6 +162,7 @@ export function SalaryBreakdownCard({
               Gross pay minus deductions yields an expected net of{" "}
               {waterfall.grossSalary != null && (
                 <Amount
+                  ghostable
                   value={waterfall.grossSalary - waterfall.totalDeductions}
                   currency="INR"
                   style={styles.discrepancyAmountInline}
@@ -166,6 +170,7 @@ export function SalaryBreakdownCard({
               )}
               , differing from the actual net credit by{" "}
               <Amount
+                ghostable
                 value={Math.abs(waterfall.discrepancyAmount)}
                 currency="INR"
                 style={styles.discrepancyAmountInline}
@@ -322,6 +327,7 @@ export function SalaryBreakdownCard({
             <Text style={[styles.netOnlySubtitle, { color: colors.mutedForeground }]}>
               Only the net bank deposit of{" "}
               <Amount
+                ghostable
                 value={waterfall.netSalary}
                 currency="INR"
                 style={styles.netOnlyAmountInline}
@@ -380,6 +386,7 @@ function BreakdownItemRow({
       <View style={styles.itemRight}>
         <Text style={[styles.itemAmountPrefix, { color: valueColor }]}>{prefix}</Text>
         <Amount
+          ghostable
           value={item.amount}
           currency="INR"
           style={[styles.itemAmountValue, { color: valueColor }]}

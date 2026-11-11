@@ -88,6 +88,22 @@ export const SalaryHeaderSummary = memo(function SalaryHeaderSummary({
               </Text>
             </View>
           ) : null}
+          {onAddManualRecord ? (
+            <Pressable
+              onPress={onAddManualRecord}
+              style={({ pressed }) => [
+                styles.addRecordBtn,
+                {
+                  backgroundColor: pressed ? surfaces.tile : "transparent",
+                  borderColor: theme.colors.border,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Add paycheck"
+            >
+              <Plus size={14} color={theme.colors.primary} />
+            </Pressable>
+          ) : null}
         </View>
 
         <Text style={[styles.label, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
@@ -95,12 +111,12 @@ export const SalaryHeaderSummary = memo(function SalaryHeaderSummary({
         </Text>
 
         <View style={styles.amountRow}>
-          <Amount value={netAmount} style={{ fontSize: theme.typography.xxl, fontFamily: theme.fontFamily.bold, color: theme.colors.foreground }} />
+          <Amount ghostable value={netAmount} style={{ fontSize: theme.typography.xxl, fontFamily: theme.fontFamily.bold, color: theme.colors.foreground }} />
           {grossAmount && grossAmount > netAmount ? (
             <View style={[styles.grossPill, { backgroundColor: surfaces.tile }]}>
               <Receipt size={12} color={theme.colors.mutedForeground} />
               <Text style={[styles.grossText, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>
-                Gross <Amount value={grossAmount} style={{ fontSize: theme.typography.xs, fontFamily: theme.fontFamily.medium, color: theme.colors.mutedForeground }} />
+                Gross <Amount ghostable value={grossAmount} style={{ fontSize: theme.typography.xs, fontFamily: theme.fontFamily.medium, color: theme.colors.mutedForeground }} />
               </Text>
             </View>
           ) : null}
@@ -130,7 +146,7 @@ export const SalaryHeaderSummary = memo(function SalaryHeaderSummary({
           <TrendingUp size={14} color={theme.colors.primary} />
           <Text style={[styles.bonusText, { color: theme.colors.foreground, fontFamily: theme.fontFamily.regular }]}>
             <Text style={{ fontFamily: theme.fontFamily.semibold }}>
-              +<Amount value={totalBonusPast12Months} style={{ fontSize: theme.typography.xs, fontFamily: theme.fontFamily.semibold, color: theme.colors.foreground }} />
+              +<Amount ghostable value={totalBonusPast12Months} style={{ fontSize: theme.typography.xs, fontFamily: theme.fontFamily.semibold, color: theme.colors.foreground }} />
             </Text>{" "}
             variable pay / bonuses received in past 12 months
           </Text>
@@ -182,6 +198,14 @@ const styles = StyleSheet.create({
   },
   badgeConfirmedText: {
     fontSize: 10,
+  },
+  addRecordBtn: {
+    marginLeft: "auto",
+    padding: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   label: {
     fontSize: 12,

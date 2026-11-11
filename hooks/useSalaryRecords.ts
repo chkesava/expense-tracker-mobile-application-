@@ -13,14 +13,14 @@ import type { SalaryRecord } from "@/shared/features/salary/types";
  * Loads canonical salary records for the current user (SPENDLY-325, SPENDLY-333).
  * Dual-store aware: reads from Firestore by default, or Supabase via read-model local copy.
  */
-export function useSalaryRecords(options?: { enabled?: boolean }) {
+export function useSalaryRecords(options?: { enabled?: boolean; copy?: boolean }) {
   const enabled = options?.enabled !== false;
   const { user } = useAuth();
   const uid = user?.uid;
   const [records, setRecords] = useState<SalaryRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const { error, setError, retry, attempt } = useLoadFailure();
-  const recordsSource = useReadModelSource("salaryRecords");
+  const recordsSource = useReadModelSource("salaryRecords", { copy: options?.copy });
 
   useEffect(() => {
     const db = getFirestoreDb();

@@ -23,7 +23,7 @@ import {
 } from "@/shared/utils/dates";
 import { roundMoney } from "@/shared/utils/money";
 import { formatMonthName } from "./timeline";
-import { learnPaydayProfile, type LearnedPaydayProfile } from "./irregularity";
+import { learnPaydayProfile, ordinal, type LearnedPaydayProfile } from "./irregularity";
 
 export type ForecastConfidence = "high" | "medium" | "low" | "insufficient_data";
 
@@ -119,14 +119,21 @@ export function buildSalaryForecast(
     return isValidDateKey(r.paymentDate) && isValidMonthKey(r.payPeriod?.month || r.month);
   });
 
-  const regularRecords = eligible.filter((r) => r.type === "regular");
-  const bonusRecords = eligible.filter((r) => r.type !== "regular");
-
   const employer =
     options?.employerName ||
-    eligible[0]?.employer.name ||
     options?.profile?.primaryEmployer ||
+    eligible[0]?.employer.name ||
     "Primary Employer";
+
+  const employerLower = employer.toLowerCase();
+  const employerEligible = eligible.filter(
+    (r) =>
+      r.employer.name.toLowerCase() === employerLower ||
+      r.employer.normalizedName?.toLowerCase() === employerLower
+  );
+
+  const regularRecords = employerEligible.filter((r) => r.type === "regular");
+  const bonusRecords = employerEligible.filter((r) => r.type !== "regular");
 
   const disclaimer =
     "This forecast is an estimate derived from historical payroll deposits. Projections depend on ongoing employment, payroll processing, and may differ due to tax adjustments or unpaid leave. Future income is not guaranteed.";
@@ -173,8 +180,13 @@ export function buildSalaryForecast(
   const baselineRegularNet = last3Amounts[Math.floor(last3Amounts.length / 2)];
 
   // Calculate historical bonus monthly average over past 12 months
-  const totalBonusPastYear = bonusRecords.reduce((acc, r) => acc + r.netAmount, 0);
-  const historicalBonusAverageMonthly = roundMoney(totalBonusPastYear / Math.max(1, Math.min(12, eligible.length)));
+  const oneYearAgoMonth = shiftMonthKey(today.slice(0, 7), -12);
+  const pastYearBonusRecords = bonusRecords.filter((r) => {
+    const m = r.payPeriod?.month || r.month;
+    return m >= oneYearAgoMonth && m <= today.slice(0, 7);
+  });
+  const totalBonusPastYear = pastYearBonusRecords.reduce((acc, r) => acc + r.netAmount, 0);
+  const historicalBonusAverageMonthly = roundMoney(totalBonusPastYear / 12);
 
   // Derive confidence
   let confidence: ForecastConfidence = "medium";
@@ -276,7 +288,7 @@ export function buildSalaryForecast(
       `Assumes continuation of regular compensation with ${employer}.`,
       `Estimated at historical baseline net pay of ₹${baselineRegularNet}.`,
       `Conservative zero-variable baseline (bonuses are excluded).`,
-      `Payday window estimated between the ${clampedStartDay}th and ${clampedEndDay}th based on ${learned.sampleCount} past deposits.`,
+      `Payday window estimated between the ${ordinal(clampedStartDay)} and ${ordinal(clampedEndDay)} based on ${learned.sampleCount} past deposits.`,
     ];
 
     const projectionId = `salary_forecast:${employer.toLowerCase().replace(/[^a-z0-9]/g, "_")}:${wageMonth}`;

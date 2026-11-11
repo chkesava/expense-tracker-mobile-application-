@@ -248,6 +248,23 @@ describe("SPENDLY-325: Salary Intelligence firestore.rules", () => {
       const snap = await assertSucceeds(getDoc(doc(db, salaryDocPath(OWNER, "salaryReviews", review.id))));
       expect(snap.exists()).toBe(true);
 
+      // Updating existing review preserving createdAtMs succeeds
+      const updated: SalaryReview = {
+        ...review,
+        decision: "confirm",
+        salaryType: "regular",
+        updatedAtMs: (clock += 1000),
+      };
+      await assertSucceeds(commit(db, salaryReviewWriteOps(OWNER, updated, review, S)));
+
+      // Changing createdAtMs on update is rejected by rules
+      const badCreatedAt: SalaryReview = {
+        ...review,
+        createdAtMs: (clock += 1000),
+        updatedAtMs: clock,
+      };
+      await assertFails(commit(db, salaryReviewWriteOps(OWNER, badCreatedAt, review, S)));
+
       await assertSucceeds(commit(db, salaryReviewDeleteOps(OWNER, review.id)));
     });
 

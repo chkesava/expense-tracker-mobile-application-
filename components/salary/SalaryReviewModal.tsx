@@ -297,6 +297,7 @@ export function SalaryReviewModal({
                 Net Pay Credited
               </Text>
               <Amount
+                ghostable
                 value={candidate.amount}
                 currency="INR"
                 style={[styles.amountValue, { color: colors.foreground }]}

@@ -11,11 +11,14 @@ import { detectSalaryIrregularities, filterActiveSalarySignals } from "@/shared/
 import { buildSalaryForecast } from "@/shared/features/salary/utils/forecast";
 import type { SalaryCandidate, SalarySignal } from "@/shared/features/salary";
 
-export function useSalaryIntelligenceData(options?: { enabled?: boolean }) {
+export function useSalaryIntelligenceData(options?: { enabled?: boolean; copy?: boolean }) {
   const { settings } = useSettings();
   const today = todayDateKey(settings.timezone);
 
-  const { records, loading: recordsLoading, error: recordsError, retry: retryRecords } = useSalaryRecords(options);
+  const { records, loading: recordsLoading, error: recordsError, retry: retryRecords } = useSalaryRecords({
+    ...options,
+    copy: options?.copy ?? false,
+  });
   const { profiles, primaryProfile, loading: profilesLoading, error: profilesError, retry: retryProfiles } = useSalaryProfiles(options);
   const { reviews, loading: reviewsLoading, error: reviewsError, retry: retryReviews } = useSalaryReviews(options);
   const { incomes, loading: incomesLoading } = useIncomes();
