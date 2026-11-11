@@ -280,7 +280,9 @@ describe("Investments hub tabs (SPENDLY-645)", () => {
   });
 
   it("parses the Stocks sub-tab deep link and ignores unknown values", () => {
+    expect(PORTFOLIO_SUB_TAB_IDS).toContain("history");
     expect(PORTFOLIO_SUB_TAB_IDS).toContain("watchlist");
+    expect(parsePortfolioSubTab("history")).toBe("history");
     expect(parsePortfolioSubTab("watchlist")).toBe("watchlist");
     expect(parsePortfolioSubTab("alerts")).toBe("alerts");
     expect(parsePortfolioSubTab("bogus")).toBeNull();
