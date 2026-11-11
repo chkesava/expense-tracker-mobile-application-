@@ -4,6 +4,7 @@ import {
   BarChart3,
   Bell,
   Eye,
+  History,
   LineChart,
   TrendingUp,
 } from "lucide-react-native";
@@ -19,6 +20,7 @@ import { PortfolioSummaryCard } from "@/components/portfolio/PortfolioSummaryCar
 import { TradingChargesCard } from "@/components/portfolio/TradingChargesCard";
 import { ManageStockCashModal } from "@/components/portfolio/ManageStockCashModal";
 import { HoldingsList } from "@/components/portfolio/HoldingsList";
+import { PortfolioHistoryTab } from "@/components/portfolio/PortfolioHistoryTab";
 import { WatchlistTab } from "@/components/portfolio/WatchlistTab";
 import { AlertsTab } from "@/components/portfolio/AlertsTab";
 import { OrdersTab } from "@/components/portfolio/OrdersTab";
@@ -203,6 +205,11 @@ function PortfolioDashboardInner({
       icon: (color) => <TrendingUp size={14} color={color} />,
     },
     {
+      id: "history",
+      label: "History",
+      icon: (color) => <History size={14} color={color} />,
+    },
+    {
       id: "watchlist",
       label: "Watchlist",
       icon: (color) => <Eye size={14} color={color} />,
@@ -309,6 +316,25 @@ function PortfolioDashboardInner({
       <View style={styles.fill}>
         <HoldingsList
           holdings={holdingsWithMetrics}
+          listHeader={
+            <View>
+              {listHeader}
+              {chrome}
+            </View>
+          }
+        />
+        {cashModal}
+      </View>
+    );
+  }
+
+  if (subTab === "history") {
+    return (
+      <View style={styles.fill}>
+        <PortfolioHistoryTab
+          transactions={transactions}
+          holdings={holdings}
+          currency={displayCurrency}
           listHeader={
             <View>
               {listHeader}
