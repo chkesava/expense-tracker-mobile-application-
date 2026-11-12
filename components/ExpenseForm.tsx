@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -1082,68 +1083,99 @@ export function ExpenseForm({
         ) : null}
       </View>
 
-      {/* Category Picker Modal — stays open until subcategory is chosen */}
-      <Modal
-        visible={showCategoryPickerModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowCategoryPickerModal(false)}
-      >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: theme.colors.background,
-            paddingTop: 16,
-            paddingHorizontal: 16,
-            paddingBottom: 16,
-          }}
-        >
+      {/* Category Picker — stays open until subcategory is chosen. */}
+      {(() => {
+        const content = (
           <View
             style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: 8,
+              flex: 1,
+              backgroundColor: theme.colors.background,
+              paddingTop: 16,
+              paddingHorizontal: 16,
+              paddingBottom: 16,
             }}
           >
-            <View style={{ flex: 1, paddingRight: 12 }}>
-              <Text
-                style={{
-                  fontSize: 18,
-                  fontWeight: "800",
-                  color: theme.colors.foreground,
-                }}
-              >
-                Select Category
-              </Text>
-              <Text
-                style={{
-                  fontSize: 12,
-                  marginTop: 2,
-                  color: theme.colors.mutedForeground,
-                }}
-              >
-                Pick a category, then a subcategory
-              </Text>
-            </View>
-            <Button
-              variant="tonal"
-              size="icon"
-              onPress={() => setShowCategoryPickerModal(false)}
-              accessibilityLabel="Close category picker"
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 8,
+              }}
             >
-              <X size={18} color={theme.colors.onSecondaryContainer} />
-            </Button>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text
+                  style={{
+                    fontSize: 18,
+                    fontWeight: "800",
+                    color: theme.colors.foreground,
+                  }}
+                >
+                  Select Category
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    marginTop: 2,
+                    color: theme.colors.mutedForeground,
+                  }}
+                >
+                  Pick a category, then a subcategory
+                </Text>
+              </View>
+              <Button
+                variant="tonal"
+                size="icon"
+                onPress={() => setShowCategoryPickerModal(false)}
+                accessibilityLabel="Close category picker"
+              >
+                <X size={18} color={theme.colors.onSecondaryContainer} />
+              </Button>
+            </View>
+            <CategoryPicker
+              inline
+              category={category}
+              subcategory={subcategory}
+              onCategoryChange={handleSelectCategoryPair}
+              onComplete={() => setShowCategoryPickerModal(false)}
+            />
           </View>
-          <CategoryPicker
-            inline
-            category={category}
-            subcategory={subcategory}
-            onCategoryChange={handleSelectCategoryPair}
-            onComplete={() => setShowCategoryPickerModal(false)}
-          />
-        </View>
-      </Modal>
+        );
+
+        // SPENDLY-753: on web, a second React Native `Modal` nested inside the
+        // Add Transaction sheet's own Gluestack-based modal creates two
+        // competing focus traps (RN-Web's ModalFocusTrap vs Gluestack's
+        // overlay) — the outer one keeps winning and silently discards any
+        // `.focus()` call made inside this inner modal's content (confirmed:
+        // the ref and its `.focus` function are both present and called, but
+        // `document.activeElement` is yanked back to the outer sheet every
+        // single frame). Rendering this as an in-place overlay instead of a
+        // second native Modal keeps it inside the same (one) focus trap.
+        // Native iOS/Android don't have this bug and keep the real page-sheet
+        // modal.
+        if (Platform.OS === "web") {
+          return showCategoryPickerModal ? (
+            <View
+              style={[
+                StyleSheet.absoluteFillObject,
+                { zIndex: 1000, elevation: 24 },
+              ]}
+            >
+              {content}
+            </View>
+          ) : null;
+        }
+        return (
+          <Modal
+            visible={showCategoryPickerModal}
+            animationType="slide"
+            presentationStyle="pageSheet"
+            onRequestClose={() => setShowCategoryPickerModal(false)}
+          >
+            {content}
+          </Modal>
+        );
+      })()}
 
       {/* AI Modals */}
       <MagicChatModal

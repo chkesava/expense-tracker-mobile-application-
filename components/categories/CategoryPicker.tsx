@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   Modal,
   Pressable,
@@ -35,6 +35,42 @@ import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipe
 
 import { SearchBar } from "@/components/common/SearchBar";
 import { SheetBottomInset } from "@/components/common/SheetBottomInset";
+
+/**
+ * SPENDLY-753 — focuses `ref` once `active` becomes true. A bare `autoFocus`
+ * prop doesn't reliably focus a RN-Web TextInput that mounts inside a
+ * conditionally-rendered block; a ref + effect does, but a single
+ * `requestAnimationFrame` can still land one frame too early right after a
+ * host Modal mounts/transitions. Retrying across a few frames (stopping as
+ * soon as the input reports itself focused) is a cheap, harmless safety net
+ * on top of that — it is not a substitute for not nesting this inside a
+ * second Modal competing for focus (see ExpenseForm.tsx's web-only overlay
+ * for that: two independent Modal/focus-trap implementations stacked makes
+ * the outer one win and silently discard every `.focus()` call made here,
+ * no matter how many times retried).
+ */
+function useFocusOnMount(ref: RefObject<TextInput | null>, active: boolean): void {
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    let frame = 0;
+    let attempts = 0;
+    const tryFocus = () => {
+      if (cancelled) return;
+      const node = ref.current;
+      const focused = node?.isFocused?.() ?? false;
+      if (node && !focused) node.focus();
+      attempts += 1;
+      if (attempts < 10 && !focused) frame = requestAnimationFrame(tryFocus);
+    };
+    frame = requestAnimationFrame(tryFocus);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
+  }, [active, ref]);
+}
+
 export interface CategoryPickerProps {
   category: string;
   subcategory: string;
@@ -95,20 +131,17 @@ export function CategoryPicker({
   onCompleteRef.current = onComplete;
 
   // SPENDLY-753: `autoFocus` alone doesn't reliably focus a RN-Web TextInput
-  // that mounts inside a conditionally-rendered block — a ref + an effect
-  // that fires after the node has actually mounted does.
+  // that mounts inside this Modal-nested, conditionally-rendered block, and
+  // neither does a single requestAnimationFrame — the Modal's own mount/
+  // transition is still settling, and a `.focus()` call during that window is
+  // silently dropped by the browser (confirmed: the ref and its `.focus`
+  // function are both present when called, but `document.activeElement`
+  // never moves). Retrying across a few animation frames rides out that
+  // window without guessing a fixed delay.
   const newParentInputRef = useRef<TextInput>(null);
   const newSubInputRef = useRef<TextInput>(null);
-  useEffect(() => {
-    if (!showAddParent) return;
-    const frame = requestAnimationFrame(() => newParentInputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
-  }, [showAddParent]);
-  useEffect(() => {
-    if (!showAddSub) return;
-    const frame = requestAnimationFrame(() => newSubInputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
-  }, [showAddSub]);
+  useFocusOnMount(newParentInputRef, showAddParent);
+  useFocusOnMount(newSubInputRef, showAddSub);
 
   const activeParent = useMemo(
     () =>
