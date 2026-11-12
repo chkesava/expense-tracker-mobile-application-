@@ -1157,7 +1157,7 @@ export function ExpenseForm({
           return showCategoryPickerModal ? (
             <View
               style={[
-                StyleSheet.absoluteFillObject,
+                StyleSheet.absoluteFill,
                 { zIndex: 1000, elevation: 24 },
               ]}
             >
