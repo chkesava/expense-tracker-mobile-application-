@@ -210,7 +210,9 @@ export function Section({
                       fontFamily: theme.fontFamily.semibold,
                     },
                   ]}
-                  numberOfLines={1}
+                  // Two lines: beside a header action a phone cut titles to
+                  // "Spending Overv…" / "Stocks & De…".
+                  numberOfLines={2}
                 >
                   {title}
                 </Text>

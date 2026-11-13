@@ -30,6 +30,11 @@ export type ButtonProps = Omit<PressableProps, "children" | "style"> & {
   loading?: boolean;
   haptic?: boolean;
   style?: StyleProp<ViewStyle>;
+  /**
+   * Lines a string label may use before it is cut (default 1). Opt in for a
+   * long label that would otherwise truncate on a phone; it stays centred.
+   */
+  labelLines?: number;
 };
 
 export function Button({
@@ -41,6 +46,7 @@ export function Button({
   disabled,
   onPress,
   style,
+  labelLines = 1,
   ...props
 }: ButtonProps) {
   const { theme, themeName } = useTheme();
@@ -116,7 +122,10 @@ export function Button({
     >
       {loading && <GluestackButtonSpinner color={labelColor} />}
       {typeof children === "string" ? (
-        <GluestackButtonText style={labelStyle} numberOfLines={1}>
+        <GluestackButtonText
+          style={labelLines > 1 ? [labelStyle, { flexShrink: 1, textAlign: "center" }] : labelStyle}
+          numberOfLines={labelLines}
+        >
           {children}
         </GluestackButtonText>
       ) : (

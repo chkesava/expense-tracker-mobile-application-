@@ -105,6 +105,7 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
   const period = controlledPeriod ?? ownPeriod;
   const setPeriod = onPeriodChange ?? setOwnPeriod;
   const desktop = variant === "desktop";
+  const [footerNarrow, setFooterNarrow] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
 
@@ -361,14 +362,21 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
         )}
 
         {desktop ? null : (
-          <View style={[styles.footer, { borderTopColor: withAlpha(theme.colors.foreground, 0.1) }]}>
-            <FooterFigure label="Assets" ghost={ghost} value={compactAmount(netWorth.totalAssets, currency)} />
-            <View style={[styles.footerDivider, { backgroundColor: withAlpha(theme.colors.foreground, 0.12) }]} />
-            <FooterFigure label="Liabilities" ghost={ghost} value={compactAmount(netWorth.totalLiabilities, currency)} />
-            <View style={[styles.footerDivider, { backgroundColor: withAlpha(theme.colors.foreground, 0.12) }]} />
+          <View
+            style={[styles.footer, { borderTopColor: withAlpha(theme.colors.foreground, 0.1) }]}
+            onLayout={(e) => {
+              const next = e.nativeEvent.layout.width < FOOTER_NARROW_BELOW;
+              if (next !== footerNarrow) setFooterNarrow(next);
+            }}
+          >
+            <FooterFigure label="Assets" ghost={ghost} narrow={footerNarrow} value={compactAmount(netWorth.totalAssets, currency)} />
+            <View style={[styles.footerDivider, footerNarrow && styles.footerDividerNarrow, { backgroundColor: withAlpha(theme.colors.foreground, 0.12) }]} />
+            <FooterFigure label="Liabilities" ghost={ghost} narrow={footerNarrow} value={compactAmount(netWorth.totalLiabilities, currency)} />
+            <View style={[styles.footerDivider, footerNarrow && styles.footerDividerNarrow, { backgroundColor: withAlpha(theme.colors.foreground, 0.12) }]} />
             <FooterFigure
               label="Gain/Loss"
               ghost={ghost}
+              narrow={footerNarrow}
               value={pct === null ? "—" : `${pct >= 0 ? "↑" : "↓"} ${Math.abs(pct).toFixed(1)}%`}
               color={pct === null ? theme.colors.mutedForeground : pct >= 0 ? theme.colors.success : theme.colors.destructive}
             />
@@ -379,13 +387,13 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
   );
 });
 
-function FooterFigure({ label, value, ghost, color }: { label: string; value: string; ghost: boolean; color?: string }) {
+function FooterFigure({ label, value, ghost, color, narrow = false }: { label: string; value: string; ghost: boolean; color?: string; narrow?: boolean }) {
   const { theme } = useTheme();
   return (
     <View style={styles.figure}>
       <Text style={[styles.figureLabel, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}>{label}</Text>
       <Text
-        style={[styles.figureValue, { color: color ?? theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
+        style={[styles.figureValue, narrow && styles.figureValueNarrow, { color: color ?? theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
         numberOfLines={1}
         adjustsFontSizeToFit
         minimumFontScale={0.7}
@@ -531,4 +539,15 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
     fontVariant: ["tabular-nums"],
   },
+  // A footer under FOOTER_NARROW_BELOW: on web adjustsFontSizeToFit does
+  // nothing, so "₹59,905" was cut to "₹59,9…" in a ~75px column.
+  figureValueNarrow: {
+    fontSize: 15,
+  },
+  footerDividerNarrow: {
+    marginHorizontal: 8,
+  },
 });
+
+/** Footer width (px) below which its three figures use the smaller size. */
+const FOOTER_NARROW_BELOW = 300;

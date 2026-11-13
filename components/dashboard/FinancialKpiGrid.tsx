@@ -132,13 +132,19 @@ const styles = StyleSheet.create({
     flexDirection: "column",
     gap: 10,
   },
+  // Each row wraps once a card would drop under 160px (phones up to ~360px),
+  // where the 2x2 cut titles to "Tot…" and amounts to "₹7,78,…". Wider
+  // layouts (and the desktop hero) keep the 2x2.
   row: {
     flex: 1,
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
   },
   cell: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 160,
     minWidth: 0,
   },
 });

@@ -73,6 +73,17 @@ export function TransferFundsModal({
     }
   }, [defaultFromAccountId, defaultToAccountId, isOpen]);
 
+  // The sheet is mounted before accounts load, so the initial state above
+  // started empty and no source was ever selected. Apply the same default
+  // (the first account) once accounts are here, only when nothing valid is
+  // selected; an explicit default or the user's own pick is left alone.
+  useEffect(() => {
+    if (!isOpen || defaultFromAccountId) return;
+    if (selectableOptions.some((a) => a.id === fromAccountId)) return;
+    const first = accounts[0]?.id;
+    if (first) setFromAccountId(first);
+  }, [isOpen, defaultFromAccountId, fromAccountId, selectableOptions, accounts]);
+
   useEffect(() => {
     if (!isOpen) return;
     transferIds.current = { entryId: newId(), accountEntryId: newId() };

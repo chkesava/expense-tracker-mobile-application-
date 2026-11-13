@@ -161,7 +161,7 @@ export default function TaxTdsScreen() {
       ) : reconciliation.rows.length > 0 && reconciliation.statement ? (
         <TaxNotice>Everything you've added matches your {reconciliation.statement}.</TaxNotice>
       ) : null}
-      <Button variant="tonal" size="sm" onPress={() => setChoosing(true)}>
+      <Button variant="tonal" size="sm" labelLines={2} onPress={() => setChoosing(true)}>
         Add Form 16, certificate or statement line
       </Button>
     </View>
