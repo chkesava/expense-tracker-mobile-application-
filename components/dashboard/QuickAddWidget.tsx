@@ -1,9 +1,19 @@
-import { memo, useMemo, type ComponentType } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { memo, useMemo, useState, type ComponentType } from "react";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import { useRouter, type Href } from "expo-router";
 import {
   ArrowDownToLine,
   ArrowLeftRight,
+  BarChart3,
   CreditCard,
   LayoutGrid,
   Plus,
@@ -37,6 +47,17 @@ type Action = {
  */
 const BUDGET_ORB = "#B07CFF";
 
+/** The `orbs` variant's natural (non-panel) orb size, from its stylesheet. */
+const ORB_SIZE = 64;
+/**
+ * Below this a fixed 64×64 orb overflows its own flex cell on every phone
+ * width in the Spendly viewport matrix (320–412px) — six actions in one
+ * unwrapped row never had six cells that wide. The orb now shrinks to fit
+ * instead (SPENDLY dashboard redesign fix), down to a still-tappable floor.
+ */
+const ORB_MIN_SIZE = 44;
+const ORB_CELL_PADDING = 8;
+
 /**
  * Quick actions (SPENDLY-532; round orbs since SPENDLY-566). Each orb opens
  * the same form the add sheet does — no new write path. Budget opens the
@@ -59,7 +80,9 @@ export const QuickAddWidget = memo(function QuickAddWidget({
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const panel = variant === "panel";
-  const { setAddTransactionKind, setIsAddExpenseOpen, setIsTransferOpen } = useModalActions();
+  const { setAddTransactionKind, setIsAddExpenseOpen, setIsTransferOpen, setIsDebtPaymentOpen } = useModalActions();
+  const [rowWidth, setRowWidth] = useState(0);
+  const handleRowLayout = (e: LayoutChangeEvent) => setRowWidth(e.nativeEvent.layout.width);
 
   const actions = useMemo<Action[]>(
     () => [
@@ -101,12 +124,38 @@ export const QuickAddWidget = memo(function QuickAddWidget({
         accessibilityLabel: "Set budgets",
         onPress: () => router.push("/settings/money" as Href),
       },
+      {
+        id: "bill",
+        label: "Bill",
+        icon: CreditCard,
+        color: theme.colors.warning,
+        accessibilityLabel: "Pay a credit card bill",
+        onPress: () => setIsDebtPaymentOpen(true),
+      },
+      {
+        id: "report",
+        label: "Report",
+        icon: BarChart3,
+        color: theme.colors.info,
+        accessibilityLabel: "Open reports",
+        onPress: () => router.push("/insights" as Href),
+      },
     ],
-    [theme.colors, router, setAddTransactionKind, setIsAddExpenseOpen, setIsTransferOpen]
+    [theme.colors, router, setAddTransactionKind, setIsAddExpenseOpen, setIsTransferOpen, setIsDebtPaymentOpen]
   );
 
+  // The non-panel row never wraps or scrolls — all six orbs always show at
+  // once — so a fixed 64×64 orb overflows its own cell on every phone width
+  // in the matrix (320–412px: ~48–63px per cell). Shrink it to the measured
+  // cell instead, down to a still-tappable floor.
+  const orbSize = panel
+    ? undefined
+    : rowWidth > 0
+      ? Math.max(ORB_MIN_SIZE, Math.min(ORB_SIZE, rowWidth / actions.length - ORB_CELL_PADDING))
+      : ORB_SIZE;
+
   const orbs = (
-    <View style={[styles.grid, panel && styles.gridPanel]}>
+    <View style={[styles.grid, panel && styles.gridPanel]} onLayout={panel ? undefined : handleRowLayout}>
       {actions.map((action) => {
         const Icon = action.icon;
         return (
@@ -129,6 +178,7 @@ export const QuickAddWidget = memo(function QuickAddWidget({
               style={[
                 styles.orb,
                 panel && styles.orbPanel,
+                !panel && orbSize ? { width: orbSize, height: orbSize, borderRadius: orbSize / 2 } : null,
                 {
                   // SPENDLY-572: a deep, opaque tint of the hue with a bright
                   // ring, as in the reference — not a pale wash.
@@ -138,7 +188,11 @@ export const QuickAddWidget = memo(function QuickAddWidget({
                 },
               ]}
             >
-              <Icon size={panel ? 22 : 27} color={action.color} strokeWidth={2.4} />
+              <Icon
+                size={panel ? 22 : Math.round((orbSize ?? ORB_SIZE) * 0.42)}
+                color={action.color}
+                strokeWidth={2.4}
+              />
             </View>
             <Text
               style={[styles.label, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
@@ -201,6 +255,12 @@ export const QuickShortcutsWidget = memo(function QuickShortcutsWidget({
         label: "Recurring",
         icon: Repeat,
         onPress: () => router.push("/ledger?tab=subscriptions" as Href),
+      },
+      {
+        id: "reports",
+        label: "Reports",
+        icon: BarChart3,
+        onPress: () => router.push("/insights" as Href),
       },
     ],
     [router, onOpenAddSheet, setIsDebtPaymentOpen]

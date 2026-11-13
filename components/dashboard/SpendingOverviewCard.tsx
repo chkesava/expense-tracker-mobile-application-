@@ -210,7 +210,7 @@ export const SpendingOverviewCard = memo(function SpendingOverviewCard({
             onSlicePress={(_, index) => openSlice(index)}
             centerAccessibilityLabel={`Total spent for ${monthLabel}. Open total spending`}
           />
-          <View style={styles.legend}>
+          <View style={[styles.legend, wide && styles.legendWide]}>
             {categories.map((c, i) => (
               <Pressable
                 key={c.category}
@@ -412,6 +412,13 @@ const styles = StyleSheet.create({
     minWidth: 156,
     gap: 2,
   },
+  legendWide: {
+    // SPENDLY dashboard redesign fix: wide mode adds the amount column
+    // (`legendAmount`, min 76) and a wider percentage column — the plain
+    // 156 floor was sized for the narrow legend only and let the card's own
+    // `overflow: hidden` clip the amount when the row couldn't grow.
+    minWidth: 220,
+  },
   legendRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -447,19 +454,30 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   chartRowWide: {
-    flexWrap: "nowrap",
+    // SPENDLY dashboard redesign fix: a narrow desktop row (e.g. this card
+    // sharing its row with Income vs Expenses and/or Budget) could force
+    // the donut and legend into less width than either needs. `nowrap` then
+    // let the card's own `overflow: hidden` clip the legend's amount column
+    // instead of reflowing to the legend below the donut.
     gap: 24,
     paddingHorizontal: 4,
     paddingVertical: 4,
   },
   linkStrip: {
     flexDirection: "row",
+    // Reflows to two rows instead of squeezing three links to an
+    // unreadable sliver when the card's own row is narrow (SPENDLY
+    // dashboard redesign fix).
+    flexWrap: "wrap",
     gap: 10,
     marginTop: 16,
   },
   linkWide: {
     flex: 1,
-    minWidth: 0,
+    // A floor so three links reliably wrap to two rows (flex-basis alone
+    // doesn't force it) rather than compressing past readability.
+    flexBasis: 140,
+    minWidth: 140,
     marginTop: 0,
     padding: 10,
     gap: 10,

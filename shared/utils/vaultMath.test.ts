@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateMemberSpending, calculateVaultStats } from "./vaultMath";
+import { calculateMemberSpending, calculateVaultStats, totalVaultBudgets } from "./vaultMath";
 import type { SharedVault } from "@/shared/types/vault";
 import type { VaultExpense } from "@/shared/types/vaultExpense";
 
@@ -112,5 +112,23 @@ describe("vaultMath utilities", () => {
     ]);
     expect(stats.totalDeposits).toBe(0.3);
     expect(stats.currentBalance).toBe(0);
+  });
+});
+
+describe("totalVaultBudgets", () => {
+  it("sums budgets across every vault and counts them", () => {
+    const vaults: SharedVault[] = [
+      { name: "A", budget: 20000, currency: "INR", memberIds: [], ownerId: "u", themeColor: "#000" },
+      { name: "B", budget: 5000, currency: "INR", memberIds: [], ownerId: "u", themeColor: "#000" },
+    ];
+    expect(totalVaultBudgets(vaults)).toEqual({ totalBudget: 25000, vaultCount: 2 });
+  });
+
+  it("treats a missing budget as zero and handles an empty list", () => {
+    const vaults: SharedVault[] = [
+      { name: "A", budget: 0, currency: "INR", memberIds: [], ownerId: "u", themeColor: "#000" },
+    ];
+    expect(totalVaultBudgets(vaults)).toEqual({ totalBudget: 0, vaultCount: 1 });
+    expect(totalVaultBudgets([])).toEqual({ totalBudget: 0, vaultCount: 0 });
   });
 });

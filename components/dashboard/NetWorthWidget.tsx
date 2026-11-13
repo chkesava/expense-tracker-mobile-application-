@@ -19,8 +19,8 @@ import {
 import { Amount } from "@/components/common/Amount";
 import { Skeleton } from "@/components/common/Skeleton";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { FinancialKpiGrid } from "@/components/dashboard/FinancialKpiGrid";
 import { NetWorthGlassCard, trendWhen } from "@/components/dashboard/NetWorthGlassCard";
-import { NetWorthTotalCard } from "@/components/dashboard/NetWorthTotalCard";
 import {
   DASH_RADIUS,
   DASH_TYPE,
@@ -53,6 +53,16 @@ export interface NetWorthWidgetProps {
   currency: string;
 }
 
+/** SPENDLY dashboard redesign — the This Month Income/Expense KPI cards. */
+export interface NetWorthWidgetKpiProps {
+  monthlyIncome: number;
+  monthlyExpense: number;
+  previousIncome: number;
+  previousExpense: number;
+  /** The month the income/expense figures and their "View all" nav describe. */
+  activeMonth: string;
+}
+
 export interface NetWorthWidgetDesktopProps {
   /**
    * SPENDLY-718: `desktop` lays the hero beside Total Assets / Total
@@ -78,7 +88,12 @@ export const NetWorthWidget = memo(function NetWorthWidget({
   variant = "stack",
   aside,
   gap = 16,
-}: NetWorthWidgetProps & NetWorthWidgetDesktopProps) {
+  monthlyIncome,
+  monthlyExpense,
+  previousIncome,
+  previousExpense,
+  activeMonth,
+}: NetWorthWidgetProps & NetWorthWidgetDesktopProps & NetWorthWidgetKpiProps) {
   const { settings } = useSettings();
   const todayKey = todayDateKey(settings.timezone);
   // SPENDLY-568: history is read only here, where the trend renders.
@@ -86,6 +101,7 @@ export const NetWorthWidget = memo(function NetWorthWidget({
   // shows whether it is saved and, if not, why.
   const history = useNetWorthHistory(todayKey);
   const recorder = useNetWorthSnapshotStatus({ summary: netWorth, todayKey, history });
+  const kpiProps: NetWorthWidgetKpiProps = { monthlyIncome, monthlyExpense, previousIncome, previousExpense, activeMonth };
 
   if (variant === "desktop") {
     return (
@@ -97,6 +113,7 @@ export const NetWorthWidget = memo(function NetWorthWidget({
         todayKey={todayKey}
         aside={aside}
         gap={gap}
+        {...kpiProps}
       />
     );
   }
@@ -107,18 +124,43 @@ export const NetWorthWidget = memo(function NetWorthWidget({
     return <DashboardSkeleton variant="hero" />;
   }
 
-  // SPENDLY-572: the dashboard's own glass card; the Money hub keeps
-  // `NetWorthHeroCard`.
+  // SPENDLY: the same period (1M, fixed — the mobile card has no range
+  // control of its own) drives the KPI row's assets/liabilities change, so it
+  // never disagrees with the hero above it.
+  const trend = netWorthTrend(history.points, "1M", todayKey);
+  const usable = !history.error && !history.loading && history.points.length >= MIN_POINTS_FOR_TREND;
+  const assetsChange = usable ? totalChange(trend.baseline, trend.latest, "assets") : NO_CHANGE;
+  const liabilitiesChange = usable ? totalChange(trend.baseline, trend.latest, "liabilities") : NO_CHANGE;
+  const when = trendWhen(trend, "1M", settings.dateFormat);
+
   return (
-    <NetWorthGlassCard
-      netWorth={netWorth}
-      currency={currency}
-      points={history.points}
-      todayKey={todayKey}
-      historyLoading={history.loading}
-      historyFailed={Boolean(history.error)}
-      recorder={recorder}
-    />
+    <View style={styles.stack}>
+      {/* SPENDLY-572: the dashboard's own glass card; the Money hub keeps
+          `NetWorthHeroCard`. */}
+      <NetWorthGlassCard
+        netWorth={netWorth}
+        currency={currency}
+        points={history.points}
+        todayKey={todayKey}
+        historyLoading={history.loading}
+        historyFailed={Boolean(history.error)}
+        recorder={recorder}
+      />
+      <FinancialKpiGrid
+        currency={currency}
+        loading={netWorth.loading}
+        when={when}
+        totalAssets={netWorth.totalAssets}
+        totalLiabilities={netWorth.totalLiabilities}
+        assetsChange={assetsChange}
+        liabilitiesChange={liabilitiesChange}
+        monthlyIncome={monthlyIncome}
+        monthlyExpense={monthlyExpense}
+        previousIncome={previousIncome}
+        previousExpense={previousExpense}
+        activeMonth={activeMonth}
+      />
+    </View>
   );
 });
 
@@ -136,6 +178,11 @@ function DesktopNetWorth({
   todayKey,
   aside,
   gap,
+  monthlyIncome,
+  monthlyExpense,
+  previousIncome,
+  previousExpense,
+  activeMonth,
 }: {
   netWorth: UnifiedNetWorthSummary;
   currency: string;
@@ -144,8 +191,7 @@ function DesktopNetWorth({
   todayKey: string;
   aside: ReactNode;
   gap: number;
-}) {
-  const router = useRouter();
+} & NetWorthWidgetKpiProps) {
   const { settings } = useSettings();
   const [period, setPeriod] = useState<NetWorthPeriod>("1M");
   const trend = useMemo(() => netWorthTrend(history.points, period, todayKey), [history.points, period, todayKey]);
@@ -155,7 +201,6 @@ function DesktopNetWorth({
   const assetsChange = usable ? totalChange(trend.baseline, trend.latest, "assets") : NO_CHANGE;
   const liabilitiesChange = usable ? totalChange(trend.baseline, trend.latest, "liabilities") : NO_CHANGE;
   const when = trendWhen(trend, period, settings.dateFormat);
-  const openAccounts = () => router.push("/ledger?tab=accounts" as Href);
 
   return (
     <View style={[desktopStyles.row, { gap }]}>
@@ -179,26 +224,25 @@ function DesktopNetWorth({
         )}
       </View>
       <View style={[desktopStyles.side, { gap }]}>
-        <View style={[desktopStyles.totals, { gap }]}>
-          <NetWorthTotalCard
-            kind="assets"
-            value={netWorth.totalAssets}
-            currency={currency}
-            change={assetsChange}
-            when={when}
-            loading={netWorth.loading}
-            onPress={openAccounts}
-          />
-          <NetWorthTotalCard
-            kind="liabilities"
-            value={netWorth.totalLiabilities}
-            currency={currency}
-            change={liabilitiesChange}
-            when={when}
-            loading={netWorth.loading}
-            onPress={openAccounts}
-          />
-        </View>
+        <FinancialKpiGrid
+          currency={currency}
+          loading={netWorth.loading}
+          when={when}
+          totalAssets={netWorth.totalAssets}
+          totalLiabilities={netWorth.totalLiabilities}
+          assetsChange={assetsChange}
+          liabilitiesChange={liabilitiesChange}
+          monthlyIncome={monthlyIncome}
+          monthlyExpense={monthlyExpense}
+          previousIncome={previousIncome}
+          previousExpense={previousExpense}
+          activeMonth={activeMonth}
+          // Stretches to fill the hero's full height (SPENDLY dashboard
+          // redesign) — there is no `aside` below it any more (Quick Actions
+          // moved to its own full-width row), so this is the only content in
+          // the side column.
+          style={desktopStyles.fill}
+        />
         {aside}
       </View>
     </View>

@@ -47,6 +47,22 @@ export function calculateVaultStats(
 }
 
 /**
+ * Total budgeted across every vault, and how many there are. A true
+ * cross-vault savings *balance* needs each vault's own deposits/withdrawals
+ * (`calculateVaultStats`), which only has a per-vault listener
+ * (`useVaultExpenses(vaultId)`) — fanning that out to every vault for a
+ * dashboard summary would mean one new Firestore listener per vault, so the
+ * dashboard's Vaults summary card shows the budgeted total instead, which is
+ * already on the one `useVaults()` listener it already needs for the count.
+ */
+export function totalVaultBudgets(vaults: SharedVault[]): { totalBudget: number; vaultCount: number } {
+  return {
+    totalBudget: roundMoney(vaults.reduce((sum, vault) => sum + (vault.budget || 0), 0)),
+    vaultCount: vaults.length,
+  };
+}
+
+/**
  * Groups deposits & withdrawals by member
  */
 export function calculateMemberSpending(
