@@ -84,7 +84,7 @@ export function TaxIncomeLineSheet({
 
   if (mode === "category") {
     return (
-      <Modal isOpen onClose={onClose} title="Which kind of income is it?">
+      <Modal density="compact" isOpen onClose={onClose} title="Which kind of income is it?">
         <View style={{ gap: theme.space.md }}>
           <Text style={muted}>Spendly put it under {categoryLabel(line.override?.derivedCategory ?? line.category)}. Moving it doesn't change your Spendly income.</Text>
           <View style={[styles.wrap, { gap: theme.space.sm }]} accessibilityRole="radiogroup">
@@ -106,7 +106,7 @@ export function TaxIncomeLineSheet({
   }
 
   return (
-    <Modal isOpen onClose={onClose} title="Replace with which income?">
+    <Modal density="compact" isOpen onClose={onClose} title="Replace with which income?">
       <View style={{ gap: theme.space.md }}>
         <Text style={muted}>The income you pick counts instead of this one, so the same money isn't counted twice.</Text>
         <View style={[styles.wrap, { gap: theme.space.sm }]} accessibilityRole="radiogroup">

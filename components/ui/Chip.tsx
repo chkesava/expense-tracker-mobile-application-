@@ -138,6 +138,9 @@ const styles = StyleSheet.create({
     gap: 6,
     borderRadius: 999,
     borderCurve: "continuous",
+    // Never wider than its row: a long account name ellipsizes inside the
+    // chip instead of pushing past the sheet edge on a phone.
+    maxWidth: "100%",
   },
   sm: {
     minHeight: 30,
@@ -148,9 +151,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   labelSm: {
+    flexShrink: 1,
     fontSize: 12,
   },
   labelMd: {
+    flexShrink: 1,
     fontSize: 13,
   },
 });

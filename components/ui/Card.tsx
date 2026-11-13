@@ -60,6 +60,12 @@ export type CardProps = {
   contentStyle?: StyleProp<ViewStyle>;
   /** Padding density; see `CardDensity`. */
   density?: CardDensity;
+  /**
+   * Drops the Gluestack shell's `p-4` so only the content padding remains.
+   * On web that class is a stylesheet rule (`html .p-4`) that outranks any
+   * `style` padding, so it has to be swapped, not overridden. Off by default.
+   */
+  flushShell?: boolean;
   testID?: string;
 };
 
@@ -92,6 +98,7 @@ export function Card({
   style,
   contentStyle,
   density = "default",
+  flushShell = false,
   testID,
 }: CardProps) {
   const { theme, themeName } = useTheme();
@@ -351,7 +358,7 @@ export function Card({
   }
 
   return (
-    <GluestackCard testID={testID} style={containerStyle}>
+    <GluestackCard testID={testID} className={flushShell ? "p-0" : undefined} style={containerStyle}>
       {cardInner}
     </GluestackCard>
   );

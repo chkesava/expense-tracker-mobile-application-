@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useState, type ReactNode } from "react";
+import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 
 import { AccountEditButton } from "@/components/accounts/AccountEditButton";
@@ -46,9 +46,27 @@ export function AccountRow({
 }) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
+  // Driven by the row's own width, not the window (the desktop sidebar and
+  // section padding change what is left). Below it the name gets the whole
+  // first line and the value moves under it; one line cut names to "HDFC …"
+  // on a 320-412dp phone.
+  const [stacked, setStacked] = useState(false);
+  const onLayout = (e: LayoutChangeEvent) => {
+    const next = e.nativeEvent.layout.width < STACK_BELOW;
+    if (next !== stacked) setStacked(next);
+  };
+  const identity = (
+    <Text
+      style={[styles.sub, stacked && styles.subStacked, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
+      numberOfLines={1}
+    >
+      {formatAccountIdentityLine(account, typeName)}
+    </Text>
+  );
 
   return (
     <View
+      onLayout={onLayout}
       style={[
         styles.card,
         { backgroundColor: theme.colors.card, borderColor: theme.colors.outlineVariant },
@@ -81,17 +99,23 @@ export function AccountRow({
           >
             {account.name}
           </Text>
-          <Text
-            style={[styles.sub, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
-            numberOfLines={1}
-          >
-            {formatAccountIdentityLine(account, typeName)}
-          </Text>
+          {stacked ? (
+            <View style={styles.stackedLine}>
+              {identity}
+              <View style={styles.trailingStacked}>{trailing}</View>
+            </View>
+          ) : (
+            identity
+          )}
           <NeedsReconciliationText account={account} />
         </View>
 
-        <View style={styles.trailing}>{trailing}</View>
-        <ChevronRight size={16} color={theme.colors.mutedForeground} />
+        {stacked ? null : (
+          <>
+            <View style={styles.trailing}>{trailing}</View>
+            <ChevronRight size={16} color={theme.colors.mutedForeground} />
+          </>
+        )}
       </Pressable>
 
       <AccountEditButton
@@ -153,4 +177,22 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     maxWidth: "45%",
   },
+  stackedLine: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  subStacked: {
+    flex: 1,
+    minWidth: 0,
+    paddingTop: 3,
+  },
+  trailingStacked: {
+    alignItems: "flex-end",
+    flexShrink: 0,
+    maxWidth: "65%",
+  },
 });
+
+/** Row width (dp) below which the value moves under the name. */
+const STACK_BELOW = 400;

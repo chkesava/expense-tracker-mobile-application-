@@ -92,6 +92,7 @@ export function AddAccountEntryModal({
 
   return (
     <Modal
+      density="compact"
       isOpen={isOpen}
       onClose={onClose}
       title="Manual Adjustment"
@@ -113,6 +114,7 @@ export function AddAccountEntryModal({
       >
         {/* Direction Toggle */}
         <SegmentedControl
+          wrapLabels
           value={direction}
           onChange={setDirection}
           options={[
@@ -141,11 +143,7 @@ export function AddAccountEntryModal({
           >
             Account *
           </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8 }}
-          >
+          <View style={[{ gap: 8 }, styles.chipWrap]}>
             {accounts.map((a) => {
               const isSelected = accountId === a.id;
               return (
@@ -158,7 +156,7 @@ export function AddAccountEntryModal({
                 />
               );
             })}
-          </ScrollView>
+          </View>
         </View>
 
         {/* Amount */}
@@ -216,6 +214,12 @@ export function AddAccountEntryModal({
 }
 
 const styles = StyleSheet.create({
+  // Account/option chips wrap instead of scrolling sideways: on a phone a
+  // strip cut chips at the sheet edge and could hide the selected one.
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
   label: {
     fontWeight: "700",
   },

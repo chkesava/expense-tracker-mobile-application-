@@ -97,13 +97,15 @@ export const DebtCard = memo(function DebtCard({
                 headline !== undefined ? styles.subTitle : styles.title,
                 { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold },
               ]}
-              numberOfLines={1}
+              // Two lines, not one: beside the status pill a phone cut the
+              // lender name and the interest rate in the meta line ("13.…").
+              numberOfLines={2}
             >
               {title}
             </Text>
             <Text
               style={[styles.meta, { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular }]}
-              numberOfLines={1}
+              numberOfLines={2}
             >
               {meta}
             </Text>

@@ -276,7 +276,7 @@ export function RecordCashbackModal({
 
   if (creditCards.length === 0) {
     return (
-      <Modal isOpen={isOpen} onClose={onClose} title="Record Cashback">
+      <Modal density="compact" isOpen={isOpen} onClose={onClose} title="Record Cashback">
         <View style={{ gap: 12, paddingBottom: 20 }}>
           <Text style={{ color: theme.colors.mutedForeground, lineHeight: 20 }}>
             Cashback is credited to a credit card, and there are no credit card
@@ -292,6 +292,7 @@ export function RecordCashbackModal({
 
   return (
     <Modal
+      density="compact"
       isOpen={isOpen}
       onClose={onClose}
       title="Record Cashback"
@@ -333,11 +334,7 @@ export function RecordCashbackModal({
           >
             Credit Card *
           </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8 }}
-          >
+          <View style={[{ gap: 8 }, styles.chipWrap]}>
             {creditCards.map((c) => {
               const isSelected = cardId === c.id;
               return (
@@ -351,7 +348,7 @@ export function RecordCashbackModal({
                 />
               );
             })}
-          </ScrollView>
+          </View>
         </View>
 
         {/* What the card owes right now — the ceiling for this entry. */}
@@ -561,6 +558,12 @@ export function RecordCashbackModal({
 }
 
 const styles = StyleSheet.create({
+  // Account/option chips wrap instead of scrolling sideways: on a phone a
+  // strip cut chips at the sheet edge and could hide the selected one.
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
   label: {
     fontWeight: "700",
   },

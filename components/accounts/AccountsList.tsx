@@ -270,11 +270,11 @@ export function AccountsList() {
             size="sm"
             variant="outline"
             onPress={() => setIsStockCashModalOpen(true)}
-            style={{ flex: 1 }}
+            style={styles.stockAction}
           >
             Transfer Cash
           </Button>
-          <Button size="sm" onPress={openPortfolio} style={{ flex: 1 }}>
+          <Button size="sm" onPress={openPortfolio} style={styles.stockAction}>
             View Portfolio
           </Button>
         </View>
@@ -469,12 +469,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
   },
+  // Both action rows wrap: on a 320dp phone side-by-side buttons cut their
+  // labels ("Adjust Bala…", "Transfer Ca…"); they stack full width instead.
   quickActionsRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
   },
   quickAction: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 150,
     minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
@@ -493,8 +497,13 @@ const styles = StyleSheet.create({
   },
   stockActionsRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
     marginTop: 12,
+  },
+  stockAction: {
+    flexGrow: 1,
+    flexBasis: 120,
   },
   accountList: {
     gap: 8,

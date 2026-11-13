@@ -305,6 +305,7 @@ export function EditAccountModal({
 
   return (
     <Modal
+      density="compact"
       isOpen={isOpen}
       onClose={onClose}
       title={isEditing ? "Edit Account" : "Add Account"}
@@ -337,11 +338,7 @@ export function EditAccountModal({
           >
             Account Type *
           </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8 }}
-          >
+          <View style={[{ gap: 8 }, styles.chipWrap]}>
             {accountTypes.map((t) => {
               const isSelected = typeId === t.id;
               return (
@@ -389,7 +386,7 @@ export function EditAccountModal({
                 </Pressable>
               );
             })}
-          </ScrollView>
+          </View>
         </View>
 
         {needsInstitution ? (
@@ -598,6 +595,12 @@ export function EditAccountModal({
 }
 
 const styles = StyleSheet.create({
+  // Account/option chips wrap instead of scrolling sideways: on a phone a
+  // strip cut chips at the sheet edge and could hide the selected one.
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
   label: {
     fontWeight: "700",
   },

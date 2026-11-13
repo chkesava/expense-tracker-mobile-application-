@@ -259,8 +259,12 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.88,
   },
+  // Both rows wrap on a narrow card (320-360dp phones): the reset badge drops
+  // under the name instead of cutting it, and the footer buttons drop under
+  // the limit instead of cutting the limit amount to "₹2,50,…".
   topRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 10,
@@ -269,7 +273,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 190,
     minWidth: 0,
   },
   plastic: {
@@ -365,6 +371,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     gap: 8,
     paddingHorizontal: 16,
@@ -372,8 +379,9 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   limit: {
-    flex: 1,
-    minWidth: 0,
+    flexGrow: 1,
+    flexShrink: 0,
+    minWidth: 96,
     gap: 1,
   },
   footerBtn: {

@@ -128,6 +128,7 @@ export function AccountDocumentModal({
 
   return (
     <Modal
+      density="compact"
       isOpen={isOpen}
       onClose={onClose}
       title={isEditing ? "Edit document" : "Add document"}

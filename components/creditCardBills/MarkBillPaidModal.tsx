@@ -117,6 +117,7 @@ export function MarkBillPaidModal({
 
   return (
     <Modal
+      density="compact"
       isOpen={isOpen}
       onClose={onClose}
       title="Mark Bill as Paid"

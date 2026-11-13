@@ -59,7 +59,9 @@ export function Input({
           onFocus={onFocus as any}
           onBlur={onBlur as any}
           editable={editable}
-          style={[{ fontFamily: theme.fontFamily.regular }, style] as any}
+          // minWidth 0: on web a text input keeps its intrinsic width, so beside
+          // a leading icon (₹) it overran the box and hid a long amount's tail.
+          style={[{ fontFamily: theme.fontFamily.regular, minWidth: 0 }, style] as any}
           {...props}
         />
         {trailingIcon && (

@@ -563,7 +563,9 @@ const styles = StyleSheet.create({
   heroTile: {
     flexGrow: 1,
     flexBasis: "30%",
-    minWidth: 90,
+    // Wide enough for "Subscriptions" / "Auto-transfers" untruncated: on a
+    // phone the third tile wraps to its own row instead of squeezing.
+    minWidth: 120,
   },
   dueStrip: {
     marginTop: 14,
@@ -605,11 +607,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
   },
+  // Wraps: four status tabs ran past the screen edge on a 320-360dp phone.
   filterRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
   },
   filterPill: {
+    minHeight: 36,
+    justifyContent: "center",
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 12,

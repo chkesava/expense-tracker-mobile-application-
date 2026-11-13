@@ -197,10 +197,10 @@ export default function TaxCapitalGainsScreen() {
       ) : null}
       {duplicateIds.size > 0 ? <TaxNotice tone="warning">Some sales look entered twice. Open them to check.</TaxNotice> : null}
       <View style={[styles.inline, { gap: theme.space.sm }]}>
-        <Button variant="tonal" size="sm" onPress={addSale} style={{ flex: 1 }}>
+        <Button variant="tonal" size="sm" onPress={addSale} style={styles.addBtn}>
           Add a sale
         </Button>
-        <Button variant="tonal" size="sm" onPress={addTotal} style={{ flex: 1 }}>
+        <Button variant="tonal" size="sm" onPress={addTotal} style={styles.addBtn}>
           Add a statement total
         </Button>
       </View>
@@ -347,4 +347,6 @@ function GainList({
 const styles = StyleSheet.create({
   listWrap: { flex: 1 },
   inline: { flexDirection: "row", alignItems: "center", flexWrap: "wrap" },
+  // A real basis so the pair wraps on a phone ("Add a stateme…" at flex: 1).
+  addBtn: { flexGrow: 1, flexBasis: 150 },
 });

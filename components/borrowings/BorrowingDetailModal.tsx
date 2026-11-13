@@ -142,7 +142,7 @@ export function BorrowingDetailModal({
 
   if (!borrowing || !summary) {
     return (
-      <Modal isOpen={visible} onClose={onClose} title="Borrowing">
+      <Modal density="compact" isOpen={visible} onClose={onClose} title="Borrowing">
         <View />
       </Modal>
     );
@@ -306,7 +306,7 @@ export function BorrowingDetailModal({
   }
 
   return (
-    <Modal isOpen={visible} onClose={onClose} title={borrowing.lenderName}>
+    <Modal density="compact" isOpen={visible} onClose={onClose} title={borrowing.lenderName}>
       <View style={styles.body}>
         <View style={styles.headerMeta}>
           <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
@@ -512,11 +512,7 @@ export function BorrowingDetailModal({
               <Text style={[styles.label, { color: theme.colors.foreground }]}>
                 Payment Account
               </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.pillRow}
-              >
+              <View style={[styles.pillRow, styles.chipWrap]}>
                 <Chip
                   label="None"
                   selected={paymentAccountId === ""}
@@ -533,7 +529,7 @@ export function BorrowingDetailModal({
                     />
                   );
                 })}
-              </ScrollView>
+              </View>
             </View>
 
             <View style={styles.group}>
@@ -689,6 +685,12 @@ export function BorrowingDetailModal({
 }
 
 const styles = StyleSheet.create({
+  // Account/option chips wrap instead of scrolling sideways: on a phone a
+  // strip cut chips at the sheet edge and could hide the selected one.
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
   body: {
     gap: 18,
   },

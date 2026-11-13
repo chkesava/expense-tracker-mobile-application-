@@ -362,6 +362,7 @@ export function PayCreditBillModal({
 
   return (
     <Modal
+      density="compact"
       isOpen={isOpen}
       onClose={onClose}
       title={isEdit ? "Edit Bill Payment" : "Pay Credit Card Bill"}
@@ -397,11 +398,7 @@ export function PayCreditBillModal({
           >
             Credit Card *
           </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8 }}
-          >
+          <View style={[{ gap: 8 }, styles.chipWrap]}>
             {creditCards.map((c) => {
               const isSelected = toCardId === c.id;
               return (
@@ -416,7 +413,7 @@ export function PayCreditBillModal({
                 />
               );
             })}
-          </ScrollView>
+          </View>
         </View>
 
         {/* Outstanding = unpaid statements + unbilled cycle spend */}
@@ -535,11 +532,7 @@ export function PayCreditBillModal({
           </View>
 
           {!isExternal ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 8 }}
-            >
+            <View style={[{ gap: 8 }, styles.chipWrap]}>
               {bankAccounts.map((b) => {
                 const isSelected = fromAccountId === b.id;
                 return (
@@ -552,7 +545,7 @@ export function PayCreditBillModal({
                   />
                 );
               })}
-            </ScrollView>
+            </View>
           ) : (
             <Text
               style={{
@@ -621,6 +614,12 @@ export function PayCreditBillModal({
 }
 
 const styles = StyleSheet.create({
+  // Account/option chips wrap instead of scrolling sideways: on a phone a
+  // strip cut chips at the sheet edge and could hide the selected one.
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
   label: {
     fontWeight: "700",
   },

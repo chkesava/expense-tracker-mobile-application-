@@ -195,6 +195,7 @@ export function CreateCreditCardBillModal({
 
   return (
     <Modal
+      density="compact"
       isOpen={isOpen}
       onClose={onClose}
       title="Add Credit Card Bill"
@@ -227,11 +228,7 @@ export function CreateCreditCardBillModal({
               No credit card accounts found. Create a Credit Card account first.
             </Text>
           ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 8 }}
-            >
+            <View style={[{ gap: 8 }, { flexDirection: "row", flexWrap: "wrap" }]}>
               {creditCards.map((c) => {
                 const selected = accountId === c.id;
                 return (
@@ -244,7 +241,7 @@ export function CreateCreditCardBillModal({
                   />
                 );
               })}
-            </ScrollView>
+            </View>
           )}
         </View>
 

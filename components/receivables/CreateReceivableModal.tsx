@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { Modal } from "@/components/common/Modal";
 import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
@@ -149,6 +149,7 @@ export function CreateReceivableModal({
 
   return (
     <Modal
+      density="compact"
       isOpen={visible}
       onClose={onClose}
       title="Record Money Lent"
@@ -215,11 +216,7 @@ export function CreateReceivableModal({
           <Text style={[styles.label, { color: theme.colors.foreground }]}>
             Paid From Account *
           </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.pillRow}
-          >
+          <View style={[styles.pillRow, styles.chipWrap]}>
             {accounts.map((account) => {
               const isActive = sourceAccountId === account.id;
               return (
@@ -238,7 +235,7 @@ export function CreateReceivableModal({
               onPress={() => setSourceAccountId(LEND_SOURCE_ALREADY_DEDUCTED)}
               accessibilityLabel="None, already deducted. No account balance change."
             />
-          </ScrollView>
+          </View>
           <Text style={[styles.helper, { color: theme.colors.mutedForeground }]}>
             {isAlreadyDeducted
               ? "No account balance change. Use when this amount was already recorded elsewhere."
@@ -352,11 +349,7 @@ export function CreateReceivableModal({
             <Text style={[styles.label, { color: theme.colors.foreground }]}>
               Space (optional)
             </Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.pillRow}
-            >
+            <View style={[styles.pillRow, styles.chipWrap]}>
               <Chip
                 label="None"
                 selected={spaceId === ""}
@@ -373,7 +366,7 @@ export function CreateReceivableModal({
                   />
                 );
               })}
-            </ScrollView>
+            </View>
           </View>
         ) : null}
 
@@ -383,6 +376,12 @@ export function CreateReceivableModal({
 }
 
 const styles = StyleSheet.create({
+  // Account/option chips wrap instead of scrolling sideways: on a phone a
+  // strip cut chips at the sheet edge and could hide the selected one.
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
   body: {
     gap: 16,
     paddingBottom: 8,
