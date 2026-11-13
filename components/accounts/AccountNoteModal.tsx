@@ -80,6 +80,7 @@ export function AccountNoteModal({
 
   return (
     <Modal
+      density="compact"
       isOpen={isOpen}
       onClose={onClose}
       title={note ? "Edit note" : "Add note"}

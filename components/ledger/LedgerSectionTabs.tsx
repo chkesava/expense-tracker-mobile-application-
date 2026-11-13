@@ -66,6 +66,12 @@ export function LedgerSectionTabs({
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.tabs}
+          // Counts arrive after the first layout and widen the earlier tabs,
+          // which pushed a late active tab (Tax & ITR) part-way off the edge.
+          onContentSizeChange={() => {
+            const x = offsets.current[section];
+            if (x !== undefined) scrollRef.current?.scrollTo({ x: Math.max(0, x - 16), animated: false });
+          }}
           // The row is a tablist, not a scroll region, for a screen reader.
           accessibilityRole="tablist"
         >
@@ -84,7 +90,12 @@ export function LedgerSectionTabs({
                 haptic={!selected}
                 accessibilityRole="tab"
                 onLayout={(event) => {
-                  offsets.current[entry.id] = event.nativeEvent.layout.x;
+                  const x = event.nativeEvent.layout.x;
+                  offsets.current[entry.id] = x;
+                  // On arrival the effect above runs before any chip has laid
+                  // out, so it found no offset and the active tab (e.g. Tax &
+                  // ITR) stayed off-screen. Scroll once its offset is known.
+                  if (selected) scrollRef.current?.scrollTo({ x: Math.max(0, x - 16), animated: false });
                 }}
                 onPress={() => {
                   if (selected) return;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
 
 import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
@@ -137,6 +137,7 @@ export function GroupFundBackfillSheet({ visible, fund, accounts, currency, rece
 
   return (
     <Modal
+      density="compact"
       isOpen={visible}
       onClose={onClose}
       title="Record past months"
@@ -183,11 +184,11 @@ export function GroupFundBackfillSheet({ visible, fund, accounts, currency, rece
         {purposes.length > 1 ? (
           <View style={styles.group}>
             <Text style={label}>Purpose</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+            <View style={[styles.chips, styles.chipWrap]}>
               {purposes.map((p) => (
                 <Chip key={p.id} label={p.name} selected={purposeId === p.id} onPress={() => setPurposeId(p.id)} />
               ))}
-            </ScrollView>
+            </View>
           </View>
         ) : null}
 
@@ -202,12 +203,12 @@ export function GroupFundBackfillSheet({ visible, fund, accounts, currency, rece
               ? "No account balance changes. Use this when the money already reached your bank or cash. Pick the account below to show where it sits (optional)."
               : "The account below goes up once, today. Use this only if the money hasn't been added to any account yet."}
           </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          <View style={[styles.chips, styles.chipWrap]}>
             {alreadyInBalance ? <Chip label="Don't say" selected={!accountId} onPress={() => setAccountId("")} /> : null}
             {accounts.map((a) => (
               <Chip key={a.id} label={a.name} selected={accountId === a.id} onPress={() => setAccountId(a.id)} />
             ))}
-          </ScrollView>
+          </View>
           {alreadyInBalance ? null : <DateField value={date} onChange={setDate} accessibilityLabel="Date received" />}
         </View>
 
@@ -270,6 +271,12 @@ export function GroupFundBackfillSheet({ visible, fund, accounts, currency, rece
 }
 
 const styles = StyleSheet.create({
+  // Account/option chips wrap instead of scrolling sideways: on a phone a
+  // strip cut chips at the sheet edge and could hide the selected one.
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
   body: { gap: 16, paddingBottom: 8 },
   group: { gap: 8 },
   label: { fontSize: 12, fontWeight: "700" },

@@ -32,6 +32,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
+import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 
 export interface EditSubscriptionModalProps {
   visible: boolean;
@@ -89,6 +90,7 @@ export function EditSubscriptionModal({
   onClose,
 }: EditSubscriptionModalProps) {
   const { theme } = useTheme();
+  const { isCompact } = useResponsiveLayout();
   // SPENDLY-553: an RN Modal portals outside SpendlyUIScope on web; re-apply
   // the theme variables so its Gluestack controls keep their colours.
   const scopeVars = useSpendlyScopeVars();
@@ -324,10 +326,11 @@ export function EditSubscriptionModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={[styles.backdrop, { backgroundColor: theme.colors.scrim }, scopeVars]}>
+      <View style={[styles.backdrop, isCompact && styles.backdropCompact, { backgroundColor: theme.colors.scrim }, scopeVars]}>
         <View
           style={[
             styles.modalCard,
+            isCompact && styles.modalCardCompact,
             {
               backgroundColor: theme.colors.card,
               borderColor: theme.colors.border,
@@ -401,6 +404,7 @@ export function EditSubscriptionModal({
                 TYPE
               </Text>
               <SegmentedControl
+                wrapLabels
                 value={type}
                 onChange={(next) => {
                   setType(next);
@@ -466,6 +470,7 @@ export function EditSubscriptionModal({
                   FREQUENCY
                 </Text>
                 <SegmentedControl
+                  wrapLabels
                   value={frequency}
                   onChange={setFrequency}
                   options={[
@@ -607,11 +612,7 @@ export function EditSubscriptionModal({
                     ? "AUTO-DEBIT ACCOUNT"
                     : "LINKED ACCOUNT"}
               </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 8 }}
-              >
+              <View style={[{ gap: 8 }, styles.chipWrap]}>
                 {accounts.map((acc) => {
                   const isSelected = accountId === acc.id;
                   return (
@@ -623,7 +624,7 @@ export function EditSubscriptionModal({
                     />
                   );
                 })}
-              </ScrollView>
+              </View>
             </View>
 
             {/* Destination Account (if transfer) */}
@@ -637,11 +638,7 @@ export function EditSubscriptionModal({
                 >
                   DESTINATION ACCOUNT
                 </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 8 }}
-                >
+                <View style={[{ gap: 8 }, styles.chipWrap]}>
                   {accounts.map((acc) => {
                     const isSelected = toAccountId === acc.id;
                     return (
@@ -653,7 +650,7 @@ export function EditSubscriptionModal({
                       />
                     );
                   })}
-                </ScrollView>
+                </View>
               </View>
             )}
 
@@ -720,6 +717,12 @@ export function EditSubscriptionModal({
 }
 
 const styles = StyleSheet.create({
+  // Account/option chips wrap instead of scrolling sideways: on a phone a
+  // strip cut chips at the sheet edge and could hide the selected one.
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
   backdrop: {
     flex: 1,
     justifyContent: "center",
@@ -732,6 +735,14 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     padding: 20,
+  },
+  // Phones: 16dp less margin and padding a side, so the Type switch fits
+  // "Subscription" on one line at 320-360dp.
+  backdropCompact: {
+    padding: 8,
+  },
+  modalCardCompact: {
+    padding: 16,
   },
   header: {
     flexDirection: "row",

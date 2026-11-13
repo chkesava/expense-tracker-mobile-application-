@@ -73,7 +73,7 @@ export function TaxCapitalGainSheet({
 
   if (choosingClass) {
     return (
-      <Modal isOpen onClose={onClose} title="What kind of asset is it?">
+      <Modal density="compact" isOpen onClose={onClose} title="What kind of asset is it?">
         <View style={{ gap: theme.space.md }}>
           <Text style={muted}>
             Spendly put it under {ASSET_CLASS_LABELS[first.assetClass]}. The asset type decides when a sale is long-term. Your

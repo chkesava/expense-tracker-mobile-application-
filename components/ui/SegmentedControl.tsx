@@ -21,6 +21,12 @@ export type SegmentedControlProps<T extends string> = {
   onChange: (value: T) => void;
   style?: StyleProp<ViewStyle>;
   testID?: string;
+  /**
+   * Opt-in: a label that doesn't fit takes a second, centred line instead of
+   * being cut ("Subscript…" in a phone-width form). Off by default, so every
+   * existing control renders as before.
+   */
+  wrapLabels?: boolean;
 };
 
 /**
@@ -33,6 +39,7 @@ export function SegmentedControl<T extends string>({
   onChange,
   style,
   testID,
+  wrapLabels = false,
 }: SegmentedControlProps<T>) {
   const { theme } = useTheme();
   const surfaces = useSurfaces();
@@ -62,6 +69,7 @@ export function SegmentedControl<T extends string>({
             }}
             style={({ pressed }) => [
               styles.segment,
+              wrapLabels && styles.segmentWrap,
               selected && [{ backgroundColor: theme.colors.card }, theme.elevation[1]],
               pressed && !selected && { opacity: 0.7 },
             ]}
@@ -73,12 +81,13 @@ export function SegmentedControl<T extends string>({
             <Text
               style={[
                 styles.label,
+                wrapLabels && styles.labelWrap,
                 {
                   color: selected ? theme.colors.foreground : theme.colors.mutedForeground,
                   fontWeight: selected ? "700" : "500",
                 },
               ]}
-              numberOfLines={1}
+              numberOfLines={wrapLabels ? 2 : 1}
             >
               {option.label}
             </Text>
@@ -110,5 +119,15 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
+  },
+  segmentWrap: {
+    minWidth: 0,
+    paddingHorizontal: 2,
+    paddingVertical: 4,
+  },
+  labelWrap: {
+    flexShrink: 1,
+    fontSize: 13,
+    textAlign: "center",
   },
 });

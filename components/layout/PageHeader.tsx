@@ -113,7 +113,9 @@ export function PageHeader({
                   fontFamily: theme.fontFamily.bold,
                 },
               ]}
-              numberOfLines={1}
+              // Two lines: beside the icon tile and header actions a phone cut
+              // titles to "Capital …" / "TDS & F…". Wide screens still fit one.
+              numberOfLines={2}
             >
               {title}
             </Text>
@@ -127,7 +129,7 @@ export function PageHeader({
                     fontFamily: theme.fontFamily.semibold,
                   },
                 ]}
-                numberOfLines={1}
+                numberOfLines={2}
               >
                 {subtitle}
               </Text>

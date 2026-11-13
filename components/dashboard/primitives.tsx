@@ -28,6 +28,7 @@ import { ChevronRight } from "lucide-react-native";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { haptic } from "@/lib/haptics";
+import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces, withAlpha } from "@/theme/surfaces";
 
@@ -179,6 +180,10 @@ export function Section({
   const surfaces = useSurfaces();
 
   const hasHeader = Boolean(title || subtitle || icon || action || badge);
+  // Phones: one 16dp layer, not the Card shell's p-4 on top of the 16dp
+  // content padding (32dp a side left ~230dp of a 320dp screen for content
+  // and cut section titles to "Stocks …"). Tablet and desktop are unchanged.
+  const { isCompact } = useResponsiveLayout();
 
   const body = (
     <>
@@ -256,6 +261,7 @@ export function Section({
       variant="outlined"
       elevation={0}
       radius={DASH_RADIUS.section}
+      flushShell={isCompact}
       style={[styles.sectionSurface, fill && styles.fill, style]}
       contentStyle={[styles.sectionContent, fill && styles.fill]}
     >

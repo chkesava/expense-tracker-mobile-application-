@@ -129,7 +129,7 @@ export function TaxReconcileSheet({
   })();
 
   return (
-    <Modal isOpen onClose={onClose} title={row.label}>
+    <Modal density="compact" isOpen onClose={onClose} title={row.label}>
       <View style={{ gap: theme.space.md }}>
         <Text style={{ color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular, fontSize: theme.typography.xs }}>
           {[row.groupLabel, row.tanMasked ? `TAN ${row.tanMasked}` : null].filter(Boolean).join(" · ")} · {status.label}

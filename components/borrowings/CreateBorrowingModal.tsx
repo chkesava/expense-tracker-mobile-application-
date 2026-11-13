@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { Modal } from "@/components/common/Modal";
 import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
@@ -122,6 +122,7 @@ export function CreateBorrowingModal({
 
   return (
     <Modal
+      density="compact"
       isOpen={visible}
       onClose={onClose}
       title="Record Borrowing"
@@ -262,11 +263,7 @@ export function CreateBorrowingModal({
               No accounts yet. You can link one later.
             </Text>
           ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.pillRow}
-            >
+            <View style={[styles.pillRow, styles.chipWrap]}>
               <Chip
                 label="None"
                 selected={creditedAccountId === ""}
@@ -283,7 +280,7 @@ export function CreateBorrowingModal({
                   />
                 );
               })}
-            </ScrollView>
+            </View>
           )}
           <Text style={[styles.helper, { color: theme.colors.mutedForeground }]}>
             Increases this account&apos;s balance. Not counted as income.
@@ -314,6 +311,12 @@ export function CreateBorrowingModal({
 }
 
 const styles = StyleSheet.create({
+  // Account/option chips wrap instead of scrolling sideways: on a phone a
+  // strip cut chips at the sheet edge and could hide the selected one.
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
   body: {
     gap: 16,
     paddingBottom: 8,

@@ -255,18 +255,26 @@ export function GroupFundEventSheet({
     onSelect: (id: string) => void,
     a11y: (name: string) => string,
     exclude?: string
-  ) => (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-      {items
-        .filter((i) => i.id !== exclude)
-        .map((i) => (
-          <Chip key={i.id} label={i.name} selected={selected === i.id} onPress={() => onSelect(i.id)} accessibilityLabel={a11y(i.name)} />
-        ))}
-    </ScrollView>
-  );
+  ) => {
+    const chips = items
+      .filter((i) => i.id !== exclude)
+      .map((i) => (
+        <Chip key={i.id} label={i.name} selected={selected === i.id} onPress={() => onSelect(i.id)} accessibilityLabel={a11y(i.name)} />
+      ));
+    // A short list wraps so every choice (and the selected one) is on screen;
+    // a long member list keeps the strip rather than a wall of chips.
+    return chips.length <= CHIP_WRAP_MAX ? (
+      <View style={[styles.chips, styles.chipWrap]}>{chips}</View>
+    ) : (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+        {chips}
+      </ScrollView>
+    );
+  };
 
   return (
     <Modal
+      density="compact"
       isOpen={visible}
       onClose={onClose}
       title={TITLES[mode]}
@@ -426,7 +434,13 @@ export function GroupFundEventSheet({
   );
 }
 
+/** Up to this many chips wrap; more stay in a horizontal strip. */
+const CHIP_WRAP_MAX = 12;
+
 const styles = StyleSheet.create({
+  chipWrap: {
+    flexWrap: "wrap",
+  },
   body: { gap: 16, paddingBottom: 8 },
   group: { gap: 8 },
   label: { fontSize: 12, fontWeight: "700" },

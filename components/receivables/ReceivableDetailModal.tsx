@@ -152,7 +152,7 @@ export function ReceivableDetailModal({
 
   if (!receivable || !summary) {
     return (
-      <Modal isOpen={visible} onClose={onClose} title="Receivable">
+      <Modal density="compact" isOpen={visible} onClose={onClose} title="Receivable">
         <View />
       </Modal>
     );
@@ -358,7 +358,7 @@ export function ReceivableDetailModal({
   rows.push({ label: "Outstanding", value: summary.outstandingAmount });
 
   return (
-    <Modal isOpen={visible} onClose={onClose} title={receivable.personName}>
+    <Modal density="compact" isOpen={visible} onClose={onClose} title={receivable.personName}>
       <View style={styles.body}>
         <View style={styles.headerMeta}>
           <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
@@ -533,11 +533,7 @@ export function ReceivableDetailModal({
                 <Text style={[styles.label, { color: theme.colors.foreground }]}>
                   Space
                 </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.pillRow}
-                >
+                <View style={[styles.pillRow, styles.chipWrap]}>
                   <Chip
                     label="None"
                     selected={editSpaceId === ""}
@@ -554,7 +550,7 @@ export function ReceivableDetailModal({
                       />
                     );
                   })}
-                </ScrollView>
+                </View>
               </View>
             ) : null}
 
@@ -615,11 +611,7 @@ export function ReceivableDetailModal({
               <Text style={[styles.label, { color: theme.colors.foreground }]}>
                 Received Into Account
               </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.pillRow}
-              >
+              <View style={[styles.pillRow, styles.chipWrap]}>
                 <Chip
                   label="None"
                   selected={receivedAccountId === ""}
@@ -636,7 +628,7 @@ export function ReceivableDetailModal({
                     />
                   );
                 })}
-              </ScrollView>
+              </View>
             </View>
 
             <View style={styles.group}>
@@ -823,6 +815,12 @@ export function ReceivableDetailModal({
 }
 
 const styles = StyleSheet.create({
+  // Account/option chips wrap instead of scrolling sideways: on a phone a
+  // strip cut chips at the sheet edge and could hide the selected one.
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
   body: {
     gap: 18,
   },

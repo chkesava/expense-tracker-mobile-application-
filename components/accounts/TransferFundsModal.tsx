@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ArrowRight, TrendingUp, Wallet } from "lucide-react-native";
 
 import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
@@ -37,7 +37,6 @@ export function TransferFundsModal({
   accounts,
 }: TransferFundsModalProps) {
   const { theme } = useTheme();
-  const surfaces = useSurfaces();
   const { addTransfer } = useAccountTransfers();
   const { depositCash, withdrawCash } = usePortfolioMutations();
   const transferIds = useRef({ entryId: newId(), accountEntryId: newId() });
@@ -180,6 +179,9 @@ export function TransferFundsModal({
       isOpen={isOpen}
       onClose={onClose}
       title="Transfer Funds"
+      // 16dp gutter, as Add Transaction: the default 44dp edge-to-content
+      // left ~230dp for the form on a 320dp phone.
+      density="compact"
       // SPENDLY-552: 6a form pattern, the submit is pinned below the body.
       // Same handler, same disabled condition, same label as before.
       footer={
@@ -192,10 +194,13 @@ export function TransferFundsModal({
         />
       }
     >
-      <ScrollView
-        contentContainerStyle={{ gap: 16, paddingBottom: 20 }}
-        keyboardShouldPersistTaps="handled"
-      >
+      {/*
+        The sheet body (common/Modal) is the only scroller. The account
+        choices wrap instead of scrolling sideways: on a 320-412dp phone a
+        horizontal strip cut chips off at the edge and could hide the
+        selected account entirely.
+      */}
+      <View style={styles.body}>
         {/* Source Account */}
         <View style={{ gap: 6 }}>
           <Text
@@ -206,69 +211,12 @@ export function TransferFundsModal({
           >
             From Account (Source) *
           </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8 }}
-          >
-            {selectableOptions.map((a) => {
-              const isSelected = fromAccountId === a.id;
-              const isDemat = a.id === DEMAT_ACCOUNT_ID;
-              return (
-                <Pressable
-                  key={a.id}
-                  onPress={() => {
-                    haptic.selection().catch(() => undefined);
-                    setFromAccountId(a.id);
-                  }}
-                  style={[
-                    styles.pill,
-                    {
-                      backgroundColor: isSelected
-                        ? theme.colors.primary
-                        : surfaces.control,
-                      borderColor: isSelected
-                        ? theme.colors.primary
-                        : theme.colors.border,
-                    },
-                  ]}
-                >
-                  {isDemat ? (
-                    <TrendingUp
-                      size={14}
-                      color={
-                        isSelected
-                          ? theme.colors.primaryForeground
-                          : theme.colors.mutedForeground
-                      }
-                    />
-                  ) : (
-                    <Wallet
-                      size={14}
-                      color={
-                        isSelected
-                          ? theme.colors.primaryForeground
-                          : theme.colors.mutedForeground
-                      }
-                    />
-                  )}
-                  <Text
-                    style={[
-                      styles.pillText,
-                      {
-                        color: isSelected
-                          ? theme.colors.primaryForeground
-                          : theme.colors.foreground,
-                        fontSize: theme.typography.xs,
-                      },
-                    ]}
-                  >
-                    {a.name}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+          <AccountChoices
+            label="From account"
+            options={selectableOptions}
+            selectedId={fromAccountId}
+            onSelect={setFromAccountId}
+          />
         </View>
 
         {/* Transfer Icon Divider */}
@@ -302,71 +250,12 @@ export function TransferFundsModal({
           >
             To Account (Destination) *
           </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8 }}
-          >
-            {selectableOptions
-              .filter((a) => a.id !== fromAccountId)
-              .map((a) => {
-                const isSelected = toAccountId === a.id;
-                const isDemat = a.id === DEMAT_ACCOUNT_ID;
-                return (
-                  <Pressable
-                    key={a.id}
-                    onPress={() => {
-                      haptic.selection().catch(() => undefined);
-                      setToAccountId(a.id);
-                    }}
-                    style={[
-                      styles.pill,
-                      {
-                        backgroundColor: isSelected
-                          ? theme.colors.primary
-                          : surfaces.control,
-                        borderColor: isSelected
-                          ? theme.colors.primary
-                          : theme.colors.border,
-                      },
-                    ]}
-                  >
-                    {isDemat ? (
-                      <TrendingUp
-                        size={14}
-                        color={
-                          isSelected
-                            ? theme.colors.primaryForeground
-                            : theme.colors.mutedForeground
-                        }
-                      />
-                    ) : (
-                      <Wallet
-                        size={14}
-                        color={
-                          isSelected
-                            ? theme.colors.primaryForeground
-                            : theme.colors.mutedForeground
-                        }
-                      />
-                    )}
-                    <Text
-                      style={[
-                        styles.pillText,
-                        {
-                          color: isSelected
-                            ? theme.colors.primaryForeground
-                            : theme.colors.foreground,
-                          fontSize: theme.typography.xs,
-                        },
-                      ]}
-                    >
-                      {a.name}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-          </ScrollView>
+          <AccountChoices
+            label="To account"
+            options={selectableOptions.filter((a) => a.id !== fromAccountId)}
+            selectedId={toAccountId}
+            onSelect={setToAccountId}
+          />
         </View>
 
         {/* Amount */}
@@ -417,26 +306,107 @@ export function TransferFundsModal({
             placeholder="e.g. Stocks investment fund, ATM withdrawal"
           />
         </View>
-
-      </ScrollView>
+      </View>
     </Modal>
   );
 }
 
+/** One row of account chips that wraps; a long name ellipsizes inside its chip. */
+function AccountChoices({
+  label,
+  options,
+  selectedId,
+  onSelect,
+}: {
+  label: string;
+  options: Account[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+}) {
+  const { theme } = useTheme();
+  const surfaces = useSurfaces();
+  return (
+    <View style={styles.chipWrap} accessibilityRole="radiogroup" accessibilityLabel={label}>
+      {options.map((a) => {
+        const isSelected = selectedId === a.id;
+        const isDemat = a.id === DEMAT_ACCOUNT_ID;
+        const iconColor = isSelected
+          ? theme.colors.primaryForeground
+          : theme.colors.mutedForeground;
+        return (
+          <Pressable
+            key={a.id}
+            onPress={() => {
+              haptic.selection().catch(() => undefined);
+              onSelect(a.id);
+            }}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: isSelected }}
+            // Web reads only aria-checked; accessibilityState covers native.
+            aria-checked={isSelected}
+            accessibilityLabel={a.name}
+            style={[
+              styles.pill,
+              {
+                backgroundColor: isSelected ? theme.colors.primary : surfaces.control,
+                borderColor: isSelected ? theme.colors.primary : theme.colors.border,
+              },
+            ]}
+          >
+            {isDemat ? (
+              <TrendingUp size={14} color={iconColor} style={styles.pillIcon} />
+            ) : (
+              <Wallet size={14} color={iconColor} style={styles.pillIcon} />
+            )}
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.pillText,
+                {
+                  color: isSelected
+                    ? theme.colors.primaryForeground
+                    : theme.colors.foreground,
+                  fontSize: theme.typography.xs,
+                },
+              ]}
+            >
+              {a.name}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  body: {
+    gap: 16,
+  },
   label: {
     fontWeight: "700",
+  },
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
   },
   pill: {
     flexDirection: "row",
     alignItems: "center",
+    maxWidth: "100%",
+    minHeight: 40,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 16,
     borderWidth: 1,
     gap: 6,
   },
+  pillIcon: {
+    flexShrink: 0,
+  },
   pillText: {
+    flexShrink: 1,
     fontWeight: "700",
   },
   arrowRow: {

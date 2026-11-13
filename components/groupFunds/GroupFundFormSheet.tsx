@@ -198,6 +198,7 @@ export function GroupFundFormSheet({ visible, fund, newKey, onClose, onSubmit }:
 
   return (
     <Modal
+      density="compact"
       isOpen={visible}
       onClose={onClose}
       title={editing ? "Edit group fund" : "New group fund"}

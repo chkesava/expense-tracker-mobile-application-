@@ -261,13 +261,17 @@ export default function GroupFundScreen() {
               ) : null}
             </View>
             {archived ? null : (
-              <View style={styles.row}>
-                <Button variant="primary" onPress={() => openSheet("contribution")} style={styles.flex}>
-                  Add contribution
-                </Button>
-                <Button variant="secondary" onPress={() => openSheet("payout")} style={styles.flex}>
-                  Record payout
-                </Button>
+              <View style={styles.actionRow}>
+                {/* The two actions wrap as a pair, More stays pinned: side by
+                    side on a 320-412dp phone they read "Add …" / "Rec…". */}
+                <View style={styles.actionPair}>
+                  <Button variant="primary" onPress={() => openSheet("contribution")} style={styles.actionBtn}>
+                    Add contribution
+                  </Button>
+                  <Button variant="secondary" onPress={() => openSheet("payout")} style={styles.actionBtn}>
+                    Record payout
+                  </Button>
+                </View>
                 <Button variant="ghost" size="icon" onPress={openMore} accessibilityLabel="More actions">
                   <MoreHorizontal size={18} color={theme.colors.foreground} />
                 </Button>
@@ -416,6 +420,9 @@ const styles = StyleSheet.create({
   stat: { gap: 2 },
   row: { flexDirection: "row", alignItems: "center", gap: 8 },
   flex: { flex: 1 },
+  actionRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  actionPair: { flex: 1, minWidth: 0, flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  actionBtn: { flexGrow: 1, flexBasis: 150 },
   line: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 },
   lineTitle: { fontSize: 14, fontWeight: "600" },
   lineDetail: { fontSize: 12, marginTop: 2 },
