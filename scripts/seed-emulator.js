@@ -564,6 +564,7 @@ function buildDemoData(today = new Date(), { months = 3 } = {}) {
 
   const financialSummaries = buildDashboardSummaries(expenses, incomes, today);
   applyStoredBalances(accounts, expenses, incomes);
+  const netWorthHistory = buildNetWorthHistory(accounts, holdings, investments, start, today, rand);
 
   return {
     userDoc,
@@ -583,9 +584,70 @@ function buildDemoData(today = new Date(), { months = 3 } = {}) {
       taxEntries,
       salaryProfiles,
       salaryRecords,
+      netWorthHistory,
     },
     portfolioSettings,
   };
+}
+
+/**
+ * SPENDLY-568: the Net Worth card's trend line reads `netWorthHistory`
+ * month docs (`shared/utils/netWorthHistory.ts`), which the real app only
+ * gets from the SPENDLY-741 server job — the seed never ran one. This
+ * builds one daily point per day in the seeded range (`start`..`today`),
+ * walking backwards from an approximation of today's live totals (bank/cash
+ * balances, card outstanding, holdings at cost, FD principal — the same
+ * seeded figures `applyStoredBalances` already reconciled) with a gentle
+ * random drift, so the chart shows a believable rising trend instead of the
+ * "not enough history" empty state. It is sample data for the chart, not a
+ * reconciled figure: the live Dashboard totals also include quote-priced
+ * holdings and accrued FD interest this approximation skips.
+ */
+function buildNetWorthHistory(accounts, holdings, investments, start, today, rand) {
+  const round2 = (n) => Math.round(n * 100) / 100;
+  const bankCash = accounts
+    .filter((a) => a.data.typeId !== 'type-credit')
+    .reduce((sum, a) => sum + (a.data.currentBalance || 0), 0);
+  const cardDebt = accounts
+    .filter((a) => a.data.typeId === 'type-credit')
+    .reduce((sum, a) => sum + (a.data.currentOutstanding || 0), 0);
+  const holdingsValue = holdings.reduce((sum, h) => sum + h.data.quantity * h.data.averageBuyPrice, 0);
+  const fdValue = investments.reduce((sum, inv) => sum + (inv.data.principal || 0), 0);
+  const todayAssets = bankCash + holdingsValue + fdValue;
+  const todayLiabilities = cardDebt;
+
+  const dayMs = 24 * 3600 * 1000;
+  // At least `MIN_POINTS_FOR_TREND` (shared/utils/netWorthHistory.ts) days, so
+  // the card always has enough history to draw a line rather than the empty state.
+  const MIN_POINTS_FOR_TREND = 3;
+  const totalDays = Math.max(MIN_POINTS_FOR_TREND, Math.round((today.getTime() - start.getTime()) / dayMs));
+  const nowMs = today.getTime();
+  const byMonth = new Map();
+
+  let assets = todayAssets;
+  let liabilities = todayLiabilities;
+  for (let i = 0; i <= totalDays; i++) {
+    const day = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+    const monthKey = ym(day);
+    const dayKey = pad(day.getDate());
+    if (!byMonth.has(monthKey)) byMonth.set(monthKey, {});
+    byMonth.get(monthKey)[dayKey] = {
+      netWorth: round2(assets - liabilities),
+      assets: round2(Math.max(0, assets)),
+      liabilities: round2(Math.max(0, liabilities)),
+      recordedAtMs: new Date(day.getFullYear(), day.getMonth(), day.getDate(), 8, 30).getTime(),
+    };
+    // Walk one day further into the past: assets a little lower, liabilities
+    // a touch higher, plus daily noise, so the oldest day reads noticeably
+    // behind today and the series isn't a straight line.
+    assets -= todayAssets * 0.0025 * (0.4 + rand());
+    liabilities = Math.max(0, liabilities + todayLiabilities * 0.003 * (rand() - 0.3));
+  }
+
+  return [...byMonth.entries()].map(([month, points]) => ({
+    id: month,
+    data: { month, points, schemaVersion: 1, createdAtMs: nowMs, updatedAtMs: nowMs },
+  }));
 }
 
 // ---- Emulator writes ----------------------------------------------------------

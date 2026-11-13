@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   desktopAnalyticsSplit,
   desktopDashboardGap,
+  monthOverMonthChange,
   planDesktopDashboard,
   totalChange,
   totalChangeTone,
@@ -25,36 +26,54 @@ describe("planDesktopDashboard", () => {
       "financialGoals",
       "budgetAlerts",
       "gamification",
-      "accounts",
-      "shortcuts",
     ]);
     expect(plan.cashFlow).toBe(true);
-    expect(plan.bills).toBe(true);
     expect(plan.budget).toBe(true);
     expect(plan.rest).toEqual([
       "budgetCategories",
       "focus",
+      "subscriptions",
       "financialGoals",
       "gamification",
-      "accounts",
-      "shortcuts",
     ]);
   });
 
   it("leaves out a slot the user turned off", () => {
-    const plan = planDesktopDashboard(["cashFlow", "focus", "accounts", "shortcuts"]);
-    expect(plan.bills).toBe(false);
+    const plan = planDesktopDashboard(["cashFlow", "focus"]);
     expect(plan.budget).toBe(false);
-    expect(plan.rest).toEqual(["focus", "accounts", "shortcuts"]);
+    expect(plan.rest).toEqual(["focus"]);
   });
 
   it("never drops a card it doesn't place", () => {
     const ids = ["cashFlow", "subscriptions", "budgetAlerts", "a", "b", "c"];
     const plan = planDesktopDashboard(ids);
-    const placed = ["cashFlow", "subscriptions", "budgetAlerts"].length;
+    const placed = ["cashFlow", "budgetAlerts"].length;
     // + 1: Budget's Category Budgets move to the grid as their own card.
     expect(plan.rest.length + placed).toBe(ids.length + 1);
-    for (const id of ["a", "b", "c"]) expect(plan.rest).toContain(id);
+    for (const id of ["a", "b", "c", "subscriptions"]) expect(plan.rest).toContain(id);
+  });
+
+  it("also lifts the four cards the desktop composition pins into its own fixed row", () => {
+    // SPENDLY dashboard redesign fix: these are always appended to
+    // `moreCardIds` in dashboard.tsx, but `rows[4]` already renders them
+    // directly — without this, the "more" grid rendered each a second time.
+    const plan = planDesktopDashboard([
+      "cashFlow",
+      "categoryInsights",
+      "investmentsSummary",
+      "vaultsSummary",
+      "shortcuts",
+    ]);
+    expect(plan.rest).toEqual([]);
+  });
+
+  it("lifts accounts into its own fixed row too", () => {
+    // SPENDLY dashboard redesign fix: accounts' own 5-tile wrap grid is far
+    // taller than a typical "more" card, so leaving it in the round-robin
+    // masonry made whichever column it landed in much taller than the
+    // other two, leaving a large blank gap beside it.
+    const plan = planDesktopDashboard(["cashFlow", "accounts", "focus"]);
+    expect(plan.rest).toEqual(["focus"]);
   });
 });
 
@@ -117,5 +136,20 @@ describe("totalChangeTone", () => {
   it("is flat without a change", () => {
     expect(totalChangeTone("assets", null)).toBe("flat");
     expect(totalChangeTone("liabilities", 0)).toBe("flat");
+  });
+});
+
+describe("monthOverMonthChange", () => {
+  it("diffs the active and previous month's own totals", () => {
+    expect(monthOverMonthChange(5500, 5000)).toEqual({ change: 500, changePct: 10 });
+    expect(monthOverMonthChange(4000, 5000)).toEqual({ change: -1000, changePct: -20 });
+  });
+
+  it("has no percentage from a zero previous total", () => {
+    expect(monthOverMonthChange(500, 0)).toEqual({ change: 500, changePct: null });
+  });
+
+  it("rounds to paise", () => {
+    expect(monthOverMonthChange(0.3, 0.1).change).toBe(0.2);
   });
 });

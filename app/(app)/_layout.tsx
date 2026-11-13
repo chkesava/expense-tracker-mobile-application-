@@ -273,6 +273,13 @@ function AppShellInner() {
                 animation: "slide_from_right",
               }}
             />
+            {/* SPENDLY dashboard redesign — Total Liabilities breakdown. */}
+            <Stack.Screen
+              name="liabilities"
+              options={{
+                animation: "slide_from_right",
+              }}
+            />
             {/* SPENDLY-687: one Group Fund. */}
             <Stack.Screen
               name="group-funds/[id]"

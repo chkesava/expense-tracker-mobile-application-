@@ -5,8 +5,10 @@ import { ArrowDownRight, ArrowUpRight, ChevronDown, Eye, EyeOff, Info, Minus } f
 
 import { SpendingCurveChart } from "@/components/charts/SpendingCurveChart";
 import { Amount } from "@/components/common/Amount";
-import { mixColors } from "@/components/dashboard/primitives";
+import { NetWorthCardBackdrop } from "@/components/dashboard/NetWorthCardBackdrop";
+import { RangeSegmentedControl } from "@/components/dashboard/RangeSegmentedControl";
 import type { UnifiedNetWorthSummary } from "@/hooks/useUnifiedNetWorth";
+import { NET_WORTH_CARD_WASH_ALPHA } from "@/theme/netWorthScene";
 import { haptic } from "@/lib/haptics";
 import { useSettings } from "@/providers/SettingsProvider";
 import { compactAmount } from "@/shared/utils/compactAmount";
@@ -122,8 +124,18 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
   const pct = enoughHistory ? trend.changePct : null;
   const when = trendWhen(trend, period, settings.dateFormat);
 
-  const surfaceTop = mixColors(theme.colors.card, theme.colors.primary, 0.2);
-  const surfaceBottom = mixColors(theme.colors.card, theme.colors.background, 0.35);
+  // SPENDLY: the mountain-sunrise scene sits behind a theme-derived wash
+  // (never a hardcoded accent). On a light palette the wash stays thin so the
+  // scene reads vividly (the reference's look — dark text over a pale sky is
+  // legible on its own); on a dark palette it stays strong, since the scene
+  // itself is kept faint there to protect light-coloured text
+  // (`theme/netWorthScene.ts`). Either way it fades in toward the bottom,
+  // where the chart's axis and the card's edge sit.
+  const surfaceTop = withAlpha(
+    theme.colors.card,
+    surfaces.isDark ? NET_WORTH_CARD_WASH_ALPHA.dark : NET_WORTH_CARD_WASH_ALPHA.light
+  );
+  const surfaceBottom = withAlpha(theme.colors.background, surfaces.isDark ? 0.72 : 0.5);
 
   return (
     <View
@@ -137,6 +149,7 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
       ]}
       testID="dashboard-net-worth"
     >
+      <NetWorthCardBackdrop height={desktop ? 220 : 160} />
       <LinearGradient colors={[surfaceTop, surfaceBottom]} start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 1 }} style={StyleSheet.absoluteFill} />
       {/* Lit top edge. */}
       <LinearGradient
@@ -182,53 +195,14 @@ export const NetWorthGlassCard = memo(function NetWorthGlassCard({
           </View>
 
           {desktop ? (
-            <View
-              style={[
-                styles.segments,
-                {
-                  backgroundColor: surfaces.isDark ? withAlpha("#000000", 0.22) : withAlpha(theme.colors.foreground, 0.05),
-                  borderColor: withAlpha(theme.colors.foreground, 0.1),
-                },
-              ]}
-              accessibilityRole="radiogroup"
+            <RangeSegmentedControl
+              periods={NET_WORTH_PERIODS}
+              value={period}
+              onChange={setPeriod}
+              labels={PERIOD_LABELS}
               accessibilityLabel="Trend period"
-            >
-              {NET_WORTH_PERIODS.map((p) => {
-                const selected = p === period;
-                return (
-                  <Pressable
-                    key={p}
-                    onPress={() => {
-                      void haptic.selection();
-                      setPeriod(p);
-                    }}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: selected }}
-                    // Web reads only aria-checked; accessibilityState covers native.
-                    aria-checked={selected}
-                    accessibilityLabel={PERIOD_LABELS[p]}
-                    style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
-                      styles.segment,
-                      selected
-                        ? { backgroundColor: theme.colors.primary }
-                        : (pressed || hovered) && { backgroundColor: withAlpha(theme.colors.foreground, 0.06) },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.segmentText,
-                        {
-                          color: selected ? theme.colors.primaryForeground : theme.colors.mutedForeground,
-                          fontFamily: selected ? theme.fontFamily.semibold : theme.fontFamily.medium,
-                        },
-                      ]}
-                    >
-                      {p}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+              testIDPrefix="net-worth-period"
+            />
           ) : (
             <View>
               <Pressable
@@ -447,25 +421,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 20,
     paddingBottom: 18,
-  },
-  segments: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    padding: 3,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  segment: {
-    minWidth: 40,
-    minHeight: 30,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  segmentText: {
-    fontSize: 13,
   },
   header: {
     flexDirection: "row",

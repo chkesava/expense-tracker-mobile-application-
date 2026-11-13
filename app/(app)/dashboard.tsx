@@ -4,18 +4,25 @@ import { useRouter, type Href } from "expo-router";
 import { ShieldAlert, Sparkles } from "lucide-react-native";
 
 import { BudgetAlertsWidget } from "@/components/dashboard/BudgetAlertsWidget";
+import { CashFlowCard } from "@/components/dashboard/CashFlowCard";
+import { CategoryInsightsWidget } from "@/components/dashboard/CategoryInsightsWidget";
 import { FinancialGoalsWidget } from "@/components/dashboard/FinancialGoalsWidget";
 import { GamificationWidget } from "@/components/dashboard/GamificationWidget";
 import { DashboardHero } from "@/components/dashboard/hero/DashboardHero";
+import { InvestmentsSummaryWidget } from "@/components/dashboard/InvestmentsSummaryWidget";
 import { AccountSummaryWidget, NetWorthWidget } from "@/components/dashboard/NetWorthWidget";
 import { QuickAddWidget, QuickShortcutsWidget } from "@/components/dashboard/QuickAddWidget";
 import { QuickInsightsWidget } from "@/components/dashboard/QuickInsightsWidget";
 import { SafeToSpendWidget } from "@/components/dashboard/SafeToSpendWidget";
 import { SmartInsightsWidget } from "@/components/dashboard/SmartInsightsWidget";
 import { RecentActivityWidget } from "@/components/dashboard/RecentActivityWidget";
+import { SpendingHeatmapCard } from "@/components/dashboard/SpendingHeatmapCard";
+import { SpendingTrendCard } from "@/components/dashboard/SpendingTrendCard";
 import { SubscriptionsWidget } from "@/components/dashboard/SubscriptionsWidget";
 import { SpendingOverviewCard } from "@/components/dashboard/SpendingOverviewCard";
 import { SetupChecklistWidget } from "@/components/dashboard/SetupChecklistWidget";
+import { TopCategoriesWidget } from "@/components/dashboard/TopCategoriesWidget";
+import { VaultsSummaryWidget } from "@/components/dashboard/VaultsSummaryWidget";
 import {
   DASH_RADIUS,
   useSurfaces,
@@ -48,6 +55,7 @@ import {
   type DashboardWidgetId,
 } from "@/shared/utils/dashboardWidgets";
 import { currentMonthKey, formatDateKey } from "@/shared/utils/dates";
+import { buildJournalRecords } from "@/shared/utils/journalActivities";
 import { mergeRecentActivity, newestLiveExpenses, type RecentActivityItem } from "@/shared/utils/recentActivity";
 import { transactionHref } from "@/shared/utils/transactionRef";
 import { transactionsHref } from "@/shared/utils/transactionsFeed";
@@ -62,13 +70,9 @@ import { dashboardMonthLabel } from "@/shared/utils/dashboardLabels";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { GridItem, ResponsiveGrid } from "@/components/layout/ResponsiveGrid";
 import { Button } from "@/components/ui/Button";
-import { DesktopDashboardLayout } from "@/components/dashboard/desktop/DesktopDashboardLayout";
+import { DesktopDashboardLayout, type DesktopDashboardRow } from "@/components/dashboard/desktop/DesktopDashboardLayout";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
-import {
-  desktopAnalyticsSplit,
-  desktopDashboardGap,
-  planDesktopDashboard,
-} from "@/shared/utils/dashboardDesktop";
+import { desktopDashboardGap, planDesktopDashboard } from "@/shared/utils/dashboardDesktop";
 
 /** SPENDLY-718: page gutter of the desktop composition (PageShell's 12 + 12). */
 const DESKTOP_GUTTER = 24;
@@ -85,7 +89,16 @@ type MoreCardId =
   | "accounts"
   | "shortcuts"
   // SPENDLY-718: Budget's Category Budgets as their own desktop grid card.
-  | "budgetCategories";
+  | "budgetCategories"
+  // SPENDLY dashboard redesign — the lower-dashboard additions.
+  | "cashFlowCard"
+  | "spendingHeatmap"
+  | "investmentsSummary"
+  | "vaultsSummary"
+  | "categoryInsights"
+  | "topCategory"
+  | "spendingTrend"
+  | "quickActionsRow";
 
 function getPreviousMonthKey(month: string): string {
   const [yearRaw, monthRaw] = month.split("-");
@@ -165,6 +178,21 @@ export default function DashboardScreen() {
   const recentActivity = useMemo(
     () => mergeRecentActivity(recentExpenses, incomes, 5),
     [recentExpenses, incomes]
+  );
+  // SPENDLY dashboard redesign fix: the desktop composition's second Recent
+  // Transactions card shares a row with the taller Cash Flow/Spending by Day
+  // stack — 5 rows left it visibly shorter than its neighbour. More rows
+  // (not a taller card for the same 5) actually uses the space.
+  const recentActivityWide = useMemo(
+    () => mergeRecentActivity(newestLiveExpenses(ledgerExpenses, 8), incomes, 8),
+    [ledgerExpenses, incomes]
+  );
+  // SPENDLY dashboard redesign — the Spending by Day heatmap's eligible-spend
+  // rows. Built from the already-loaded expense list, no new listener; the
+  // Journal's row set structurally excludes transfers/bills/repayments.
+  const heatmapRecords = useMemo(
+    () => buildJournalRecords(ledgerExpenses, [], [], { scope: "expenses" }),
+    [ledgerExpenses]
   );
 
   const { accounts, loading: accountsLoading } = useAccounts();
@@ -270,7 +298,17 @@ export default function DashboardScreen() {
       settings.dashboardWidgets,
       investmentsEnabled
     );
-    return ["cashFlow", ...more, "accounts", "shortcuts"];
+    // SPENDLY dashboard redesign — always present (not yet user-toggleable),
+    // except Investments, which follows the same gate as the account cards.
+    return [
+      "cashFlow",
+      ...more,
+      "accounts",
+      "categoryInsights",
+      ...(investmentsEnabled ? (["investmentsSummary"] as const) : []),
+      "vaultsSummary",
+      "shortcuts",
+    ];
   }, [settings.dashboardOrder, settings.dashboardWidgets, investmentsEnabled]);
 
   // SPENDLY-717: one column (phones, native included) leads with the account
@@ -398,6 +436,55 @@ export default function DashboardScreen() {
       case "accounts":
         return <AccountSummaryWidget netWorth={netWorth} currency={displayCurrency} />;
 
+      case "cashFlowCard":
+        return (
+          <CashFlowCard
+            isCurrentMonth={activeMonth === currentMonthKey(settings.timezone)}
+            monthlyIncome={monthlyIncome}
+            monthlyExpense={monthlySpent}
+            liquidBankAssets={netWorth.liquidBankAssets}
+            currency={displayCurrency}
+            activeMonth={activeMonth}
+            loading={activeLoading && !activeSummary}
+            fill={desktop}
+          />
+        );
+
+      case "spendingHeatmap":
+        return <SpendingHeatmapCard records={heatmapRecords} currency={displayCurrency} fill={desktop} />;
+
+      case "investmentsSummary":
+        return <InvestmentsSummaryWidget netWorth={netWorth} currency={displayCurrency} fill={desktop} />;
+
+      case "vaultsSummary":
+        return <VaultsSummaryWidget currency={displayCurrency} fill={desktop} />;
+
+      case "categoryInsights":
+        return (
+          <CategoryInsightsWidget
+            expenses={ledgerExpenses}
+            activeMonth={activeMonth}
+            previousMonth={previousMonth}
+            currency={displayCurrency}
+            fill={desktop}
+          />
+        );
+
+      case "topCategory":
+        return (
+          <TopCategoriesWidget
+            categoryTotals={activeSummary?.categoryTotals || null}
+            currency={displayCurrency}
+            activeMonth={activeMonth}
+          />
+        );
+
+      case "spendingTrend":
+        return <SpendingTrendCard months={cashFlow} currency={displayCurrency} fill={desktop} />;
+
+      case "quickActionsRow":
+        return <QuickAddWidget variant="panel" onViewAll={handleOpenAddSheet} style={desktop ? styles.fill : undefined} />;
+
       case "shortcuts":
         return <QuickShortcutsWidget onOpenAddSheet={handleOpenAddSheet} />;
 
@@ -485,11 +572,11 @@ export default function DashboardScreen() {
     />
   );
 
-  const recentActivityCard = (fill: boolean) => (
+  const recentActivityCard = (fill: boolean, items: RecentActivityItem[] = recentActivity) => (
     <RecentActivityWidget
-      items={recentActivity}
+      items={items}
       currency={displayCurrency}
-      loading={recentLoading && recentActivity.length === 0}
+      loading={recentLoading && items.length === 0}
       accountNames={accountNames}
       onOpen={handleOpenActivity}
       onViewAll={handleViewLedger}
@@ -565,8 +652,7 @@ export default function DashboardScreen() {
   if (desktopDashboard) {
     const gap = desktopDashboardGap(viewportWidth);
     const plan = planDesktopDashboard(moreCardIds);
-    const split = desktopAnalyticsSplit(viewportWidth);
-    /** A lower-row card, deferred like the More card it came from. */
+    /** A row card, deferred like the More card it came from. */
     const lazyCell = (id: MoreCardId, delayMs: number, index: number) => (
       <LazyMount key={id} delayMs={delayMs} minHeight={120}>
         <DashboardEntrance index={index} style={styles.fill}>
@@ -574,6 +660,84 @@ export default function DashboardScreen() {
         </DashboardEntrance>
       </LazyMount>
     );
+
+    // SPENDLY dashboard redesign — the fixed rows below the Net Worth/KPI
+    // overview, in the design reference's own row-by-row order. Everything
+    // here is the same widget instance/handlers the phone layout uses; this
+    // only composes their order and width.
+    const rows: DesktopDashboardRow[] = dashboardError
+      ? [{ cells: [<View key="error">{dashboardError}</View>] }]
+      : [
+          { cells: [lazyCell("quickActionsRow", 0, 1)] },
+          {
+            cells: [
+              <DashboardEntrance key="spending" index={2} style={styles.fill}>
+                {spendingOverview(true)}
+              </DashboardEntrance>,
+              plan.cashFlow ? lazyCell("cashFlow", 40, 3) : null,
+              plan.budget ? lazyCell("budgetAlerts", 80, 4) : null,
+            ],
+          },
+          {
+            cells: [
+              <DashboardEntrance key="recent1" index={5} style={styles.fill}>
+                {recentActivityCard(true)}
+              </DashboardEntrance>,
+              lazyCell("topCategory", 40, 6),
+              lazyCell("spendingTrend", 80, 7),
+            ],
+          },
+          {
+            // SPENDLY dashboard redesign fix: Cash Flow's five lines and
+            // Spending by Day's calendar are each far shorter than Recent
+            // Transactions' list, so giving them their own full-height lane
+            // next to it (either stretched, or sized to content with the
+            // leftover lane height still reserved) always left a large gap.
+            // Stacking them into one column instead lets their combined
+            // height actually use the space Recent Transactions sets.
+            align: "start",
+            cells: [
+              <DashboardEntrance key="recent2" index={8} style={styles.fill}>
+                {recentActivityCard(true, recentActivityWide)}
+              </DashboardEntrance>,
+              <View key="cashflow-stack" style={[styles.fill, { gap }]}>
+                {lazyCell("cashFlowCard", 40, 9)}
+                {lazyCell("spendingHeatmap", 80, 10)}
+              </View>,
+            ],
+          },
+          {
+            // SPENDLY dashboard redesign fix: Investments and Vaults are
+            // each much shorter than Category Insights' five rows.
+            // Stretching them padded both out with dead space inside the
+            // card; not stretching just left the same dead space below them
+            // instead. Putting them beside each other in one column gets
+            // their *combined* height close to Category Insights' instead.
+            align: "start",
+            cells: [
+              lazyCell("categoryInsights", 0, 12),
+              investmentsEnabled ? (
+                <View key="insights-stack" style={{ flexDirection: "row", gap }}>
+                  <View style={[styles.fill, styles.minWidth0]}>{lazyCell("investmentsSummary", 40, 13)}</View>
+                  <View style={[styles.fill, styles.minWidth0]}>{lazyCell("vaultsSummary", 80, 14)}</View>
+                </View>
+              ) : (
+                lazyCell("vaultsSummary", 80, 14)
+              ),
+            ],
+          },
+          // SPENDLY dashboard redesign fix: Shortcuts is a horizontal chip
+          // rail, not a stat card — cramming it into the narrow column
+          // beside Category Insights left it both oddly narrow and the
+          // tallest-lane math worse. Its own row takes the full width.
+          { cells: [lazyCell("shortcuts", 120, 15)] },
+          // SPENDLY dashboard redesign fix: accounts' own 5-tile wrap grid
+          // is far taller than a typical "more" card. Left in the masonry
+          // below, whichever column it round-robined into ran far longer
+          // than the other two, leaving most of the row blank beside it.
+          // Its own full-width row wraps its tiles freely instead.
+          { cells: [lazyCell("accounts", 160, 16)] },
+        ];
 
     return (
       <>
@@ -596,37 +760,16 @@ export default function DashboardScreen() {
                 gap={gap}
                 netWorth={netWorth}
                 currency={displayCurrency}
-                aside={<QuickAddWidget variant="panel" onViewAll={handleOpenAddSheet} style={styles.fill} />}
+                monthlyIncome={monthlyIncome}
+                monthlyExpense={monthlySpent}
+                previousIncome={previousIncome}
+                previousExpense={previousSpent}
+                activeMonth={activeMonth}
               />
             </DashboardEntrance>
           }
           notices={notices}
-          analyticsWeights={split.weights}
-          analytics={
-            dashboardError
-              ? [<View key="error">{dashboardError}</View>]
-              : [
-                  <DashboardEntrance key="spending" index={1} style={styles.fill}>
-                    {spendingOverview(true)}
-                  </DashboardEntrance>,
-                  plan.cashFlow ? (
-                    <DashboardEntrance key="cashFlow" index={2} style={styles.fill}>
-                      {renderMoreCard("cashFlow", true, split.cashFlowWide)}
-                    </DashboardEntrance>
-                  ) : null,
-                ]
-          }
-          lower={
-            dashboardError
-              ? []
-              : [
-                  plan.bills ? lazyCell("subscriptions", 40, 3) : null,
-                  <DashboardEntrance key="recent" index={4} style={styles.fill}>
-                    {recentActivityCard(true)}
-                  </DashboardEntrance>,
-                  plan.budget ? lazyCell("budgetAlerts", 80, 5) : null,
-                ]
-          }
+          rows={rows}
           more={
             dashboardError ? null : (
               <ResponsiveGrid gap={gap}>
@@ -637,7 +780,7 @@ export default function DashboardScreen() {
                   plan.rest.filter(
                     (id) => id !== "budgetCategories" || (settings.monthlyBudget > 0 && hasActiveCategoryBudgets)
                   ),
-                  6,
+                  16,
                   // Smart Insights after the first grid card (Category Budgets
                   // when they split out), as close to Budget as the grid allows.
                   0
@@ -670,7 +813,15 @@ export default function DashboardScreen() {
 
       {/* Rides up over the hero's fade (DASHBOARD_HERO_OVERLAP). */}
       <DashboardEntrance index={0}>
-        <NetWorthWidget netWorth={netWorth} currency={displayCurrency} />
+        <NetWorthWidget
+          netWorth={netWorth}
+          currency={displayCurrency}
+          monthlyIncome={monthlyIncome}
+          monthlyExpense={monthlySpent}
+          previousIncome={previousIncome}
+          previousExpense={previousSpent}
+          activeMonth={activeMonth}
+        />
       </DashboardEntrance>
 
       {notices}
@@ -694,7 +845,15 @@ export default function DashboardScreen() {
             <DashboardEntrance index={3}>{recentActivityCard(false)}</DashboardEntrance>
           </GridItem>
 
-          {renderMoreItems(renderedCardIds, 4, insertInsightsAfter)}
+          {/* SPENDLY dashboard redesign — mandatory, always-on cards. */}
+          <GridItem key="cashFlowCard" span="full">
+            <DashboardEntrance index={4}>{renderMoreCard("cashFlowCard")}</DashboardEntrance>
+          </GridItem>
+          <GridItem key="spendingHeatmap" span="full">
+            <DashboardEntrance index={5}>{renderMoreCard("spendingHeatmap")}</DashboardEntrance>
+          </GridItem>
+
+          {renderMoreItems(renderedCardIds, 6, insertInsightsAfter)}
 
           {isCompact ? (
             <GridItem key="showMoreCards" span="full">
@@ -726,6 +885,9 @@ const styles = StyleSheet.create({
   },
   fill: {
     flex: 1,
+  },
+  minWidth0: {
+    minWidth: 0,
   },
   grid: {
     marginTop: 18,

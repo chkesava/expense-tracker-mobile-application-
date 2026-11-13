@@ -1,5 +1,5 @@
-import { memo, useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { memo, useMemo, useState } from "react";
+import { StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { ArrowDownLeft, ArrowUpRight, ChevronDown, TrendingUp } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
@@ -45,6 +45,15 @@ export interface QuickInsightsWidgetProps {
 
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+/**
+ * Below this measured card width the desktop "wide" side-by-side figures +
+ * chart layout no longer has room for either half (SPENDLY dashboard
+ * redesign fix) — a narrow desktop row (e.g. three cards sharing it) would
+ * otherwise squeeze the chart into an unreadable sliver instead of falling
+ * back to the stacked one-column layout the component already supports.
+ */
+const WIDE_STACK_MIN_WIDTH = 460;
+
 function monthShort(monthKey: string): string {
   const index = Number(monthKey.slice(5, 7)) - 1;
   return MONTHS_SHORT[index] ?? monthKey;
@@ -80,6 +89,14 @@ export const QuickInsightsWidget = memo(function QuickInsightsWidget({
   const { theme } = useTheme();
   const surfaces = useSurfaces();
 
+  // SPENDLY dashboard redesign fix: `wide` says the caller *wants* the
+  // side-by-side desktop layout, but the row's actual cell width (not just
+  // the viewport) decides whether there is room for it. Defaults to the
+  // wide layout until measured so desktop doesn't flash the stacked one.
+  const [cardWidth, setCardWidth] = useState<number | null>(null);
+  const isWide = wide && (cardWidth === null || cardWidth >= WIDE_STACK_MIN_WIDTH);
+  const handleWideLayout = (e: LayoutChangeEvent) => setCardWidth(e.nativeEvent.layout.width);
+
   const net = monthlyIncome - monthlySpent;
   const savingsRate =
     monthlyIncome > 0 ? Math.max(0, Math.round((net / monthlyIncome) * 100)) : null;
@@ -102,7 +119,7 @@ export const QuickInsightsWidget = memo(function QuickInsightsWidget({
     <Section
       fill={fill}
       testID="dash-cashflow"
-      title={wide ? "Income vs Expenses" : "Income & expenses"}
+      title={isWide ? "Income vs Expenses" : "Income & expenses"}
       subtitle="Month to date"
       icon={<TrendingUp size={16} color={theme.colors.primary} strokeWidth={2.3} />}
       iconTint={surfaces.wash(theme.colors.primary)}
@@ -120,9 +137,12 @@ export const QuickInsightsWidget = memo(function QuickInsightsWidget({
         ) : null
       }
     >
-      <View style={wide ? styles.wideBody : undefined}>
-      <View style={wide ? styles.wideFigures : undefined}>
-      <View style={[styles.row, wide && styles.rowWide]}>
+      <View
+        style={isWide ? styles.wideBody : undefined}
+        onLayout={wide ? handleWideLayout : undefined}
+      >
+      <View style={isWide ? styles.wideFigures : undefined}>
+      <View style={[styles.row, isWide && styles.rowWide]}>
         <Metric
           label="Income"
           icon={<ArrowDownLeft size={12} color={incomeColor} strokeWidth={2.6} />}
@@ -141,7 +161,7 @@ export const QuickInsightsWidget = memo(function QuickInsightsWidget({
           />
           <TrendText delta={pctChange(monthlyIncome, previousIncome)} />
         </Metric>
-        {wide ? null : <View style={[styles.vDivider, { backgroundColor: surfaces.divider }]} />}
+        {isWide ? null : <View style={[styles.vDivider, { backgroundColor: surfaces.divider }]} />}
         <Metric
           label="Spent"
           icon={<ArrowUpRight size={12} color={spendColor} strokeWidth={2.6} />}
@@ -162,7 +182,7 @@ export const QuickInsightsWidget = memo(function QuickInsightsWidget({
         </Metric>
       </View>
 
-      <View style={[styles.netRow, wide && styles.netRowWide, { backgroundColor: surfaces.tile }]}>
+      <View style={[styles.netRow, isWide && styles.netRowWide, { backgroundColor: surfaces.tile }]}>
         <View style={styles.netText}>
           <MetaLabel>Net cash flow</MetaLabel>
           {loading ? null : (
@@ -217,15 +237,15 @@ export const QuickInsightsWidget = memo(function QuickInsightsWidget({
         <View
           style={[
             styles.chartBlock,
-            wide ? [styles.chartBlockWide, { borderLeftColor: surfaces.divider }] : { borderTopColor: surfaces.divider },
+            isWide ? [styles.chartBlockWide, { borderLeftColor: surfaces.divider }] : { borderTopColor: surfaces.divider },
           ]}
         >
           <MetaLabel>Last {cashFlow.length} months</MetaLabel>
           {/* The SVG chart is the heaviest node here; let the figures paint first. */}
-          <LazyMount delayMs={80} minHeight={wide ? 206 : 176}>
+          <LazyMount delayMs={80} minHeight={isWide ? 206 : 176}>
             <BarChart
               data={chartData}
-              height={wide ? 180 : 150}
+              height={isWide ? 180 : 150}
               currency={currency}
               primaryLabel="Spent"
               secondaryLabel="Income"

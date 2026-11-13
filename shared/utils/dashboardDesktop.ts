@@ -14,14 +14,15 @@ export type DesktopMoreCardId = string;
 export type DesktopDashboardPlan<Id extends DesktopMoreCardId> = {
   /** Income vs expenses, beside Spending Overview. */
   cashFlow: boolean;
-  /** Upcoming bills, first card of the lower row (absent when toggled off). */
-  bills: boolean;
-  /** Budget progress, last card of the lower row (absent when toggled off). */
+  /** Budget progress, beside Spending Overview / Income vs Expenses. */
   budget: boolean;
   /**
    * Every other More card, in the user's order, for the grid below. When
    * Budget is placed, its Category Budgets lead the grid as their own card
-   * ("budgetCategories"), so the lower row keeps one budget card.
+   * ("budgetCategories"), so the fixed row keeps one budget card. Upcoming
+   * bills (subscriptions) is no longer lifted out by name — the reference
+   * layout (SPENDLY dashboard redesign) has no fixed slot for it, so it stays
+   * an ordinary user-toggleable "More" card here.
    */
   rest: Array<Id | typeof BUDGET_CATEGORIES>;
 };
@@ -29,20 +30,42 @@ export type DesktopDashboardPlan<Id extends DesktopMoreCardId> = {
 /** The Category Budgets half of the Budget card, as its own grid card. */
 export const BUDGET_CATEGORIES = "budgetCategories" as const;
 
-const PLACED = new Set(["cashFlow", "subscriptions", "budgetAlerts"]);
+/**
+ * Every id the desktop composition's fixed rows already place directly
+ * (`app/(app)/dashboard.tsx`'s `rows`), so `rest` never hands the same card
+ * to the "more" grid a second time. `topCategory`, `spendingTrend`,
+ * `cashFlowCard` and `spendingHeatmap` are fixed-row-only and never added to
+ * `moreCardIds`, so they don't need listing here; these four are also always
+ * appended to `moreCardIds`, which was duplicating them below the fold.
+ *
+ * `accounts` is here for a different reason (SPENDLY dashboard redesign
+ * fix): the "more" grid's masonry deals cards round-robin by index, not by
+ * height, so one unusually tall card (accounts' own 5-tile wrap grid)
+ * landing in a column made that whole column far taller than its siblings
+ * — the other two columns' content ended, leaving the rest of the row
+ * blank beside it. `accounts` gets its own full-width fixed row instead.
+ */
+const PLACED = new Set([
+  "cashFlow",
+  "budgetAlerts",
+  "categoryInsights",
+  "investmentsSummary",
+  "vaultsSummary",
+  "shortcuts",
+  "accounts",
+]);
 
 /**
- * Lifts the cards the reference places by name (income vs expenses, upcoming
- * bills, budget progress) out of the More list. A card the user has turned
- * off is simply not in `moreIds`, so its slot is left out and the lower row
- * re-flexes; everything else keeps its saved order.
+ * Lifts the cards the reference places by name (income vs expenses, budget
+ * progress) out of the More list. A card the user has turned off is simply
+ * not in `moreIds`, so its slot is left out and the row re-flexes; everything
+ * else keeps its saved order.
  */
 export function planDesktopDashboard<Id extends DesktopMoreCardId>(
   moreIds: readonly Id[]
 ): DesktopDashboardPlan<Id> {
   return {
     cashFlow: moreIds.includes("cashFlow" as Id),
-    bills: moreIds.includes("subscriptions" as Id),
     budget: moreIds.includes("budgetAlerts" as Id),
     rest: [
       ...(moreIds.includes("budgetAlerts" as Id) ? [BUDGET_CATEGORIES] : []),
@@ -109,4 +132,20 @@ export function totalChangeTone(kind: TotalKind, change: number | null): "good" 
   if (change === null || change === 0) return "flat";
   const up = change > 0;
   return (kind === "assets" ? up : !up) ? "good" : "bad";
+}
+
+/**
+ * Month-over-month change for a KPI that isn't a net-worth snapshot field
+ * (income, expense) — a sibling to `totalChange`, not an overload of it:
+ * `totalChange` specifically diffs two stored net-worth snapshots, while this
+ * is a plain subtraction between the active and previous month's own totals
+ * (`useDashboardCashFlow`'s `activeSummary`/`previousSummary`).
+ */
+export function monthOverMonthChange(current: number, previous: number): TotalChange {
+  if (!Number.isFinite(current) || !Number.isFinite(previous)) {
+    return { change: null, changePct: null };
+  }
+  const change = Math.round((current - previous) * 100) / 100;
+  const changePct = previous === 0 ? null : (change / Math.abs(previous)) * 100;
+  return { change, changePct };
 }
