@@ -358,7 +358,14 @@ export function Card({
   }
 
   return (
-    <GluestackCard testID={testID} className={flushShell ? "p-0" : undefined} style={containerStyle}>
+    <GluestackCard
+      testID={testID}
+      // Compact (SPENDLY-173) means no shell padding. `compactShell` sets it
+      // in style, but on web the shell's `p-4` is a stylesheet rule that a
+      // style can't beat, so compact cards kept 32dp there; swap the class.
+      className={flushShell || density === "compact" ? "p-0" : undefined}
+      style={containerStyle}
+    >
       {cardInner}
     </GluestackCard>
   );

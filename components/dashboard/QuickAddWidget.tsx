@@ -57,6 +57,8 @@ const ORB_SIZE = 64;
  */
 const ORB_MIN_SIZE = 44;
 const ORB_CELL_PADDING = 8;
+/** Narrowest cell (px) that still fits a label like "Transfer" on one line. */
+const MIN_CELL_FOR_ONE_ROW = 72;
 
 /**
  * Quick actions (SPENDLY-532; round orbs since SPENDLY-566). Each orb opens
@@ -148,14 +150,18 @@ export const QuickAddWidget = memo(function QuickAddWidget({
   // once — so a fixed 64×64 orb overflows its own cell on every phone width
   // in the matrix (320–412px: ~48–63px per cell). Shrink it to the measured
   // cell instead, down to a still-tappable floor.
+  // Below MIN_CELL_FOR_ONE_ROW a cell can't hold its label ("Expe…",
+  // "Tran…" on a 320-412px phone), so the six actions take two rows of three.
+  const twoRows = !panel && rowWidth > 0 && rowWidth / actions.length < MIN_CELL_FOR_ONE_ROW;
+  const columns = twoRows ? Math.ceil(actions.length / 2) : actions.length;
   const orbSize = panel
     ? undefined
     : rowWidth > 0
-      ? Math.max(ORB_MIN_SIZE, Math.min(ORB_SIZE, rowWidth / actions.length - ORB_CELL_PADDING))
+      ? Math.max(ORB_MIN_SIZE, Math.min(ORB_SIZE, rowWidth / columns - ORB_CELL_PADDING))
       : ORB_SIZE;
 
   const orbs = (
-    <View style={[styles.grid, panel && styles.gridPanel]} onLayout={panel ? undefined : handleRowLayout}>
+    <View style={[styles.grid, panel && styles.gridPanel, twoRows && styles.gridTwoRows]} onLayout={panel ? undefined : handleRowLayout}>
       {actions.map((action) => {
         const Icon = action.icon;
         return (
@@ -167,6 +173,7 @@ export const QuickAddWidget = memo(function QuickAddWidget({
             }}
             style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
               styles.action,
+              twoRows && { flexGrow: 0, flexBasis: `${100 / columns}%` },
               panel && styles.actionPanel,
               panel && hovered && { backgroundColor: surfaces.control },
               pressed && styles.pressed,
@@ -306,6 +313,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     paddingVertical: 4,
+  },
+  gridTwoRows: {
+    flexWrap: "wrap",
+    justifyContent: "flex-start",
+    rowGap: 14,
   },
   gridPanel: {
     paddingHorizontal: 0,

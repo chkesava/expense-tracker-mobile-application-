@@ -82,7 +82,8 @@ export const KpiCard = memo(function KpiCard({
           </View>
           <Text
             style={[styles.label, { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold }]}
-            numberOfLines={1}
+            // Two lines: in a phone's 2x2 the title read "This Mont…".
+            numberOfLines={2}
           >
             {label}
           </Text>
