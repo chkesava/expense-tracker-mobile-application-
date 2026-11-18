@@ -10,8 +10,12 @@
  *    every line it prints is masked. Skipped in a dry run (it has none).
  * 2. FY interest and the stored EPF summary: scripts/lib/epfDailyCore.ts.
  *
+ * SPENDLY-790 `--queue`: only step 2, only for the users the read model
+ * queued after an app save to an EPF ledger input (no catch-up, no finder).
+ *
  *   npx tsx scripts/epf-daily.ts --dry-run
  *   npx tsx scripts/epf-daily.ts
+ *   npx tsx scripts/epf-daily.ts --queue
  *
  * Credentials: EPF_FIREBASE_SERVICE_ACCOUNT or FIREBASE_SERVICE_ACCOUNT (JSON).
  * FIRESTORE_EMULATOR_HOST uses the emulator. Read model:
@@ -42,7 +46,8 @@ import type { EpfSummary } from "../shared/types/financialSummary";
 import { createServerPush } from "../netlify/functions/_readmodelServerPush";
 import { serverPushPorts } from "../netlify/functions/readmodel-push";
 import { finishJobSummary, jobReadBudget, summaryAnnotations, type JobDb } from "./lib/dailyJobCore";
-import { findEpfWorkOnReadModel, runEpfDaily, type EpfDailyPorts } from "./lib/epfDailyCore";
+import { supabaseServerRunQueue } from "./lib/billReadModelSource";
+import { findEpfWorkOnReadModel, runEpfDaily, runEpfQueue, type EpfDailyPorts } from "./lib/epfDailyCore";
 import { supabaseEpfReadModel } from "./lib/epfReadModelSource";
 
 function positive(value: string | undefined, fallback: number): number {
@@ -92,6 +97,7 @@ async function runCronCatchUp(log: (line: string) => void): Promise<Record<strin
 
 async function main() {
   const dryRun = process.argv.includes("--dry-run");
+  const queueMode = process.argv.includes("--queue");
   const now = new Date();
   const raw = process.env.EPF_FIREBASE_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT;
   // epf-cron's initAdmin reads FIREBASE_SERVICE_ACCOUNT; it reuses this app.
@@ -105,7 +111,9 @@ async function main() {
   // 1. Contribution catch-up (writes; so not in a dry run).
   let catchUpFailed = 0;
   let catchUpWrote = 0;
-  if (!dryRun && process.env.EPF_DAILY_CATCHUP !== "off") {
+  if (queueMode) {
+    log("epf-daily: catch-up skipped (queue mode)");
+  } else if (!dryRun && process.env.EPF_DAILY_CATCHUP !== "off") {
     const totals = await runCronCatchUp(log);
     catchUpFailed = totals.failed;
     catchUpWrote = totals.written + totals.repaired + totals.released;
@@ -156,6 +164,18 @@ async function main() {
   let readModel: Awaited<ReturnType<typeof findEpfWorkOnReadModel>> | null = null;
   const rmUrl = process.env.READMODEL_SUPABASE_URL;
   const rmKey = process.env.READMODEL_SUPABASE_SERVICE_ROLE_KEY;
+
+  // SPENDLY-790: queue mode recomputes only the users the read model queued.
+  if (queueMode) {
+    if (!rmUrl || !rmKey) throw new Error("--queue needs READMODEL_SUPABASE_URL and READMODEL_SUPABASE_SERVICE_ROLE_KEY");
+    const client = createClient(rmUrl, rmKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const summary = await runEpfQueue({ queue: supabaseServerRunQueue(client, "epf-daily"), ports, now, dryRun, budget, push, log });
+    finishJobSummary(summary, budget, push ? await push.flush() : null);
+    console.log(JSON.stringify(summary, null, 2));
+    for (const line of summaryAnnotations(summary)) console.log(line);
+    if (summary.writes.failed > 0) process.exitCode = 1;
+    return;
+  }
   // After a catch-up that wrote, the copy can lag its new rows: check every owner then.
   if (rmUrl && rmKey && process.env.EPF_READMODEL_FINDER !== "off" && catchUpWrote === 0) {
     try {

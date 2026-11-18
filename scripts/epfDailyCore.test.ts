@@ -5,7 +5,7 @@ import { buildInterestEntry, creditableYears, interestEntryId, interestSchedule 
 import { epfSummaryFields } from "../shared/features/epf/utils/summarySync";
 import { maskUids } from "./epf-daily";
 import { jobReadBudget, type JobDb } from "./lib/dailyJobCore";
-import { findEpfWorkOnReadModel, planEpfWrites, runEpfDaily, STAMP, type EpfUserData } from "./lib/epfDailyCore";
+import { findEpfWorkOnReadModel, planEpfWrites, runEpfDaily, runEpfQueue, STAMP, type EpfRunQueue, type EpfUserData } from "./lib/epfDailyCore";
 
 // 9 Nov 2026: the current EPF financial year is 2026-27.
 const NOW = new Date("2026-11-09T03:00:00.000Z");
@@ -119,5 +119,125 @@ describe("epf-daily (SPENDLY-740): FY interest and the EPF summary, on the serve
     const masked = maskUids(line);
     expect(masked).not.toContain("G9NxBehpGFSascp95Pbwr6Fk9nn2");
     expect(masked).toMatch(/"uid":"#[0-9a-f]{8}"/);
+  });
+});
+
+describe("SPENDLY-790: queue mode recomputes only the users an EPF save queued", () => {
+  function recordingDb() {
+    const sets: Array<{ path: string; data: Record<string, unknown> }> = [];
+    const db: JobDb = {
+      doc: (path) => ({ path }),
+      batch: () => ({
+        create: () => undefined,
+        set: (ref, d) => sets.push({ path: ref.path, data: d }),
+        update: () => undefined,
+        delete: () => undefined,
+        commit: async () => undefined,
+      }),
+    };
+    return { db, sets };
+  }
+  function queueOf(rounds: Array<Array<{ uid: string; requestedAt: string }>>) {
+    let i = 0;
+    const done = vi.fn(async () => undefined);
+    const pending = vi.fn(async () => rounds[i++] ?? []);
+    const queue: EpfRunQueue = { pending, done };
+    return { queue, done, pending };
+  }
+  // The stored summary as it was before the October backfill: one month short.
+  const before = () => {
+    const entries = storedEntries(data());
+    const stale = epfSummaryFields({ establishments: [establishment], contributions: CONTRIBUTIONS.slice(0, -1), transfers: [], interestEntries: entries, adjustments: [] });
+    return data({ interestEntries: entries, storedSummary: stale });
+  };
+
+  it("a queued user's stale summary is rewritten from Firestore; no owner scan; the request is cleared", async () => {
+    const { db, sets } = recordingDb();
+    const ports = { listOwners: vi.fn(async () => ["u1", "u2"]), load: vi.fn(async () => before()), db, stamp: () => "<ts>" };
+    const { queue, done } = queueOf([[{ uid: "u1", requestedAt: "2026-11-18T12:50:00.1+00:00" }]]);
+    const s = await runEpfQueue({ queue, ports, now: NOW, dryRun: false, budget: jobReadBudget(1000), push: null, log: () => undefined });
+
+    expect(ports.listOwners).not.toHaveBeenCalled();
+    expect(ports.load).toHaveBeenCalledTimes(1);
+    expect(ports.load).toHaveBeenCalledWith("u1");
+    const written = sets.find((x) => x.path === "users/u1/financialSummaries/epf")?.data;
+    const expected = epfSummaryFields({ establishments: [establishment], contributions: CONTRIBUTIONS, transfers: [], interestEntries: storedEntries(data()), adjustments: [] });
+    expect(written).toMatchObject({ currentBalance: expected.currentBalance, calculatedAt: "<ts>" });
+    expect(s.counts.summariesWritten).toBe(1);
+    expect(s.counts.queueUsers).toBe(1);
+    expect(done).toHaveBeenCalledWith("u1", "2026-11-18T12:50:00.1+00:00");
+  });
+
+  it("an empty queue reads nothing and writes nothing", async () => {
+    const { db, sets } = recordingDb();
+    const ports = { listOwners: vi.fn(async () => ["u1"]), load: vi.fn(async () => before()), db, stamp: () => "<ts>" };
+    const { queue, done } = queueOf([]);
+    const s = await runEpfQueue({ queue, ports, now: NOW, dryRun: false, budget: jobReadBudget(1000), push: null, log: () => undefined });
+    expect(ports.load).not.toHaveBeenCalled();
+    expect(ports.listOwners).not.toHaveBeenCalled();
+    expect(sets).toEqual([]);
+    expect(done).not.toHaveBeenCalled();
+    expect(s.counts.queueRounds ?? 0).toBe(0);
+  });
+
+  it("an already-in-sync user is cleared without a write (no churn)", async () => {
+    const { db, sets } = recordingDb();
+    const entries = storedEntries(data());
+    const summary = epfSummaryFields({ establishments: [establishment], contributions: CONTRIBUTIONS, transfers: [], interestEntries: entries, adjustments: [] });
+    const ports = { listOwners: vi.fn(async () => []), load: vi.fn(async () => data({ interestEntries: entries, storedSummary: summary })), db, stamp: () => "<ts>" };
+    const { queue, done } = queueOf([[{ uid: "u1", requestedAt: "t1" }]]);
+    await runEpfQueue({ queue, ports, now: NOW, dryRun: false, budget: jobReadBudget(1000), push: null, log: () => undefined });
+    expect(sets).toEqual([]);
+    expect(done).toHaveBeenCalledWith("u1", "t1");
+  });
+
+  it("a save during the run is served by the next round", async () => {
+    const { db } = recordingDb();
+    const ports = { listOwners: vi.fn(async () => []), load: vi.fn(async () => before()), db, stamp: () => "<ts>" };
+    const { queue, done } = queueOf([[{ uid: "u1", requestedAt: "t1" }], [{ uid: "u1", requestedAt: "t2" }]]);
+    const s = await runEpfQueue({ queue, ports, now: NOW, dryRun: false, budget: jobReadBudget(1000), push: null, log: () => undefined });
+    expect(s.counts.queueRounds).toBe(2);
+    expect(done).toHaveBeenNthCalledWith(1, "u1", "t1");
+    expect(done).toHaveBeenNthCalledWith(2, "u1", "t2");
+  });
+
+  it("a dry run reads one round, writes nothing and keeps the requests", async () => {
+    const { db, sets } = recordingDb();
+    const ports = { listOwners: vi.fn(async () => []), load: vi.fn(async () => before()), db, stamp: () => "<ts>" };
+    const { queue, done, pending } = queueOf([[{ uid: "u1", requestedAt: "t1" }], [{ uid: "u1", requestedAt: "t2" }]]);
+    const s = await runEpfQueue({ queue, ports, now: NOW, dryRun: true, budget: jobReadBudget(1000), push: null, log: () => undefined });
+    expect(sets).toEqual([]);
+    expect(pending).toHaveBeenCalledTimes(1);
+    expect(done).not.toHaveBeenCalled();
+    expect(s.counts.summariesWritten).toBe(1);
+  });
+
+  it("a duress uid is never loaded, and its request is cleared", async () => {
+    const { db, sets } = recordingDb();
+    const ports = { listOwners: vi.fn(async () => []), load: vi.fn(async () => before()), db, stamp: () => "<ts>" };
+    const { queue, done } = queueOf([[{ uid: "u1_duress", requestedAt: "t1" }]]);
+    const s = await runEpfQueue({ queue, ports, now: NOW, dryRun: false, budget: jobReadBudget(1000), push: null, log: () => undefined });
+    expect(ports.load).not.toHaveBeenCalled();
+    expect(sets).toEqual([]);
+    expect(s.counts.queueUsers).toBe(0);
+    expect(done).toHaveBeenCalledWith("u1_duress", "t1");
+  });
+
+  it("out of read budget: the requests stay queued for the next run", async () => {
+    const { db } = recordingDb();
+    const budget = jobReadBudget(1);
+    const ports = {
+      listOwners: vi.fn(async () => []),
+      load: vi.fn(async () => {
+        budget.add(5); // as the CLI's Firestore ports charge
+        return before();
+      }),
+      db,
+      stamp: () => "<ts>",
+    };
+    const { queue, done } = queueOf([[{ uid: "u1", requestedAt: "t1" }, { uid: "u2", requestedAt: "t1" }]]);
+    await runEpfQueue({ queue, ports, now: NOW, dryRun: false, budget, push: null, log: () => undefined });
+    expect(ports.load).toHaveBeenCalledTimes(1);
+    expect(done).not.toHaveBeenCalled();
   });
 });

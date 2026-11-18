@@ -287,6 +287,25 @@ An app save to a bill input (expenses, account payments, card bills, accounts; `
 - `select status_code, created from net._http_response order by created desc limit 5;`
 - Actions → *Bill daily* runs with `trigger: queue`.
 
+## EPF-run queue (SPENDLY-790)
+The same queue and token, with job `epf-daily`. An app save to an EPF ledger input queues its owner, and at most once a minute (per job) the dispatch asks GitHub to run `epf-daily.yml` with `trigger: queue`. The inputs are `epf_establishments`, `epf_contributions`, `epf_transfers` and `epf_reconciliations`, with `written_by = 'client'`. Migration `20261117000000`.
+
+Queue mode recomputes FY interest and `financialSummaries/epf` for the queued users only, from Firestore. It skips the contribution catch-up.
+
+**On:**
+- Apply the migration (dry run, approval).
+- Nothing else is needed while the bill queue's Vault token and pg_net are live and `EPF_DAILY_ENABLED` is `true`.
+
+**Off:**
+- Set `EPF_DAILY_ENABLED` to anything but `true`. That stops the cron and queue runs alike.
+- Or drop the `*_epf_run_ins` / `*_epf_run_upd` triggers.
+
+The daily run still recomputes every user with work, whether or not they're queued. A leftover queue row (at most one per user) is cleared by the next queue run.
+
+**Check it:**
+- `select uid is not null, requested_at from server_run_queue where job = 'epf-daily';`
+- Actions → *EPF daily* runs with `trigger: queue`.
+
 ## The on-device copy (SPENDLY-594)
 
 **What it is:** each device keeps a copy of its user's read-model rows (`lib/readModelLocal/`): SQLite on Android and iOS (`spendly-readmodel.db`), IndexedDB on web.

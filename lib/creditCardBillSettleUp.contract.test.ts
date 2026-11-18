@@ -86,11 +86,21 @@ describe("stored bills are settled by the server after every money action (SPEND
   });
 
   it("the trigger dispatches bill-daily.yml in queue mode, debounced, with no uid", () => {
-    expect(migration).toContain(`https://api.github.com/repos/${DISPATCH_TARGET.repo}/actions/workflows/bill-daily.yml/dispatches`);
-    expect(migration).toContain(
+    expect(migration).toContain("perform public.server_run_dispatch('bill-daily')");
+    // The live dispatch is the latest definition (SPENDLY-790 added epf-daily to it).
+    const file = readdirSync(MIGRATIONS)
+      .filter((f) => f.endsWith(".sql"))
+      .sort()
+      .filter((f) => readFileSync(path.join(MIGRATIONS, f), "utf8").includes("function public.server_run_dispatch("))
+      .pop();
+    const sql = readFileSync(path.join(MIGRATIONS, file!), "utf8").replace(/\r\n/g, "\n");
+    const dispatch = sql.slice(sql.indexOf("function public.server_run_dispatch("));
+    expect(dispatch).toContain(`https://api.github.com/repos/${DISPATCH_TARGET.repo}/actions/workflows/`);
+    expect(dispatch).toMatch(/'bill-daily'(?: then '|, ')bill-daily\.yml|workflows\/bill-daily\.yml\/dispatches/);
+    expect(dispatch).toContain(
       "jsonb_build_object('ref', 'main', 'inputs', jsonb_build_object('dry_run', 'false', 'trigger', 'queue'))"
     );
-    expect(migration).toContain("interval '60 seconds'");
+    expect(dispatch).toContain("interval '60 seconds'");
   });
 
   it("bill-daily.yml accepts queue runs, gates them on BILL_DAILY_ENABLED and runs --queue", () => {

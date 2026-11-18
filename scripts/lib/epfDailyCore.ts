@@ -181,15 +181,19 @@ export async function runEpfDaily(opts: {
   log: (line: string) => void;
   /** Users with work on the read model; null checks every owner (fallback). */
   readModel?: { uids: Set<string>; usersSeen: number; failures: number } | null;
+  /** SPENDLY-790 (queue mode): only these users, each confirmed on Firestore. */
+  onlyUids?: string[];
+  /** Accumulate into this summary (queue mode runs several rounds). */
+  summary?: DailyJobSummary;
 }): Promise<DailyJobSummary> {
   const { ports, now, budget } = opts;
-  const summary = newJobSummary("epf-daily", opts.dryRun);
+  const summary = opts.summary ?? newJobSummary("epf-daily", opts.dryRun);
   if (opts.readModel) {
     bump(summary, "readModelUsers", opts.readModel.usersSeen);
     bump(summary, "readModelUsersWithWork", opts.readModel.uids.size);
     if (opts.readModel.failures) bump(summary, "readModelFailures", opts.readModel.failures);
   }
-  const owners = opts.readModel ? [...opts.readModel.uids] : await ports.listOwners();
+  const owners = opts.onlyUids ?? (opts.readModel ? [...opts.readModel.uids] : await ports.listOwners());
   for (const uid of owners) {
     if (budget.exhausted()) break;
     summary.usersSeen += 1;
@@ -216,6 +220,65 @@ export async function runEpfDaily(opts: {
       if (plan.summary) bump(summary, "summariesWritten");
     }
     if (result.status === "conflict") bump(summary, "conflicts");
+  }
+  return summary;
+}
+
+/**
+ * SPENDLY-790 — the users the read model queued after an app save to an EPF
+ * ledger input (supabase-readmodel migration 20261117000000: the trigger
+ * queues the owner and asks GitHub to run this job with `trigger: queue`).
+ * Same shape as the bill queue (SPENDLY-737). Never logged.
+ */
+export type EpfRunQueue = {
+  pending(): Promise<Array<{ uid: string; requestedAt: string }>>;
+  /** Clears the user's request unless a newer save re-queued it meanwhile. */
+  done(uid: string, requestedAt: string): Promise<void>;
+};
+
+export const EPF_QUEUE_MAX_ROUNDS = 3;
+
+/**
+ * Queue mode: recomputes interest and the summary for the queued users only,
+ * straight from Firestore (no read-model finder: the copy can lag the save
+ * that queued them, and a queued user is a handful of reads). Each round reads
+ * the queue, runs `runEpfDaily` for those users, then clears the requests it
+ * served. A save during the run re-queues its user (newer `requestedAt`), so
+ * the next round, or the next dispatch, takes it. A dry run reads only.
+ */
+export async function runEpfQueue(opts: {
+  queue: EpfRunQueue;
+  ports: EpfDailyPorts;
+  now: Date;
+  dryRun: boolean;
+  budget: ReadBudget;
+  push: JobPush | null;
+  log: (line: string) => void;
+  maxRounds?: number;
+}): Promise<DailyJobSummary> {
+  const summary = newJobSummary("epf-daily", opts.dryRun);
+  const rounds = opts.dryRun ? 1 : opts.maxRounds ?? EPF_QUEUE_MAX_ROUNDS;
+  for (let round = 0; round < rounds; round += 1) {
+    if (opts.budget.exhausted()) break;
+    const pending = await opts.queue.pending();
+    if (!pending.length) break;
+    bump(summary, "queueRounds");
+    const live = pending.filter((p) => p.uid && !isDuressUid(p.uid));
+    bump(summary, "queueUsers", live.length);
+    await runEpfDaily({
+      ports: opts.ports,
+      now: opts.now,
+      dryRun: opts.dryRun,
+      budget: opts.budget,
+      push: opts.push,
+      log: opts.log,
+      onlyUids: live.map((p) => p.uid),
+      summary,
+    });
+    if (opts.dryRun) break;
+    // Out of budget mid-round: keep every request; the next run serves them (idempotent).
+    if (opts.budget.exhausted()) break;
+    for (const p of pending) await opts.queue.done(p.uid, p.requestedAt);
   }
   return summary;
 }

@@ -11,6 +11,12 @@ name: EPF daily
 # the repository variable EPF_DAILY_ENABLED is "true". A manual dispatch always
 # runs (dry run by default; a dry run skips step 1).
 #
+# SPENDLY-790: trigger=queue runs (`--queue`) are dispatched by the read model
+# (Supabase migration 20261117000000) about a minute after an app save to an
+# EPF ledger input. They run only step 2, only for the queued users, read from
+# the server-only queue table, so no uid is ever an input. Gated by
+# EPF_DAILY_ENABLED, like the Worker's cron runs.
+#
 # Secrets: FIREBASE_SERVICE_ACCOUNT (or EPF_FIREBASE_SERVICE_ACCOUNT),
 #          READMODEL_SUPABASE_SERVICE_ROLE_KEY (optional: finder + read-model push)
 # Variables: EPF_DAILY_ENABLED, READMODEL_SUPABASE_URL, EPF_MAX_READS_PER_RUN,
@@ -25,13 +31,14 @@ on:
         default: true
         type: boolean
       trigger:
-        description: "Who started the run. The Cloudflare Worker sends cron, which obeys EPF_DAILY_ENABLED."
+        description: "Who started the run. The Cloudflare Worker sends cron, the read model sends queue (SPENDLY-790); both obey EPF_DAILY_ENABLED."
         required: false
         default: manual
         type: choice
         options:
           - manual
           - cron
+          - queue
 
 concurrency:
   group: epf-daily
@@ -43,7 +50,7 @@ permissions:
 jobs:
   run:
     name: EPF catch-up, interest and summary
-    if: vars.EPF_DAILY_ENABLED == 'true' || inputs.trigger != 'cron'
+    if: vars.EPF_DAILY_ENABLED == 'true' || (inputs.trigger != 'cron' && inputs.trigger != 'queue')
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -72,6 +79,7 @@ jobs:
           EPF_READMODEL_FINDER: ${{ vars.EPF_READMODEL_FINDER || 'on' }}
           EPF_DAILY_CATCHUP: ${{ vars.EPF_DAILY_CATCHUP || 'on' }}
           DRY_RUN: ${{ inputs.dry_run }}
+          TRIGGER: ${{ inputs.trigger }}
         run: |
           set -euo pipefail
           if [ -z "$EPF_FIREBASE_SERVICE_ACCOUNT" ]; then
@@ -80,6 +88,7 @@ jobs:
           fi
           args=""
           if [ "$DRY_RUN" = "true" ]; then args="--dry-run"; fi
+          if [ "$TRIGGER" = "queue" ]; then args="$args --queue"; fi
           npx --no-install tsx scripts/epf-daily.ts $args | tee epf-daily.log
           {
             echo "## EPF daily"
