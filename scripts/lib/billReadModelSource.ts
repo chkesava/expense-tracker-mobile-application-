@@ -112,17 +112,17 @@ export function supabaseBillReadModel(client: SupabaseClient): ReadModelBillSour
 }
 
 /**
- * SPENDLY-737: the bill-run queue (`server_run_queue`, service role only).
+ * SPENDLY-737/790: a job's run queue (`server_run_queue`, service role only).
  * `done` deletes a request only if no newer save re-queued the user since it
  * was read (`requested_at` unchanged or older).
  */
-export function supabaseBillRunQueue(client: SupabaseClient): BillRunQueue {
+export function supabaseServerRunQueue(client: SupabaseClient, job: "bill-daily" | "epf-daily"): BillRunQueue {
   return {
     async pending() {
       const { data, error } = await client
         .from("server_run_queue")
         .select("uid, requested_at")
-        .eq("job", "bill-daily")
+        .eq("job", job)
         .order("requested_at", { ascending: true })
         .limit(500);
       if (error) throw new Error(`read model: ${error.message}`);
@@ -132,10 +132,15 @@ export function supabaseBillRunQueue(client: SupabaseClient): BillRunQueue {
       const { error } = await client
         .from("server_run_queue")
         .delete()
-        .eq("job", "bill-daily")
+        .eq("job", job)
         .eq("uid", uid)
         .lte("requested_at", requestedAt);
       if (error) throw new Error(`read model: ${error.message}`);
     },
   };
+}
+
+/** SPENDLY-737: the bill-run queue. */
+export function supabaseBillRunQueue(client: SupabaseClient): BillRunQueue {
+  return supabaseServerRunQueue(client, "bill-daily");
 }

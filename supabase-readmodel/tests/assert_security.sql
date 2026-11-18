@@ -366,6 +366,32 @@ begin
 end
 $$;
 
+-- 12. SPENDLY-790: the EPF run trigger is a definer with an empty search_path
+--     that no client role can execute; every EPF ledger input carries both
+--     EPF queue triggers.
+do $$
+declare
+  fn regprocedure := 'public.server_run_note_epf_inputs()'::regprocedure;
+  missing text;
+begin
+  if not (select p.prosecdef and p.proconfig @> array['search_path=""'] from pg_proc p where p.oid = fn) then
+    raise exception '% must be security definer with an empty search_path', fn;
+  end if;
+  if has_function_privilege('authenticated', fn, 'execute') or has_function_privilege('anon', fn, 'execute') then
+    raise exception '% must not be executable by client roles', fn;
+  end if;
+  select string_agg(x, ', ') into missing
+  from unnest(array['epf_establishments', 'epf_contributions', 'epf_transfers', 'epf_reconciliations']) as x
+  where (
+    select count(*) from pg_trigger g join pg_class c on c.oid = g.tgrelid
+    where c.relname = x and g.tgname in (x || '_epf_run_ins', x || '_epf_run_upd') and not g.tgisinternal
+  ) <> 2;
+  if missing is not null then
+    raise exception 'EPF inputs without both epf-run triggers: %', missing;
+  end if;
+end
+$$;
+
 select 'read-model security assertions passed' as result;
 
 -- 7. SPENDLY-513: the Phase 3 views run as the caller (security_invoker), so

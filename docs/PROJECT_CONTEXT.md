@@ -66,6 +66,7 @@ Full rules: `docs/READ_MODEL_RULES.md`. Operations: `docs/READMODEL_RUNBOOK.md`.
 - **Server-side checks:**
   - Supabase finds the work, and Firestore confirms before writing (R4.3a).
   - After a save, a Supabase trigger queues the user, and `pg_net` dispatches the bill job (`server_run_queue`, SPENDLY-737).
+  - EPF saves do the same for `epf-daily` (SPENDLY-790, migration 20261117000000), so net worth picks up an EPF backfill or "mark credited" within minutes instead of at the next 08:30 IST run.
 - **Never** add a calculation back into the app, a second job framework, or a second writer.
 - The app must not recompute authoritative totals in UI components. It shows the stored summaries.
 

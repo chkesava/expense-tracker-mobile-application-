@@ -87,6 +87,13 @@ jobs:
         # stand-in). Server writes and duress never queue; clients can't read
         # it; a purge clears it.
         run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/bill_run_queue.sql
+
+      - name: EPF-run queue (SPENDLY-790)
+        # An app save to an EPF ledger input queues its owner for epf-daily;
+        # once a minute (debounced per job), one dispatch to epf-daily.yml in
+        # queue mode. Server writes and duress never queue; deletes queue;
+        # unknown jobs refused; a purge clears every job.
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/epf_run_queue.sql
       - name: Account purge (SPENDLY-508)
         # Deletes every row and all sync bookkeeping for the uid and its duress
         # twin; idempotent; a late sync cannot resurrect it; client roles can't call it.
