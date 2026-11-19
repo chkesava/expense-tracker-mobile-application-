@@ -45,3 +45,29 @@ export interface Space {
   createdAt?: unknown;
   updatedAt?: unknown;
 }
+
+/**
+ * SPENDLY-791: one Space's totals, derived on the server (`space-daily`) from
+ * every expense carrying its `spaceId`, whatever month it falls in. The app
+ * shows these; it never adds up a Space from the months it happens to hold.
+ */
+export interface StoredSpaceTotals {
+  totalSpent: number;
+  expenseCount: number;
+  /** YYYY-MM-DD, null with no dated expense. */
+  firstExpenseDate: string | null;
+  lastExpenseDate: string | null;
+  /** Category totals, largest first. */
+  categories: Array<{ category: string; total: number; count: number; percentage: number }>;
+}
+
+/** Stored at `users/{uid}/financialSummaries/spaces`. Written only by `space-daily`. */
+export const SPACES_SUMMARY_DOC_ID = "spaces";
+export const SPACES_SUMMARY_VERSION = 1;
+
+export interface SpacesSummaryDoc {
+  /** Keyed by Space id. A Space with no expense has a zero entry. */
+  spaces: Record<string, StoredSpaceTotals>;
+  summaryVersion: number;
+  calculatedAt?: unknown;
+}

@@ -50,6 +50,24 @@ export async function firestoreJournalMonth<T extends { id?: string }>(
   return foldLedgerSnapshot<T>(snap.docs, { activeOnly: true }).items;
 }
 
+/**
+ * SPENDLY-791: every live expense assigned to a Space, any month, from
+ * Firestore (the `spaceId` equality; `spaceId`+`date` is indexed too).
+ */
+export async function firestoreSpaceExpenses<T extends { id?: string }>(
+  db: Firestore,
+  uid: string,
+  spaceId: string
+): Promise<T[]> {
+  if (!spaceId) return [];
+  const snap = await getDocs(query(collection(db, "users", uid, "expenses"), where("spaceId", "==", spaceId)));
+  logDirectRead(`users/${uid}/expenses`, snap.docs.length, snap.metadata.fromCache ? "cache" : "server", {
+    feature: "space_expenses_query",
+    queryShape: "spaceId ==",
+  });
+  return foldLedgerSnapshot<T>(snap.docs, { activeOnly: true }).items;
+}
+
 const PAGE = 1000;
 
 export async function supabaseJournalMonth<T extends { id?: string }>(
