@@ -7,7 +7,8 @@
  */
 
 import type { Expense } from "../types/expense";
-import type { Space } from "../types/space";
+import type { Space, StoredSpaceTotals } from "../types/space";
+import { isActiveLedgerRow } from "./ledgerRow";
 import { roundMoney } from "./money";
 export { roundMoney };
 
@@ -156,5 +157,86 @@ export function summarizeSpaces(
     overBudgetCount,
     unassignedExpenseCount: expenses.filter((expense) => !expense.spaceId)
       .length,
+  };
+}
+
+/**
+ * SPENDLY-791 — every Space's totals from every expense assigned to it, as the
+ * server job `space-daily` stores them. Soft-deleted expenses don't count.
+ * Pure; the caller supplies all of a Space's expenses, never a month window.
+ */
+export function buildStoredSpaceTotals(
+  spaces: Space[],
+  expenses: Expense[]
+): Record<string, StoredSpaceTotals> {
+  const live = expenses.filter((expense) => isActiveLedgerRow(expense));
+  const out: Record<string, StoredSpaceTotals> = {};
+  for (const space of spaces) {
+    if (!space.id) continue;
+    const summary = summarizeSpace(space, live);
+    out[space.id] = {
+      totalSpent: summary.totalSpent,
+      expenseCount: summary.expenseCount,
+      firstExpenseDate: summary.firstExpenseDate,
+      lastExpenseDate: summary.lastExpenseDate,
+      categories: buildSpaceCategoryBreakdown(expensesInSpace(live, space.id)),
+    };
+  }
+  return out;
+}
+
+/**
+ * SPENDLY-791 — a Space's summary from its stored totals. Only the budget
+ * share is worked out here, against the Space's current budget, so a budget
+ * edit shows at once; the money comes from the server. `null` until the
+ * server has stored this Space.
+ */
+export function spaceSummaryFromStored(
+  space: Space,
+  stored: StoredSpaceTotals | undefined
+): SpaceSummary | null {
+  if (!stored) return null;
+  const budget = space.budget ?? 0;
+  const hasBudget = Number.isFinite(budget) && budget > 0;
+  const percentUsed = hasBudget ? roundMoney((stored.totalSpent / budget) * 100) : 0;
+  return {
+    spaceId: space.id ?? "",
+    totalSpent: stored.totalSpent,
+    expenseCount: stored.expenseCount,
+    hasBudget,
+    budget: hasBudget ? budget : 0,
+    budgetRemaining: hasBudget ? roundMoney(budget - stored.totalSpent) : 0,
+    percentUsed,
+    tier: budgetProgressTier(percentUsed, hasBudget),
+    firstExpenseDate: stored.firstExpenseDate,
+    lastExpenseDate: stored.lastExpenseDate,
+  };
+}
+
+/** SPENDLY-791 — the header totals over the shown Spaces, from stored totals. */
+export function summarizeStoredSpaces(
+  spaces: Space[],
+  stored: Record<string, StoredSpaceTotals>
+): Omit<SpacesPortfolioSummary, "unassignedExpenseCount"> & { pendingCount: number } {
+  let totalSpent = 0;
+  let totalBudget = 0;
+  let overBudgetCount = 0;
+  let pendingCount = 0;
+  for (const space of spaces) {
+    const summary = spaceSummaryFromStored(space, space.id ? stored[space.id] : undefined);
+    if (!summary) {
+      pendingCount += 1;
+      continue;
+    }
+    totalSpent += summary.totalSpent;
+    totalBudget += summary.budget;
+    if (summary.tier === "over") overBudgetCount += 1;
+  }
+  return {
+    totalSpent: roundMoney(totalSpent),
+    totalBudget: roundMoney(totalBudget),
+    spaceCount: spaces.length,
+    overBudgetCount,
+    pendingCount,
   };
 }

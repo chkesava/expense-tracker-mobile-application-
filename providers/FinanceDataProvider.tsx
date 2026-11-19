@@ -45,7 +45,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useNetwork } from "@/providers/NetworkProvider";
 import { useSystemSettings } from "@/providers/SystemSettingsProvider";
 import type { ReadModelReadConditions } from "@/lib/readModel/screenReadPath";
-import { readJournalMatches, readJournalMonth, readJournalPage, shadowCompareJournalHistory } from "@/lib/readModel/journalReadPath";
+import { readJournalMatches, readJournalMonth, readJournalPage, readSpaceExpenses, shadowCompareJournalHistory } from "@/lib/readModel/journalReadPath";
 import { createJournalMonthCache } from "@/lib/readModel/journalMonthCache";
 import type { JournalMatch } from "@/lib/readModel/backend";
 import { isLocalTestMode, isReadModelEnvConfigured } from "@/lib/env";
@@ -162,6 +162,8 @@ type ExpensesContextType = {
    * without paging all history. A no-op in `firestore` (default) and `shadow`.
    */
   loadMatchingExpenses: (match: JournalMatch) => Promise<void>;
+  /** SPENDLY-791: loads every expense of a Space, any month (read model or Firestore). */
+  loadSpaceExpenses: (spaceId: string) => Promise<void>;
   /**
    * SPENDLY-513: what read-model screens outside the provider need: the
    * current read conditions, and the ids removed on this device this session
@@ -2058,6 +2060,28 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const loadSpaceExpenses = useCallback(async (spaceId: string) => {
+    const u = userRef.current;
+    const database = getFirestoreDb();
+    if (!u || !database || !spaceId) return;
+    try {
+      const rows = await readSpaceExpenses<Expense>({
+        db: database,
+        user: u,
+        spaceId,
+        conditions: readModelRef.current,
+        locallyRemovedIds: locallyRemovedIdsRef.current,
+      });
+      if (!rows.length) return;
+      setPaginatedExpenses((prev) => {
+        const toAdd = unseenRows(prev, realtimeExpensesRef.current, rows);
+        return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+      });
+    } catch (err) {
+      logError("financeProvider.loadSpaceExpenses", err);
+    }
+  }, []);
+
   const removeExpense = useCallback((id: string) => {
     locallyRemovedIdsRef.current.add(id);
     setRealtimeExpenses((prev) => prev.filter((e) => e.id !== id));
@@ -2239,6 +2263,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       expenseMonthsLoaded,
       loadExpensesForMonth,
       loadMatchingExpenses,
+      loadSpaceExpenses,
       readModelSession,
       removeExpense,
       updateExpense,
@@ -2258,6 +2283,7 @@ export function FinanceDataProvider({ children }: { children: ReactNode }) {
       expenseMonthsLoaded,
       loadExpensesForMonth,
       loadMatchingExpenses,
+      loadSpaceExpenses,
       readModelSession,
       removeExpense,
       updateExpense,

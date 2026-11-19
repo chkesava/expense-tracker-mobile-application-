@@ -52,6 +52,8 @@ export type JournalMatch = {
   maxAmount?: number;
   fromDate?: string;
   toDate?: string;
+  /** SPENDLY-791: every row assigned to this Space, any month (the doc's `spaceId`). */
+  spaceId?: string;
 };
 
 export type ReadModelBackend = {
@@ -101,6 +103,7 @@ export function supabaseBackend(client: SupabaseClient): ReadModelBackend {
         if (match.maxAmount !== undefined) q = q.lte("amount", match.maxAmount + AMOUNT_MARGIN);
         if (match.fromDate) q = q.gte("date", match.fromDate);
         if (match.toDate) q = q.lte("date", match.toDate);
+        if (match.spaceId) q = q.eq("doc->>spaceId", match.spaceId);
         const { data, error } = await q.order("doc_id").range(from, from + MATCH_PAGE - 1);
         if (error) throw new Error(`read model ${collectionName}: ${error.message}`);
         const rows = (data ?? []) as { doc_id: string; doc: Record<string, unknown> }[];
@@ -173,6 +176,7 @@ export function loopbackBackend(db: Firestore, uid: string, knobs: LoopbackKnobs
         .filter((r) => match.maxAmount === undefined || (r.amount != null && Number(r.amount) <= match.maxAmount + AMOUNT_MARGIN))
         .filter((r) => !match.fromDate || (r.date != null && String(r.date) >= match.fromDate))
         .filter((r) => !match.toDate || (r.date != null && String(r.date) <= match.toDate))
+        .filter((r) => !match.spaceId || (r.doc as Record<string, unknown>).spaceId === match.spaceId)
         .map((r) => toApp(r));
     },
     async byMonthKey(collectionName, monthKey) {

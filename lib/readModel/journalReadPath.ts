@@ -6,7 +6,7 @@ import type { ReadModelMode } from "@/shared/utils/readModelMode";
 
 import type { JournalMatch, ReadModelBackend } from "./backend";
 import { firestoreJournalPage, type SupabaseCursor } from "./journalHistorySource";
-import { firestoreJournalMonth, type JournalCollection } from "./journalMonthSource";
+import { firestoreJournalMonth, firestoreSpaceExpenses, type JournalCollection } from "./journalMonthSource";
 import { compareLedgerRows, type ReadPath } from "./readPath";
 import {
   READ_MODEL_TIMEOUT_MS,
@@ -125,6 +125,20 @@ export async function readJournalMatches<T extends { id?: string }>(
     logWarning("readModel.journal.matches", error);
     return null;
   }
+}
+
+/**
+ * SPENDLY-791: every expense of a Space, whatever month it is in, so the
+ * Space's list doesn't depend on which months the Journal has loaded. The
+ * read model in `supabase` mode; Firestore otherwise, or if the copy fails.
+ */
+export async function readSpaceExpenses<T extends { id?: string }>(
+  input: Omit<BaseInput, "collectionName"> & { spaceId: string }
+): Promise<T[]> {
+  if (!input.spaceId || !input.user) return [];
+  const copied = await readJournalMatches<T>({ ...input, collectionName: "expenses", match: { spaceId: input.spaceId } });
+  if (copied) return copied;
+  return withoutRemoved(await firestoreSpaceExpenses<T>(input.db, input.user.uid, input.spaceId), input.locallyRemovedIds);
 }
 
 /**

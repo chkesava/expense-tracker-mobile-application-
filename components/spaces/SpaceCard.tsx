@@ -12,7 +12,8 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export interface SpaceCardProps {
   space: Space;
-  summary: SpaceSummary;
+  /** SPENDLY-791: null until the server has stored this Space's totals. */
+  summary: SpaceSummary | null;
   currency?: string;
   onPress: () => void;
 }
@@ -27,7 +28,7 @@ export function SpaceCard({ space, summary, currency, onPress }: SpaceCardProps)
   const money = useGhostMoney(currency ?? "INR");
 
   const accent = space.color ?? SPACE_COLORS[0];
-  const budget = spaceBudgetPresentation(summary.tier);
+  const budget = spaceBudgetPresentation(summary?.tier ?? "none");
 
   return (
     <Pressable
@@ -54,16 +55,21 @@ export function SpaceCard({ space, summary, currency, onPress }: SpaceCardProps)
             {space.name}
           </Text>
           <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
-            {summary.expenseCount} expense
-            {summary.expenseCount === 1 ? "" : "s"}
+            {summary
+              ? `${summary.expenseCount} expense${summary.expenseCount === 1 ? "" : "s"}`
+              : "Updating totals…"}
             {space.status === "ARCHIVED" ? " · Archived" : ""}
           </Text>
         </View>
 
-        <FinancialAmount value={summary.totalSpent} currency={currency ?? "INR"} size="md" weight="bold" />
+        {summary ? (
+          <FinancialAmount value={summary.totalSpent} currency={currency ?? "INR"} size="md" weight="bold" />
+        ) : (
+          <Text style={[styles.name, { color: theme.colors.mutedForeground }]}>—</Text>
+        )}
       </View>
 
-      {summary.hasBudget ? (
+      {summary?.hasBudget ? (
         <ProgressIndicator
           pct={summary.percentUsed}
           status={budget.status}

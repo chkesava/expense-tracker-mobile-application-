@@ -67,6 +67,7 @@ Full rules: `docs/READ_MODEL_RULES.md`. Operations: `docs/READMODEL_RUNBOOK.md`.
   - Supabase finds the work, and Firestore confirms before writing (R4.3a).
   - After a save, a Supabase trigger queues the user, and `pg_net` dispatches the bill job (`server_run_queue`, SPENDLY-737).
   - EPF saves do the same for `epf-daily` (SPENDLY-790, migration 20261117000000), so net worth picks up an EPF backfill or "mark credited" within minutes instead of at the next 08:30 IST run.
+  - Space totals (`financialSummaries/spaces`) come only from `space-daily` (SPENDLY-791, migration 20261119000000): every expense in a Space, any month. A save to a Space, or to an expense in a Space, queues it the same way; the Worker's 03:00 UTC tick runs it daily.
 - **Never** add a calculation back into the app, a second job framework, or a second writer.
 - The app must not recompute authoritative totals in UI components. It shows the stored summaries.
 

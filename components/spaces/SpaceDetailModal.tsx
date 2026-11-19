@@ -1,5 +1,5 @@
 import { appDialog } from "@/lib/appDialog";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -18,7 +18,7 @@ import { SearchBar } from "@/components/common/SearchBar";
 import { Button } from "@/components/ui/Button";
 import { useReceivables } from "@/hooks/useReceivables";
 import type { Expense } from "@/shared/types/expense";
-import type { Space } from "@/shared/types/space";
+import type { Space, StoredSpaceTotals } from "@/shared/types/space";
 import { SPACE_COLORS } from "@/shared/types/space";
 import { todayDateKey } from "@/shared/utils/dates";
 import {
@@ -26,9 +26,8 @@ import {
   summarizeReceivables,
 } from "@/shared/utils/receivableMath";
 import {
-  buildSpaceCategoryBreakdown,
   expensesInSpace,
-  summarizeSpace,
+  spaceSummaryFromStored,
 } from "@/shared/utils/spaceMath";
 import { spaceBudgetLeftText, spaceBudgetPresentation } from "@/shared/utils/vaultSpacePresentation";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -47,6 +46,13 @@ export interface SpaceDetailModalProps {
   visible: boolean;
   space: Space | null;
   expenses: Expense[];
+  /**
+   * SPENDLY-791: the Space's totals as the server stored them (every expense
+   * in the Space, any month). Undefined until the server has run.
+   */
+  storedTotals?: StoredSpaceTotals;
+  /** SPENDLY-791: loads every expense of the Space, so the list isn't month-bound. */
+  onLoadExpenses?: (spaceId: string) => void;
   currency?: string;
   onClose: () => void;
   onEdit: (space: Space) => void;
@@ -59,6 +65,8 @@ export function SpaceDetailModal({
   visible,
   space,
   expenses,
+  storedTotals,
+  onLoadExpenses,
   currency,
   onClose,
   onEdit,
@@ -94,15 +102,19 @@ export function SpaceDetailModal({
     [space?.id, expenses]
   );
 
-  const summary = useMemo(
-    () => (space ? summarizeSpace(space, expenses) : null),
-    [space, expenses]
-  );
+  // SPENDLY-791: the list holds every expense of the Space, not just the
+  // months the Journal has loaded. The totals are the server's.
+  useEffect(() => {
+    if (visible && space?.id) onLoadExpenses?.(space.id);
+  }, [visible, space?.id, onLoadExpenses]);
 
-  const breakdown = useMemo(
-    () => buildSpaceCategoryBreakdown(spaceExpenses),
-    [spaceExpenses]
+  const summary = useMemo(
+    () => (space ? spaceSummaryFromStored(space, storedTotals) : null),
+    [space, storedTotals]
   );
+  const pending = !!space && !summary;
+
+  const breakdown = storedTotals?.categories ?? [];
 
   const visibleExpenses = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -134,7 +146,7 @@ export function SpaceDetailModal({
     });
   }, [spaceExpenses, searchQuery, categoryFilter, fromDate, sortMode]);
 
-  if (!space || !summary) {
+  if (!space) {
     return (
       <Modal isOpen={visible} onClose={onClose} title="Space">
         <View />
@@ -143,7 +155,7 @@ export function SpaceDetailModal({
   }
 
   const accent = space.color ?? SPACE_COLORS[0];
-  const budget = spaceBudgetPresentation(summary.tier);
+  const budget = spaceBudgetPresentation(summary?.tier ?? "none");
 
   const confirmDelete = () => {
     if (!space.id) return;
@@ -177,7 +189,11 @@ export function SpaceDetailModal({
             <Text style={[styles.statLabel, { color: theme.colors.mutedForeground }]}>
               Total spent
             </Text>
-            <FinancialAmount value={summary.totalSpent} currency={currency ?? "INR"} size="lg" weight="bold" />
+            {summary ? (
+              <FinancialAmount value={summary.totalSpent} currency={currency ?? "INR"} size="lg" weight="bold" />
+            ) : (
+              <Text style={[styles.statValue, { color: theme.colors.mutedForeground }]}>—</Text>
+            )}
           </View>
 
           <View style={styles.statCell}>
@@ -185,12 +201,18 @@ export function SpaceDetailModal({
               Expenses
             </Text>
             <Text style={[styles.statValue, { color: theme.colors.foreground }]}>
-              {summary.expenseCount}
+              {summary ? summary.expenseCount : "—"}
             </Text>
           </View>
         </View>
 
-        {summary.hasBudget ? (
+        {pending ? (
+          <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
+            Totals are being worked out on the server. They appear here in a minute or two.
+          </Text>
+        ) : null}
+
+        {summary?.hasBudget ? (
           <ProgressIndicator
             pct={summary.percentUsed}
             status={budget.status}
@@ -348,7 +370,7 @@ export function SpaceDetailModal({
                 ))}
               </ScrollView>
 
-              {summary.firstExpenseDate ? (
+              {summary?.firstExpenseDate ? (
                 <View style={styles.pillRow}>
                   {[
                     { id: "", label: "Any date" },
