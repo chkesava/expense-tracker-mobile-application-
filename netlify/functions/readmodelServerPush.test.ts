@@ -124,6 +124,8 @@ describe("every server-side writer of a synced collection pushes (SPENDLY-680)",
     "scripts/lib/insightsDailyCore.ts": "writes via applyJobWrites; insights-daily.ts creates the push",
     // SPENDLY-791.
     "scripts/lib/spaceDailyCore.ts": "writes via applyJobWrites; space-daily.ts creates the push",
+    // SPENDLY-796.
+    "scripts/lib/autoDebitDailyCore.ts": "writes via applyJobWrites; autodebit-daily.ts creates the push",
   };
   const PUSHES = /\bcreateServerPush\(|\breadModel\b[^\n]*serverPushPorts|\bserverPushPorts\(/;
 

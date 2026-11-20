@@ -11,8 +11,8 @@ If it can't cover it, push once a day until it is topped up, the debit posts, or
 | Story | Scope | State |
 |---|---|---|
 | SPENDLY-794 | S1 Data model + dual write | Merged into the epic (8a2b9389) |
-| SPENDLY-795 | S2 Pure per-account cumulative shortfall engine | Built on its branch; awaiting merge approval |
-| SPENDLY-796 | S3 Server job → `serverResults/autoDebitShortfall` | To Do |
+| SPENDLY-795 | S2 Pure per-account cumulative shortfall engine | Merged into the epic (844722fd) |
+| SPENDLY-796 | S3 Server job → `serverResults/autoDebitShortfall` (`autodebit-daily`, daily + save queue) | Built on its branch; awaiting merge approval |
 | SPENDLY-797 | S4 `lowBalance` push source + category | To Do |
 | SPENDLY-798 | S5 App UI (lead days, card autopay, banners, dashboard) | To Do |
 | SPENDLY-799 | S6 Local-notification fallback | To Do |
@@ -30,8 +30,8 @@ If it can't cover it, push once a day until it is topped up, the debit posts, or
 
 ## Go-live order
 1. Rules and indexes.
-2. The Supabase migration, if any.
-3. Dry-run the S3 job, then set `AUTODEBIT_CHECK_ENABLED`, then the Worker.
+2. Supabase migration `20261121000000` (the auto-debit run queue).
+3. Dry-run the S3 job, then set `AUTODEBIT_DAILY_ENABLED`, then redeploy the Worker.
 4. Turn the push on.
 5. App release.
 
