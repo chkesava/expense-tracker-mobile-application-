@@ -80,6 +80,7 @@ describe("in-app rebuild uses the single reference (SPENDLY-499)", () => {
             borrowingRepayments: [],
             receivables: [],
             receivableRepayments: [],
+            receivableLends: [],
             bills: [],
           }),
           "2026-10-20"

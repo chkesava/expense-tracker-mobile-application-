@@ -16,7 +16,7 @@
  * rows is judged against zero rather than skipped.
  */
 import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
-import type { Receivable, ReceivableRepayment } from "../types/receivable";
+import type { Receivable, ReceivableLend, ReceivableRepayment } from "../types/receivable";
 import {
   borrowingCacheAsOfDate,
   borrowingCacheDrifted,
@@ -28,6 +28,7 @@ import {
   denormalizedReceivableCacheFields,
   receivableCacheAsOfDate,
   receivableCacheDrifted,
+  receivableLendTotals,
   receivableRepaymentTotals,
   summarizeReceivable,
 } from "./receivableMath";
@@ -58,23 +59,33 @@ export function planDebtCacheRepair(
     borrowingRepayments: BorrowingRepayment[];
     receivables: Receivable[];
     receivableRepayments: ReceivableRepayment[];
+    /** SPENDLY-792 */
+    receivableLends: ReceivableLend[];
   },
   today: string
 ): DebtCacheRepairPlan[] {
   const plans: DebtCacheRepairPlan[] = [];
 
   const rTotals = receivableRepaymentTotals(input.receivableRepayments);
+  const lTotals = receivableLendTotals(input.receivableLends);
   for (const receivable of input.receivables) {
     if (!receivable.id || receivable.totalReceived === undefined) continue;
     if (!rTotals.has(receivable.id)) {
       rTotals.set(receivable.id, { totalReceived: 0, principalReceived: 0 });
     }
-    if (!receivableCacheDrifted(receivable, rTotals)) continue;
+    if (!lTotals.has(receivable.id)) lTotals.set(receivable.id, 0);
+    if (!receivableCacheDrifted(receivable, rTotals, lTotals)) continue;
     const next = denormalizedReceivableCacheFields(
       summarizeReceivable(
         receivable,
         input.receivableRepayments,
-        receivableCacheAsOfDate(receivable.id, input.receivableRepayments, today)
+        receivableCacheAsOfDate(
+          receivable.id,
+          input.receivableRepayments,
+          today,
+          input.receivableLends
+        ),
+        input.receivableLends
       )
     );
     plans.push({

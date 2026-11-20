@@ -25,7 +25,7 @@ import { computeInvestmentCashBalance } from "../../shared/features/portfolio/ut
 import { buildHoldingsWithMetrics, buildPortfolioSummary, quoteKeyFor } from "../../shared/features/portfolio/utils/portfolioMetrics";
 import type { Account, AccountType } from "../../shared/types/expense";
 import type { Borrowing, BorrowingRepayment } from "../../shared/types/borrowing";
-import type { Receivable, ReceivableRepayment } from "../../shared/types/receivable";
+import type { Receivable, ReceivableLend, ReceivableRepayment } from "../../shared/types/receivable";
 import { summarizeBorrowings } from "../../shared/utils/borrowingMath";
 import { formatDateKey, isValidTimeZone } from "../../shared/utils/dates";
 import { isDuressUid } from "../../shared/utils/duress";
@@ -60,6 +60,8 @@ export type SnapshotUserData = {
   borrowingRepayments: BorrowingRepayment[];
   receivables: Receivable[];
   receivableRepayments: ReceivableRepayment[];
+  /** SPENDLY-792: later lends on existing receivables. */
+  receivableLends: ReceivableLend[];
   groupFunds: GroupFund[];
   /** `financialSummaries/epf.currentBalance`, or null without a summary. */
   epfBalance: number | null;
@@ -115,7 +117,7 @@ export function computeSnapshots(data: SnapshotUserData, prices: Map<string, num
     receivables: data.receivables,
     receivableRepayments: data.receivableRepayments,
     borrowingOutstanding: summarizeBorrowings(data.borrowings, data.borrowingRepayments, today).totalOutstanding,
-    receivableOutstanding: summarizeReceivables(data.receivables, data.receivableRepayments, today).totalOutstanding,
+    receivableOutstanding: summarizeReceivables(data.receivables, data.receivableRepayments, today, data.receivableLends).totalOutstanding,
     investments: data.investments as never,
     holdings: data.holdings,
     quotes,

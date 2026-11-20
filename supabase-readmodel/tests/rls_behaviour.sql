@@ -27,7 +27,7 @@ begin
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
-    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'receivable_lends', 'subscriptions',
     'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
     'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
@@ -72,7 +72,7 @@ begin
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
-    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'receivable_lends', 'subscriptions',
     'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
     'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
@@ -99,8 +99,8 @@ begin
   if wrong is not null then
     raise exception 'user A saw rows that are not theirs or are tombstoned: %', wrong;
   end if;
-  if (select count(*) from rls_test.visible()) <> 134 then
-    raise exception 'user A should see 2 rows in each of 67 tables (Wave 1 + SPENDLY-609 goals + Waves 2 and 3 + SPENDLY-591 + SPENDLY-685 + SPENDLY-224 + SPENDLY-230 + SPENDLY-744 + SPENDLY-747 + SPENDLY-709 + SPENDLY-325), saw %', (select count(*) from rls_test.visible());
+  if (select count(*) from rls_test.visible()) <> 136 then
+    raise exception 'user A should see 2 rows in each of 68 tables (Wave 1 + SPENDLY-609 goals + Waves 2 and 3 + SPENDLY-591 + SPENDLY-685 + SPENDLY-224 + SPENDLY-230 + SPENDLY-744 + SPENDLY-747 + SPENDLY-709 + SPENDLY-325 + SPENDLY-792), saw %', (select count(*) from rls_test.visible());
   end if;
   if (select count(*) from public.sync_status) <> 1
      or exists (select 1 from public.sync_status s where s.uid <> 'user-a') then
@@ -114,7 +114,7 @@ do $$ begin perform set_config('request.jwt.claims', rls_test.claims('{"sub": "u
 do $$
 begin
   if exists (select 1 from rls_test.visible() v where v.uid <> 'user-b')
-     or (select count(*) from rls_test.visible()) <> 67 then
+     or (select count(*) from rls_test.visible()) <> 68 then
     raise exception 'user B isolation failed';
   end if;
 end
@@ -170,7 +170,7 @@ begin
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
-    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'receivable_lends', 'subscriptions',
     'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
     'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
@@ -269,7 +269,7 @@ begin
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
-    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'receivable_lends', 'subscriptions',
     'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
     'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',

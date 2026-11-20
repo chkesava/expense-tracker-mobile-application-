@@ -57,6 +57,10 @@ export function ReceivablesList() {
     markSettled,
     waiveInterest,
     cancelReceivable,
+    lends,
+    getLends,
+    addLend,
+    deleteLend,
   } = useReceivables();
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -101,8 +105,8 @@ export function ReceivablesList() {
   }, [receivables, summaries, statusFilter, searchQuery]);
 
   const portfolio = useMemo(
-    () => summarizeReceivables(filtered, repayments, today),
-    [filtered, repayments, today]
+    () => summarizeReceivables(filtered, repayments, today, lends),
+    [filtered, repayments, lends, today]
   );
 
   const selectedReceivable: Receivable | null = useMemo(
@@ -271,6 +275,7 @@ export function ReceivablesList() {
         receivable={selectedReceivable}
         summary={selectedId ? getSummary(selectedId) : null}
         repayments={selectedId ? getRepayments(selectedId) : []}
+        lends={selectedId ? getLends(selectedId) : []}
         currency={displayCurrency}
         startRepaying={startRepaying}
         onClose={() => {
@@ -279,6 +284,8 @@ export function ReceivablesList() {
         }}
         onAddRepayment={addRepayment}
         onDeleteRepayment={deleteRepayment}
+        onAddLend={addLend}
+        onDeleteLend={deleteLend}
         onUpdateReceivable={updateReceivable}
         onMarkSettled={markSettled}
         onWaiveInterest={waiveInterest}

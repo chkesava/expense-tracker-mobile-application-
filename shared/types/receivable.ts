@@ -76,7 +76,11 @@ export interface Receivable {
   /** Optional link to a future contact; unused in v1 UI. */
   personId?: string | null;
   personName: string;
-  /** Amount originally lent. */
+  /**
+   * Amount originally lent — the first lend only. Later lends to the same
+   * person are `ReceivableLend` rows (SPENDLY-792); the principal owed is
+   * this plus their sum (`receivablePrincipalLent`).
+   */
   originalAmount: number;
   /** YYYY-MM-DD */
   lentDate: string;
@@ -123,6 +127,8 @@ export interface Receivable {
    * Do not recalculate from repayments during normal reads.
    */
   totalReceived?: number;
+  /** Sum of every `ReceivableLend` row (SPENDLY-792). Absent reads as 0. */
+  additionalLent?: number;
   outstandingAmount?: number;
   accruedInterest?: number;
   principalReceived?: number;
@@ -157,6 +163,28 @@ export interface ReceivableRepayment {
   month?: string;
   note?: string;
   createdAt?: unknown;
+}
+
+/**
+ * SPENDLY-792: more money lent to the same person later, on an existing
+ * receivable. Each row is its own dated ledger leg — it debits
+ * `sourceAccountId` on `date`, or moves no balance when `sourceMode` is
+ * `"already_deducted"` — and interest on it accrues from `date`.
+ */
+export interface ReceivableLend {
+  id?: string;
+  receivableId: string;
+  amount: number;
+  /** YYYY-MM-DD */
+  date: string;
+  /** YYYY-MM */
+  month?: string;
+  sourceMode: ReceivableSourceMode;
+  /** Null when `sourceMode` is `"already_deducted"`. */
+  sourceAccountId: string | null;
+  note?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
 }
 
 /**

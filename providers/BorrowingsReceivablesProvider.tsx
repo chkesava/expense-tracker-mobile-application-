@@ -48,7 +48,11 @@ import {
   logQuerySnapshot,
 } from "@/lib/firestoreReadDebug";
 import type { Borrowing, BorrowingRepayment } from "@/shared/types/borrowing";
-import type { Receivable, ReceivableRepayment } from "@/shared/types/receivable";
+import type {
+  Receivable,
+  ReceivableLend,
+  ReceivableRepayment,
+} from "@/shared/types/receivable";
 import {
   allocateRepayment,
   borrowingCacheAsOfDate,
@@ -67,10 +71,13 @@ import {
   denormalizedReceivableCacheFields,
   receivableCacheAsOfDate,
   receivableCacheDrifted,
+  receivableLendTotals,
   receivableRepaymentTotals,
   roundMoney,
   summarizeReceivable,
   summarizeReceivables,
+  validateReceivableLend,
+  validateReceivableLendDelete,
   validateReceivableRepayment,
   type ReceivableSummary,
 } from "@/shared/utils/receivableMath";
@@ -78,6 +85,7 @@ import { monthFromDateKey, todayDateKey } from "@/shared/utils/dates";
 import {
   lockLendSource,
   normalizeLendSource,
+  resolveLendSource,
 } from "@/shared/utils/receivableSource";
 
 /**
@@ -123,6 +131,16 @@ export type AddReceivableRepaymentInput = {
   allowOverpayment?: boolean;
 };
 
+/** SPENDLY-792: more money lent later on an existing receivable. */
+export type AddReceivableLendInput = {
+  receivableId: string;
+  amount: number;
+  date: string;
+  /** An account id, or `LEND_SOURCE_ALREADY_DEDUCTED`. */
+  source: string;
+  note?: string;
+};
+
 function denormalizedBorrowingFields(summary: BorrowingSummary) {
   return {
     ...denormalizedBorrowingCacheFields(summary),
@@ -163,6 +181,8 @@ export type BorrowingsContextType = {
 export type ReceivablesContextType = {
   receivables: Receivable[];
   repayments: ReceivableRepayment[];
+  /** SPENDLY-792: later lends on existing receivables. */
+  lends: ReceivableLend[];
   summaries: Map<string, ReceivableSummary>;
   portfolio: ReturnType<typeof summarizeReceivables>;
   loading: boolean;
@@ -170,6 +190,7 @@ export type ReceivablesContextType = {
   retry: () => void;
   getSummary: (receivableId: string) => ReceivableSummary | null;
   getRepayments: (receivableId: string) => ReceivableRepayment[];
+  getLends: (receivableId: string) => ReceivableLend[];
   createReceivable: (input: CreateReceivableInput) => Promise<string | null>;
   updateReceivable: (id: string, updates: Partial<Receivable>) => Promise<boolean>;
   deleteReceivable: (id: string) => Promise<boolean>;
@@ -178,6 +199,8 @@ export type ReceivablesContextType = {
     repaymentId: string,
     receivableId: string
   ) => Promise<boolean>;
+  addLend: (input: AddReceivableLendInput) => Promise<string | null>;
+  deleteLend: (lendId: string, receivableId: string) => Promise<boolean>;
   markSettled: (id: string) => Promise<boolean>;
   /** SPENDLY-160 — forgive outstanding interest once the principal is back. */
   waiveInterest: (id: string) => Promise<boolean>;
@@ -204,6 +227,7 @@ export function BorrowingsReceivablesProvider({
   const borrowingRepaymentsSource = useReadModelSource("borrowingRepayments");
   const receivablesSource = useReadModelSource("receivables");
   const receivableRepaymentsSource = useReadModelSource("receivableRepayments");
+  const receivableLendsSource = useReadModelSource("receivableLends");
   const { settings } = useSettings();
   const today = todayDateKey(settings.timezone);
 
@@ -223,6 +247,7 @@ export function BorrowingsReceivablesProvider({
   const [receivableRepayments, setReceivableRepayments] = useState<
     ReceivableRepayment[]
   >([]);
+  const [receivableLends, setReceivableLends] = useState<ReceivableLend[]>([]);
   const [receivablesLoading, setReceivablesLoading] = useState(true);
   const {
     error: receivablesError,
@@ -410,6 +435,7 @@ export function BorrowingsReceivablesProvider({
     if (!uid || !db) {
       setReceivables([]);
       setReceivableRepayments([]);
+      setReceivableLends([]);
       setReceivablesLoading(false);
       return;
     }
@@ -418,8 +444,10 @@ export function BorrowingsReceivablesProvider({
     const base = ["users", uid] as const;
     const receivablesPath = `users/${uid}/receivables`;
     const receivableRepaymentsPath = `users/${uid}/receivableRepayments`;
+    const receivableLendsPath = `users/${uid}/receivableLends`;
     let unsubReceivables: (() => void) | null = null;
     let unsubReceivableRepayments: (() => void) | null = null;
+    let unsubReceivableLends: (() => void) | null = null;
 
     // SPENDLY-673: the same mapping for either source.
     const applyReceivables = (docs: SourceDoc[]) => {
@@ -429,6 +457,8 @@ export function BorrowingsReceivablesProvider({
     };
     const applyReceivableRepayments = (docs: SourceDoc[]) =>
       setReceivableRepayments(docs.map((d) => ({ id: d.id, ...(d.data as Omit<ReceivableRepayment, "id">) })));
+    const applyReceivableLends = (docs: SourceDoc[]) =>
+      setReceivableLends(docs.map((d) => ({ id: d.id, ...(d.data as Omit<ReceivableLend, "id">) })));
 
     const cancelIdle = scheduleIdleWork(() => {
       perfEvent("firestore_listener_start", { collection: "receivables" });
@@ -484,16 +514,44 @@ export function BorrowingsReceivablesProvider({
         },
         (err) => logWarning("snapshot.receivable.repayments", err)
       );
+
+      // SPENDLY-792: later lends, read exactly like the repayments.
+      perfEvent("firestore_listener_start", { collection: "receivableLends" });
+      unsubReceivableLends = receivableLendsSource.mode === "supabase"
+        ? receivableLendsSource.subscribe(applyReceivableLends, { orderBy: [{ field: "date", direction: "desc" }] })
+        : onSnapshot(
+        query(
+          collection(db, ...base, "receivableLends"),
+          orderBy("date", "desc")
+        ),
+        (snapshot) => {
+          logQuerySnapshot(receivableLendsPath, snapshot, {
+            feature: "receivables",
+            queryShape: "receivableLends",
+          });
+          perfEvent("firestore_first_snapshot", {
+            collection: "receivableLends",
+            docCount: snapshot.docs.length,
+            fromCache: snapshot.metadata.fromCache,
+          });
+          const docs = toSourceDocs(snapshot);
+          applyReceivableLends(docs);
+          if (receivableLendsSource.mode === "shadow") void receivableLendsSource.shadow(docs);
+        },
+        (err) => logWarning("snapshot.receivable.lends", err)
+      );
     });
 
     return () => {
       cancelIdle();
       forgetSnapshotPath(receivablesPath);
       forgetSnapshotPath(receivableRepaymentsPath);
+      forgetSnapshotPath(receivableLendsPath);
       if (unsubReceivables) unsubReceivables();
       if (unsubReceivableRepayments) unsubReceivableRepayments();
+      if (unsubReceivableLends) unsubReceivableLends();
     };
-  }, [uid, receivablesAttempt, setReceivablesError, shouldListenReceivables, receivablesSource.mode, receivableRepaymentsSource.mode]);
+  }, [uid, receivablesAttempt, setReceivablesError, shouldListenReceivables, receivablesSource.mode, receivableRepaymentsSource.mode, receivableLendsSource.mode]);
 
   // ─── Borrowings ─────────────────────────────────────────────────────────
 
@@ -869,6 +927,7 @@ export function BorrowingsReceivablesProvider({
   const receivableSummaries = useMemo(() => {
     const map = new Map<string, ReceivableSummary>();
     const totals = receivableRepaymentTotals(receivableRepayments);
+    const lendTotals = receivableLendTotals(receivableLends);
     for (const receivable of receivables) {
       if (!receivable.id) continue;
 
@@ -877,12 +936,15 @@ export function BorrowingsReceivablesProvider({
         receivable.outstandingAmount !== undefined &&
         receivable.totalReceived !== undefined &&
         (receivable.interestRate || 0) === 0 &&
-        !receivableCacheDrifted(receivable, totals)
+        !receivableCacheDrifted(receivable, totals, lendTotals)
       ) {
         // SPENDLY-434: O(1) Fast path
+        const additionalLent = receivable.additionalLent ?? 0;
         map.set(receivable.id, {
           receivableId: receivable.id,
           originalAmount: receivable.originalAmount,
+          additionalLent,
+          principalLent: roundMoney(receivable.originalAmount + additionalLent),
           principalReceived: receivable.principalReceived ?? 0,
           interestReceived: receivable.interestReceived ?? 0,
           totalReceived: receivable.totalReceived ?? 0,
@@ -899,16 +961,16 @@ export function BorrowingsReceivablesProvider({
       } else {
         map.set(
           receivable.id,
-          summarizeReceivable(receivable, receivableRepayments, today)
+          summarizeReceivable(receivable, receivableRepayments, today, receivableLends)
         );
       }
     }
     return map;
-  }, [receivables, receivableRepayments, today]);
+  }, [receivables, receivableRepayments, receivableLends, today]);
 
   const receivablePortfolio = useMemo(
-    () => summarizeReceivables(receivables, receivableRepayments, today),
-    [receivables, receivableRepayments, today]
+    () => summarizeReceivables(receivables, receivableRepayments, today, receivableLends),
+    [receivables, receivableRepayments, receivableLends, today]
   );
 
   const getReceivableSummary = useCallback(
@@ -922,6 +984,14 @@ export function BorrowingsReceivablesProvider({
         .filter((r) => r.receivableId === receivableId)
         .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
     [receivableRepayments]
+  );
+
+  const getReceivableLends = useCallback(
+    (receivableId: string) =>
+      receivableLends
+        .filter((l) => l.receivableId === receivableId)
+        .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
+    [receivableLends]
   );
 
   const createReceivable = useCallback(
@@ -1010,7 +1080,8 @@ export function BorrowingsReceivablesProvider({
             existing,
             updates,
             receivableRepayments,
-            today
+            today,
+            receivableLends
           );
           if (!built.ok) {
             toast.error(built.error);
@@ -1047,7 +1118,7 @@ export function BorrowingsReceivablesProvider({
         return false;
       }
     },
-    [uid, receivables, receivableRepayments, today]
+    [uid, receivables, receivableRepayments, receivableLends, today]
   );
 
   const deleteReceivable = useCallback(
@@ -1055,16 +1126,25 @@ export function BorrowingsReceivablesProvider({
       const db = getFirestoreDb();
       if (!uid || !db || !id) return false;
       try {
-        const linked = await getDocs(
-          query(
-            collection(db, "users", uid, "receivableRepayments"),
-            where("receivableId", "==", id)
-          )
-        );
+        const [linked, linkedLends] = await Promise.all([
+          getDocs(
+            query(
+              collection(db, "users", uid, "receivableRepayments"),
+              where("receivableId", "==", id)
+            )
+          ),
+          // SPENDLY-792: later lends go with the receivable too.
+          getDocs(
+            query(
+              collection(db, "users", uid, "receivableLends"),
+              where("receivableId", "==", id)
+            )
+          ),
+        ]);
 
         // Offline this query answers from cache and may not list every
         // repayment, which would orphan the ones it missed.
-        if (linked.metadata.fromCache) {
+        if (linked.metadata.fromCache || linkedLends.metadata.fromCache) {
           toast.error(
             "Can't verify linked repayments while offline. Try again when connected."
           );
@@ -1085,10 +1165,18 @@ export function BorrowingsReceivablesProvider({
                 row: { ...(d.data() as ReceivableRepayment), id: d.id },
               }) as LedgerRow
           ),
+          ...linkedLends.docs.map(
+            (d) =>
+              ({
+                kind: "receivableLend",
+                row: { ...(d.data() as ReceivableLend), id: d.id },
+              }) as LedgerRow
+          ),
         ];
         const balanceOps = await debtLedgerBalanceOps(db, uid, before, [], today);
         const ops: MutationOp[] = [
           ...linked.docs.map((d): MutationOp => ({ op: "delete", ref: d.ref })),
+          ...linkedLends.docs.map((d): MutationOp => ({ op: "delete", ref: d.ref })),
           { op: "delete", ref: receivableRef },
           ...balanceOps,
         ];
@@ -1129,7 +1217,8 @@ export function BorrowingsReceivablesProvider({
       const summary = summarizeReceivable(
         receivable,
         receivableRepayments,
-        input.date
+        input.date,
+        receivableLends
       );
       const validation = validateReceivableRepayment(input.amount, summary, {
         allowOverpayment: input.allowOverpayment,
@@ -1163,7 +1252,8 @@ export function BorrowingsReceivablesProvider({
         const nextSummary = summarizeReceivable(
           receivable,
           nextRepayments,
-          receivableCacheAsOfDate(input.receivableId, nextRepayments, today)
+          receivableCacheAsOfDate(input.receivableId, nextRepayments, today, receivableLends),
+          receivableLends
         );
 
         // Repayment + recomputed parent totals commit atomically. Two separate
@@ -1217,7 +1307,7 @@ export function BorrowingsReceivablesProvider({
         return null;
       }
     },
-    [uid, receivables, receivableRepayments, today]
+    [uid, receivables, receivableRepayments, receivableLends, today]
   );
 
   const deleteReceivableRepayment = useCallback(
@@ -1234,7 +1324,8 @@ export function BorrowingsReceivablesProvider({
           const nextSummary = summarizeReceivable(
             receivable,
             remaining,
-            receivableCacheAsOfDate(receivableId, remaining, today)
+            receivableCacheAsOfDate(receivableId, remaining, today, receivableLends),
+            receivableLends
           );
           ops.push({
             op: "update",
@@ -1271,7 +1362,154 @@ export function BorrowingsReceivablesProvider({
         return false;
       }
     },
-    [uid, receivables, receivableRepayments, today]
+    [uid, receivables, receivableRepayments, receivableLends, today]
+  );
+
+  /**
+   * SPENDLY-792 — the same person borrows more. The lend row, the parent's
+   * restamped cache and the source account's debit commit as one batch, the
+   * way a repayment does, so the outstanding can never show the new money
+   * without the account having paid it (or the reverse).
+   */
+  const addReceivableLend = useCallback(
+    async (input: AddReceivableLendInput): Promise<string | null> => {
+      const db = getFirestoreDb();
+      if (!uid || !db) {
+        toast.error("Not authenticated");
+        return null;
+      }
+      const receivable = receivables.find((r) => r.id === input.receivableId);
+      if (!receivable) {
+        toast.error("Receivable not found");
+        return null;
+      }
+      const validation = validateReceivableLend(input, receivable, today);
+      if (!validation.ok) {
+        toast.error(validation.error ?? "Invalid amount");
+        return null;
+      }
+      const source = resolveLendSource(input.source);
+      if (!source.ok) {
+        toast.error(source.error);
+        return null;
+      }
+
+      try {
+        const ref = doc(collection(db, "users", uid, "receivableLends"));
+        const lend = {
+          receivableId: input.receivableId,
+          amount: input.amount,
+          date: input.date,
+          month: monthFromDateKey(input.date),
+          ...source.fields,
+          note: input.note ?? "",
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+        const row = { ...lend, id: ref.id } as unknown as ReceivableLend;
+        const nextLends = [...receivableLends, row];
+        const nextSummary = summarizeReceivable(
+          receivable,
+          receivableRepayments,
+          receivableCacheAsOfDate(input.receivableId, receivableRepayments, today, nextLends),
+          nextLends
+        );
+        const balanceOps = await debtLedgerBalanceOps(
+          db,
+          uid,
+          [],
+          [{ kind: "receivableLend", row }],
+          today
+        );
+        const outcome = await commitMutations(
+          uid,
+          [
+            { op: "set", ref, data: lend },
+            {
+              op: "update",
+              ref: doc(db, "users", uid, "receivables", input.receivableId),
+              data: denormalizedReceivableFields(nextSummary),
+            },
+            ...balanceOps,
+          ],
+          { label: "receivable lend" }
+        );
+        toast.success(writeSavedMessage(outcome, "Money lent recorded"));
+        return ref.id;
+      } catch (err) {
+        logError("receivables.addreceivablelend", err);
+        toast.error("Failed to record money lent");
+        return null;
+      }
+    },
+    [uid, receivables, receivableRepayments, receivableLends, today]
+  );
+
+  const deleteReceivableLend = useCallback(
+    async (lendId: string, receivableId: string): Promise<boolean> => {
+      const db = getFirestoreDb();
+      if (!uid || !db) return false;
+      const receivable = receivables.find((r) => r.id === receivableId);
+      if (receivable) {
+        const check = validateReceivableLendDelete(
+          receivable,
+          lendId,
+          receivableRepayments,
+          receivableLends,
+          today
+        );
+        if (!check.ok) {
+          toast.error(check.error ?? "This lend can't be removed");
+          return false;
+        }
+      }
+      try {
+        const lendRef = doc(db, "users", uid, "receivableLends", lendId);
+        const ops: MutationOp[] = [{ op: "delete", ref: lendRef }];
+
+        if (receivable) {
+          const remaining = receivableLends.filter((l) => l.id !== lendId);
+          const nextSummary = summarizeReceivable(
+            receivable,
+            receivableRepayments,
+            receivableCacheAsOfDate(receivableId, receivableRepayments, today, remaining),
+            remaining
+          );
+          ops.push({
+            op: "update",
+            ref: doc(db, "users", uid, "receivables", receivableId),
+            data: denormalizedReceivableFields(nextSummary),
+          });
+        }
+
+        // Put the lent money back into the account it came from.
+        const removed =
+          receivableLends.find((l) => l.id === lendId) ??
+          (await readLedgerRow<ReceivableLend>(lendRef));
+        if (removed) {
+          ops.push(
+            ...(await debtLedgerBalanceOps(
+              db,
+              uid,
+              [{ kind: "receivableLend", row: removed }],
+              [],
+              today
+            ))
+          );
+        }
+
+        const outcome = await commitMutations(uid, ops, {
+          label: "receivable lend deletion",
+        });
+        toast.success(writeSavedMessage(outcome, "Lend removed"));
+        return true;
+      } catch (err) {
+        logError("receivables.deletereceivablelend", err);
+        toast.error("Failed to remove lend");
+        return false;
+      }
+    },
+    [uid, receivables, receivableRepayments, receivableLends, today]
   );
 
   /**
@@ -1305,7 +1543,8 @@ export function BorrowingsReceivablesProvider({
       const summary = summarizeReceivable(
         receivable,
         receivableRepayments,
-        today
+        today,
+        receivableLends
       );
       if (summary.outstandingAmount > 0) {
         toast.error(
@@ -1318,7 +1557,7 @@ export function BorrowingsReceivablesProvider({
         settledDate: summary.settledDate ?? today,
       });
     },
-    [receivables, receivableRepayments, updateReceivable, today]
+    [receivables, receivableRepayments, receivableLends, updateReceivable, today]
   );
 
   /**
@@ -1336,7 +1575,8 @@ export function BorrowingsReceivablesProvider({
       const summary = summarizeReceivable(
         receivable,
         receivableRepayments,
-        today
+        today,
+        receivableLends
       );
       if (summary.outstandingPrincipal > 0) {
         toast.error(
@@ -1355,7 +1595,7 @@ export function BorrowingsReceivablesProvider({
         interestStoppedDate: today,
       });
     },
-    [receivables, receivableRepayments, updateReceivable, today]
+    [receivables, receivableRepayments, receivableLends, updateReceivable, today]
   );
 
   const cancelReceivable = useCallback(
@@ -1414,6 +1654,7 @@ export function BorrowingsReceivablesProvider({
     () => ({
       receivables,
       repayments: receivableRepayments,
+      lends: receivableLends,
       summaries: receivableSummaries,
       portfolio: receivablePortfolio,
       loading: receivablesLoading,
@@ -1421,11 +1662,14 @@ export function BorrowingsReceivablesProvider({
       retry: retryReceivables,
       getSummary: getReceivableSummary,
       getRepayments: getReceivableRepayments,
+      getLends: getReceivableLends,
       createReceivable,
       updateReceivable,
       deleteReceivable,
       addRepayment: addReceivableRepayment,
       deleteRepayment: deleteReceivableRepayment,
+      addLend: addReceivableLend,
+      deleteLend: deleteReceivableLend,
       markSettled: markReceivableSettled,
       waiveInterest: waiveReceivableInterest,
       cancelReceivable,
@@ -1434,6 +1678,7 @@ export function BorrowingsReceivablesProvider({
     [
       receivables,
       receivableRepayments,
+      receivableLends,
       receivableSummaries,
       receivablePortfolio,
       receivablesLoading,
@@ -1441,11 +1686,14 @@ export function BorrowingsReceivablesProvider({
       retryReceivables,
       getReceivableSummary,
       getReceivableRepayments,
+      getReceivableLends,
       createReceivable,
       updateReceivable,
       deleteReceivable,
       addReceivableRepayment,
       deleteReceivableRepayment,
+      addReceivableLend,
+      deleteReceivableLend,
       markReceivableSettled,
       waiveReceivableInterest,
       cancelReceivable,

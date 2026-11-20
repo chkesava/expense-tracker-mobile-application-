@@ -1,6 +1,6 @@
 import type { Account, AccountEntry, AccountPayment, AccountTransfer, Expense, Income } from "../types/expense";
 import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
-import type { Receivable, ReceivableRepayment } from "../types/receivable";
+import type { Receivable, ReceivableLend, ReceivableRepayment } from "../types/receivable";
 import { summarizeBorrowings } from "./borrowingMath";
 import { isActiveLedgerRow } from "./ledgerRow";
 import { roundMoney } from "./money";
@@ -35,6 +35,8 @@ export const BASELINE_COLLECTIONS = [
   "borrowingRepayments",
   "receivables",
   "receivableRepayments",
+  // SPENDLY-792: later lends on existing receivables.
+  "receivableLends",
   "subscriptions",
   "investments",
   "holdings",
@@ -124,6 +126,8 @@ const SUMMED: BaselineCollection[] = [
   "borrowingRepayments",
   "receivables",
   "receivableRepayments",
+  // SPENDLY-792: later lends on existing receivables.
+  "receivableLends",
   "investmentCashTransactions",
 ];
 
@@ -165,6 +169,7 @@ export function buildUserBaseline(rows: BaselineRows, today: string): UserBaseli
     borrowingRepayments: rows.borrowingRepayments as BorrowingRepayment[],
     receivables: rows.receivables as Receivable[],
     receivableRepayments: rows.receivableRepayments as ReceivableRepayment[],
+    receivableLends: (rows.receivableLends ?? []) as ReceivableLend[],
     bills: rows.creditCardBills,
     epfEstablishments: rows.epfEstablishments,
     epfContributions: rows.epfContributions,
@@ -226,7 +231,7 @@ export function buildUserBaseline(rows: BaselineRows, today: string): UserBaseli
       receivables: input.receivables,
       receivableRepayments: input.receivableRepayments,
       borrowingOutstanding: summarizeBorrowings(input.borrowings, input.borrowingRepayments, today).totalOutstanding,
-      receivableOutstanding: summarizeReceivables(input.receivables, input.receivableRepayments, today).totalOutstanding,
+      receivableOutstanding: summarizeReceivables(input.receivables, input.receivableRepayments, today, input.receivableLends).totalOutstanding,
       investments: rows.investments ?? [],
       holdings: rows.holdings ?? [],
       quotes: new Map(),

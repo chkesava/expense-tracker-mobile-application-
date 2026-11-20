@@ -94,11 +94,11 @@ async function main() {
   if (!accountSnap.exists) throw new Error(`Account ${ACCOUNT_ID} not found`);
   const account = { id: accountSnap.id, ...accountSnap.data() } as unknown as Account & Doc;
 
-  const [expenses, incomes, payments, entries, transfers, borrowings, borrowingRepayments, receivables, receivableRepayments] =
+  const [expenses, incomes, payments, entries, transfers, borrowings, borrowingRepayments, receivables, receivableRepayments, receivableLends] =
     await Promise.all([
       read("expenses"), read("incomes"), read("accountPayments"), read("accountEntries"),
       read("accountTransfers"), read("borrowings"), read("borrowingRepayments"),
-      read("receivables"), read("receivableRepayments"),
+      read("receivables"), read("receivableRepayments"), read("receivableLends"),
     ]);
 
   const rows: LedgerRow[] = [
@@ -111,6 +111,7 @@ async function main() {
     ...borrowingRepayments.map((row) => ({ kind: "borrowingRepayment", row }) as LedgerRow),
     ...receivables.map((row) => ({ kind: "receivable", row }) as LedgerRow),
     ...receivableRepayments.map((row) => ({ kind: "receivableRepayment", row }) as LedgerRow),
+    ...receivableLends.map((row) => ({ kind: "receivableLend", row }) as LedgerRow),
   ];
   const byKey = new Map<string, Doc>();
   for (const r of rows) byKey.set(`${r.kind}:${r.row.id}`, r.row as unknown as Doc);
@@ -125,7 +126,8 @@ async function main() {
   const recomputed = balanceFromContributions(account, contributions);
   const crossCheck = computeBankBalance(
     account, expenses as any, incomes as any, payments as any, entries as any, transfers as any,
-    borrowings as any, borrowingRepayments as any, receivables as any, receivableRepayments as any, today
+    borrowings as any, borrowingRepayments as any, receivables as any, receivableRepayments as any, today,
+    receivableLends as any
   );
   const stored = typeof account.currentBalance === "number" ? account.currentBalance : null;
   const lastRebuilt = isoOf(account.balanceLastRebuiltAt);

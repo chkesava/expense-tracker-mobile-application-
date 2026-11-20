@@ -41,7 +41,7 @@ export function useAccountActivities(accountId: string | null | undefined) {
   const { payments } = useAccountPayments();
   const { transfers } = useAccountTransfers();
   const { borrowings, repayments: borrowingRepayments } = useBorrowings();
-  const { receivables, repayments: receivableRepayments } = useReceivables();
+  const { receivables, repayments: receivableRepayments, lends: receivableLends } = useReceivables();
 
   const account = useMemo(
     () => (accountId ? accounts.find((a) => a.id === accountId) : undefined),
@@ -73,7 +73,7 @@ export function useAccountActivities(accountId: string | null | undefined) {
       transfers,
       accountNameById,
       { borrowings, borrowingRepayments },
-      { receivables, receivableRepayments },
+      { receivables, receivableRepayments, receivableLends },
       { ledgerComplete, loadedFrom }
     );
   }, [
@@ -89,6 +89,7 @@ export function useAccountActivities(accountId: string | null | undefined) {
     borrowingRepayments,
     receivables,
     receivableRepayments,
+    receivableLends,
     ledgerComplete,
     loadedFrom,
   ]);

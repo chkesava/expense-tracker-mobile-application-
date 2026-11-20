@@ -23,6 +23,7 @@ const none: AccountSources = {
   borrowingRepayments: [],
   receivables: [],
   receivableRepayments: [],
+  receivableLends: [],
   bills: [],
 };
 

@@ -11,7 +11,7 @@ begin
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
-    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'receivable_lends', 'subscriptions',
     'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
     'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
@@ -61,7 +61,7 @@ begin
           'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
           'account_transfers', 'account_entries', 'account_payments',
           'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
-    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'receivable_lends', 'subscriptions',
     'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
     'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
@@ -115,8 +115,8 @@ begin
     raise exception 'unexpected policies: %', bad;
   end if;
   select count(*) into n from pg_policies where schemaname = 'public';
-  if n <> 68 then  -- 10 Wave 1 + sync_status + SPENDLY-609 goals (2) + SPENDLY-589 Wave 2 (5) + SPENDLY-590 Wave 3 (14) + SPENDLY-591 (21) + SPENDLY-592 (1) + SPENDLY-685 group funds (2) + SPENDLY-224 devices (1) + SPENDLY-230 notifications (1) + SPENDLY-744 recurring suggestions (1) + SPENDLY-747 server results (1) + SPENDLY-709 tax (5) + SPENDLY-325 salary (3)
-    raise exception 'expected 68 owner-read policies, found %', n;
+  if n <> 69 then  -- 10 Wave 1 + sync_status + SPENDLY-609 goals (2) + SPENDLY-589 Wave 2 (5) + SPENDLY-590 Wave 3 (14) + SPENDLY-591 (21) + SPENDLY-592 (1) + SPENDLY-685 group funds (2) + SPENDLY-224 devices (1) + SPENDLY-230 notifications (1) + SPENDLY-744 recurring suggestions (1) + SPENDLY-747 server results (1) + SPENDLY-709 tax (5) + SPENDLY-325 salary (3) + SPENDLY-792 receivable lends (1)
+    raise exception 'expected 69 owner-read policies, found %', n;
   end if;
   if exists (
     select 1 from pg_policies
@@ -164,7 +164,7 @@ begin
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
-    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'receivable_lends', 'subscriptions',
     'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
     'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
@@ -239,7 +239,7 @@ begin
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
-    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'receivable_lends', 'subscriptions',
     'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
     'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',

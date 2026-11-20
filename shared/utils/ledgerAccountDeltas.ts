@@ -7,7 +7,11 @@ import type {
   Income,
 } from "../types/expense";
 import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
-import type { Receivable, ReceivableRepayment } from "../types/receivable";
+import type {
+  Receivable,
+  ReceivableLend,
+  ReceivableRepayment,
+} from "../types/receivable";
 import { effectiveBalanceAsOfDate } from "./accountBaseline";
 import { todayDateKey } from "./dates";
 import { isActiveLedgerRow } from "./ledgerRow";
@@ -35,7 +39,9 @@ export type LedgerRow =
   | { kind: "borrowing"; row: Borrowing }
   | { kind: "borrowingRepayment"; row: BorrowingRepayment }
   | { kind: "receivable"; row: Receivable }
-  | { kind: "receivableRepayment"; row: ReceivableRepayment };
+  | { kind: "receivableRepayment"; row: ReceivableRepayment }
+  /** SPENDLY-792: a later lend on an existing receivable. */
+  | { kind: "receivableLend"; row: ReceivableLend };
 
 export type LedgerRowKind = LedgerRow["kind"];
 
@@ -95,6 +101,10 @@ export function ledgerRowAccountDeltas(input: LedgerRow): AccountDelta[] {
     case "receivableRepayment": {
       const r = input.row;
       return leg(r.receivedAccountId, r.amount, r.date);
+    }
+    case "receivableLend": {
+      const r = input.row;
+      return leg(r.sourceAccountId, -r.amount, r.date);
     }
   }
 }

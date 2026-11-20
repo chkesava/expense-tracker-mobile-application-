@@ -39,6 +39,8 @@ export const SWITCHED_COLLECTIONS: readonly string[] = [
   "sipPlans", "sipTransactions", "virtualPositions", "subscriptions", "watchlists", "watchlists/items",
   "epfContributions", "epfEstablishments", "epfInterestEntries",
   "borrowings", "borrowingRepayments", "receivables", "receivableRepayments",
+  // SPENDLY-792: later lends on a receivable, read with the receivables.
+  "receivableLends",
   // SPENDLY-685: Group Funds (the fund list; history uses the groupFundHistory screen switch).
   "groupFunds",
   // SPENDLY-230: the unified inbox's notification rows.
