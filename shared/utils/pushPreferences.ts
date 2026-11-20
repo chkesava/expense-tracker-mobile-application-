@@ -7,6 +7,7 @@
  *   calendar → settings.calendarNotifications.remindersEnabled
  *   dues     → settings.calendarNotifications.duesEnabled
  *   goals    → each goal's own reminder settings (checked by the goal source)
+ *   lowBalance → settings.lowBalanceAlerts.enabled (SPENDLY-797, on by default)
  * Event categories that had no switch get one in `pushNotifications.categories`.
  *
  * One delivery window replaces the separate bill and calendar quiet hours
@@ -14,7 +15,7 @@
  * accounts that never saved one). A window may cross midnight (22:00–07:00).
  */
 
-export type PushCategory = "bills" | "calendar" | "dues" | "goals" | "investments" | "shared" | "priceAlerts" | "salary";
+export type PushCategory = "bills" | "calendar" | "dues" | "goals" | "investments" | "shared" | "priceAlerts" | "salary" | "lowBalance";
 
 /** Categories whose only switch lives in `pushNotifications.categories`. */
 export type PushEventCategory = "investments" | "shared" | "priceAlerts";
@@ -58,6 +59,8 @@ export const PUSH_CHANNELS: Record<PushCategory, { id: string; name: string; imp
   shared: { id: "shared-money", name: "Shared splits and vaults", importance: "default" },
   priceAlerts: { id: "price-alerts", name: "Price alerts", importance: "high" },
   salary: { id: "salary-payday", name: "Salary & Payday reminders", importance: "default" },
+  // SPENDLY-797: money that's about to be debited, so high (like bills).
+  lowBalance: { id: "low-balance", name: "Low balance before auto-debits", importance: "high" },
 };
 
 const TIME = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -100,6 +103,7 @@ export type PushPreferenceSource = {
   pushNotifications?: PushNotificationSettings;
   creditCardBillReminders?: { enabled?: boolean; quietHoursStart?: string; quietHoursEnd?: string };
   calendarNotifications?: { remindersEnabled?: boolean; duesEnabled?: boolean; salaryEnabled?: boolean; quietHoursStart?: string; quietHoursEnd?: string };
+  lowBalanceAlerts?: { enabled?: boolean };
 };
 
 /** The one window every Spendly notification is delivered in. */
@@ -142,6 +146,8 @@ export function isPushCategoryEnabled(s: PushPreferenceSource, category: PushCat
       return s.calendarNotifications?.salaryEnabled !== false;
     case "goals":
       return true;
+    case "lowBalance":
+      return s.lowBalanceAlerts?.enabled !== false;
     default: {
       const prefs = s.pushNotifications ?? DEFAULT_PUSH_NOTIFICATIONS;
       return prefs.categories[category] !== false;

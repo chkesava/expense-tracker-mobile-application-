@@ -21,7 +21,7 @@ const WINDOW_END = ["18:00", "20:00", "21:00", "22:00", "23:00"] as const;
  */
 export function PushNotificationSettings() {
   const { theme } = useTheme();
-  const { settings, setPushNotifications, setDeliveryWindow } = useSettings();
+  const { settings, setPushNotifications, setDeliveryWindow, setLowBalanceAlerts } = useSettings();
   const prefs = settings.pushNotifications;
   const current = resolveDeliveryWindow(settings);
   // SPENDLY-225: the phone's permission, shown with the way to fix it.
@@ -93,6 +93,12 @@ export function PushNotificationSettings() {
           />
         </View>
 
+        <RowSwitch
+          label="Low balance before auto-debits"
+          description="A daily alert when an account may not cover a coming EMI, subscription or card autopay, until it's topped up."
+          value={settings.lowBalanceAlerts.enabled}
+          onValueChange={(v) => setLowBalanceAlerts({ enabled: v })}
+        />
         <RowSwitch
           label="SIP and EPF updates"
           description="When a SIP runs, is skipped or fails, and when an EPF credit is expected or late."

@@ -22,12 +22,9 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { applicationDefault, cert, initializeApp } from "firebase-admin/app";
-import { FieldValue, getFirestore, type QuerySnapshot } from "firebase-admin/firestore";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
 
-import type { Account, AccountType } from "../shared/types/expense";
-import type { CreditCardBill } from "../shared/types/creditCardBill";
-import type { Subscription } from "../shared/types/subscription";
-import { mergeSettingsFromDoc } from "../shared/types/settings";
+import { loadAutoDebitInputs, type AutoDebitInputsDb } from "../shared/utils/autoDebitInputs";
 import { createServerPush } from "../netlify/functions/_readmodelServerPush";
 import { serverPushPorts } from "../netlify/functions/readmodel-push";
 import { finishJobSummary, jobReadBudget, summaryAnnotations, type JobDb } from "./lib/dailyJobCore";
@@ -39,9 +36,6 @@ import {
   type AutoDebitDailyPorts,
 } from "./lib/autoDebitDailyCore";
 import { maskUids } from "./epf-daily";
-
-/** Bills that can still be paid: everything but PAID and CANCELLED. */
-export const OPEN_BILL_STATUSES = ["UPCOMING", "DUE_SOON", "DUE_TODAY", "OVERDUE", "PARTIALLY_PAID"] as const;
 
 function positive(value: string | undefined, fallback: number): number {
   const n = Number(value);
@@ -61,11 +55,6 @@ async function main() {
   const budget = jobReadBudget(positive(process.env.AUTODEBIT_MAX_READS_PER_RUN, 5000));
   const charge = (n: number) => budget.add(Math.max(1, n));
   const push = dryRun ? null : createServerPush(serverPushPorts(db, log));
-  const all = async <T>(snapPromise: Promise<QuerySnapshot>): Promise<T[]> => {
-    const snap = await snapPromise;
-    charge(snap.size);
-    return snap.docs.map((d) => ({ ...(d.data() as T), id: d.id }));
-  };
 
   const ports: AutoDebitDailyPorts = {
     async listOwners() {
@@ -75,36 +64,10 @@ async function main() {
       return snap.docs.map((d) => d.id);
     },
     async load(uid) {
-      const base = `users/${uid}`;
-      const [userSnap, storedSnap] = await Promise.all([db.doc(base).get(), db.doc(autoDebitShortfallPath(uid)).get()]);
-      charge(2);
-      const settings = mergeSettingsFromDoc(userSnap.exists ? (userSnap.data() as Record<string, unknown>) : null);
-      const [subscriptions, accounts] = await Promise.all([
-        all<Subscription>(db.collection(`${base}/subscriptions`).where("isActive", "==", true).get()),
-        all<Account>(db.collection(`${base}/accounts`).get()),
-      ]);
-      const stored = storedSnap.exists ? (storedSnap.data() as Record<string, unknown>) : null;
-      const hasWork =
-        subscriptions.some((s) => typeof s.accountId === "string" && s.accountId !== "") ||
-        accounts.some((a) => typeof a.autopayFromAccountId === "string" && a.autopayFromAccountId !== "");
-      // Nothing to check: skip the other reads. A stored result is still recomputed (to empty).
-      if (!hasWork) {
-        return { settings: { timezone: settings.timezone }, subscriptions: [], accounts, accountTypes: [], creditCardBills: [], groupFunds: [], stored };
-      }
-      const [accountTypes, creditCardBills, groupFunds] = await Promise.all([
-        all<AccountType>(db.collection(`${base}/accountTypes`).get()),
-        all<CreditCardBill>(db.collection(`${base}/creditCardBills`).where("status", "in", [...OPEN_BILL_STATUSES]).get()),
-        all<{ heldByAccount?: Record<string, number> | null }>(db.collection(`${base}/groupFunds`).get()),
-      ]);
-      return {
-        settings: { timezone: settings.timezone, defaultLeadDays: settings.lowBalanceAlerts.defaultLeadDays },
-        subscriptions,
-        accounts,
-        accountTypes,
-        creditCardBills,
-        groupFunds,
-        stored,
-      };
+      const storedSnap = await db.doc(autoDebitShortfallPath(uid)).get();
+      charge(1);
+      const inputs = await loadAutoDebitInputs(db as unknown as AutoDebitInputsDb, uid, charge);
+      return { ...inputs, stored: storedSnap.exists ? (storedSnap.data() as Record<string, unknown>) : null };
     },
     db: db as unknown as JobDb,
     stamp: () => FieldValue.serverTimestamp(),

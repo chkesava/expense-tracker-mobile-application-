@@ -21,13 +21,8 @@
  * Pure; Firestore comes in as ports.
  */
 
-import type { Account, AccountType } from "../../shared/types/expense";
-import type { CreditCardBill } from "../../shared/types/creditCardBill";
-import type { Subscription } from "../../shared/types/subscription";
-import { computeAutoDebitShortfall } from "../../shared/utils/autoDebitShortfall";
-import { formatDateKey, isValidTimeZone } from "../../shared/utils/dates";
+import { computeForInputs, userToday, type AutoDebitInputs } from "../../shared/utils/autoDebitInputs";
 import { isDuressUid } from "../../shared/utils/duress";
-import { DEFAULT_LOW_BALANCE_LEAD_DAYS, isValidLeadDays } from "../../shared/utils/lowBalanceAlerts";
 import {
   AUTO_DEBIT_SHORTFALL_DOC,
   SERVER_RESULTS_COLLECTION,
@@ -47,17 +42,10 @@ import {
 import type { ReadBudget } from "./pushRunCore";
 
 export const JOB_NAME = "autodebit-daily";
-export const DEFAULT_TIME_ZONE = "Asia/Kolkata";
+export { userToday };
 
-export type AutoDebitUserData = {
-  /** The user's settings timezone and default lead days (raw, validated here). */
-  settings: { timezone?: unknown; defaultLeadDays?: unknown };
-  subscriptions: Subscription[];
-  accounts: Account[];
-  accountTypes: AccountType[];
-  /** Open card bills (not PAID or CANCELLED). */
-  creditCardBills: CreditCardBill[];
-  groupFunds: { heldByAccount?: Record<string, number> | null }[];
+/** The user's inputs (`loadAutoDebitInputs`, shared with the push re-check) and the stored result. */
+export type AutoDebitUserData = AutoDebitInputs & {
   /** `serverResults/autoDebitShortfall` as stored, or null. */
   stored: Record<string, unknown> | null;
 };
@@ -84,12 +72,6 @@ function stable(value: unknown): string {
   return JSON.stringify(value ?? null);
 }
 
-/** The user's calendar day, or null when their timezone is invalid. */
-export function userToday(now: Date, timezone: unknown): string | null {
-  const tz = typeof timezone === "string" && timezone ? timezone : DEFAULT_TIME_ZONE;
-  return isValidTimeZone(tz) ? formatDateKey(now, tz) : null;
-}
-
 export type AutoDebitPlan = {
   writes: JobWrite[];
   accounts: number;
@@ -101,15 +83,7 @@ export type AutoDebitPlan = {
 export function planAutoDebitWrites(uid: string, data: AutoDebitUserData, now: Date, runId: string): AutoDebitPlan {
   const today = userToday(now, data.settings.timezone);
   if (!today) return { writes: [], accounts: 0, hasShortfall: false, invalidTimeZone: true };
-  const result = computeAutoDebitShortfall({
-    today,
-    subscriptions: data.subscriptions,
-    accounts: data.accounts,
-    accountTypeNames: Object.fromEntries(data.accountTypes.map((t) => [t.id, t.name])),
-    creditCardBills: data.creditCardBills,
-    groupFunds: data.groupFunds,
-    defaultLeadDays: isValidLeadDays(data.settings.defaultLeadDays) ? data.settings.defaultLeadDays : DEFAULT_LOW_BALANCE_LEAD_DAYS,
-  });
+  const result = computeForInputs(data, today);
   const stored = data.stored;
   const summary = { accounts: result.accounts.length, hasShortfall: result.hasShortfall };
   if (!stored && result.accounts.length === 0) return { writes: [], ...summary };

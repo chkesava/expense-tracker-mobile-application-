@@ -89,16 +89,19 @@ export type UserSettings = {
   calendarNotifications: CalendarNotificationSettings;
   /** SPENDLY-226: push categories without an older switch, the delivery window, lock-screen amounts. */
   pushNotifications: PushNotificationSettings;
-  /** SPENDLY-794: low-balance alerts before auto-debits. On/off is the push category. */
+  /** SPENDLY-794/797: low-balance alerts before auto-debits. */
   lowBalanceAlerts: LowBalanceAlertSettings;
 };
 
 export type LowBalanceAlertSettings = {
+  /** SPENDLY-797: the `lowBalance` push category's switch (and the on-device fallback's). On by default. */
+  enabled: boolean;
   /** Days before a debit to start checking the paying account; items may override. */
   defaultLeadDays: number;
 };
 
 export const DEFAULT_LOW_BALANCE_ALERTS: LowBalanceAlertSettings = {
+  enabled: true,
   defaultLeadDays: DEFAULT_LOW_BALANCE_LEAD_DAYS,
 };
 
@@ -106,6 +109,7 @@ export const DEFAULT_LOW_BALANCE_ALERTS: LowBalanceAlertSettings = {
 export function normalizeLowBalanceAlerts(raw: unknown): LowBalanceAlertSettings {
   const r = asPlainRecord(raw) ?? {};
   return {
+    enabled: typeof r.enabled === "boolean" ? r.enabled : DEFAULT_LOW_BALANCE_ALERTS.enabled,
     defaultLeadDays: isValidLeadDays(r.defaultLeadDays)
       ? r.defaultLeadDays
       : DEFAULT_LOW_BALANCE_ALERTS.defaultLeadDays,
