@@ -2,7 +2,7 @@ import { collection, deleteField, doc, getDoc, getDocs, query, where, writeBatch
 import { getFirestoreDb } from "@/lib/firebase";
 import type { Account, Expense, Income, AccountPayment, AccountEntry, AccountTransfer } from "@/shared/types/expense";
 import type { Borrowing, BorrowingRepayment } from "@/shared/types/borrowing";
-import type { Receivable, ReceivableRepayment } from "@/shared/types/receivable";
+import type { Receivable, ReceivableLend, ReceivableRepayment } from "@/shared/types/receivable";
 import { todayDateKey } from "@/shared/utils/dates";
 import type { OpenCreditBillSlice } from "@/shared/utils/accountBalance";
 import {
@@ -75,6 +75,7 @@ export async function rebuildFinancialSummaries(
     borrowingRepayments: await fetchCollection<BorrowingRepayment>("borrowingRepayments"),
     receivables: await fetchCollection<Receivable>("receivables"),
     receivableRepayments: await fetchCollection<ReceivableRepayment>("receivableRepayments"),
+    receivableLends: await fetchCollection<ReceivableLend>("receivableLends"),
     bills: await fetchCollection<OpenCreditBillSlice>("creditCardBills", "accountId"),
   });
 

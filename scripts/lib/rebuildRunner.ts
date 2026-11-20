@@ -115,6 +115,7 @@ const SOURCE_COLLECTIONS = [
   "borrowingRepayments",
   "receivables",
   "receivableRepayments",
+  "receivableLends",
   "creditCardBills",
   "epfEstablishments",
   "epfContributions",
@@ -182,6 +183,7 @@ export async function rebuildUser(db: Firestore, uid: string, options: RebuildOp
     borrowingRepayments: data.borrowingRepayments,
     receivables: data.receivables,
     receivableRepayments: data.receivableRepayments,
+    receivableLends: data.receivableLends,
     bills: data.creditCardBills,
     epfEstablishments: data.epfEstablishments,
     epfContributions: data.epfContributions,
@@ -298,6 +300,7 @@ export async function rebuildUser(db: Firestore, uid: string, options: RebuildOp
         borrowingRepayments: data.borrowingRepayments,
         receivables: data.receivables,
         receivableRepayments: data.receivableRepayments,
+        receivableLends: data.receivableLends,
       },
       today
     );

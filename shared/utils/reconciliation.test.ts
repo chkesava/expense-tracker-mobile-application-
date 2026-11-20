@@ -57,6 +57,7 @@ describe("reconciliation", () => {
       borrowingRepayments: [],
       receivables: [],
       receivableRepayments: [],
+      receivableLends: [],
       bills: [],
       today: "2026-10-09"
     });
@@ -137,6 +138,7 @@ describe("reconciliation", () => {
       borrowingRepayments,
       receivables,
       receivableRepayments,
+      receivableLends: [],
       bills: [],
       today: "2026-10-09",
     });

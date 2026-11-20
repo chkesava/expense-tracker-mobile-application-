@@ -15,6 +15,7 @@ import {
   increment,
   orderBy,
   query,
+  serverTimestamp,
   setDoc,
   updateDoc,
   writeBatch,
@@ -97,6 +98,7 @@ describe("personal tree", () => {
     "borrowingRepayments",
     "receivables",
     "receivableRepayments",
+    "receivableLends",
     "categoryBudgets",
     "financialGoals",
     "spaces",
@@ -127,6 +129,7 @@ describe("personal tree", () => {
     "creditCardBills",
     "borrowings",
     "receivables",
+    "receivableLends",
     "financialGoals",
     "portfolioSettings",
     "sipPlans",
@@ -511,6 +514,109 @@ describe("personal tree", () => {
     await assertFails(
       addDoc(collection(db, "users", OWNER, "receivables"), {
         originalAmount: -1,
+        lentDate: "2026-09-17",
+      })
+    );
+  });
+
+  // SPENDLY-792: more money lent later on an existing receivable.
+  const lend = (overrides: Record<string, unknown> = {}) => ({
+    receivableId: "r1",
+    amount: 2000,
+    date: "2026-10-05",
+    month: "2026-10",
+    sourceMode: "account",
+    sourceAccountId: "a1",
+    note: "",
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    ...overrides,
+  });
+
+  it("owner records a lend paid from an account", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      addDoc(collection(db, "users", OWNER, "receivableLends"), lend())
+    );
+  });
+
+  it("owner records an already-deducted lend with no account", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      addDoc(
+        collection(db, "users", OWNER, "receivableLends"),
+        lend({ sourceMode: "already_deducted", sourceAccountId: null })
+      )
+    );
+  });
+
+  it("an already-deducted lend cannot name an account", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      addDoc(
+        collection(db, "users", OWNER, "receivableLends"),
+        lend({ sourceMode: "already_deducted" })
+      )
+    );
+  });
+
+  it("an account lend must name its account", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      addDoc(
+        collection(db, "users", OWNER, "receivableLends"),
+        lend({ sourceAccountId: null })
+      )
+    );
+  });
+
+  for (const [label, overrides] of [
+    ["a zero amount", { amount: 0 }],
+    ["a negative amount", { amount: -5 }],
+    ["a malformed date", { date: "05-10-2026" }],
+    ["an unknown source mode", { sourceMode: "cash" }],
+    ["an unknown field", { interestRate: 2 }],
+    ["no receivable", { receivableId: "" }],
+  ] as const) {
+    it(`owner cannot record a lend with ${label}`, async () => {
+      const db = env.authenticatedContext(OWNER).firestore();
+      await assertFails(
+        addDoc(collection(db, "users", OWNER, "receivableLends"), lend(overrides))
+      );
+    });
+  }
+
+  it("a lend cannot be edited in place, only removed", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), "users", OWNER, "receivableLends", "l1"), lend());
+    });
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      updateDoc(doc(db, "users", OWNER, "receivableLends", "l1"), { amount: 9000 })
+    );
+    await assertSucceeds(deleteDoc(doc(db, "users", OWNER, "receivableLends", "l1")));
+  });
+
+  it("another user cannot record a lend for the owner", async () => {
+    const db = env.authenticatedContext(OTHER).firestore();
+    await assertFails(
+      addDoc(collection(db, "users", OWNER, "receivableLends"), lend())
+    );
+  });
+
+  it("owner caches additionalLent on a receivable, never negative", async () => {
+    const db = env.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      addDoc(collection(db, "users", OWNER, "receivables"), {
+        originalAmount: 5000,
+        additionalLent: 2000,
+        lentDate: "2026-09-17",
+      })
+    );
+    await assertFails(
+      addDoc(collection(db, "users", OWNER, "receivables"), {
+        originalAmount: 5000,
+        additionalLent: -1,
         lentDate: "2026-09-17",
       })
     );

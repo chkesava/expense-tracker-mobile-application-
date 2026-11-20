@@ -151,7 +151,7 @@ export function ExpenseForm({
   const { entries } = useAccountEntries();
   const { transfers } = useAccountTransfers();
   const { borrowings, repayments: borrowingRepayments } = useBorrowings();
-  const { receivables, repayments: receivableRepayments } = useReceivables();
+  const { receivables, repayments: receivableRepayments, lends: receivableLends } = useReceivables();
   const { bills } = useCreditCardBills();
 
   const [type, setType] = useState<"expense" | "income">(
@@ -418,6 +418,7 @@ export function ExpenseForm({
       todayDateKey(settings.timezone),
       {
         draftDate: date,
+        receivableLends,
         ledgerComplete:
           expensesComplete &&
           incomesComplete &&
@@ -454,6 +455,7 @@ export function ExpenseForm({
     borrowingRepayments,
     receivables,
     receivableRepayments,
+    receivableLends,
     bills,
     settings.timezone,
     editingExpense,

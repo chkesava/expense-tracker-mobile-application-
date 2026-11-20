@@ -9,6 +9,7 @@
 
 import type {
   Receivable,
+  ReceivableLend,
   ReceivableRepayment,
   ReceivableStatus,
 } from "../types/receivable";
@@ -43,24 +44,55 @@ function accrualEndDate(receivable: Receivable, asOfDate: string): string {
   return stop < asOfDate ? stop : asOfDate;
 }
 
-/** Interest accrued on money lent, between the lent date and `asOfDate`. */
+/**
+ * Interest accrued on money lent, between the lent date and `asOfDate`.
+ *
+ * SPENDLY-792: a later lend (`ReceivableLend`) earns interest only from its
+ * own date. On the outstanding-principal basis it is a movement that raises
+ * what is owed from that day; on the original-principal basis and for
+ * one-time interest it is its own tranche, charged from its own date.
+ */
 export function computeAccruedInterest(
   receivable: Receivable,
   repayments: ReceivableRepayment[],
-  asOfDate: string
+  asOfDate: string,
+  lends: ReceivableLend[] = []
 ): number {
-  const movements = repaymentsFor(receivable.id, repayments).map((r) => ({
-    date: r.date,
-    principalComponent: principalComponentOf(r),
-  }));
+  const terms = receivableInterestTerms(receivable);
+  const endDate = accrualEndDate(receivable, asOfDate);
+  const extraLends = lendsFor(receivable.id, lends);
+
+  if (
+    extraLends.length > 0 &&
+    (terms.frequency === "ONE_TIME" || terms.basis === "ORIGINAL_PRINCIPAL")
+  ) {
+    const tranches = [
+      { principal: receivable.originalAmount, startDate: receivable.lentDate },
+      ...extraLends.map((l) => ({ principal: l.amount, startDate: l.date })),
+    ];
+    return roundMoney(
+      tranches.reduce(
+        (sum, t) => sum + accrueInterest({ ...t, terms }, [], endDate),
+        0
+      )
+    );
+  }
+
+  const movements = [
+    ...repaymentsFor(receivable.id, repayments).map((r) => ({
+      date: r.date,
+      principalComponent: principalComponentOf(r),
+    })),
+    ...extraLends.map((l) => ({ date: l.date, principalComponent: -l.amount })),
+  ];
   return accrueInterest(
     {
       principal: receivable.originalAmount,
       startDate: receivable.lentDate,
-      terms: receivableInterestTerms(receivable),
+      terms,
     },
     movements,
-    accrualEndDate(receivable, asOfDate)
+    endDate
   );
 }
 
@@ -88,6 +120,39 @@ function repaymentsFor(
   return repayments.filter((r) => r.receivableId === receivableId);
 }
 
+/** SPENDLY-792: the later lends recorded against one receivable. */
+export function lendsFor(
+  receivableId: string | undefined,
+  lends: ReceivableLend[]
+): ReceivableLend[] {
+  if (!receivableId) return [];
+  return lends.filter((l) => l.receivableId === receivableId);
+}
+
+/** Sum of the later lends dated on or before `asOfDate`. */
+function additionalLentUpTo(lends: ReceivableLend[], asOfDate: string): number {
+  return roundMoney(
+    lends
+      .filter((l) => l.date <= asOfDate)
+      .reduce((sum, l) => sum + (l.amount || 0), 0)
+  );
+}
+
+/**
+ * SPENDLY-792: the principal lent to this person so far — the first lend plus
+ * every later lend dated on or before `asOfDate`.
+ */
+export function receivablePrincipalLent(
+  receivable: Pick<Receivable, "id" | "originalAmount">,
+  lends: ReceivableLend[],
+  asOfDate: string
+): number {
+  return roundMoney(
+    receivable.originalAmount +
+      additionalLentUpTo(lendsFor(receivable.id, lends), asOfDate)
+  );
+}
+
 /** Chronological, ignoring anything dated after `asOfDate`. */
 export function repaymentsUpTo(
   repayments: ReceivableRepayment[],
@@ -106,9 +171,13 @@ export function repaymentsUpTo(
 export function receivableCacheAsOfDate(
   receivableId: string | undefined,
   repayments: ReceivableRepayment[],
-  today: string
+  today: string,
+  lends: ReceivableLend[] = []
 ): string {
-  return cacheStampDate(today, repaymentsFor(receivableId, repayments));
+  return cacheStampDate(today, [
+    ...repaymentsFor(receivableId, repayments),
+    ...lendsFor(receivableId, lends),
+  ]);
 }
 
 export interface ReceivableRepaymentTotals {
@@ -134,26 +203,50 @@ export function receivableRepaymentTotals(
   return totals;
 }
 
+/** SPENDLY-792: per-receivable sums of every later-lend row. */
+export function receivableLendTotals(
+  lends: ReceivableLend[]
+): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const l of lends) {
+    if (!l.receivableId) continue;
+    totals.set(
+      l.receivableId,
+      roundMoney((totals.get(l.receivableId) ?? 0) + (l.amount || 0))
+    );
+  }
+  return totals;
+}
+
 /**
  * SPENDLY-605: true when the stored cache disagrees with the repayment rows,
  * so the SPENDLY-434 fast path must not be trusted for this receivable.
  *
  * Only a receivable that has rows can be judged: the repayment listener
  * mounts after the parents and delivers its whole set at once, so "no rows
- * yet" means "not loaded", not "nothing received".
+ * yet" means "not loaded", not "nothing received". The same holds for the
+ * later-lend rows (SPENDLY-792): with none loaded, the cached
+ * `additionalLent` stands in for them.
  */
 export function receivableCacheDrifted(
   receivable: Receivable,
-  totals: Map<string, ReceivableRepaymentTotals>
+  totals: Map<string, ReceivableRepaymentTotals>,
+  lendTotals: Map<string, number> = new Map()
 ): boolean {
+  const lent = receivable.id ? lendTotals.get(receivable.id) : undefined;
+  if (lent !== undefined && roundMoney(receivable.additionalLent ?? 0) !== lent) {
+    return true;
+  }
   const rows = receivable.id ? totals.get(receivable.id) : undefined;
   if (!rows) return false;
   if (roundMoney(receivable.totalReceived ?? 0) !== rows.totalReceived) {
     return true;
   }
   if ((receivable.interestRate || 0) === 0) {
+    const principalLent =
+      receivable.originalAmount + (lent ?? receivable.additionalLent ?? 0);
     const expected = roundMoney(
-      Math.max(0, receivable.originalAmount - rows.principalReceived)
+      Math.max(0, principalLent - rows.principalReceived)
     );
     if (roundMoney(receivable.outstandingAmount ?? 0) !== expected) return true;
   }
@@ -163,6 +256,10 @@ export function receivableCacheDrifted(
 export interface ReceivableSummary {
   receivableId: string;
   originalAmount: number;
+  /** Later lends to the same person, up to the as-of date (SPENDLY-792). */
+  additionalLent: number;
+  /** `originalAmount + additionalLent`: all principal lent so far. */
+  principalLent: number;
   /** Repayment principal components. Legacy repayments count in full here. */
   principalReceived: number;
   interestReceived: number;
@@ -200,16 +297,28 @@ function deriveStatus(params: {
   return "ACTIVE";
 }
 
-/** Authoritative derived view of one receivable. */
+/**
+ * Authoritative derived view of one receivable.
+ *
+ * `lends` are the later lends to the same person (SPENDLY-792). Every caller
+ * that has them must pass them: without them the principal owed is only the
+ * first lend.
+ */
 export function summarizeReceivable(
   receivable: Receivable,
   repayments: ReceivableRepayment[],
-  asOfDate: string
+  asOfDate: string,
+  lends: ReceivableLend[] = []
 ): ReceivableSummary {
   const relevant = repaymentsUpTo(
     repaymentsFor(receivable.id, repayments),
     asOfDate
   );
+  const additionalLent = additionalLentUpTo(
+    lendsFor(receivable.id, lends),
+    asOfDate
+  );
+  const principalLent = roundMoney(receivable.originalAmount + additionalLent);
 
   const totalReceived = roundMoney(
     relevant.reduce((sum, r) => sum + (r.amount || 0), 0)
@@ -221,9 +330,14 @@ export function summarizeReceivable(
     relevant.reduce((sum, r) => sum + interestComponentOf(r), 0)
   );
   const outstandingPrincipal = roundMoney(
-    Math.max(0, receivable.originalAmount - principalReceived)
+    Math.max(0, principalLent - principalReceived)
   );
-  const interestAccrued = computeAccruedInterest(receivable, repayments, asOfDate);
+  const interestAccrued = computeAccruedInterest(
+    receivable,
+    repayments,
+    asOfDate,
+    lends
+  );
   const interestWaived = receivable.waivedInterest ?? 0;
   const outstandingInterest = roundMoney(
     Math.max(0, interestAccrued - interestReceived - interestWaived)
@@ -255,6 +369,8 @@ export function summarizeReceivable(
   return {
     receivableId: receivable.id ?? "",
     originalAmount: receivable.originalAmount,
+    additionalLent,
+    principalLent,
     principalReceived,
     interestReceived,
     totalReceived,
@@ -277,6 +393,7 @@ export function summarizeReceivable(
 export function denormalizedReceivableCacheFields(summary: ReceivableSummary) {
   return {
     totalReceived: summary.totalReceived,
+    additionalLent: summary.additionalLent,
     outstandingAmount: summary.outstandingAmount,
     accruedInterest: summary.interestAccrued,
     principalReceived: summary.principalReceived,
@@ -325,16 +442,29 @@ export function buildReceivableUpdatePayload(
   existing: Receivable,
   updates: Partial<Receivable>,
   repayments: ReceivableRepayment[],
-  asOfDate: string
+  asOfDate: string,
+  lends: ReceivableLend[] = []
 ): ReceivableUpdatePayloadResult {
-  const current = summarizeReceivable(existing, repayments, asOfDate);
+  const current = summarizeReceivable(existing, repayments, asOfDate, lends);
+  // SPENDLY-792: later lends also cover principal already received, so the
+  // first lend only has to cover what they don't.
+  const floor = roundMoney(
+    Math.max(0, current.principalReceived - current.additionalLent)
+  );
+  if (updates.originalAmount != null && updates.originalAmount < floor) {
+    return {
+      ok: false,
+      error: `Amount cannot be less than ${floor} already received.`,
+    };
+  }
+  const newLentDate = updates.lentDate;
   if (
-    updates.originalAmount != null &&
-    updates.originalAmount < current.principalReceived
+    newLentDate &&
+    lendsFor(existing.id, lends).some((l) => l.date < newLentDate)
   ) {
     return {
       ok: false,
-      error: `Amount cannot be less than ${current.principalReceived} already received.`,
+      error: "The lent date cannot be after a later lend to this person.",
     };
   }
 
@@ -345,7 +475,8 @@ export function buildReceivableUpdatePayload(
   const next = summarizeReceivable(
     { ...existing, ...updates },
     repayments,
-    receivableCacheAsOfDate(existing.id, repayments, asOfDate)
+    receivableCacheAsOfDate(existing.id, repayments, asOfDate, lends),
+    lends
   );
   return {
     ok: true,
@@ -383,6 +514,64 @@ export function validateReceivableRepayment(
   return { ok: true };
 }
 
+/**
+ * SPENDLY-792: checks a later lend before it is written. Refuses a cancelled
+ * receivable, a non-positive amount, a date in the future (it would debit an
+ * account before the money moved) and a date before the first lend.
+ */
+export function validateReceivableLend(
+  input: { amount: number; date: string },
+  receivable: Pick<Receivable, "status" | "lentDate">,
+  today: string
+): RepaymentValidation {
+  if (receivable.status === "CANCELLED") {
+    return { ok: false, error: "This receivable was cancelled." };
+  }
+  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    return { ok: false, error: "Enter an amount greater than zero." };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) {
+    return { ok: false, error: "Pick the date the money was lent." };
+  }
+  if (input.date > today) {
+    return { ok: false, error: "The date cannot be in the future." };
+  }
+  if (input.date < receivable.lentDate) {
+    return {
+      ok: false,
+      error: "The date cannot be before the first lend to this person.",
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * SPENDLY-792: removing a later lend must not leave more principal received
+ * than was lent.
+ */
+export function validateReceivableLendDelete(
+  receivable: Receivable,
+  lendId: string,
+  repayments: ReceivableRepayment[],
+  lends: ReceivableLend[],
+  asOfDate: string
+): RepaymentValidation {
+  const remaining = lends.filter((l) => l.id !== lendId);
+  const after = summarizeReceivable(
+    receivable,
+    repayments,
+    receivableCacheAsOfDate(receivable.id, repayments, asOfDate, remaining),
+    remaining
+  );
+  if (after.principalReceived > after.principalLent) {
+    return {
+      ok: false,
+      error: `${after.principalReceived} has already been received, more than would be left lent. Remove a repayment first.`,
+    };
+  }
+  return { ok: true };
+}
+
 export interface ReceivablePortfolioSummary {
   totalLent: number;
   totalReceived: number;
@@ -405,13 +594,16 @@ export interface ReceivablePortfolioSummary {
 export function summarizeReceivables(
   receivables: Receivable[],
   repayments: ReceivableRepayment[],
-  asOfDate: string
+  asOfDate: string,
+  lends: ReceivableLend[] = []
 ): ReceivablePortfolioSummary {
   const totals = receivableRepaymentTotals(repayments);
+  const lendTotals = receivableLendTotals(lends);
   return receivables.reduce<ReceivablePortfolioSummary>(
     (acc, receivable) => {
       // SPENDLY-434: Fast path using materialized fields.
-      let originalAmount = receivable.originalAmount;
+      let principalLent =
+        receivable.originalAmount + (receivable.additionalLent ?? 0);
       let totalReceived = receivable.totalReceived;
       let interestAccrued = receivable.accruedInterest;
       let outstandingAmount = receivable.outstandingAmount;
@@ -421,18 +613,24 @@ export function summarizeReceivables(
         totalReceived === undefined ||
         outstandingAmount === undefined ||
         (receivable.interestRate || 0) > 0 ||
-        receivableCacheDrifted(receivable, totals)
+        receivableCacheDrifted(receivable, totals, lendTotals)
       ) {
         // Fallback for non-backfilled records, dynamic interest accrual, or a
         // cache that disagrees with its repayment rows (SPENDLY-605)
-        const summary = summarizeReceivable(receivable, repayments, asOfDate);
+        const summary = summarizeReceivable(
+          receivable,
+          repayments,
+          asOfDate,
+          lends
+        );
+        principalLent = summary.principalLent;
         totalReceived = summary.totalReceived;
         interestAccrued = summary.interestAccrued;
         outstandingAmount = summary.outstandingAmount;
         status = summary.status;
       }
 
-      acc.totalLent = roundMoney(acc.totalLent + originalAmount);
+      acc.totalLent = roundMoney(acc.totalLent + principalLent);
       acc.totalReceived = roundMoney(acc.totalReceived + (totalReceived || 0));
       acc.totalInterest = roundMoney(acc.totalInterest + (interestAccrued || 0));
       if (status !== "CANCELLED") {

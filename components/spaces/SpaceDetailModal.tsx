@@ -85,7 +85,7 @@ export function SpaceDetailModal({
 
   // Receivables now come from a shared app-wide listener (BorrowingsReceivablesProvider)
   // rather than a per-modal one, so there's no listener to gate with `enabled` anymore.
-  const { receivables, repayments } = useReceivables();
+  const { receivables, repayments, lends } = useReceivables();
 
   const spaceReceivables = useMemo(
     () => (space?.id ? receivablesInSpace(receivables, space.id) : []),
@@ -94,8 +94,8 @@ export function SpaceDetailModal({
 
   const moneyLentSummary = useMemo(() => {
     if (spaceReceivables.length === 0) return null;
-    return summarizeReceivables(spaceReceivables, repayments, todayDateKey());
-  }, [spaceReceivables, repayments]);
+    return summarizeReceivables(spaceReceivables, repayments, todayDateKey(), lends);
+  }, [spaceReceivables, repayments, lends]);
 
   const spaceExpenses = useMemo(
     () => (space?.id ? expensesInSpace(expenses, space.id) : []),

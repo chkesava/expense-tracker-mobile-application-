@@ -10,7 +10,7 @@
  * - card spend over two cycles, a closed statement, a partial bill payment,
  *   provider cashback, a voided payment and a refund (income) into the card;
  * - a borrowing with simple interest and a repayment;
- * - a receivable (money lent) and a partial collection;
+ * - a receivable (money lent), a partial collection and a later lend (SPENDLY-792);
  * - EPF: one establishment, credited contributions and FY interest;
  * - a holding with a BUY and a reversal, plus investment cash.
  *
@@ -125,6 +125,11 @@ const receivableRepayments = [
   { id: "rr1", receivableId: "r1", amount: 1000, principalComponent: 1000, interestComponent: 0, date: "2026-10-03", receivedAccountId: "wallet" },
 ];
 
+// SPENDLY-792: the same friend borrowed 500 more, from the bank.
+const receivableLends = [
+  { id: "rl1", receivableId: "r1", amount: 500, date: "2026-10-10", month: "2026-10", sourceMode: "account", sourceAccountId: "bank", note: "" },
+];
+
 const epfEstablishments = [
   {
     id: "est1",
@@ -178,8 +183,8 @@ const investmentCashTransactions = [
 
 /** Stored balances equal what the ledger implies, so the baseline is clean. */
 const accounts = [
-  // 10000 + 50000 − 1200 − 450 − 300 − 2000 + 500 + 100 − 3000 + 20000 − 5000 − 3000
-  { id: "bank", name: "Fixture Bank", typeId: "t-bank", openingBalance: 10000, currentBalance: 65650, balanceInitialized: true },
+  // 10000 + 50000 − 1200 − 450 − 300 − 2000 + 500 + 100 − 3000 + 20000 − 5000 − 3000 − 500
+  { id: "bank", name: "Fixture Bank", typeId: "t-bank", openingBalance: 10000, currentBalance: 65150, balanceInitialized: true },
   // 0 − 250 + 2000 − 500 + 1000
   { id: "wallet", name: "Fixture Wallet", typeId: "t-cash", openingBalance: 0, currentBalance: 2250, balanceInitialized: true },
   // 4000 + 1500 + 800 + 50 − 3000 − 100 − 200
@@ -202,6 +207,7 @@ export function fullLedgerFixture(): BaselineRows {
     borrowingRepayments,
     receivables,
     receivableRepayments,
+    receivableLends,
     subscriptions: [],
     investments: [],
     holdings,

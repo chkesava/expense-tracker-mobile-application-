@@ -7,9 +7,9 @@ exports[`financial baseline (SPENDLY-503) > matches the checked-in reference sna
       "accountId": "bank",
       "kind": "bank",
       "name": "Fixture Bank",
-      "recomputed": 65650,
+      "recomputed": 65150,
       "status": "match",
-      "stored": 65650,
+      "stored": 65150,
       "variance": 0,
     },
     {
@@ -156,6 +156,11 @@ exports[`financial baseline (SPENDLY-503) > matches the checked-in reference sna
       "inactive": 0,
       "total": 2,
     },
+    "receivableLends": {
+      "active": 1,
+      "inactive": 0,
+      "total": 1,
+    },
     "receivableRepayments": {
       "active": 1,
       "inactive": 0,
@@ -211,6 +216,9 @@ exports[`financial baseline (SPENDLY-503) > matches the checked-in reference sna
       "bank": 50000,
       "card": 200,
     },
+    "receivableLends": {
+      "bank": 500,
+    },
     "receivableRepayments": {
       "wallet": 1000,
     },
@@ -247,6 +255,9 @@ exports[`financial baseline (SPENDLY-503) > matches the checked-in reference sna
     },
     "investmentCashTransactions": {
       "2026-09": 17500,
+    },
+    "receivableLends": {
+      "2026-10": 500,
     },
     "receivableRepayments": {
       "2026-10": 1000,

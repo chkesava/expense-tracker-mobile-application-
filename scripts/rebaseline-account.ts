@@ -98,6 +98,7 @@ const SOURCES = [
   "borrowingRepayments",
   "receivables",
   "receivableRepayments",
+  "receivableLends",
   "creditCardBills",
 ] as const;
 
@@ -133,6 +134,7 @@ async function main() {
     borrowingRepayments: data.borrowingRepayments,
     receivables: data.receivables,
     receivableRepayments: data.receivableRepayments,
+    receivableLends: data.receivableLends,
     bills: data.creditCardBills,
     epfEstablishments: [],
     epfContributions: [],

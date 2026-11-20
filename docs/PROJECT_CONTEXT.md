@@ -137,6 +137,7 @@ Read `docs/PUSH_DEVELOPER_GUIDE.md` before adding one. Operations are in `docs/P
 - **Open work:**
   - **SPENDLY-749:** fixed Journal custom range incomplete period; on branch `fix/SPENDLY-749-journal-custom-range`.
   - **SPENDLY-288 Tax & ITR epic:** in worktree `spendly-288`, PR to main open. Its migration is now `20261115000000_readmodel_tax.sql` (was `20261110`): it runs after `20261112`–`14` and restates the table lists including `recurring_suggestions` and `server_results` plus the five tax tables.
+  - **SPENDLY-792 receivables "Lend more":** new `receivableLends` collection (each later lend is its own dated ledger row). On branch `feature/SPENDLY-792-receivable-lend-more`. Its migration `20261120000000_readmodel_receivable_lends.sql` restates the table lists after `20261116` (salary); the rules and indexes deploy and the migration must land before a release that writes lends.
   - **SPENDLY-625 price alerts:** planned, not started.
   - **SPENDLY-633 native Firestore cache:** done; Nutrition and Ganesh releases pending.
 - **Push rollout:** testers are enabled. "Everyone" (C4b) waits on tester QA. Local reminders stand down in push mode (SPENDLY-746).

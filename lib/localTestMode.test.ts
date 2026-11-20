@@ -255,7 +255,7 @@ describe("seed-emulator.js", () => {
     const { collections } = seedModule.buildDemoData(today);
     const typeName = new Map(collections.accountTypes.map((t) => [t.id, t.data.name as string]));
     const rows = (name: string) => collections[name].map((row) => ({ id: row.id, ...row.data })) as never[];
-    const empty = { payments: [], transfers: [], entries: [], borrowings: [], borrowingRepayments: [], receivables: [], receivableRepayments: [], bills: [] };
+    const empty = { payments: [], transfers: [], entries: [], borrowings: [], borrowingRepayments: [], receivables: [], receivableRepayments: [], receivableLends: [], bills: [] };
 
     for (const { id, data } of collections.accounts) {
       const account = { id, ...data } as never;

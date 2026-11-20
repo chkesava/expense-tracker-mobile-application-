@@ -20,10 +20,15 @@ const CONTRACT = new Set([
 function tableColumns(table: string): string[] {
   // R2.4: a re-runnable migration may say `create table if not exists`.
   const body = new RegExp(`create table (?:if not exists )?public\\.${table} \\(([\\s\\S]*?)\\n\\);`).exec(sql)?.[1] ?? "";
-  return body
+  const created = body
     .split("\n")
     .map((line) => /^\s+([a-z_]+)\s+[a-z]/.exec(line)?.[1])
     .filter((c): c is string => !!c && c !== "primary");
+  // SPENDLY-792: a column added to a live table later (receivables.additional_lent).
+  const added = [
+    ...sql.matchAll(new RegExp(`alter table public\\.${table} add column (?:if not exists )?([a-z_]+) `, "g")),
+  ].map((m) => m[1]);
+  return [...new Set([...created, ...added])];
 }
 
 /**

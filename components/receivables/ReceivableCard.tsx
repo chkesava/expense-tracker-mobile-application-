@@ -41,7 +41,8 @@ export function ReceivableCard({
   const { settings } = useSettings();
   // Measured against principal plus accrued interest, or the bar would read
   // 100% while interest was still owed (SPENDLY-160).
-  const collectable = summary.originalAmount + summary.interestAccrued;
+  // SPENDLY-792: everything lent, including later lends.
+  const collectable = summary.principalLent + summary.interestAccrued;
   const receivedPct = settledPercent(summary.totalReceived, collectable);
   // Nothing left to collect on a settled or cancelled receivable.
   const closed =
@@ -67,7 +68,9 @@ export function ReceivableCard({
           value: summary.outstandingAmount,
           tone: summary.status === "OVERDUE" ? "negative" : "default",
         },
-        { label: "Original", value: summary.originalAmount, tone: "muted" },
+        summary.additionalLent > 0
+          ? { label: "Lent", value: summary.principalLent, tone: "muted" }
+          : { label: "Original", value: summary.originalAmount, tone: "muted" },
         { label: "Received", value: summary.totalReceived, tone: "positive" },
       ]}
       due={

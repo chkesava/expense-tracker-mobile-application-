@@ -48,6 +48,7 @@ describe("financial baseline (SPENDLY-503)", () => {
       borrowingRepayments: [],
       receivables: [],
       receivableRepayments: [],
+      receivableLends: [],
     };
     const state = recomputeFinancialState(
       {
@@ -78,7 +79,7 @@ describe("financial baseline (SPENDLY-503)", () => {
   it("values net worth on stored and on recomputed balances, equal when there is no variance", () => {
     expect(baseline.netWorthRecomputed).toEqual(baseline.netWorth);
     const fixture = fullLedgerFixture();
-    fixture.accounts = fixture.accounts.map((a: any) => (a.id === "bank" ? { ...a, currentBalance: 60650 } : a));
+    fixture.accounts = fixture.accounts.map((a: any) => (a.id === "bank" ? { ...a, currentBalance: 60150 } : a));
     const drifted = buildUserBaseline(fixture, FIXTURE_TODAY);
     expect(drifted.netWorth.totalNetWorth).toBe(roundMoney(baseline.netWorth.totalNetWorth - 5000));
     expect(drifted.netWorthRecomputed).toEqual(baseline.netWorthRecomputed);
@@ -87,7 +88,7 @@ describe("financial baseline (SPENDLY-503)", () => {
   it("renders markdown with no uid in it", () => {
     const md = renderBaselineMarkdown("u#ab12cd34ef", baseline);
     expect(md).toContain("### User u#ab12cd34ef");
-    expect(md).toContain("| Fixture Bank | bank | 65650 | 65650 | 0 | match |");
+    expect(md).toContain("| Fixture Bank | bank | 65150 | 65150 | 0 | match |");
     expect(md).not.toContain("fixture-user");
   });
 });

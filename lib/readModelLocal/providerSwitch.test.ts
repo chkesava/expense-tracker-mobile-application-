@@ -24,6 +24,8 @@ const INTEGRATED = [
   // SPENDLY-596: the Journal's newest-300 window (FinanceDataProvider).
   "expenses", "incomes",
   "investments", "receivableRepayments", "receivables",
+  // SPENDLY-792: later lends, read with the receivables.
+  "receivableLends",
   // SPENDLY-598 part A: portfolio, SIP, subscriptions, watchlists.
   "holdings", "investmentCashTransactions", "portfolioSettings", "portfolioTransactions",
   "sipPlans", "sipTransactions", "subscriptions", "virtualPositions", "watchlists", "watchlists/items",
