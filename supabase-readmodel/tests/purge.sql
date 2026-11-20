@@ -49,9 +49,9 @@ declare
   left_over integer;
 begin
   result := public.readmodel_purge_user('user-a');
-  -- 67 tables (Wave 1 + SPENDLY-609 goals + Waves 2 and 3 + SPENDLY-591 + SPENDLY-592 + SPENDLY-685 + SPENDLY-224 devices + SPENDLY-230 notifications + SPENDLY-744 recurring suggestions + SPENDLY-747 server results + SPENDLY-709 tax + SPENDLY-325 salary) × 2 uids
+  -- 68 tables (Wave 1 + SPENDLY-609 goals + Waves 2 and 3 + SPENDLY-591 + SPENDLY-592 + SPENDLY-685 + SPENDLY-224 devices + SPENDLY-230 notifications + SPENDLY-744 recurring suggestions + SPENDLY-747 server results + SPENDLY-709 tax + SPENDLY-325 salary + SPENDLY-792 receivable lends) × 2 uids
   -- + a nested watchlist item + status + checkpoint + failure
-  if (result ->> 'rows')::int <> 138 then raise exception 'purge removed % rows, expected 138', result ->> 'rows'; end if;
+  if (result ->> 'rows')::int <> 140 then raise exception 'purge removed % rows, expected 140', result ->> 'rows'; end if;
 
   foreach t in array array[
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
