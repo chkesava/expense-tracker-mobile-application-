@@ -10,8 +10,8 @@ If it can't cover it, push once a day until it is topped up, the debit posts, or
 
 | Story | Scope | State |
 |---|---|---|
-| SPENDLY-794 | S1 Data model + dual write | Built on its branch; awaiting merge approval |
-| SPENDLY-795 | S2 Pure per-account cumulative shortfall engine | To Do |
+| SPENDLY-794 | S1 Data model + dual write | Merged into the epic (8a2b9389) |
+| SPENDLY-795 | S2 Pure per-account cumulative shortfall engine | Built on its branch; awaiting merge approval |
 | SPENDLY-796 | S3 Server job → `serverResults/autoDebitShortfall` | To Do |
 | SPENDLY-797 | S4 `lowBalance` push source + category | To Do |
 | SPENDLY-798 | S5 App UI (lead days, card autopay, banners, dashboard) | To Do |
