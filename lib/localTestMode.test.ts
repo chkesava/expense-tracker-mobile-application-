@@ -8,7 +8,8 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { isUrlAllowedInTestMode } from "@/lib/networkGuard";
-import { planAccountRebuild } from "@/shared/utils/reconciliation";
+import { accountSourcesFor, planAccountRebuild } from "@/shared/utils/reconciliation";
+import { summarizeReceivable } from "@/shared/utils/receivableMath";
 
 const require = createRequire(import.meta.url);
 const { localTestBuildBlocker, LOCAL_TEST_ENV_KEY } = require("../scripts/common.js") as {
@@ -255,19 +256,50 @@ describe("seed-emulator.js", () => {
     const { collections } = seedModule.buildDemoData(today);
     const typeName = new Map(collections.accountTypes.map((t) => [t.id, t.data.name as string]));
     const rows = (name: string) => collections[name].map((row) => ({ id: row.id, ...row.data })) as never[];
-    const empty = { payments: [], transfers: [], entries: [], borrowings: [], borrowingRepayments: [], receivables: [], receivableRepayments: [], receivableLends: [], bills: [] };
+    const all = {
+      payments: [], transfers: [], entries: [], borrowings: [], borrowingRepayments: [], bills: [],
+      expenses: rows("expenses"),
+      incomes: rows("incomes"),
+      // SPENDLY-792: lends, collections and later lends move the balances too.
+      receivables: rows("receivables"),
+      receivableRepayments: rows("receivableRepayments"),
+      receivableLends: rows("receivableLends"),
+    };
 
     for (const { id, data } of collections.accounts) {
       const account = { id, ...data } as never;
-      const sources = {
-        ...empty,
-        expenses: rows("expenses").filter((e: { accountId: string }) => e.accountId === id),
-        incomes: rows("incomes").filter((i: { accountId: string }) => i.accountId === id),
-      };
+      const sources = accountSourcesFor(id, all);
       const plan = planAccountRebuild(account, typeName.get(data.typeId as string) ?? "", sources, "2026-09-26");
       expect(plan.variances, id).toEqual([]);
       expect(plan.needsWrite, id).toBe(false);
     }
+  });
+
+  it("SPENDLY-792: seeds receivables with partial repayments and later lends", () => {
+    const today = new Date(2026, 8, 26, 12);
+    const { collections } = seedModule.buildDemoData(today);
+    const rows = (name: string) => collections[name].map((row) => ({ id: row.id, ...row.data })) as never[];
+    const summary = (id: string) =>
+      summarizeReceivable(
+        rows("receivables").find((r: { id: string }) => r.id === id)!,
+        rows("receivableRepayments"),
+        "2026-09-26",
+        rows("receivableLends")
+      );
+
+    // 20000 lent, 8000 back, 5000 + 3000 lent again.
+    expect(summary("rcv-ravi")).toMatchObject({ principalLent: 28000, totalReceived: 8000, outstandingAmount: 20000, status: "PARTIALLY_SETTLED" });
+    // Interest-bearing, with a later lend: owes more than the principal.
+    const priya = summary("rcv-priya");
+    expect(priya.principalLent).toBe(14000);
+    expect(priya.outstandingPrincipal).toBe(11000);
+    expect(priya.interestAccrued).toBeGreaterThan(0);
+    // Repaid in full: the case "Lend more" reopens.
+    expect(summary("rcv-arjun")).toMatchObject({ outstandingAmount: 0, status: "FULLY_SETTLED" });
+    // One lend is already deducted elsewhere and carries no account.
+    expect(rows("receivableLends").filter((l: { sourceMode: string; sourceAccountId: string | null }) => l.sourceMode === "already_deducted" && l.sourceAccountId === null)).toHaveLength(1);
+    // Nothing dated after today.
+    for (const l of rows("receivableLends") as { date: string }[]) expect(l.date <= "2026-09-26").toBe(true);
   });
 
   it("seeds valid tax records, and portfolio sales the capital-gains screen can trace (SPENDLY-293)", async () => {
