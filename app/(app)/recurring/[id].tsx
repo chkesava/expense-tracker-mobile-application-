@@ -18,6 +18,9 @@ import { useAccountTransfers } from "@/hooks/useAccountTransfers";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useGhostMoney } from "@/hooks/useGhostMoney";
+import { useLowBalanceAlerts } from "@/hooks/useLowBalanceAlerts";
+import { LowBalanceBanner } from "@/components/lowBalance/LowBalanceBanner";
+import { lowBalanceForSubscription } from "@/shared/utils/lowBalanceDisplay";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
 import { appDialog } from "@/lib/appDialog";
 import { haptic } from "@/lib/haptics";
@@ -64,6 +67,8 @@ export default function RecurringDetailScreen() {
   const { transfers } = useAccountTransfers();
   const { expenses, loadMonth, monthsLoaded, isFromCache } = useExpenses();
   const freshness = useJournalFreshness();
+  // SPENDLY-798: the server's stored low-balance result for this item.
+  const lowBalance = useLowBalanceAlerts();
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -179,9 +184,13 @@ export default function RecurringDetailScreen() {
   const muted = { color: theme.colors.mutedForeground, fontFamily: theme.fontFamily.regular };
   const strong = { color: theme.colors.foreground, fontFamily: theme.fontFamily.semibold };
 
+  const shortfall = lowBalanceForSubscription(lowBalance.view, sub.id);
+
   return (
     <PageShell contentContainerStyle={styles.content}>
       {header}
+
+      <LowBalanceBanner short={shortfall.short} unverified={shortfall.unverified} today={lowBalance.today} />
 
       <Card variant="outlined" elevation={0} radius={22} style={styles.edge} contentStyle={styles.hero}>
         <View style={styles.heroTop}>
