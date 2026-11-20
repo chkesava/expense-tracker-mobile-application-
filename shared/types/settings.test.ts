@@ -248,6 +248,22 @@ describe("calendar notification settings (SPENDLY-184)", () => {
   });
 });
 
+describe("lowBalanceAlerts (SPENDLY-794)", () => {
+  it("defaults to 3 lead days when absent", () => {
+    expect(mergeSettingsFromDoc({}).lowBalanceAlerts).toEqual({ defaultLeadDays: 3 });
+    expect(mergeSettingsFromDoc(null).lowBalanceAlerts).toEqual({ defaultLeadDays: 3 });
+    expect(SETTINGS_DEFAULTS.lowBalanceAlerts).toEqual({ defaultLeadDays: 3 });
+  });
+
+  it("keeps a stored value, top-level or nested, and repairs bad ones", () => {
+    expect(mergeSettingsFromDoc({ lowBalanceAlerts: { defaultLeadDays: 7 } }).lowBalanceAlerts.defaultLeadDays).toBe(7);
+    expect(mergeSettingsFromDoc({ settings: { lowBalanceAlerts: { defaultLeadDays: 0 } } }).lowBalanceAlerts.defaultLeadDays).toBe(0);
+    expect(mergeSettingsFromDoc({ lowBalanceAlerts: { defaultLeadDays: 30 } }).lowBalanceAlerts.defaultLeadDays).toBe(3);
+    expect(mergeSettingsFromDoc({ lowBalanceAlerts: { defaultLeadDays: "5" } }).lowBalanceAlerts.defaultLeadDays).toBe(3);
+    expect(mergeSettingsFromDoc({ lowBalanceAlerts: "on" }).lowBalanceAlerts.defaultLeadDays).toBe(3);
+  });
+});
+
 describe("pushNotifications (SPENDLY-226)", () => {
   it("defaults when absent and reads a stored value, top-level or nested", () => {
     expect(mergeSettingsFromDoc({}).pushNotifications).toEqual({

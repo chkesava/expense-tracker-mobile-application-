@@ -30,6 +30,11 @@ export interface Subscription {
     accountId?: string;
     /** Destination account for a recurring internal transfer. */
     toAccountId?: string;
+    /**
+     * SPENDLY-794: days before the debit to start low-balance alerts for this
+     * item. Missing or null uses the user's `lowBalanceAlerts.defaultLeadDays`.
+     */
+    lowBalanceLeadDays?: number | null;
     createdAt?: any;
 }
 

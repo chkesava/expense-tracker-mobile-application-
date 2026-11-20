@@ -4,6 +4,7 @@
  */
 
 import { parsePushNotificationSettings, type PushNotificationSettings } from "../utils/pushPreferences";
+import { DEFAULT_LOW_BALANCE_LEAD_DAYS, isValidLeadDays } from "../utils/lowBalanceAlerts";
 import {
   DEFAULT_CREDIT_CARD_BILL_REMINDERS,
   type CreditCardBillRemindersSettings,
@@ -88,7 +89,28 @@ export type UserSettings = {
   calendarNotifications: CalendarNotificationSettings;
   /** SPENDLY-226: push categories without an older switch, the delivery window, lock-screen amounts. */
   pushNotifications: PushNotificationSettings;
+  /** SPENDLY-794: low-balance alerts before auto-debits. On/off is the push category. */
+  lowBalanceAlerts: LowBalanceAlertSettings;
 };
+
+export type LowBalanceAlertSettings = {
+  /** Days before a debit to start checking the paying account; items may override. */
+  defaultLeadDays: number;
+};
+
+export const DEFAULT_LOW_BALANCE_ALERTS: LowBalanceAlertSettings = {
+  defaultLeadDays: DEFAULT_LOW_BALANCE_LEAD_DAYS,
+};
+
+/** Stored low-balance prefs → valid settings; anything out of range falls back to the default. */
+export function normalizeLowBalanceAlerts(raw: unknown): LowBalanceAlertSettings {
+  const r = asPlainRecord(raw) ?? {};
+  return {
+    defaultLeadDays: isValidLeadDays(r.defaultLeadDays)
+      ? r.defaultLeadDays
+      : DEFAULT_LOW_BALANCE_ALERTS.defaultLeadDays,
+  };
+}
 
 export type CalendarNotificationSettings = {
   /** The user's own calendar reminders. On by default — the user asked to be reminded. */
@@ -254,6 +276,7 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   creditCardBillReminders: { ...DEFAULT_CREDIT_CARD_BILL_REMINDERS },
   calendarNotifications: { ...DEFAULT_CALENDAR_NOTIFICATIONS },
   pushNotifications: parsePushNotificationSettings(undefined),
+  lowBalanceAlerts: { ...DEFAULT_LOW_BALANCE_ALERTS },
 };
 
 /**
@@ -293,6 +316,7 @@ const USER_SETTINGS_KEYS: (keyof UserSettings)[] = [
   "creditCardBillReminders",
   "calendarNotifications",
   "pushNotifications",
+  "lowBalanceAlerts",
 ];
 
 function pickKnownSettings(
@@ -405,6 +429,7 @@ export function mergeSettingsFromDoc(
     },
     calendarNotifications: normalizeCalendarNotifications(calendarNotificationsSource),
     pushNotifications: parsePushNotificationSettings(source.pushNotifications ?? data.pushNotifications),
+    lowBalanceAlerts: normalizeLowBalanceAlerts(source.lowBalanceAlerts ?? data.lowBalanceAlerts),
   };
 }
 
