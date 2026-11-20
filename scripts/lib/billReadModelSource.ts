@@ -116,7 +116,10 @@ export function supabaseBillReadModel(client: SupabaseClient): ReadModelBillSour
  * `done` deletes a request only if no newer save re-queued the user since it
  * was read (`requested_at` unchanged or older).
  */
-export function supabaseServerRunQueue(client: SupabaseClient, job: "bill-daily" | "epf-daily" | "space-daily"): BillRunQueue {
+export function supabaseServerRunQueue(
+  client: SupabaseClient,
+  job: "bill-daily" | "epf-daily" | "space-daily" | "autodebit-daily"
+): BillRunQueue {
   return {
     async pending() {
       const { data, error } = await client
