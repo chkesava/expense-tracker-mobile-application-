@@ -85,9 +85,12 @@ describe("auto-debit shortfalls are recomputed on the server after a relevant sa
   });
 
   it("the job reads its inputs from Firestore and computes with the shared engine", () => {
-    const core = read("scripts/lib/autoDebitDailyCore.ts");
-    expect(core).toContain("computeAutoDebitShortfall(");
+    // SPENDLY-797: one loader and one engine call, shared with the push's send-time re-check.
+    expect(read("scripts/lib/autoDebitDailyCore.ts")).toContain("computeForInputs(");
+    expect(read("shared/utils/autoDebitInputs.ts")).toContain("computeAutoDebitShortfall(");
     const script = read("scripts/autodebit-daily.ts");
+    expect(script).toContain("loadAutoDebitInputs(");
     expect(script).not.toMatch(/\.from\("(subscriptions|accounts|credit_card_bills|group_funds)"\)/);
+    expect(read("shared/utils/push/sources/lowBalanceSource.ts")).toContain("loadAutoDebitInputs(");
   });
 });

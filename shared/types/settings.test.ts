@@ -249,10 +249,15 @@ describe("calendar notification settings (SPENDLY-184)", () => {
 });
 
 describe("lowBalanceAlerts (SPENDLY-794)", () => {
-  it("defaults to 3 lead days when absent", () => {
-    expect(mergeSettingsFromDoc({}).lowBalanceAlerts).toEqual({ defaultLeadDays: 3 });
-    expect(mergeSettingsFromDoc(null).lowBalanceAlerts).toEqual({ defaultLeadDays: 3 });
-    expect(SETTINGS_DEFAULTS.lowBalanceAlerts).toEqual({ defaultLeadDays: 3 });
+  it("defaults to on, with 3 lead days, when absent", () => {
+    expect(mergeSettingsFromDoc({}).lowBalanceAlerts).toEqual({ enabled: true, defaultLeadDays: 3 });
+    expect(mergeSettingsFromDoc(null).lowBalanceAlerts).toEqual({ enabled: true, defaultLeadDays: 3 });
+    expect(SETTINGS_DEFAULTS.lowBalanceAlerts).toEqual({ enabled: true, defaultLeadDays: 3 });
+  });
+
+  it("keeps the switch (SPENDLY-797) and repairs a bad one", () => {
+    expect(mergeSettingsFromDoc({ lowBalanceAlerts: { enabled: false } }).lowBalanceAlerts).toEqual({ enabled: false, defaultLeadDays: 3 });
+    expect(mergeSettingsFromDoc({ lowBalanceAlerts: { enabled: "no" } }).lowBalanceAlerts.enabled).toBe(true);
   });
 
   it("keeps a stored value, top-level or nested, and repairs bad ones", () => {

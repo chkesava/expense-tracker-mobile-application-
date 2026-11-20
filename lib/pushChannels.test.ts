@@ -37,10 +37,11 @@ describe("ensurePushChannels", () => {
       "shared-money": 3,
       "price-alerts": 4,
       "salary-payday": 3,
+      "low-balance": 4,
     });
 
     await ensurePushChannels();
-    expect(m.setChannel).toHaveBeenCalledTimes(7);
+    expect(m.setChannel).toHaveBeenCalledTimes(8);
   });
 
   it("does nothing off Android", async () => {
