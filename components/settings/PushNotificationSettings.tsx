@@ -2,6 +2,7 @@ import { Text, View } from "react-native";
 import { BellRing } from "lucide-react-native";
 
 import { ChipRow, RowSwitch } from "@/components/settings/SettingsControls";
+import { LeadDaysChips } from "@/components/lowBalance/LeadDaysChips";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useNotificationPermission } from "@/hooks/useNotificationPermission";
@@ -99,6 +100,16 @@ export function PushNotificationSettings() {
           value={settings.lowBalanceAlerts.enabled}
           onValueChange={(v) => setLowBalanceAlerts({ enabled: v })}
         />
+        {settings.lowBalanceAlerts.enabled ? (
+          <LeadDaysChips
+            label="Start warning"
+            helper="Days before a debit. Each recurring item and card can choose its own."
+            value={settings.lowBalanceAlerts.defaultLeadDays}
+            onChange={(days) => {
+              if (days !== null) setLowBalanceAlerts({ defaultLeadDays: days });
+            }}
+          />
+        ) : null}
         <RowSwitch
           label="SIP and EPF updates"
           description="When a SIP runs, is skipped or fails, and when an EPF credit is expected or late."

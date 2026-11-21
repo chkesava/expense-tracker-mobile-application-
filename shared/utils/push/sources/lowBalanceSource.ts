@@ -32,12 +32,11 @@
  * - At send time: the user's inputs, once per user per run (memoised).
  */
 
-import { billUrl } from "../../billReminderCopy";
 import type { AutoDebitKind, ShortfallItem } from "../../autoDebitShortfall";
 import { alertingShortfalls } from "../../autoDebitShortfall";
 import { computeForInputs, loadAutoDebitInputs, userToday, type AutoDebitInputsDb } from "../../autoDebitInputs";
 import { shiftDateKey } from "../../dates";
-import { recurringHref } from "../../recurringDetail";
+import { lowBalanceUrl } from "../../lowBalanceDisplay";
 import { AUTO_DEBIT_SHORTFALL_DOC, SERVER_RESULTS_COLLECTION } from "../../serverResults";
 import type { AdminFirestoreLike } from "../firestorePorts";
 import type { ReminderSlot, ReminderSource, SlotContext } from "../reminderEngine";
@@ -75,10 +74,7 @@ function whenLabel(dueDate: string, today: string): string {
   return `on ${new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d, 12)))}`;
 }
 
-export function lowBalanceUrl(d: Pick<LowBalanceDebit, "kind" | "refId" | "billId">): string {
-  if (d.kind === "card") return d.billId ? billUrl(d.billId) : "/credit-card-bills";
-  return recurringHref(d.refId);
-}
+export { lowBalanceUrl };
 
 /** The notice's words. No amounts unless `showAmounts`. Pure. */
 export function lowBalanceCopy(d: LowBalanceDebit, opts: { today: string; showAmounts: boolean; currency: string }): { title: string; body: string } {

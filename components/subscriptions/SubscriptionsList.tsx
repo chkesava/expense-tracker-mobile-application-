@@ -29,6 +29,8 @@ import { Button } from "@/components/ui/Button";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useRecurringSuggestions } from "@/hooks/useRecurringSuggestions";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
+import { useLowBalanceAlerts } from "@/hooks/useLowBalanceAlerts";
+import { lowBalanceForSubscription } from "@/shared/utils/lowBalanceDisplay";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { formatDisplayDate } from "@/shared/utils/dateDisplay";
@@ -70,6 +72,7 @@ export function SubscriptionsList() {
   const displayCurrency = useDisplayCurrency();
   const { accounts } = useAccounts();
   const { subscriptions, loading, toggleActive } = useSubscriptions();
+  const lowBalance = useLowBalanceAlerts();
   const {
     items: reviewItems,
     actingKey,
@@ -365,6 +368,21 @@ export function SubscriptionsList() {
                             style={[styles.pausedBadgeText, { color: theme.colors.destructive }]}
                           >
                             OVERDUE
+                          </Text>
+                        </View>
+                      ) : null}
+
+                      {/* SPENDLY-798: the server found the paying account short for a coming debit. */}
+                      {lowBalanceForSubscription(lowBalance.view, sub.id).short.length ? (
+                        <View
+                          style={[
+                            styles.pausedBadge,
+                            { backgroundColor: surfaces.wash(theme.colors.warning) },
+                          ]}
+                          accessibilityLabel="Low balance before the next debit"
+                        >
+                          <Text style={[styles.pausedBadgeText, { color: theme.colors.warning }]}>
+                            LOW BALANCE
                           </Text>
                         </View>
                       ) : null}
