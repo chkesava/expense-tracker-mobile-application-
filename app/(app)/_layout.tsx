@@ -7,6 +7,7 @@ import { AddActionSheet } from "@/components/AddActionSheet";
 import { AddTransactionModal } from "@/components/AddTransactionModal";
 import { CalendarNotificationSync } from "@/components/calendar/CalendarNotificationSync";
 import { GoalReminderSync } from "@/components/goals/GoalReminderSync";
+import { LowBalanceNotificationSync } from "@/components/lowBalance/LowBalanceNotificationSync";
 import { GlobalAddModals } from "@/components/GlobalAddModals";
 import { GlobalSearchModal } from "@/components/search/GlobalSearchModal";
 import { BottomNav } from "@/components/BottomNav";
@@ -480,6 +481,8 @@ function AppShellInner() {
         {/* SPENDLY-184: keeps calendar notifications in step with the data */}
         <CalendarNotificationSync />
         <GoalReminderSync />
+        {/* SPENDLY-799: on-device low-balance alerts when the server doesn't push */}
+        <LowBalanceNotificationSync />
         <SetupWizardModal />
         </OverlayProvider>
       </View>

@@ -9,6 +9,9 @@ describe("resolveNotificationRoute", () => {
     expect(resolveNotificationRoute({ source: "credit_card_bill", billId: "b1", url: "/credit-card-bills/b1" })).toEqual({ href: "/credit-card-bills/b1", fallback: false });
     expect(resolveNotificationRoute({ source: "calendar", url: "/calendar?focus=reminder:r1:2026-11-06&date=2026-11-06" })?.href).toContain("/calendar?");
     expect(resolveNotificationRoute({ source: "goal", url: "/goals/g1" })?.href).toBe("/goals/g1");
+    // SPENDLY-799: the on-device low-balance alerts.
+    expect(resolveNotificationRoute({ source: "lowBalance", url: "/recurring/emi1" })?.href).toBe("/recurring/emi1");
+    expect(resolveNotificationRoute({ source: "lowBalance", url: "/credit-card-bills/b1" })?.href).toBe("/credit-card-bills/b1");
   });
 
   it("routes a Spendly push to an allowed screen", () => {

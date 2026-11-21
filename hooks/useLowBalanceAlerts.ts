@@ -16,12 +16,19 @@ import { useServerResults } from "@/hooks/useServerResults";
 import { useSettings } from "@/providers/SettingsProvider";
 import { todayDateKey } from "@/shared/utils/dates";
 import { EMPTY_LOW_BALANCE_VIEW, lowBalanceView, type LowBalanceView } from "@/shared/utils/lowBalanceDisplay";
-import { AUTO_DEBIT_SHORTFALL_DOC, autoDebitShortfallFromDocs } from "@/shared/utils/serverResults";
+import { AUTO_DEBIT_SHORTFALL_DOC, autoDebitShortfallFromDocs, type StoredAutoDebitShortfall } from "@/shared/utils/serverResults";
 
-export function useLowBalanceAlerts(options?: { enabled?: boolean }): { view: LowBalanceView; today: string; loading: boolean } {
+export function useLowBalanceAlerts(options?: { enabled?: boolean }): {
+  view: LowBalanceView;
+  /** The stored result as written (SPENDLY-799 plans the coming days from it); null when none or loading. */
+  stored: StoredAutoDebitShortfall | null;
+  today: string;
+  loading: boolean;
+} {
   const { settings } = useSettings();
   const { docs, loading } = useServerResults({ ...options, docId: AUTO_DEBIT_SHORTFALL_DOC });
   const today = todayDateKey(settings.timezone);
-  const view = useMemo(() => (docs ? lowBalanceView(autoDebitShortfallFromDocs(docs), today) : EMPTY_LOW_BALANCE_VIEW), [docs, today]);
-  return { view, today, loading };
+  const stored = useMemo(() => (docs ? autoDebitShortfallFromDocs(docs) : null), [docs]);
+  const view = useMemo(() => (docs ? lowBalanceView(stored, today) : EMPTY_LOW_BALANCE_VIEW), [docs, stored, today]);
+  return { view, stored, today, loading };
 }
