@@ -14,8 +14,8 @@ If it can't cover it, push once a day until it is topped up, the debit posts, or
 | SPENDLY-795 | S2 Pure per-account cumulative shortfall engine | Merged into the epic (844722fd) |
 | SPENDLY-796 | S3 Server job → `serverResults/autoDebitShortfall` (`autodebit-daily`, daily + save queue) | Merged into the epic (52d1f7fc) |
 | SPENDLY-797 | S4 `lowBalance` push source + category, switch `lowBalanceAlerts.enabled`, inbox row, index | Merged into the epic (f3cd3f5c) |
-| SPENDLY-798 | S5 App UI (lead days, card autopay, banners, dashboard) | Built on its branch; awaiting UI review and merge approval |
-| SPENDLY-799 | S6 Local-notification fallback | To Do |
+| SPENDLY-798 | S5 App UI (lead days, card autopay, banners, dashboard) | Merged into the epic (9638a310) |
+| SPENDLY-799 | S6 Local-notification fallback (from the stored result, stands down in push mode) | Built on its branch; awaiting merge approval |
 
 ## Decisions (owner, 2026-11-20)
 - **Scope:** recurring items that have an `accountId`, plus card autopay. SMS-sourced, paused and completed items are skipped.
