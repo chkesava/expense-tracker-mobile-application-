@@ -49,6 +49,7 @@ function updateIcon(row: NotificationRow): IconType {
   if (row.category === "shared") return Users;
   if (row.category === "priceAlerts") return BellRing;
   if (row.category === "bills") return CreditCard;
+  if (row.category === "lowBalance") return Landmark;
   return Bell;
 }
 

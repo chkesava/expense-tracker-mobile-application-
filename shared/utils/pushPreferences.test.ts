@@ -85,6 +85,13 @@ describe("isPushCategoryEnabled", () => {
     expect(isPushCategoryEnabled({ calendarNotifications: { salaryEnabled: false } }, "salary")).toBe(false);
   });
 
+  it("low-balance alerts follow lowBalanceAlerts.enabled, on by default (SPENDLY-797)", () => {
+    expect(isPushCategoryEnabled({}, "lowBalance")).toBe(true);
+    expect(isPushCategoryEnabled({ lowBalanceAlerts: { enabled: true } }, "lowBalance")).toBe(true);
+    expect(isPushCategoryEnabled({ lowBalanceAlerts: { enabled: false } }, "lowBalance")).toBe(false);
+    expect(PUSH_CHANNELS.lowBalance).toEqual({ id: "low-balance", name: "Low balance before auto-debits", importance: "high" });
+  });
+
   it("reads the new event switches, on by default", () => {
     expect(isPushCategoryEnabled({}, "investments")).toBe(true);
     const off = { ...DEFAULT_PUSH_NOTIFICATIONS, categories: { investments: false, shared: true, priceAlerts: false } };

@@ -103,16 +103,16 @@ describe("daily jobs (SPENDLY-729)", () => {
 
   it("each cron starts its own workflows; an unknown cron starts nothing", () => {
     expect(workflowsForCron(PUSH_CRON)).toEqual(["push-reminders.yml"]);
-    expect(workflowsForCron(DAILY_CRON)).toEqual(["category-daily.yml", "subscription-daily.yml", "sip-daily.yml", "epf-daily.yml", "bill-daily.yml", "housekeeping-daily.yml", "snapshot-daily.yml", "recurring-weekly.yml", "insights-daily.yml", "space-daily.yml"]);
+    expect(workflowsForCron(DAILY_CRON)).toEqual(["category-daily.yml", "subscription-daily.yml", "sip-daily.yml", "epf-daily.yml", "bill-daily.yml", "housekeeping-daily.yml", "snapshot-daily.yml", "recurring-weekly.yml", "insights-daily.yml", "space-daily.yml", "autodebit-daily.yml"]);
     expect(workflowsForCron("5 4 * * *")).toEqual([]);
   });
 
   it("the daily tick dispatches every daily job as a real cron-marked run", async () => {
     const fetchFn = respond(204);
     const results = await dispatchForCron(DAILY_CRON, { GITHUB_DISPATCH_TOKEN: TOKEN }, fetchFn, vi.fn());
-    expect(results).toEqual(Array.from({ length: 10 }, () => ({ ok: true, status: 204 })));
+    expect(results).toEqual(Array.from({ length: 11 }, () => ({ ok: true, status: 204 })));
     const calls = (fetchFn as unknown as { mock: { calls: Array<[string, { body: string }]> } }).mock.calls;
-    expect(calls.map(([url]) => url.split("/workflows/")[1])).toEqual(["category-daily.yml/dispatches", "subscription-daily.yml/dispatches", "sip-daily.yml/dispatches", "epf-daily.yml/dispatches", "bill-daily.yml/dispatches", "housekeeping-daily.yml/dispatches", "snapshot-daily.yml/dispatches", "recurring-weekly.yml/dispatches", "insights-daily.yml/dispatches", "space-daily.yml/dispatches"]);
+    expect(calls.map(([url]) => url.split("/workflows/")[1])).toEqual(["category-daily.yml/dispatches", "subscription-daily.yml/dispatches", "sip-daily.yml/dispatches", "epf-daily.yml/dispatches", "bill-daily.yml/dispatches", "housekeeping-daily.yml/dispatches", "snapshot-daily.yml/dispatches", "recurring-weekly.yml/dispatches", "insights-daily.yml/dispatches", "space-daily.yml/dispatches", "autodebit-daily.yml/dispatches"]);
     for (const [, init] of calls) expect(JSON.parse(init.body)).toEqual({ ref: "main", inputs: { dry_run: "false", trigger: "cron" } });
   });
 
@@ -120,7 +120,7 @@ describe("daily jobs (SPENDLY-729)", () => {
     let n = 0;
     const fetchFn: FetchLike = vi.fn(async () => ({ status: n++ === 0 ? 500 : 204, text: async () => "" }));
     const results = await dispatchForCron(DAILY_CRON, { GITHUB_DISPATCH_TOKEN: TOKEN }, fetchFn, vi.fn());
-    expect(results.map((r) => r.ok).sort()).toEqual([false, true, true, true, true, true, true, true, true, true]);
+    expect(results.map((r) => r.ok).sort()).toEqual([false, true, true, true, true, true, true, true, true, true, true]);
   });
 
   it("the 15-minute tick still only starts push reminders", async () => {
@@ -141,6 +141,7 @@ describe("daily jobs (SPENDLY-729)", () => {
     ["recurring-weekly.yml", "RECURRING_WEEKLY_ENABLED"],
     ["insights-daily.yml", "INSIGHTS_DAILY_ENABLED"],
     ["space-daily.yml", "SPACE_DAILY_ENABLED"],
+    ["autodebit-daily.yml", "AUTODEBIT_DAILY_ENABLED"],
   ] as const) {
     it(`${workflow} accepts the Worker's inputs and its cron runs obey ${flag}`, () => {
       expect(DAILY_WORKFLOWS).toContain(workflow);

@@ -68,6 +68,7 @@ Full rules: `docs/READ_MODEL_RULES.md`. Operations: `docs/READMODEL_RUNBOOK.md`.
   - After a save, a Supabase trigger queues the user, and `pg_net` dispatches the bill job (`server_run_queue`, SPENDLY-737).
   - EPF saves do the same for `epf-daily` (SPENDLY-790, migration 20261117000000), so net worth picks up an EPF backfill or "mark credited" within minutes instead of at the next 08:30 IST run.
   - Space totals (`financialSummaries/spaces`) come only from `space-daily` (SPENDLY-791, migration 20261119000000): every expense in a Space, any month. A save to a Space, or to an expense in a Space, queues it the same way; the Worker's 03:00 UTC tick runs it daily.
+  - Low-balance alerts before auto-debits (`serverResults/autoDebitShortfall`) come only from `autodebit-daily` (SPENDLY-796, migration 20261121000000, `AUTODEBIT_DAILY_ENABLED`). It is queued by app saves to subscriptions, accounts, card bills and group funds of users with an auto-debit. `shared/utils/autoDebitInputs.ts` is the one loader and engine call, shared by the job and the push re-check.
 - **Never** add a calculation back into the app, a second job framework, or a second writer.
 - The app must not recompute authoritative totals in UI components. It shows the stored summaries.
 
@@ -138,6 +139,18 @@ Read `docs/PUSH_DEVELOPER_GUIDE.md` before adding one. Operations are in `docs/P
   - **SPENDLY-749:** fixed Journal custom range incomplete period; on branch `fix/SPENDLY-749-journal-custom-range`.
   - **SPENDLY-288 Tax & ITR epic:** in worktree `spendly-288`, PR to main open. Its migration is now `20261115000000_readmodel_tax.sql` (was `20261110`): it runs after `20261112`–`14` and restates the table lists including `recurring_suggestions` and `server_results` plus the five tax tables.
   - **SPENDLY-792 receivables "Lend more":** new `receivableLends` collection (each later lend is its own dated ledger row). On branch `feature/SPENDLY-792-receivable-lend-more`. Its migration `20261120000000_readmodel_receivable_lends.sql` restates the table lists after `20261116` (salary); the rules and indexes deploy and the migration must land before a release that writes lends.
+  - **SPENDLY-793 low-balance alerts before auto-debits** (stories 794–799): epic PR to main opened 2026-11-21. Tracker: `docs/SPENDLY-793-low-balance-alerts.md`.
+    - It warns once a day, N days before an EMI, subscription, transfer or card autopay, when the paying account (balance minus money held for group funds, counted cumulatively across everything due from it) can't cover it.
+    - **Server-computed:** `autodebit-daily` writes `serverResults/autoDebitShortfall`.
+    - **Push source** `lowBalanceSource` (category `lowBalance`, channel `low-balance`, switch `lowBalanceAlerts.enabled`, on by default).
+    - **App:** banners, a dashboard card, the card "Autopay from" setting and per-item lead days.
+    - **On-device fallback:** `LowBalanceNotificationSync`, which stands down in push mode.
+    - **Go-live order after merge, each step with approval:**
+      1. rules and the `serverResults (kind, hasShortfall)` index;
+      2. migration `20261121000000`;
+      3. job dry run, then `AUTODEBIT_DAILY_ENABLED`, then the Worker redeploy;
+      4. app release;
+      5. push dry run.
   - **SPENDLY-625 price alerts:** planned, not started.
   - **SPENDLY-633 native Firestore cache:** done; Nutrition and Ganesh releases pending.
 - **Push rollout:** testers are enabled. "Everyone" (C4b) waits on tester QA. Local reminders stand down in push mode (SPENDLY-746).

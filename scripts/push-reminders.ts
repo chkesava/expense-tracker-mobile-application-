@@ -15,7 +15,7 @@
  *                                        now (SPENDLY-680); without them the nightly sync does
  *
  * Sources: credit card bills (231), calendar reminders (694), dues (695),
- * savings goals (696). Events, hourly: SIP and EPF (229), shared splits and
+ * savings goals (696), low balance before auto-debits (797). Events, hourly: SIP and EPF (229), shared splits and
  * vaults (697).
  */
 
@@ -30,17 +30,20 @@ import { createBillSource } from "../shared/utils/push/sources/billSource";
 import { createCalendarReminderSource } from "../shared/utils/push/sources/calendarReminderSource";
 import { createDuesSource } from "../shared/utils/push/sources/duesSource";
 import { createGoalSource } from "../shared/utils/push/sources/goalSource";
+import { createLowBalanceSource } from "../shared/utils/push/sources/lowBalanceSource";
 import { createSharedEventSource } from "../shared/utils/push/sources/sharedEvents";
 import { createEpfEventSource, createSipEventSource } from "../shared/utils/push/sources/sipEpfEvents";
 import type { EventSource } from "../shared/utils/push/events";
 import { runPushReminders } from "./lib/pushRunCore";
 
-export function buildSources(db: AdminFirestoreLike): ReminderSource[] {
+export function buildSources(db: AdminFirestoreLike, readModel: { note(uid: string, paths: string[]): void } | null = null): ReminderSource[] {
   return [
     createBillSource(db) as ReminderSource,
     createCalendarReminderSource(db) as ReminderSource,
     createDuesSource(db) as ReminderSource,
     createGoalSource(db) as ReminderSource,
+    // SPENDLY-797: its inbox row is noted for the read model.
+    createLowBalanceSource(db, { readModel }) as ReminderSource,
   ];
 }
 
@@ -66,15 +69,16 @@ async function main() {
   const push = ports ? createServerPush(ports) : null;
 
   const adminDb = db as unknown as AdminFirestoreLike;
+  const readModel = push && !dryRun ? push : null;
   const summary = await runPushReminders({
     db: adminDb,
-    sources: buildSources(adminDb),
+    sources: buildSources(adminDb, readModel),
     eventSources: buildEventSources(adminDb),
     now: new Date(),
     dryRun,
     maxReadsPerRun: positive(process.env.PUSH_MAX_READS_PER_RUN, 400),
     maxReadsPerDay: positive(process.env.PUSH_MAX_READS_PER_DAY, 6000),
-    readModel: push && !dryRun ? push : null,
+    readModel,
     expoAccessToken: process.env.EXPO_ACCESS_TOKEN || undefined,
     log,
   });
