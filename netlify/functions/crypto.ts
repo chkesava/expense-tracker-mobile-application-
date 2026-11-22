@@ -2,6 +2,16 @@ import { COIN_META, cryptoQuotesFromPayload, normalizeCoinIds } from "../../shar
 
 import { fail, isTimeout, json, query, upstreamGet, type NetlifyEvent, type NetlifyResult } from "./_market";
 
+/**
+ * SPENDLY-714: CoinGecko's keyless API answers 429 to Cloudflare's shared
+ * addresses, so the Cloudflare web backup sends a (free) Demo API key when
+ * `COINGECKO_API_KEY` is set. Without it the request is exactly as before.
+ */
+function coingeckoHeaders(): Record<string, string> {
+  const key = (process.env.COINGECKO_API_KEY ?? "").trim();
+  return key ? { "x-cg-demo-api-key": key } : {};
+}
+
 /** GET /api/crypto?ids=bitcoin,ethereum (SPENDLY-522; was on the legacy site). */
 export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
   if (event.httpMethod && event.httpMethod !== "GET") return fail(405, "Use GET.");
@@ -16,7 +26,7 @@ export async function handler(event: NetlifyEvent): Promise<NetlifyResult> {
     "&vs_currencies=inr&include_market_cap=true&include_24hr_change=true&include_last_updated_at=true";
 
   try {
-    const res = await upstreamGet(url);
+    const res = await upstreamGet(url, coingeckoHeaders());
     if (res.status === 429) {
       return fail(429, "Crypto price service is rate-limited. Please try again shortly.");
     }

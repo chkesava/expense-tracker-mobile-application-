@@ -29,6 +29,8 @@ const PEM_KEY = /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----(?:\\n|\\r|\s)*[A-Za-z0
 function secretValues(env) {
   const values = [];
   if ((env.GEMINI_API_KEY || '').trim().length >= 16) values.push(['GEMINI_API_KEY', env.GEMINI_API_KEY.trim()]);
+  // SPENDLY-714: the CoinGecko Demo key is server-side too.
+  if ((env.COINGECKO_API_KEY || '').trim().length >= 16) values.push(['COINGECKO_API_KEY', env.COINGECKO_API_KEY.trim()]);
   if (env.FIREBASE_SERVICE_ACCOUNT) {
     let account = null;
     try {

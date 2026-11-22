@@ -120,6 +120,22 @@ describe("crypto", () => {
     expect(body(res)).toMatchObject({ success: true, quotes: [{ coinId: "bitcoin", symbol: "BTC", price: 5000000 }] });
   });
 
+  it("sends the CoinGecko Demo key only when COINGECKO_API_KEY is set (SPENDLY-714)", async () => {
+    const fetchMock = vi.fn(async () => upstream({ bitcoin: { inr: 5000000 } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const headersOf = (call: number) => ((fetchMock.mock.calls[call] as unknown[])[1] as { headers: Record<string, string> }).headers;
+
+    vi.stubEnv("COINGECKO_API_KEY", "");
+    await crypto(get({ ids: "bitcoin" }));
+    expect(headersOf(0)["x-cg-demo-api-key"]).toBeUndefined();
+
+    vi.stubEnv("COINGECKO_API_KEY", " CG-demo-key ");
+    await crypto(get({ ids: "bitcoin" }));
+    expect(headersOf(1)["x-cg-demo-api-key"]).toBe("CG-demo-key");
+    expect(headersOf(1).Accept).toBe("application/json");
+    vi.unstubAllEnvs();
+  });
+
   it("passes a CoinGecko rate limit through as 429", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => upstream({}, 429)));
     expect((await crypto(get({ ids: "bitcoin" }))).statusCode).toBe(429);

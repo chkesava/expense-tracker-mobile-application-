@@ -56,6 +56,13 @@ describe("check-backup-secrets", () => {
     ]);
   });
 
+  it("stops the CoinGecko key anywhere (SPENDLY-714)", () => {
+    const env = { COINGECKO_API_KEY: "CG-FakeDemoKeyForTests0000" };
+    expect(findLeaks([{ name: "expense/_expo/x.js", content: `"${env.COINGECKO_API_KEY}"` }], env)).toEqual([
+      { file: "expense/_expo/x.js", kind: "COINGECKO_API_KEY" },
+    ]);
+  });
+
   it("never reports the secret itself", () => {
     const leaks = findLeaks([{ name: "_worker.js", content: ENV.GEMINI_API_KEY! }], ENV);
     expect(JSON.stringify(leaks)).not.toContain(ENV.GEMINI_API_KEY);
