@@ -93,7 +93,13 @@ const ACCOUNT_TYPES = {
 const ACCOUNTS = [
   ['bank', 'HDFC Savings', 'bank', 'bank', { openingBalance: 185000, last4: '4821' }],
   ['salary', 'ICICI Salary Account', 'salary', 'bank', { openingBalance: 0, last4: '5521' }],
-  ['cash', 'Cash Wallet', 'cash', 'cash', { openingBalance: 6000, last4: '' }],
+  ['cash', 'Cash Wallet', 'cash', 'cash', {
+    openingBalance: 6000,
+    last4: '',
+    // SPENDLY: demo note count for the Cash Denominations feature. Deliberately
+    // totals less than the account's balance so QA sees the mismatch hint too.
+    cashDenominations: { '500': 2, '200': 3, '100': 5, '50': 4, '20': 5, '10': 10 },
+  }],
   ['wallet', 'PhonePe Wallet', 'wallet', 'wallet', { openingBalance: 12000, last4: '' }],
   ['card', 'HDFC Regalia Credit Card', 'credit', 'credit_card', { creditLimit: 250000, billGenerationDay: 15, last4: '9034' }],
   ['shopping', 'Amazon Pay ICICI Card', 'credit', 'credit_card', { creditLimit: 120000, billGenerationDay: 5, last4: '7716' }],
@@ -161,6 +167,7 @@ function buildDemoData(today = new Date(), { months = 3 } = {}) {
       ...(extra.creditLimit !== undefined
         ? { creditLimit: extra.creditLimit, billGenerationDay: extra.billGenerationDay }
         : {}),
+      ...(extra.cashDenominations ? { cashDenominations: extra.cashDenominations } : {}),
       createdAt: baselineDate,
     },
   }));
