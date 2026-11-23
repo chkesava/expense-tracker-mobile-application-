@@ -163,7 +163,8 @@ import {
   summarizeAccountMonth,
 } from "@/shared/utils/accountMonthSummary";
 import { effectiveBalanceAsOfDate } from "@/shared/utils/accountBaseline";
-import { getAccountKind } from "@/shared/utils/accountKind";
+import { canonicalAccountTypeId, getAccountKind } from "@/shared/utils/accountKind";
+import { CashDenominationCard } from "@/components/accounts/CashDenominationCard";
 import {
   accountKindSubtitle,
   activitySubtypeLabel,
@@ -316,6 +317,7 @@ export default function AccountDetailScreen() {
   }, [account, typeMap]);
 
   const isCreditCard = getAccountKind(typeName) === "credit";
+  const isCash = canonicalAccountTypeId(typeName) === "cash";
   const currency = displayCurrency;
 
   const bankBalance = useMemo(() => {
@@ -1326,6 +1328,15 @@ export default function AccountDetailScreen() {
             heldForOthers={heldForOthers}
           />
         )}
+
+        {isCash ? (
+          <CashDenominationCard
+            denominations={account.cashDenominations}
+            currency={currency}
+            balance={bankBalance}
+            onEdit={() => setIsEditModalOpen(true)}
+          />
+        ) : null}
 
         {isCreditCard ? (
           <>

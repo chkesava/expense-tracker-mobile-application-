@@ -613,13 +613,16 @@ export function EditAccountModal({
             {denominationHasEntries ? (
               <Text
                 style={{
-                  color: theme.colors.mutedForeground,
+                  color: denominationMismatch
+                    ? theme.colors.destructive
+                    : theme.colors.mutedForeground,
                   fontSize: theme.typography.xs,
+                  fontWeight: denominationMismatch ? "700" : "400",
                 }}
               >
                 {`Counted total: ₹${denominationTotal.toLocaleString("en-IN")}`}
                 {denominationMismatch
-                  ? ` — doesn't match the account balance (₹${denominationBalance.toLocaleString("en-IN")}).`
+                  ? ` — doesn't match the account balance (₹${denominationBalance.toLocaleString("en-IN")}). This won't block saving.`
                   : ""}
               </Text>
             ) : null}
