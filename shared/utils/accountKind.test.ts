@@ -19,6 +19,8 @@ describe("accountKind", () => {
     expect(getAccountKind("Savings")).toBe("bank");
     expect(getAccountKind("Checking")).toBe("bank");
     expect(getAccountKind("Debit card")).toBe("bank");
+    expect(getAccountKind("Salary Account")).toBe("bank");
+    expect(getAccountKind("Sallery account")).toBe("bank");
     expect(isBankAccount("Savings")).toBe(true);
   });
 

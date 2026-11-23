@@ -7,7 +7,9 @@ export function getAccountKind(typeName: string): AccountKind {
     n.includes("bank") ||
     n.includes("saving") ||
     n.includes("checking") ||
-    n.includes("debit")
+    n.includes("debit") ||
+    n.includes("salary") ||
+    n.includes("sallery")
   ) {
     return "bank";
   }

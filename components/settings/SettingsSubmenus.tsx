@@ -43,6 +43,11 @@ import { useSaveGoalsEnabled } from "@/hooks/useSaveGoalsEnabled";
 import { useUnlockedGoalIds } from "@/lib/goalLockSession";
 import { isGoalInProgress, parseGoalAmount } from "@/shared/utils/goalModel";
 import { useAccountTypes } from "@/hooks/useAccountTypes";
+import {
+  ACCOUNT_TYPE_CATALOG,
+  matchCatalogEntry,
+} from "@/shared/data/accountTypeCatalog";
+import { getAccountTypeIcon } from "@/components/accounts/accountTypeIcons";
 import { useAccounts } from "@/hooks/useAccounts";
 import { CategoryPicker } from "@/components/categories/CategoryPicker";
 import {
@@ -779,12 +784,27 @@ export function AccountTypesManager() {
   const surfaces = useSurfaces();
   const { accountTypes, addAccountType, deleteAccountType } = useAccountTypes();
   const [newType, setNewType] = useState("");
+  const [showCustomInput, setShowCustomInput] = useState(false);
 
-  const handleAdd = () => {
+  const addedCatalogIds = useMemo(
+    () => new Set(accountTypes.map((t) => matchCatalogEntry(t.name).id)),
+    [accountTypes]
+  );
+  const availableCatalogEntries = ACCOUNT_TYPE_CATALOG.filter(
+    (entry) => entry.id !== "other" && !addedCatalogIds.has(entry.id)
+  );
+
+  const handleAddCatalogEntry = (label: string) => {
+    haptic.medium().catch(() => undefined);
+    void addAccountType(label);
+  };
+
+  const handleAddCustom = () => {
     if (!newType.trim()) return;
     haptic.medium().catch(() => undefined);
     void addAccountType(newType.trim());
     setNewType("");
+    setShowCustomInput(false);
   };
 
   const handleDelete = (id?: string) => {
@@ -800,23 +820,76 @@ export function AccountTypesManager() {
       icon={Wallet}
     >
       <View style={{ gap: 14 }}>
-        <View style={{ flexDirection: "row", gap: 10, alignItems: "flex-end" }}>
-          <View style={{ flex: 1 }}>
-            <Input
-              label="New Account Type"
-              placeholder="e.g. Bank, Credit Card, Cash, Crypto"
-              value={newType}
-              onChangeText={setNewType}
-            />
+        {availableCatalogEntries.length > 0 ? (
+          <View style={{ gap: 8 }}>
+            <Text
+              style={{
+                color: theme.colors.mutedForeground,
+                fontSize: 13,
+                fontWeight: "600",
+              }}
+            >
+              Tap to add a type
+            </Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              {availableCatalogEntries.map((entry) => {
+                const Icon = getAccountTypeIcon(entry.iconName);
+                return (
+                  <Pressable
+                    key={entry.id}
+                    onPress={() => handleAddCatalogEntry(entry.label)}
+                    style={[
+                      styles.catalogChip,
+                      {
+                        backgroundColor: surfaces.control,
+                        borderColor: theme.colors.border,
+                      },
+                    ]}
+                  >
+                    <Icon size={16} color={theme.colors.foreground} />
+                    <Text
+                      style={{
+                        color: theme.colors.foreground,
+                        fontWeight: "700",
+                        fontSize: 13,
+                      }}
+                    >
+                      {entry.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
+        ) : null}
+
+        {showCustomInput ? (
+          <View style={{ flexDirection: "row", gap: 10, alignItems: "flex-end" }}>
+            <View style={{ flex: 1 }}>
+              <Input
+                label="Custom Account Type"
+                placeholder="e.g. Crypto"
+                value={newType}
+                onChangeText={setNewType}
+              />
+            </View>
+            <Button
+              onPress={handleAddCustom}
+              disabled={!newType.trim()}
+              style={{ height: 48, paddingHorizontal: 20, borderRadius: 12 }}
+            >
+              Add
+            </Button>
+          </View>
+        ) : (
           <Button
-            onPress={handleAdd}
-            disabled={!newType.trim()}
-            style={{ height: 48, paddingHorizontal: 20, borderRadius: 12 }}
+            variant="outline"
+            onPress={() => setShowCustomInput(true)}
+            style={{ alignSelf: "flex-start" }}
           >
-            Add
+            Other (custom type)
           </Button>
-        </View>
+        )}
 
         <View style={{ gap: 8, marginTop: 8 }}>
           {accountTypes.length === 0 ? (
@@ -832,33 +905,47 @@ export function AccountTypesManager() {
               No custom account types.
             </Text>
           ) : (
-            accountTypes.map((t) => (
-              <View
-                key={t.id}
-                style={[
-                  styles.itemCard,
-                  {
-                    backgroundColor: surfaces.tile,
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-              >
-                <Text style={{ color: theme.colors.foreground, fontWeight: "700", fontSize: 15 }}>
-                  {t.name}
-                </Text>
-
-                {/* 48x48dp Touch Target Delete Button */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onPress={() => handleDelete(t.id)}
-                  accessibilityLabel={`Delete account type ${t.name}`}
-                  style={styles.touchActionBtn}
+            accountTypes.map((t) => {
+              const Icon = getAccountTypeIcon(matchCatalogEntry(t.name).iconName);
+              return (
+                <View
+                  key={t.id}
+                  style={[
+                    styles.itemCard,
+                    {
+                      backgroundColor: surfaces.tile,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}
                 >
-                  <Trash2 size={18} color={theme.colors.destructive} />
-                </Button>
-              </View>
-            ))
+                  <View
+                    style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+                  >
+                    <Icon size={18} color={theme.colors.mutedForeground} />
+                    <Text
+                      style={{
+                        color: theme.colors.foreground,
+                        fontWeight: "700",
+                        fontSize: 15,
+                      }}
+                    >
+                      {t.name}
+                    </Text>
+                  </View>
+
+                  {/* 48x48dp Touch Target Delete Button */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onPress={() => handleDelete(t.id)}
+                    accessibilityLabel={`Delete account type ${t.name}`}
+                    style={styles.touchActionBtn}
+                  >
+                    <Trash2 size={18} color={theme.colors.destructive} />
+                  </Button>
+                </View>
+              );
+            })
           )}
         </View>
       </View>
@@ -1086,6 +1173,15 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     minHeight: 56,
+  },
+  catalogChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
   },
   itemCard: {
     flexDirection: "row",

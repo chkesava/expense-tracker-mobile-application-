@@ -35,6 +35,8 @@ import {
   suggestedAccountDisplayName,
 } from "@/shared/utils/accountIdentity";
 import { canonicalAccountTypeId, getAccountKind } from "@/shared/utils/accountKind";
+import { matchCatalogEntry } from "@/shared/data/accountTypeCatalog";
+import { getAccountTypeIcon } from "@/components/accounts/accountTypeIcons";
 import { effectiveBalanceAsOfDate } from "@/shared/utils/accountBaseline";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -341,6 +343,7 @@ export function EditAccountModal({
           <View style={[{ gap: 8 }, styles.chipWrap]}>
             {accountTypes.map((t) => {
               const isSelected = typeId === t.id;
+              const Icon = getAccountTypeIcon(matchCatalogEntry(t.name).iconName);
               return (
                 <Pressable
                   key={t.id}
@@ -361,6 +364,9 @@ export function EditAccountModal({
                   style={[
                     styles.typePill,
                     {
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
                       backgroundColor: isSelected
                         ? theme.colors.primary
                         : surfaces.control,
@@ -370,6 +376,14 @@ export function EditAccountModal({
                     },
                   ]}
                 >
+                  <Icon
+                    size={14}
+                    color={
+                      isSelected
+                        ? theme.colors.primaryForeground
+                        : theme.colors.foreground
+                    }
+                  />
                   <Text
                     style={[
                       styles.typePillText,
