@@ -115,6 +115,8 @@ export interface Account {
   billGenerationDay?: number;
   creditLimit?: number;
   openingBalance?: number;
+  /** Cash-only: physical note count by denomination. Informational — never feeds balance math. */
+  cashDenominations?: Partial<Record<"500" | "200" | "100" | "50" | "20" | "10", number>>;
   balanceInitialized?: boolean;
   balanceAsOfDate?: string | null;
   

@@ -7,7 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { Check, CreditCard } from "lucide-react-native";
+import { Banknote, Check, CreditCard } from "lucide-react-native";
 
 import { InstitutionSearchField } from "@/components/accounts/InstitutionSearchField";
 import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
@@ -36,6 +36,10 @@ import {
 } from "@/shared/utils/accountIdentity";
 import { canonicalAccountTypeId, getAccountKind } from "@/shared/utils/accountKind";
 import { matchCatalogEntry } from "@/shared/data/accountTypeCatalog";
+import {
+  CASH_DENOMINATIONS,
+  cashDenominationTotal,
+} from "@/shared/utils/cashDenominations";
 import { getAccountTypeIcon } from "@/components/accounts/accountTypeIcons";
 import { effectiveBalanceAsOfDate } from "@/shared/utils/accountBaseline";
 import { formatDateKey } from "@/shared/utils/dates";
@@ -79,6 +83,7 @@ export function EditAccountModal({
   const [creditLimit, setCreditLimit] = useState("");
   const [billGenerationDay, setBillGenerationDay] = useState("");
   const [color, setColor] = useState<string>(ACCOUNT_COLORS[0]);
+  const [denominations, setDenominations] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -121,6 +126,17 @@ export function EditAccountModal({
           : ""
       );
       setColor(account.color || ACCOUNT_COLORS[0]);
+      const counts = account.cashDenominations || {};
+      setDenominations(
+        Object.fromEntries(
+          CASH_DENOMINATIONS.map((d) => [
+            String(d),
+            counts[String(d) as keyof typeof counts]
+              ? String(counts[String(d) as keyof typeof counts])
+              : "",
+          ])
+        )
+      );
     } else {
       setName("");
       setDisplayNameTouched(false);
@@ -132,6 +148,7 @@ export function EditAccountModal({
       setCreditLimit("");
       setBillGenerationDay("");
       setColor(ACCOUNT_COLORS[0]);
+      setDenominations({});
     }
   }, [account, accountTypes, isOpen]);
 
@@ -142,12 +159,28 @@ export function EditAccountModal({
 
   const accountTypeId = canonicalAccountTypeId(selectedTypeName);
   const isCreditCard = getAccountKind(selectedTypeName) === "credit";
+  const isCash = accountTypeId === "cash";
   const needsInstitution = requiresCatalogInstitution(accountTypeId);
   const catalogInstitution = getInstitutionById(institutionId);
   const suggestedName = suggestedAccountDisplayName(
     catalogInstitution,
     accountTypeId
   );
+
+  const denominationTotal = useMemo(() => {
+    const counts = Object.fromEntries(
+      Object.entries(denominations).map(([key, value]) => [key, Number(value) || 0])
+    );
+    return cashDenominationTotal(counts);
+  }, [denominations]);
+  const denominationHasEntries = Object.values(denominations).some(
+    (value) => (Number(value) || 0) > 0
+  );
+  const denominationBalance = isEditing
+    ? (account?.currentBalance ?? account?.openingBalance ?? 0)
+    : parseFloat(openingBalance) || 0;
+  const denominationMismatch =
+    isCash && denominationHasEntries && denominationTotal !== denominationBalance;
 
   const linkedStats = useMemo(() => {
     if (!account?.id) return { total: 0, countExp: 0, countInc: 0 };
@@ -219,6 +252,13 @@ export function EditAccountModal({
 
       const trimmedBaseline = balanceAsOfDate.trim();
       const last4 = normalizeLast4(accountNumber);
+      const parsedDenominations = isCash
+        ? Object.fromEntries(
+            CASH_DENOMINATIONS.map(
+              (d): [string, number] => [String(d), Number(denominations[String(d)]) || 0]
+            ).filter(([, count]) => count > 0)
+          )
+        : undefined;
       const extras: Partial<Account> & { balanceAsOfDate?: string | null } = {
         openingBalance: parsedOpening,
         balanceAsOfDate: trimmedBaseline || null,
@@ -230,6 +270,7 @@ export function EditAccountModal({
         creditLimit: parsedLimit,
         billGenerationDay: parsedBillDay,
         color,
+        ...(parsedDenominations ? { cashDenominations: parsedDenominations } : {}),
       };
 
       if (isEditing && account?.id) {
@@ -522,6 +563,66 @@ export function EditAccountModal({
                 helperText="Spend from the previous generation date through this date is billed. A 21st statement covers last month's 21st through this month's 21st."
               />
             </View>
+          </View>
+        ) : null}
+
+        {isCash ? (
+          <View style={[styles.creditCardBox, { borderColor: theme.colors.border }]}>
+            <View style={styles.creditHeader}>
+              <Banknote size={18} color={theme.colors.primary} />
+              <Text
+                style={{
+                  fontWeight: "700",
+                  fontSize: theme.typography.sm,
+                  color: theme.colors.foreground,
+                }}
+              >
+                Cash Denominations
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+              {CASH_DENOMINATIONS.map((d) => (
+                <View key={d} style={{ width: "30%", gap: 4 }}>
+                  <Text
+                    style={[
+                      styles.label,
+                      {
+                        color: theme.colors.foreground,
+                        fontSize: theme.typography.xs,
+                      },
+                    ]}
+                  >
+                    {`₹${d}`}
+                  </Text>
+                  <Input
+                    value={denominations[String(d)] ?? ""}
+                    onChangeText={(value) =>
+                      setDenominations((prev) => ({
+                        ...prev,
+                        [String(d)]: value.replace(/\D/g, ""),
+                      }))
+                    }
+                    keyboardType="number-pad"
+                    placeholder="0"
+                  />
+                </View>
+              ))}
+            </View>
+
+            {denominationHasEntries ? (
+              <Text
+                style={{
+                  color: theme.colors.mutedForeground,
+                  fontSize: theme.typography.xs,
+                }}
+              >
+                {`Counted total: ₹${denominationTotal.toLocaleString("en-IN")}`}
+                {denominationMismatch
+                  ? ` — doesn't match the account balance (₹${denominationBalance.toLocaleString("en-IN")}).`
+                  : ""}
+              </Text>
+            ) : null}
           </View>
         ) : null}
 

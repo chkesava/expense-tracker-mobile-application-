@@ -22,6 +22,7 @@ const ACCOUNT_EXTRA_KEYS = [
   "institutionType",
   "accountTypeId",
   "last4",
+  "cashDenominations",
 ] as const;
 
 export function normalizeLast4(raw?: string | null): string | undefined {
