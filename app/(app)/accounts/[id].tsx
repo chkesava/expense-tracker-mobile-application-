@@ -193,6 +193,14 @@ const EMPTY_ACTIVITIES: AccountActivity[] = [];
 
 export default function AccountDetailScreen() {
   const router = useRouter();
+  // A direct link/refresh (e.g. pasting /accounts/<id> into the browser) has
+  // no prior screen in the router's own history, so an unconditional
+  // router.back() throws "The action 'GO_BACK' was not handled" — same guard
+  // transactions/[id].tsx and recurring/[id].tsx already use.
+  const goBack = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace("/ledger" as Href);
+  }, [router]);
   const listPaddingBottom = usePageListBottomPadding();
   const { width } = useWindowDimensions();
   const compact = width < WIDE_ROW_BREAKPOINT;
@@ -1228,7 +1236,7 @@ export default function AccountDetailScreen() {
         <AccountHeader
           title="Account"
           subtitle=""
-          onBack={() => router.back()}
+          onBack={goBack}
         />
         <View style={styles.missing}>
           {accountsError ? (
@@ -1249,7 +1257,7 @@ export default function AccountDetailScreen() {
               >
                 Account not found
               </Text>
-              <Pressable onPress={() => router.back()} style={{ marginTop: 12 }}>
+              <Pressable onPress={goBack} style={{ marginTop: 12 }}>
                 <Text
                   style={{
                     fontSize: theme.typography.sm,
@@ -1557,7 +1565,7 @@ export default function AccountDetailScreen() {
         }
         variant={isCreditCard ? "credit" : "default"}
         accentColor={account.color}
-        onBack={() => router.back()}
+        onBack={goBack}
         onEdit={() => {
           haptic.light().catch(() => undefined);
           setIsEditModalOpen(true);
