@@ -22,6 +22,7 @@ const ACCOUNT_EXTRA_KEYS = [
   "institutionType",
   "accountTypeId",
   "last4",
+  "cashDenominations",
   // SPENDLY-794: card autopay link (null clears it).
   "autopayFromAccountId",
   "autopayAmountMode",

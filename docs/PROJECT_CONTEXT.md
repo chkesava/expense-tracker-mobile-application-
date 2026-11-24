@@ -151,6 +151,8 @@ Read `docs/PUSH_DEVELOPER_GUIDE.md` before adding one. Operations are in `docs/P
       3. job dry run, then `AUTODEBIT_DAILY_ENABLED`, then the Worker redeploy;
       4. app release;
       5. push dry run.
+  - **Account type catalog, cash denominations, daily FD interest crediting** (ad hoc, no epic): PR #313 on branch `feature/account-types-catalog`, CI green. Centralized account-type picker replaces free-text; Cash accounts get a note-count breakdown (informational, never overwrites the real balance); `fd-interest-daily` (new, disabled by default via `FD_INTEREST_DAILY_ENABLED`) credits each compound FD's daily growth into a per-day log (`investments/{id}/interestCredits/{date}`), calling the same `computeInterestValuation` the app's live estimate already uses. Needs the Supabase migration `20261124000000_readmodel_fd_interest_credits.sql`, the Firestore rules/indexes, and the GH Actions var before it can run live; the workflow currently only supports `workflow_dispatch` (no cron wired up yet).
+    - **SPENDLY-800 (follow-up, not blocking):** the daily-job read budget can be starved by `listOwners()`'s own discovery query before any owner is processed — same shape already shipped in `autodebit-daily.ts`, so it's a shared-pattern redesign (`scripts/lib/dailyJobCore.ts`), not a one-off fix.
   - **SPENDLY-625 price alerts:** planned, not started.
   - **SPENDLY-633 native Firestore cache:** done; Nutrition and Ganesh releases pending.
 - **Push rollout:** testers are enabled. "Everyone" (C4b) waits on tester QA. Local reminders stand down in push mode (SPENDLY-746).

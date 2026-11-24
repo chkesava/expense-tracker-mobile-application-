@@ -67,7 +67,7 @@ const EXPENSE_TEMPLATES = [
   ['Food & Groceries', 'Vegetables', 'Vegetables', 150, 450, 6, 'cash'],
   ['Food & Groceries', 'Milk & Dairy', 'Milk', 60, 120, 8, 'cash'],
   ['Food & Groceries', 'Restaurants & Dining', 'Dinner out', 700, 2400, 3, 'card'],
-  ['Food & Groceries', 'Food Delivery', 'Swiggy order', 250, 750, 5, 'card'],
+  ['Food & Groceries', 'Food Delivery', 'Swiggy order', 250, 750, 5, 'wallet'],
   ['Transport & Vehicles', 'Petrol', 'Petrol', 1200, 2500, 2, 'card'],
   ['Transport & Vehicles', 'Cab / Taxi', 'Cab ride', 180, 520, 4, 'bank'],
   ['Transport & Vehicles', 'Metro', 'Metro card top-up', 200, 500, 1, 'bank'],
@@ -83,14 +83,24 @@ const EXPENSE_TEMPLATES = [
 
 const ACCOUNT_TYPES = {
   bank: 'Bank Account',
+  salary: 'Salary Account',
   cash: 'Cash Wallet',
+  wallet: 'UPI/Wallet',
   credit: 'Credit Card',
 };
 
 /** [key, name, typeKey, accountTypeId, extra] */
 const ACCOUNTS = [
   ['bank', 'HDFC Savings', 'bank', 'bank', { openingBalance: 185000, last4: '4821' }],
-  ['cash', 'Cash Wallet', 'cash', 'cash', { openingBalance: 6000, last4: '' }],
+  ['salary', 'ICICI Salary Account', 'salary', 'bank', { openingBalance: 0, last4: '5521' }],
+  ['cash', 'Cash Wallet', 'cash', 'cash', {
+    openingBalance: 6000,
+    last4: '',
+    // SPENDLY: demo note count for the Cash Denominations feature. Deliberately
+    // totals less than the account's balance so QA sees the mismatch hint too.
+    cashDenominations: { '500': 2, '200': 3, '100': 5, '50': 4, '20': 5, '10': 10 },
+  }],
+  ['wallet', 'PhonePe Wallet', 'wallet', 'wallet', { openingBalance: 12000, last4: '' }],
   ['card', 'HDFC Regalia Credit Card', 'credit', 'credit_card', { creditLimit: 250000, billGenerationDay: 15, last4: '9034' }],
   ['shopping', 'Amazon Pay ICICI Card', 'credit', 'credit_card', { creditLimit: 120000, billGenerationDay: 5, last4: '7716' }],
 ];
@@ -157,6 +167,7 @@ function buildDemoData(today = new Date(), { months = 3 } = {}) {
       ...(extra.creditLimit !== undefined
         ? { creditLimit: extra.creditLimit, billGenerationDay: extra.billGenerationDay }
         : {}),
+      ...(extra.cashDenominations ? { cashDenominations: extra.cashDenominations } : {}),
       createdAt: baselineDate,
     },
   }));
@@ -176,7 +187,7 @@ function buildDemoData(today = new Date(), { months = 3 } = {}) {
         source: 'Salary',
         date: ymd(monthStart),
         month: ym(monthStart),
-        accountId: accountId('bank'),
+        accountId: accountId('salary'),
         note: 'SALARY ACME TECHNOLOGIES INDIA PVT LTD',
         createdAt: new Date(monthStart.getTime() + 10 * 3600 * 1000),
       },
@@ -480,7 +491,7 @@ function buildDemoData(today = new Date(), { months = 3 } = {}) {
         primaryEmployer: 'Acme Technologies India Pvt Ltd',
         expectedPaydayWindow: { startDay: 28, endDay: 31 },
         frequency: 'monthly',
-        primaryAccountId: accountId('bank'),
+        primaryAccountId: accountId('salary'),
         notificationEnabled: true,
         notes: 'Monthly direct deposit salary',
         schemaVersion: 1,
@@ -523,7 +534,7 @@ function buildDemoData(today = new Date(), { months = 3 } = {}) {
         currency: 'INR',
         paymentDate: payDateStr,
         transactionId: `inc-${monthStr}-salary`,
-        accountId: accountId('bank'),
+        accountId: accountId('salary'),
         type: 'regular',
         status: 'confirmed',
         confidence: 'high',

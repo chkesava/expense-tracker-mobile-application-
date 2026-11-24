@@ -166,7 +166,8 @@ import {
   summarizeAccountMonth,
 } from "@/shared/utils/accountMonthSummary";
 import { effectiveBalanceAsOfDate } from "@/shared/utils/accountBaseline";
-import { getAccountKind } from "@/shared/utils/accountKind";
+import { canonicalAccountTypeId, getAccountKind } from "@/shared/utils/accountKind";
+import { CashDenominationCard } from "@/components/accounts/CashDenominationCard";
 import {
   accountKindSubtitle,
   activitySubtypeLabel,
@@ -195,6 +196,14 @@ const EMPTY_ACTIVITIES: AccountActivity[] = [];
 
 export default function AccountDetailScreen() {
   const router = useRouter();
+  // A direct link/refresh (e.g. pasting /accounts/<id> into the browser) has
+  // no prior screen in the router's own history, so an unconditional
+  // router.back() throws "The action 'GO_BACK' was not handled" — same guard
+  // transactions/[id].tsx and recurring/[id].tsx already use.
+  const goBack = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace("/ledger" as Href);
+  }, [router]);
   const listPaddingBottom = usePageListBottomPadding();
   const { width } = useWindowDimensions();
   const compact = width < WIDE_ROW_BREAKPOINT;
@@ -319,6 +328,7 @@ export default function AccountDetailScreen() {
   }, [account, typeMap]);
 
   const isCreditCard = getAccountKind(typeName) === "credit";
+  const isCash = canonicalAccountTypeId(typeName) === "cash";
   const currency = displayCurrency;
 
   const bankBalance = useMemo(() => {
@@ -1232,7 +1242,7 @@ export default function AccountDetailScreen() {
         <AccountHeader
           title="Account"
           subtitle=""
-          onBack={() => router.back()}
+          onBack={goBack}
         />
         <View style={styles.missing}>
           {accountsError ? (
@@ -1253,7 +1263,7 @@ export default function AccountDetailScreen() {
               >
                 Account not found
               </Text>
-              <Pressable onPress={() => router.back()} style={{ marginTop: 12 }}>
+              <Pressable onPress={goBack} style={{ marginTop: 12 }}>
                 <Text
                   style={{
                     fontSize: theme.typography.sm,
@@ -1346,6 +1356,14 @@ export default function AccountDetailScreen() {
             heldForOthers={heldForOthers}
           />
         )}
+
+        {isCash ? (
+          <CashDenominationCard
+            denominations={account.cashDenominations}
+            balance={bankBalance}
+            onEdit={() => setIsEditModalOpen(true)}
+          />
+        ) : null}
 
         {isCreditCard ? (
           <>
@@ -1566,7 +1584,7 @@ export default function AccountDetailScreen() {
         }
         variant={isCreditCard ? "credit" : "default"}
         accentColor={account.color}
-        onBack={() => router.back()}
+        onBack={goBack}
         onEdit={() => {
           haptic.light().catch(() => undefined);
           setIsEditModalOpen(true);

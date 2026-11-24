@@ -384,6 +384,19 @@ export const READ_MODEL_TABLES: TableSpec[] = [
       f("closed_date", "closedDate", "date"),
     ],
   },
+  // SPENDLY: fd-interest-daily's per-day credit log (server-only writes).
+  {
+    table: "investment_interest_credits",
+    collection: "investments/interestCredits",
+    parent: { collection: "investments", child: "interestCredits", column: "investment_id" },
+    fields: [
+      f("date", "date", "date"),
+      f("amount", "amount", "money"),
+      f("balance_after", "balanceAfter", "money"),
+      f("created_at", "createdAt", "timestamp"),
+      f("updated_at", "updatedAt", "timestamp"),
+    ],
+  },
   {
     table: "holdings",
     collection: "holdings",

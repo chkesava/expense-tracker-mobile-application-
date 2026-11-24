@@ -30,6 +30,8 @@ export interface Investment {
   status: InvestmentStatus;
   closedDate?: string;
   createdAt?: unknown;
+  /** SPENDLY: last date the fd-interest-daily job credited this FD's compounding interest. */
+  lastInterestCreditedDate?: string;
 }
 
 export type InterestCreditEvent = {

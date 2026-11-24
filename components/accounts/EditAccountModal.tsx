@@ -7,7 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { Check, CreditCard } from "lucide-react-native";
+import { Banknote, Check, CreditCard } from "lucide-react-native";
 
 import { InstitutionSearchField } from "@/components/accounts/InstitutionSearchField";
 import { CurrencyPrefix } from "@/components/common/CurrencyPrefix";
@@ -35,6 +35,12 @@ import {
   suggestedAccountDisplayName,
 } from "@/shared/utils/accountIdentity";
 import { canonicalAccountTypeId, getAccountKind } from "@/shared/utils/accountKind";
+import { matchCatalogEntry } from "@/shared/data/accountTypeCatalog";
+import {
+  CASH_DENOMINATIONS,
+  cashDenominationTotal,
+} from "@/shared/utils/cashDenominations";
+import { getAccountTypeIcon } from "@/components/accounts/accountTypeIcons";
 import { effectiveBalanceAsOfDate } from "@/shared/utils/accountBaseline";
 import { formatDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -82,6 +88,7 @@ export function EditAccountModal({
   const [creditLimit, setCreditLimit] = useState("");
   const [billGenerationDay, setBillGenerationDay] = useState("");
   const [color, setColor] = useState<string>(ACCOUNT_COLORS[0]);
+  const [denominations, setDenominations] = useState<Record<string, string>>({});
   // SPENDLY-798: card autopay. Alerts only; Spendly never pays the bill.
   const [autopayFrom, setAutopayFrom] = useState("");
   const [autopayMode, setAutopayMode] = useState<AutopayAmountMode>("total");
@@ -128,6 +135,17 @@ export function EditAccountModal({
           : ""
       );
       setColor(account.color || ACCOUNT_COLORS[0]);
+      const counts = account.cashDenominations || {};
+      setDenominations(
+        Object.fromEntries(
+          CASH_DENOMINATIONS.map((d) => [
+            String(d),
+            counts[String(d) as keyof typeof counts]
+              ? String(counts[String(d) as keyof typeof counts])
+              : "",
+          ])
+        )
+      );
       setAutopayFrom(account.autopayFromAccountId || "");
       setAutopayMode(isAutopayAmountMode(account.autopayAmountMode) ? account.autopayAmountMode : "total");
       setAutopayLeadDays(isValidLeadDays(account.autopayLeadDays) ? account.autopayLeadDays : null);
@@ -142,6 +160,7 @@ export function EditAccountModal({
       setCreditLimit("");
       setBillGenerationDay("");
       setColor(ACCOUNT_COLORS[0]);
+      setDenominations({});
       setAutopayFrom("");
       setAutopayMode("total");
       setAutopayLeadDays(null);
@@ -155,6 +174,7 @@ export function EditAccountModal({
 
   const accountTypeId = canonicalAccountTypeId(selectedTypeName);
   const isCreditCard = getAccountKind(selectedTypeName) === "credit";
+  const isCash = accountTypeId === "cash";
   // Accounts a card's autopay can debit: anything but a card, never this one.
   const payingAccounts = useMemo(
     () =>
@@ -171,6 +191,21 @@ export function EditAccountModal({
     catalogInstitution,
     accountTypeId
   );
+
+  const denominationTotal = useMemo(() => {
+    const counts = Object.fromEntries(
+      Object.entries(denominations).map(([key, value]) => [key, Number(value) || 0])
+    );
+    return cashDenominationTotal(counts);
+  }, [denominations]);
+  const denominationHasEntries = Object.values(denominations).some(
+    (value) => (Number(value) || 0) > 0
+  );
+  const denominationBalance = isEditing
+    ? (account?.currentBalance ?? account?.openingBalance ?? 0)
+    : parseFloat(openingBalance) || 0;
+  const denominationMismatch =
+    isCash && denominationHasEntries && denominationTotal !== denominationBalance;
 
   const linkedStats = useMemo(() => {
     if (!account?.id) return { total: 0, countExp: 0, countInc: 0 };
@@ -242,6 +277,13 @@ export function EditAccountModal({
 
       const trimmedBaseline = balanceAsOfDate.trim();
       const last4 = normalizeLast4(accountNumber);
+      const parsedDenominations = isCash
+        ? Object.fromEntries(
+            CASH_DENOMINATIONS.map(
+              (d): [string, number] => [String(d), Number(denominations[String(d)]) || 0]
+            ).filter(([, count]) => count > 0)
+          )
+        : undefined;
       const extras: Partial<Account> & { balanceAsOfDate?: string | null } = {
         openingBalance: parsedOpening,
         balanceAsOfDate: trimmedBaseline || null,
@@ -253,6 +295,7 @@ export function EditAccountModal({
         creditLimit: parsedLimit,
         billGenerationDay: parsedBillDay,
         color,
+        ...(parsedDenominations ? { cashDenominations: parsedDenominations } : {}),
         // SPENDLY-798: null clears a link; non-cards leave the fields alone.
         ...(isCreditCard
           ? {
@@ -374,6 +417,7 @@ export function EditAccountModal({
           <View style={[{ gap: 8 }, styles.chipWrap]}>
             {accountTypes.map((t) => {
               const isSelected = typeId === t.id;
+              const Icon = getAccountTypeIcon(matchCatalogEntry(t.name).iconName);
               return (
                 <Pressable
                   key={t.id}
@@ -394,6 +438,9 @@ export function EditAccountModal({
                   style={[
                     styles.typePill,
                     {
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
                       backgroundColor: isSelected
                         ? theme.colors.primary
                         : surfaces.control,
@@ -403,6 +450,14 @@ export function EditAccountModal({
                     },
                   ]}
                 >
+                  <Icon
+                    size={14}
+                    color={
+                      isSelected
+                        ? theme.colors.primaryForeground
+                        : theme.colors.foreground
+                    }
+                  />
                   <Text
                     style={[
                       styles.typePillText,
@@ -582,6 +637,70 @@ export function EditAccountModal({
                   onChange={setAutopayLeadDays}
                 />
               </>
+            ) : null}
+          </View>
+        ) : null}
+
+        {isCash ? (
+          <View style={[styles.creditCardBox, { borderColor: theme.colors.border }]}>
+            <View style={styles.creditHeader}>
+              <Banknote size={18} color={theme.colors.primary} />
+              <Text
+                style={{
+                  fontWeight: "700",
+                  fontSize: theme.typography.sm,
+                  color: theme.colors.foreground,
+                }}
+              >
+                Cash Denominations
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+              {CASH_DENOMINATIONS.map((d) => (
+                <View key={d} style={{ width: "30%", gap: 4 }}>
+                  <Text
+                    style={[
+                      styles.label,
+                      {
+                        color: theme.colors.foreground,
+                        fontSize: theme.typography.xs,
+                      },
+                    ]}
+                  >
+                    {`₹${d}`}
+                  </Text>
+                  <Input
+                    value={denominations[String(d)] ?? ""}
+                    onChangeText={(value) =>
+                      setDenominations((prev) => ({
+                        ...prev,
+                        [String(d)]: value.replace(/\D/g, ""),
+                      }))
+                    }
+                    keyboardType="number-pad"
+                    placeholder="0"
+                    accessibilityLabel={`Number of ₹${d} notes`}
+                  />
+                </View>
+              ))}
+            </View>
+
+            {denominationHasEntries ? (
+              <Text
+                style={{
+                  color: denominationMismatch
+                    ? theme.colors.destructive
+                    : theme.colors.mutedForeground,
+                  fontSize: theme.typography.xs,
+                  fontWeight: denominationMismatch ? "700" : "400",
+                }}
+              >
+                {`Counted total: ₹${denominationTotal.toLocaleString("en-IN")}`}
+                {denominationMismatch
+                  ? ` — doesn't match the account balance (₹${denominationBalance.toLocaleString("en-IN")}). This won't block saving.`
+                  : ""}
+              </Text>
             ) : null}
           </View>
         ) : null}

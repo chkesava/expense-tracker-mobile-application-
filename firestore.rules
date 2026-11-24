@@ -1401,6 +1401,13 @@ service cloud.firestore {
       match /investments/{id} {
         allow read, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && investmentWellFormed();
+
+        // fd-interest-daily's per-day credit log: server-only writes (the
+        // Admin SDK bypasses rules), the owner may only read it.
+        match /interestCredits/{date} {
+          allow read: if isOwner(uid);
+          allow write: if false;
+        }
       }
       match /trips/{id} {
         allow read, delete: if isOwner(uid);
