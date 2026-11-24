@@ -1,0 +1,86 @@
+name: FD interest daily
+
+# SPENDLY (epic SPENDLY-735): daily compounding interest credit for Fixed
+# Deposits / interest-bearing savings (scripts/lib/fdInterestDailyCore.ts).
+# Interest is reinvested into the FD itself; no money moves to any linked
+# account, and this never computes a different number than the app's own
+# live valuation (shared/utils/investmentInterest.ts) — it calls the same
+# function.
+#
+# Dispatched on a daily tick with `trigger: cron`, gated by the repository
+# variable FD_INTEREST_DAILY_ENABLED. A manual dispatch always runs (dry run
+# by default). Stays disabled until explicitly turned on.
+#
+# Secrets: FIREBASE_SERVICE_ACCOUNT (or FD_INTEREST_FIREBASE_SERVICE_ACCOUNT),
+#          READMODEL_SUPABASE_SERVICE_ROLE_KEY (optional: read-model push)
+# Variables: FD_INTEREST_DAILY_ENABLED, READMODEL_SUPABASE_URL,
+#            FD_INTEREST_MAX_READS_PER_RUN
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Decide and log, write nothing"
+        required: true
+        default: true
+        type: boolean
+      trigger:
+        description: "Who started the run"
+        required: false
+        default: manual
+        type: choice
+        options:
+          - manual
+          - cron
+
+concurrency:
+  group: fd-interest-daily
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: FD interest credit
+    if: vars.FD_INTEREST_DAILY_ENABLED == 'true' || inputs.trigger != 'cron'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run
+        env:
+          FD_INTEREST_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FD_INTEREST_FIREBASE_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
+          READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+          FD_INTEREST_MAX_READS_PER_RUN: ${{ vars.FD_INTEREST_MAX_READS_PER_RUN || '2000' }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ -z "$FD_INTEREST_FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT (or FD_INTEREST_FIREBASE_SERVICE_ACCOUNT) is not set."
+            exit 1
+          fi
+          args=""
+          if [ "$DRY_RUN" = "true" ]; then args="--dry-run"; fi
+          npx --no-install tsx scripts/fd-interest-daily.ts $args | tee fd-interest-daily.log
+          {
+            echo "## FD interest daily"
+            echo '```json'
+            sed -n '/^{/,/^}/p' fd-interest-daily.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,5 +1,5 @@
 import { appDialog } from "@/lib/appDialog";
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
   Archive,
@@ -11,6 +11,7 @@ import {
 import { FinancialAmount } from "@/components/dashboard/FinancialAmount";
 import { MetaLabel, Pill } from "@/components/dashboard/primitives";
 import { useInvestmentKindStyle } from "@/components/investments/investmentKind";
+import { useAuth } from "@/providers/AuthProvider";
 import { useSettings } from "@/providers/SettingsProvider";
 import { formatDisplayDate } from "@/shared/utils/dateDisplay";
 import {
@@ -21,9 +22,10 @@ import {
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import type { Investment } from "@/shared/types/investment";
+import type { Investment, InterestCreditEvent } from "@/shared/types/investment";
 import { todayDateKey } from "@/shared/utils/dates";
 import { getInvestmentValuation } from "@/shared/utils/investmentInterest";
+import { listInterestCredits } from "@/services/investments/interestCreditsStore";
 import { useTheme } from "@/theme/ThemeProvider";
 import { withAlpha } from "@/theme/surfaces";
 
@@ -45,6 +47,7 @@ export function InvestmentDetailModal({
   onDeleteInvestment,
 }: InvestmentDetailModalProps) {
   const { theme } = useTheme();
+  const { user } = useAuth();
   const { settings } = useSettings();
   // Hooks run before the early return below; the kind is a placeholder
   // while no investment is selected.
@@ -56,6 +59,23 @@ export function InvestmentDetailModal({
     if (!investment) return null;
     return getInvestmentValuation(investment, today);
   }, [investment, today]);
+
+  // fd-interest-daily's credit log, loaded on demand (SPENDLY) -- a one-shot
+  // read, not a listener, same reasoning as account notes.
+  const [interestCredits, setInterestCredits] = useState<InterestCreditEvent[]>([]);
+  useEffect(() => {
+    if (!visible || !user?.uid || !investment?.id || investment.interestMethod !== "compound") {
+      setInterestCredits([]);
+      return;
+    }
+    let cancelled = false;
+    void listInterestCredits(user.uid, investment.id).then((events) => {
+      if (!cancelled) setInterestCredits(events);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, user?.uid, investment?.id, investment?.interestMethod]);
 
   if (!investment || !valuation) return null;
 
@@ -221,6 +241,27 @@ export function InvestmentDetailModal({
           </View>
         </Card>
       </View>
+
+      {/* Interest Credits history (fd-interest-daily) */}
+      {interestCredits.length > 0 ? (
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.mutedForeground }]}>
+            INTEREST CREDITS
+          </Text>
+          <Card style={{ padding: 14 }}>
+            <View style={styles.specs}>
+              {interestCredits.map((event) => (
+                <View key={event.date} style={styles.specRow}>
+                  <Text style={{ fontSize: 13, color: theme.colors.mutedForeground }}>
+                    {date(event.date)}
+                  </Text>
+                  <FinancialAmount value={event.amount} currency={currency} size="sm" weight="semibold" />
+                </View>
+              ))}
+            </View>
+          </Card>
+        </View>
+      ) : null}
 
       {/* Footer Action */}
       {!isClosed && (
