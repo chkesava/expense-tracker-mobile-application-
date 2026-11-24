@@ -338,7 +338,13 @@ export function getInvestmentValuation(
 
   const rate = investment.annualInterestRate ?? 0;
   const method = investment.interestMethod ?? "simple";
-  const frequency = investment.creditFrequency ?? "monthly";
+  // fd-interest-daily.ts credits every compound-interest investment daily,
+  // regardless of its own stored creditFrequency (by design: that field isn't
+  // even selectable in the UI). The live estimate must match what the server
+  // actually posts, or the displayed value would sit frozen at principal
+  // until a whole stored period (e.g. a quarter) elapsed, while the real
+  // credited total silently grew underneath it every day.
+  const frequency = method === "compound" ? "daily" : (investment.creditFrequency ?? "monthly");
   const effectiveAsOf = getEffectiveAsOf(investment, asOf);
 
   return computeInterestValuation(
