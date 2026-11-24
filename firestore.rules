@@ -1008,7 +1008,8 @@ service cloud.firestore {
       function investmentWellFormed() {
         let d = request.resource.data;
         return optionalBoundedNonNeg(d, 'principal')
-          && optionalYmd(d, 'startDate');
+          && optionalYmd(d, 'startDate')
+          && optionalBoundedNonNeg(d, 'annualInterestRate');
       }
 
       function tripWellFormed() {
