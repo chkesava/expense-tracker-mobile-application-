@@ -32,7 +32,7 @@ const MARKET_PROBES = {
   'stock-quotes': '?symbols=TCS.NS,INFY.NS',
 };
 const SIGNED_IN_FUNCTIONS = ['nutrition-ai', 'readmodel-claims'];
-const NETLIFY_ONLY_POST = ['ganesh-summary', 'ganesh-draw', 'epf-cron', 'delete-account', 'readmodel-push'];
+const NETLIFY_ONLY_POST = ['ganesh-summary', 'ganesh-draw', 'epf-cron', 'delete-account', 'readmodel-push', 'fd-interest-recompute'];
 const NETLIFY_ONLY_GET = ['screener-universe'];
 
 const isHtml = (res) => (res.headers.get('content-type') || '').includes('text/html');
