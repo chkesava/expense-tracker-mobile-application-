@@ -39,6 +39,7 @@ export function InvestmentsList() {
     investments,
     loading,
     addInvestment,
+    updateInvestment,
     closeInvestment,
     deleteInvestment,
   } = useInvestments();
@@ -242,6 +243,7 @@ export function InvestmentsList() {
         onClose={() => setSelectedInvestment(null)}
         onCloseInvestment={closeInvestment}
         onDeleteInvestment={deleteInvestment}
+        onUpdateInvestment={updateInvestment}
       />
     </View>
   );

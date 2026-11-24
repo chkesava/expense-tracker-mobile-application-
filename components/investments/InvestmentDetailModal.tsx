@@ -5,6 +5,7 @@ import { StyleSheet, Text, View } from "react-native";
 import {
   Archive,
   Calendar,
+  Pencil,
   Percent,
   Trash2,
 } from "lucide-react-native";
@@ -23,6 +24,7 @@ import {
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
 import type { Investment, InterestCreditEvent } from "@/shared/types/investment";
 import { todayDateKey } from "@/shared/utils/dates";
 import { getInvestmentValuation } from "@/shared/utils/investmentInterest";
@@ -37,6 +39,7 @@ export interface InvestmentDetailModalProps {
   onClose: () => void;
   onCloseInvestment: (id: string) => Promise<boolean>;
   onDeleteInvestment: (id: string) => Promise<boolean>;
+  onUpdateInvestment: (id: string, updates: Partial<Investment>) => Promise<boolean>;
 }
 
 export function InvestmentDetailModal({
@@ -46,6 +49,7 @@ export function InvestmentDetailModal({
   onClose,
   onCloseInvestment,
   onDeleteInvestment,
+  onUpdateInvestment,
 }: InvestmentDetailModalProps) {
   const { theme } = useTheme();
   const { user } = useAuth();
@@ -86,6 +90,13 @@ export function InvestmentDetailModal({
     };
   }, [visible, user?.uid, investment?.id, investment?.interestMethod]);
 
+  const [isEditingRate, setIsEditingRate] = useState(false);
+  const [rateDraft, setRateDraft] = useState("");
+  useEffect(() => {
+    setIsEditingRate(false);
+    setRateDraft(investment?.annualInterestRate !== undefined ? String(investment.annualInterestRate) : "");
+  }, [investment?.id, investment?.annualInterestRate]);
+
   if (!investment || !valuation) return null;
 
   const isClosed = investment.status === "closed";
@@ -106,6 +117,32 @@ export function InvestmentDetailModal({
           onPress: async () => {
             await onDeleteInvestment(investment.id);
             onClose();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSaveRate = () => {
+    const parsed = Number(rateDraft);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setIsEditingRate(false);
+      setRateDraft(investment.annualInterestRate !== undefined ? String(investment.annualInterestRate) : "");
+      return;
+    }
+    appDialog.alert(
+      "Change Interest Rate",
+      "Changing the rate recalculates every previously credited day using the new rate. This can take up to a few days to fully catch up for an older FD. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Continue",
+          onPress: async () => {
+            await onUpdateInvestment(investment.id, {
+              annualInterestRate: parsed,
+              lastInterestCreditedDate: null,
+            });
+            setIsEditingRate(false);
           },
         },
       ]
@@ -212,11 +249,38 @@ export function InvestmentDetailModal({
               <Text style={{ fontSize: 13, color: theme.colors.mutedForeground }}>
                 Interest Rate
               </Text>
-              <Text style={{ fontSize: 13, fontWeight: "700", color: theme.colors.foreground }}>
-                {investment.annualInterestRate !== undefined
-                  ? `${investment.annualInterestRate}% p.a.`
-                  : "Market Linked"}
-              </Text>
+              {isEditingRate ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Input
+                    value={rateDraft}
+                    onChangeText={setRateDraft}
+                    keyboardType="decimal-pad"
+                    style={{ width: 80, height: 36, paddingVertical: 4 }}
+                    autoFocus
+                  />
+                  <Button variant="ghost" size="sm" onPress={handleSaveRate} accessibilityLabel="Save interest rate">
+                    Save
+                  </Button>
+                </View>
+              ) : (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "700", color: theme.colors.foreground }}>
+                    {investment.annualInterestRate !== undefined
+                      ? `${investment.annualInterestRate}% p.a.`
+                      : "Market Linked"}
+                  </Text>
+                  {investment.kind !== "mutual_fund" ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onPress={() => setIsEditingRate(true)}
+                      accessibilityLabel="Edit interest rate"
+                    >
+                      <Pencil size={14} color={theme.colors.mutedForeground} />
+                    </Button>
+                  ) : null}
+                </View>
+              )}
             </View>
 
             {investment.interestMethod && (

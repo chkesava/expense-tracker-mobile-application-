@@ -30,8 +30,14 @@ export interface Investment {
   status: InvestmentStatus;
   closedDate?: string;
   createdAt?: unknown;
-  /** SPENDLY: last date the fd-interest-daily job credited this FD's compounding interest. */
-  lastInterestCreditedDate?: string;
+  /**
+   * SPENDLY: last date the fd-interest-daily job credited this FD's
+   * compounding interest. Explicit `null` (set by the app after an interest
+   * rate edit) means "treat as never credited" -- the next run re-walks the
+   * whole history at the current rate. The job's own check treats `null` and
+   * `undefined` identically.
+   */
+  lastInterestCreditedDate?: string | null;
 }
 
 export type InterestCreditEvent = {

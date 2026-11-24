@@ -117,6 +117,31 @@ describe("planFdInterestWrites", () => {
     expect(credited).toBe(0);
   });
 
+  it("recalibrates the whole history at the corrected rate after an interest-rate edit", () => {
+    // The app's rate-edit flow writes { annualInterestRate: newRate,
+    // lastInterestCreditedDate: null } -- this is the only trigger a rate
+    // edit needs. The job has no memory of an "old rate": every day's
+    // amount is recomputed fresh from computeInterestValuation using
+    // whatever rate is currently on the document, so clearing
+    // lastInterestCreditedDate re-walks the whole history at the (now
+    // corrected) rate, not just the days going forward.
+    const corrected = fd({ annualInterestRate: 9.5, lastInterestCreditedDate: null });
+    const { writes, credited } = planFdInterestWrites(
+      "u1",
+      [{ id: "fd1", data: corrected }],
+      "2026-01-10"
+    );
+    expect(credited).toBe(1);
+    const logWrites = writes.filter((w) => w.kind === "set");
+    expect(logWrites).toHaveLength(9); // 01-02 through 01-10
+    const expectedTotal = valuationDelta(corrected, "2026-01-01", "2026-01-10");
+    const actualTotal = logWrites.reduce((sum, w) => sum + (w.data as { amount: number }).amount, 0);
+    expect(actualTotal).toBeCloseTo(expectedTotal, 1);
+    // Every amount reflects the corrected 9.5% rate, not the original 7.25%.
+    const atOldRate = valuationDelta(fd(), "2026-01-01", "2026-01-10");
+    expect(actualTotal).toBeGreaterThan(atOldRate);
+  });
+
   it("skips non-compound, non-FD, and inactive investments", () => {
     const simple = fd({ id: "s1", interestMethod: "simple" });
     const mutualFund = fd({ id: "m1", kind: "mutual_fund" });
