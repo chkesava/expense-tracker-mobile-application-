@@ -43,6 +43,16 @@ export type FdDailyPorts = {
   stamp: () => unknown;
 };
 
+/** Same IST server clock as the EPF job's financial-year date key: one date for every caller, not per-account timezone. Shared by the daily CLI and the on-demand recompute function. */
+export function todayIst(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
 function eligible(investment: Investment): boolean {
   return (
     (investment.kind === "fixed_deposit" || investment.kind === "interest_savings") &&

@@ -1,6 +1,8 @@
 import { appDialog } from "@/lib/appDialog";
 import { logWarning } from "@/lib/errors";
-import React, { useEffect, useMemo, useState } from "react";
+import { toast } from "@/lib/toast";
+import { recomputeFdInterestRemote } from "@/services/investments/fdInterestRecomputeClient";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
   Archive,
@@ -68,27 +70,34 @@ export function InvestmentDetailModal({
   // fd-interest-daily's credit log, loaded on demand (SPENDLY) -- a one-shot
   // read, not a listener, same reasoning as account notes.
   const [interestCredits, setInterestCredits] = useState<InterestCreditEvent[]>([]);
+  const investmentId = investment?.id;
+  const investmentMethod = investment?.interestMethod;
+  const uid = user?.uid;
+  // Guards against a slow, in-flight read from a previous investment (or a
+  // previous call) landing after a newer one has already started/resolved.
+  const requestIdRef = useRef(0);
+  const refreshInterestCredits = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+    if (!uid || !investmentId || investmentMethod !== "compound") return;
+    try {
+      const events = await listInterestCredits(uid, investmentId);
+      if (requestIdRef.current === requestId) setInterestCredits(events);
+    } catch (error) {
+      if (requestIdRef.current === requestId) {
+        logWarning("investmentDetailModal.listInterestCredits", error);
+      }
+    }
+  }, [uid, investmentId, investmentMethod]);
+
   useEffect(() => {
     // Cleared synchronously on every dependency change (not just the early
     // return below) so switching from one investment to another never shows
     // the previous investment's credits under the new one's title while the
     // new request is in flight.
     setInterestCredits([]);
-    if (!visible || !user?.uid || !investment?.id || investment.interestMethod !== "compound") {
-      return;
-    }
-    let cancelled = false;
-    listInterestCredits(user.uid, investment.id)
-      .then((events) => {
-        if (!cancelled) setInterestCredits(events);
-      })
-      .catch((error) => {
-        if (!cancelled) logWarning("investmentDetailModal.listInterestCredits", error);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [visible, user?.uid, investment?.id, investment?.interestMethod]);
+    if (!visible) return;
+    void refreshInterestCredits();
+  }, [visible, refreshInterestCredits]);
 
   const [isEditingRate, setIsEditingRate] = useState(false);
   const [rateDraft, setRateDraft] = useState("");
@@ -132,7 +141,7 @@ export function InvestmentDetailModal({
     }
     appDialog.alert(
       "Change Interest Rate",
-      "Changing the rate recalculates every previously credited day using the new rate. This can take up to a few days to fully catch up for an older FD. Continue?",
+      "Changing the rate recalculates every previously credited day using the new rate. Continue?",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -143,6 +152,18 @@ export function InvestmentDetailModal({
               lastInterestCreditedDate: null,
             });
             setIsEditingRate(false);
+            try {
+              const { creditedDays } = await recomputeFdInterestRemote(investment.id);
+              await refreshInterestCredits();
+              toast.success(
+                creditedDays > 0
+                  ? `Recalculated ${creditedDays} day${creditedDays === 1 ? "" : "s"}`
+                  : "Rate updated"
+              );
+            } catch (error) {
+              logWarning("investmentDetailModal.recomputeFdInterest", error);
+              toast.error("Rate updated — the detailed history will catch up within a day");
+            }
           },
         },
       ]

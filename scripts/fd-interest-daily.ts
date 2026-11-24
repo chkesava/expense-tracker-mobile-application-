@@ -25,21 +25,11 @@ import type { Investment } from "../shared/types/investment";
 import { createServerPush } from "../netlify/functions/_readmodelServerPush";
 import { serverPushPorts } from "../netlify/functions/readmodel-push";
 import { finishJobSummary, jobReadBudget, summaryAnnotations, type JobDb } from "./lib/dailyJobCore";
-import { runFdInterestDaily, type FdDailyPorts } from "./lib/fdInterestDailyCore";
+import { runFdInterestDaily, todayIst, type FdDailyPorts } from "./lib/fdInterestDailyCore";
 
 function positive(value: string | undefined, fallback: number): number {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : fallback;
-}
-
-/** Same IST server clock as the EPF job's financial-year date key: one date for every user, not per-account timezone. */
-function todayIst(now: Date): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kolkata",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
 }
 
 async function main() {
