@@ -42,6 +42,9 @@ const FUNCTIONS = (module.exports.FUNCTIONS = [
   "readmodel-claims",
   // SPENDLY-583: copies a user's just-saved documents to the read model.
   "readmodel-push",
+  // Instant recompute after an FD interest-rate edit, instead of waiting for
+  // the next fd-interest-daily run.
+  "fd-interest-recompute",
 ]);
 // scripts/netlifyFunctionsBundled.test.ts fails if a function in
 // netlify/functions/ is missing here: an unlisted function is never deployed.

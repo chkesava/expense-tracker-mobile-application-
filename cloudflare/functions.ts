@@ -29,4 +29,5 @@ export const NETLIFY_ONLY_FUNCTIONS: Record<string, string> = {
   "delete-account": "uses Firestore Admin, which can't run on Workers",
   "readmodel-push": "uses Firestore Admin, which can't run on Workers; the nightly sync catches up",
   "screener-universe": "needs about 200 ms of CPU per call, over the Free plan's 10 ms",
+  "fd-interest-recompute": "uses Firestore Admin, which can't run on Workers; the daily job catches up",
 };

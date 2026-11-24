@@ -153,6 +153,7 @@ jobs:
           node --no-experimental-require-module -e "require('./netlify/functions-dist/stock-quotes.js'); console.log('stock-quotes loaded')"
           node --no-experimental-require-module -e "require('./netlify/functions-dist/readmodel-claims.js'); console.log('readmodel-claims loaded')"
           node --no-experimental-require-module -e "require('./netlify/functions-dist/readmodel-push.js'); console.log('readmodel-push loaded')"
+          node --no-experimental-require-module -e "require('./netlify/functions-dist/fd-interest-recompute.js'); console.log('fd-interest-recompute loaded')"
 
       - name: Deploy to Netlify
         env:
