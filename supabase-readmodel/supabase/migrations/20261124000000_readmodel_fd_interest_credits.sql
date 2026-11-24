@@ -89,7 +89,7 @@ as $$
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments', 'credit_card_bills',
     'categories', 'financial_goals', 'goal_events', 'borrowings', 'borrowing_repayments',
-    'receivables', 'receivable_repayments', 'subscriptions', 'investments', 'holdings',
+    'receivables', 'receivable_repayments', 'receivable_lends', 'subscriptions', 'investments', 'holdings',
     'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'investment_interest_credits',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events',
@@ -116,7 +116,7 @@ as $$
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments', 'credit_card_bills',
     'categories', 'financial_goals', 'goal_events', 'borrowings', 'borrowing_repayments',
-    'receivables', 'receivable_repayments', 'subscriptions', 'investments', 'holdings',
+    'receivables', 'receivable_repayments', 'receivable_lends', 'subscriptions', 'investments', 'holdings',
     'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events',
     'epf_transfers', 'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations',
@@ -155,7 +155,7 @@ begin
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments', 'credit_card_bills',
     'categories', 'financial_goals', 'goal_events', 'borrowings', 'borrowing_repayments',
-    'receivables', 'receivable_repayments', 'subscriptions', 'investments', 'holdings',
+    'receivables', 'receivable_repayments', 'receivable_lends', 'subscriptions', 'investments', 'holdings',
     'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'investment_interest_credits',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events',
@@ -210,6 +210,7 @@ as $$
   union all select uid, 'borrowingRepayments', count(*) from public.borrowing_repayments where not source_deleted group by uid
   union all select uid, 'receivables', count(*) from public.receivables where not source_deleted group by uid
   union all select uid, 'receivableRepayments', count(*) from public.receivable_repayments where not source_deleted group by uid
+  union all select uid, 'receivableLends', count(*) from public.receivable_lends where not source_deleted group by uid
   union all select uid, 'subscriptions', count(*) from public.subscriptions where not source_deleted group by uid
   union all select uid, 'investments', count(*) from public.investments where not source_deleted group by uid
   union all select uid, 'holdings', count(*) from public.holdings where not source_deleted group by uid
@@ -317,6 +318,9 @@ create or replace view public.v_data_quality with (security_invoker = true) as
   union all
   select uid, 'receivableRepayments', doc_id, case when mapping_status = 'unmapped' then 'unmapped' else 'missing amount or receivable' end
   from public.receivable_repayments where not source_deleted and (mapping_status = 'unmapped' or amount is null or receivable_id is null)
+  union all
+  select uid, 'receivableLends', doc_id, case when mapping_status = 'unmapped' then 'unmapped' else 'missing amount or receivable' end
+  from public.receivable_lends where not source_deleted and (mapping_status = 'unmapped' or amount is null or receivable_id is null)
   union all
   select uid, 'subscriptions', doc_id, 'unmapped' from public.subscriptions where not source_deleted and mapping_status = 'unmapped'
   union all
