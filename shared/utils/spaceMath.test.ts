@@ -5,9 +5,12 @@ import type { Space } from "../types/space";
 import {
   budgetProgressTier,
   buildSpaceCategoryBreakdown,
+  buildStoredSpaceTotals,
   expensesInSpace,
+  spaceSummaryFromStored,
   summarizeSpace,
   summarizeSpaces,
+  summarizeStoredSpaces,
 } from "./spaceMath";
 
 function makeSpace(overrides: Partial<Space> = {}): Space {
@@ -206,5 +209,40 @@ describe("summarizeSpaces", () => {
     expect(totals.totalSpent).toBe(0);
     expect(totals.spaceCount).toBe(0);
     expect(totals.unassignedExpenseCount).toBe(1);
+  });
+});
+
+describe("stored Space totals (SPENDLY-791)", () => {
+  const space = makeSpace({ budget: 10000 });
+  const expenses = [
+    makeExpense({ id: "a", amount: 6000, date: "2026-08-04", spaceId: "s1" }),
+    makeExpense({ id: "b", amount: 2000, date: "2026-11-02", spaceId: "s1", category: "Pharmacy" }),
+    makeExpense({ id: "c", amount: 500, date: "2026-08-05", spaceId: "s1", deletedAt: "2026-08-06T00:00:00Z" }),
+    makeExpense({ id: "d", amount: 900, date: "2026-08-05", spaceId: "other" }),
+  ];
+
+  it("totals every live expense of each Space, with its category breakdown", () => {
+    const stored = buildStoredSpaceTotals([space], expenses);
+    expect(stored.s1).toEqual({
+      totalSpent: 8000,
+      expenseCount: 2,
+      firstExpenseDate: "2026-08-04",
+      lastExpenseDate: "2026-11-02",
+      categories: buildSpaceCategoryBreakdown([expenses[0], expenses[1]]),
+    });
+  });
+
+  it("the summary uses the stored total against the Space's current budget", () => {
+    const stored = buildStoredSpaceTotals([space], expenses);
+    const summary = spaceSummaryFromStored(space, stored.s1);
+    expect(summary).toMatchObject({ totalSpent: 8000, percentUsed: 80, tier: "warning", budgetRemaining: 2000 });
+    // A budget edit shows at once, without a server run.
+    expect(spaceSummaryFromStored({ ...space, budget: 5000 }, stored.s1)?.tier).toBe("over");
+  });
+
+  it("is null, never zero, before the server has stored the Space", () => {
+    expect(spaceSummaryFromStored(space, undefined)).toBeNull();
+    const header = summarizeStoredSpaces([space, makeSpace({ id: "s2" })], buildStoredSpaceTotals([space], expenses));
+    expect(header).toMatchObject({ totalSpent: 8000, spaceCount: 2, pendingCount: 1 });
   });
 });

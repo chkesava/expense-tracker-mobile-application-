@@ -69,7 +69,7 @@ async function main() {
       return [...owners];
     },
     async load(uid) {
-      const [user, accounts, accountTypes, investments, holdings, cashEntries, portfolioSettings, borrowings, borrowingRepayments, receivables, receivableRepayments, funds, epf] =
+      const [user, accounts, accountTypes, investments, holdings, cashEntries, portfolioSettings, borrowings, borrowingRepayments, receivables, receivableRepayments, receivableLends, funds, epf] =
         await Promise.all([
           one(`users/${uid}`),
           all(uid, "accounts"),
@@ -82,6 +82,7 @@ async function main() {
           all(uid, "borrowingRepayments"),
           all(uid, "receivables"),
           all(uid, "receivableRepayments"),
+          all(uid, "receivableLends"),
           db.collection(`users/${uid}/groupFunds`).get(),
           one(`users/${uid}/financialSummaries/epf`),
         ]);
@@ -99,6 +100,7 @@ async function main() {
         borrowingRepayments: borrowingRepayments as never,
         receivables: receivables as never,
         receivableRepayments: receivableRepayments as never,
+        receivableLends: receivableLends as never,
         groupFunds: funds.docs.map((d) => groupFundFromDoc(d.id, d.data())).filter((f): f is GroupFund => !!f),
         epfBalance: typeof epf?.currentBalance === "number" ? epf.currentBalance : null,
       };

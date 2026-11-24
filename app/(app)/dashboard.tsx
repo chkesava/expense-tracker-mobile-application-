@@ -21,6 +21,7 @@ import { SpendingTrendCard } from "@/components/dashboard/SpendingTrendCard";
 import { SubscriptionsWidget } from "@/components/dashboard/SubscriptionsWidget";
 import { SpendingOverviewCard } from "@/components/dashboard/SpendingOverviewCard";
 import { SetupChecklistWidget } from "@/components/dashboard/SetupChecklistWidget";
+import { LowBalanceAlertCard } from "@/components/lowBalance/LowBalanceAlertCard";
 import { TopCategoriesWidget } from "@/components/dashboard/TopCategoriesWidget";
 import { VaultsSummaryWidget } from "@/components/dashboard/VaultsSummaryWidget";
 import {
@@ -646,6 +647,8 @@ export default function DashboardScreen() {
 
       <WelcomeScreen />
       <SetupChecklistWidget />
+      {/* SPENDLY-798: hidden unless a coming auto-debit falls short. */}
+      <LowBalanceAlertCard />
     </>
   );
 

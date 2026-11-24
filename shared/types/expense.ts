@@ -95,6 +95,8 @@ export type CanonicalAccountTypeId =
   | "wallet"
   | "other";
 
+export type AutopayAmountMode = "total" | "minimum";
+
 export interface Account {
   id: string;
   /** Legacy display label. Prefer `displayName` for new writes; keep in sync. */
@@ -142,6 +144,14 @@ export interface Account {
   summaryAsOf?: string;
   summaryVersion?: number;
   summaryReconciliationStatus?: "healthy" | "needs_reconciliation";
+
+  // -- SPENDLY-794: credit-card autopay (alerts only; nothing is auto-paid) --
+  /** Bank account the card's autopay mandate debits. Null clears the link. */
+  autopayFromAccountId?: string | null;
+  /** What the mandate pays: the remaining total due or the minimum due. */
+  autopayAmountMode?: AutopayAmountMode | null;
+  /** Low-balance alert lead days for this card; missing/null uses the default. */
+  autopayLeadDays?: number | null;
 
   /** Legacy mask / last4 storage. Prefer `last4` for matching. */
   accountNumber?: string;

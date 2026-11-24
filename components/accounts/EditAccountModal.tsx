@@ -47,7 +47,11 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { useSurfaces } from "@/theme/surfaces";
 import { haptic } from "@/lib/haptics";
 import { DateField } from "@/components/common/DateField";
-import { ACCOUNT_COLORS, ACCOUNT_COLOR_INK } from "@/shared/types/expense";
+import { ACCOUNT_COLORS, ACCOUNT_COLOR_INK, type AutopayAmountMode } from "@/shared/types/expense";
+import { LeadDaysChips } from "@/components/lowBalance/LeadDaysChips";
+import { ChipRow } from "@/components/settings/SettingsControls";
+import { useSettings } from "@/providers/SettingsProvider";
+import { isAutopayAmountMode, isValidLeadDays } from "@/shared/utils/lowBalanceAlerts";
 
 export interface EditAccountModalProps {
   isOpen: boolean;
@@ -63,7 +67,8 @@ export function EditAccountModal({
   const { theme } = useTheme();
   const surfaces = useSurfaces();
   const { user } = useAuth();
-  const { addAccount, updateAccount, deleteAccount } = useAccounts();
+  const { accounts, addAccount, updateAccount, deleteAccount } = useAccounts();
+  const { settings } = useSettings();
   const { accountTypes } = useAccountTypes();
   const { expenses } = useExpenses();
   const { incomes } = useIncomes();
@@ -84,6 +89,10 @@ export function EditAccountModal({
   const [billGenerationDay, setBillGenerationDay] = useState("");
   const [color, setColor] = useState<string>(ACCOUNT_COLORS[0]);
   const [denominations, setDenominations] = useState<Record<string, string>>({});
+  // SPENDLY-798: card autopay. Alerts only; Spendly never pays the bill.
+  const [autopayFrom, setAutopayFrom] = useState("");
+  const [autopayMode, setAutopayMode] = useState<AutopayAmountMode>("total");
+  const [autopayLeadDays, setAutopayLeadDays] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -137,6 +146,9 @@ export function EditAccountModal({
           ])
         )
       );
+      setAutopayFrom(account.autopayFromAccountId || "");
+      setAutopayMode(isAutopayAmountMode(account.autopayAmountMode) ? account.autopayAmountMode : "total");
+      setAutopayLeadDays(isValidLeadDays(account.autopayLeadDays) ? account.autopayLeadDays : null);
     } else {
       setName("");
       setDisplayNameTouched(false);
@@ -149,6 +161,9 @@ export function EditAccountModal({
       setBillGenerationDay("");
       setColor(ACCOUNT_COLORS[0]);
       setDenominations({});
+      setAutopayFrom("");
+      setAutopayMode("total");
+      setAutopayLeadDays(null);
     }
   }, [account, accountTypes, isOpen]);
 
@@ -160,6 +175,16 @@ export function EditAccountModal({
   const accountTypeId = canonicalAccountTypeId(selectedTypeName);
   const isCreditCard = getAccountKind(selectedTypeName) === "credit";
   const isCash = accountTypeId === "cash";
+  // Accounts a card's autopay can debit: anything but a card, never this one.
+  const payingAccounts = useMemo(
+    () =>
+      accounts.filter(
+        (a) =>
+          a.id !== account?.id &&
+          getAccountKind(accountTypes.find((t) => t.id === a.typeId)?.name || "") !== "credit"
+      ),
+    [accounts, accountTypes, account?.id]
+  );
   const needsInstitution = requiresCatalogInstitution(accountTypeId);
   const catalogInstitution = getInstitutionById(institutionId);
   const suggestedName = suggestedAccountDisplayName(
@@ -271,6 +296,14 @@ export function EditAccountModal({
         billGenerationDay: parsedBillDay,
         color,
         ...(parsedDenominations ? { cashDenominations: parsedDenominations } : {}),
+        // SPENDLY-798: null clears a link; non-cards leave the fields alone.
+        ...(isCreditCard
+          ? {
+              autopayFromAccountId: autopayFrom || null,
+              autopayAmountMode: autopayFrom ? autopayMode : null,
+              autopayLeadDays: autopayFrom ? autopayLeadDays : null,
+            }
+          : {}),
       };
 
       if (isEditing && account?.id) {
@@ -563,6 +596,48 @@ export function EditAccountModal({
                 helperText="Spend from the previous generation date through this date is billed. A 21st statement covers last month's 21st through this month's 21st."
               />
             </View>
+
+            {/* SPENDLY-798: which account the card's autopay debits, for low-balance alerts. */}
+            <View style={{ gap: 6 }}>
+              <Text style={[styles.label, { color: theme.colors.foreground, fontSize: theme.typography.xs }]}>
+                Autopay from
+              </Text>
+              <Text style={{ color: theme.colors.mutedForeground, fontSize: theme.typography.xs }}>
+                If your bank pays this card automatically, pick that account. Spendly warns you when it may not cover the bill. It never pays anything itself.
+              </Text>
+              <ChipRow<string>
+                options={[
+                  { value: "", label: "No autopay" },
+                  ...payingAccounts.map((a) => ({ value: a.id, label: a.displayName || a.name })),
+                ]}
+                selected={autopayFrom}
+                onSelect={setAutopayFrom}
+              />
+            </View>
+            {autopayFrom ? (
+              <>
+                <View style={{ gap: 6 }}>
+                  <Text style={[styles.label, { color: theme.colors.foreground, fontSize: theme.typography.xs }]}>
+                    Autopay pays
+                  </Text>
+                  <ChipRow<AutopayAmountMode>
+                    options={[
+                      { value: "total", label: "Total due" },
+                      { value: "minimum", label: "Minimum due" },
+                    ]}
+                    selected={autopayMode}
+                    onSelect={setAutopayMode}
+                  />
+                </View>
+                <LeadDaysChips
+                  label="Low-balance alert"
+                  helper="Days before the due date to start warning you if that account can't cover it."
+                  value={autopayLeadDays}
+                  defaultLeadDays={settings.lowBalanceAlerts.defaultLeadDays}
+                  onChange={setAutopayLeadDays}
+                />
+              </>
+            ) : null}
           </View>
         ) : null}
 

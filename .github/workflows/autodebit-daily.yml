@@ -1,0 +1,92 @@
+name: Auto-debit daily
+
+# SPENDLY-796 (epic SPENDLY-793): low-balance alerts before auto-debits.
+# For every user, checks whether each paying account covers its coming
+# recurring debits and card autopay (scripts/autodebit-daily.ts), and stores
+# the result at serverResults/autoDebitShortfall. The app and the push only
+# read it. Alerts only: nothing is paid or posted.
+#
+# The Cloudflare Worker `spendly-push-trigger` dispatches this workflow on its
+# daily 03:00 UTC tick (08:30 IST) with `trigger: cron`. The read model
+# (Supabase migration 20261121000000) dispatches it with `trigger: queue`
+# about a minute after an app save to a subscription, account, card bill or
+# group fund. Queue runs serve only the queued users, read from the server-only
+# queue table, so no uid is ever an input. Both obey AUTODEBIT_DAILY_ENABLED.
+# A manual dispatch always runs (dry run by default).
+#
+# Secrets: FIREBASE_SERVICE_ACCOUNT (or AUTODEBIT_FIREBASE_SERVICE_ACCOUNT),
+#          READMODEL_SUPABASE_SERVICE_ROLE_KEY (queue + read-model push)
+# Variables: AUTODEBIT_DAILY_ENABLED, READMODEL_SUPABASE_URL, AUTODEBIT_MAX_READS_PER_RUN
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Decide and log, write nothing"
+        required: true
+        default: true
+        type: boolean
+      trigger:
+        description: "Who started the run. The Cloudflare Worker sends cron, the read model sends queue (SPENDLY-796); both obey AUTODEBIT_DAILY_ENABLED."
+        required: false
+        default: manual
+        type: choice
+        options:
+          - manual
+          - cron
+          - queue
+
+concurrency:
+  group: autodebit-daily
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: Auto-debit shortfalls
+    if: vars.AUTODEBIT_DAILY_ENABLED == 'true' || (inputs.trigger != 'cron' && inputs.trigger != 'queue')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The job never pushes; don't leave the token in git config.
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run
+        env:
+          AUTODEBIT_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.AUTODEBIT_FIREBASE_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
+          READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+          AUTODEBIT_MAX_READS_PER_RUN: ${{ vars.AUTODEBIT_MAX_READS_PER_RUN || '5000' }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          TRIGGER: ${{ inputs.trigger }}
+        run: |
+          set -euo pipefail
+          if [ -z "$AUTODEBIT_FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT (or AUTODEBIT_FIREBASE_SERVICE_ACCOUNT) is not set."
+            exit 1
+          fi
+          args=""
+          if [ "$DRY_RUN" = "true" ]; then args="--dry-run"; fi
+          if [ "$TRIGGER" = "queue" ]; then args="$args --queue"; fi
+          npx --no-install tsx scripts/autodebit-daily.ts $args | tee autodebit-daily.log
+          {
+            echo "## Auto-debit daily"
+            echo '```json'
+            sed -n '/^{/,/^}/p' autodebit-daily.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

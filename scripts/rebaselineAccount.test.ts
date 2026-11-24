@@ -30,6 +30,7 @@ const base = () =>
     borrowingRepayments: [],
     receivables: [],
     receivableRepayments: [],
+    receivableLends: [],
     bills: [],
     epfEstablishments: [],
     epfContributions: [],

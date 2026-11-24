@@ -306,6 +306,25 @@ The daily run still recomputes every user with work, whether or not they're queu
 - `select uid is not null, requested_at from server_run_queue where job = 'epf-daily';`
 - Actions → *EPF daily* runs with `trigger: queue`.
 
+## Space-run queue (SPENDLY-791)
+The same queue and token, with job `space-daily`. An app save (`written_by = 'client'`) to `spaces`, or to an `expenses` row whose doc has a `spaceId` now or had one before the update, queues its owner. At most once a minute (per job) the dispatch asks GitHub to run `space-daily.yml` with `trigger: queue`. Migration `20261119000000`.
+
+`space-daily` reads each queued user's Spaces and every expense `where spaceId in [...]` from Firestore, and replaces `financialSummaries/spaces` whole when it differs. The Worker's 03:00 UTC tick runs it for every Space owner.
+
+**On (order matters, the app only shows what the server stored):**
+- Dry-run `space-daily.yml` by hand (manual dispatch, dry run on), then a real manual run.
+- Apply the migration (dry run, approval).
+- Set `SPACE_DAILY_ENABLED` to `true`, then redeploy the Worker (`spendly-push-trigger`).
+- Only then release the app/web build that reads the stored totals.
+
+**Off:**
+- Set `SPACE_DAILY_ENABLED` to anything but `true`. That stops the cron and queue runs alike.
+- Or drop the `spaces_space_run_*` / `expenses_space_run_*` triggers.
+
+**Check it:**
+- `select uid is not null, requested_at from server_run_queue where job = 'space-daily';`
+- Actions → *Space daily* runs with `trigger: queue`.
+
 ## The on-device copy (SPENDLY-594)
 
 **What it is:** each device keeps a copy of its user's read-model rows (`lib/readModelLocal/`): SQLite on Android and iOS (`spendly-readmodel.db`), IndexedDB on web.

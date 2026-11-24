@@ -2,6 +2,7 @@ import {
   borrowingsCreditedTo,
   computeBankBalance,
   computeOutstandingCredit,
+  receivableLendsPaidFrom,
   receivableRepaymentsInto,
   receivablesPaidFrom,
   repaymentsPaidFrom,
@@ -10,7 +11,7 @@ import { getAccountKind } from "./accountKind";
 import type { EpfSummary, DashboardPeriodSummary } from "../types/financialSummary";
 import type { Account, Expense, Income, AccountPayment, AccountTransfer, AccountEntry } from "../types/expense";
 import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
-import type { Receivable, ReceivableRepayment } from "../types/receivable";
+import type { Receivable, ReceivableLend, ReceivableRepayment } from "../types/receivable";
 import { addCategoryDeltas, summaryMonthOf } from "./dashboardSummaryKeys";
 import { epfPortfolioSummary } from "../features/epf/utils/portfolio";
 import type { EpfEstablishment, EpfContribution, EpfTransfer, EpfInterestEntry, EpfReconciliation } from "../features/epf/types";
@@ -26,6 +27,8 @@ export type AccountSources = {
   borrowingRepayments: BorrowingRepayment[];
   receivables: Receivable[];
   receivableRepayments: ReceivableRepayment[];
+  /** SPENDLY-792: later lends on existing receivables. */
+  receivableLends: ReceivableLend[];
   bills: any[];
 };
 
@@ -96,7 +99,8 @@ export function planAccountRebuild(
     sources.borrowingRepayments,
     sources.receivables,
     sources.receivableRepayments,
-    today
+    today,
+    sources.receivableLends
   );
   const was = typeof stored.currentBalance === "number" ? stored.currentBalance : undefined;
   const variances = was === balance ? [] : [`currentBalance: ${was ?? "missing"} → ${balance}`];
@@ -136,6 +140,7 @@ export function accountSourcesFor(
     borrowingRepayments: repaymentsPaidFrom(accountId, rows.borrowingRepayments),
     receivables: receivablesPaidFrom(accountId, rows.receivables),
     receivableRepayments: receivableRepaymentsInto(accountId, rows.receivableRepayments),
+    receivableLends: receivableLendsPaidFrom(accountId, rows.receivableLends),
     bills: rows.bills.filter((b: { accountId?: string }) => b.accountId === accountId),
   };
 }

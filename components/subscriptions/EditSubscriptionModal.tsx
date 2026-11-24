@@ -33,6 +33,9 @@ import { useSpendlyScopeVars } from "@/components/layout/SpendlyUIScope";
 import { haptic } from "@/lib/haptics";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
+import { LeadDaysChips } from "@/components/lowBalance/LeadDaysChips";
+import { useSettings } from "@/providers/SettingsProvider";
+import { isValidLeadDays } from "@/shared/utils/lowBalanceAlerts";
 
 export interface EditSubscriptionModalProps {
   visible: boolean;
@@ -95,6 +98,7 @@ export function EditSubscriptionModal({
   // the theme variables so its Gluestack controls keep their colours.
   const scopeVars = useSpendlyScopeVars();
   const displayCurrency = useDisplayCurrency();
+  const { settings } = useSettings();
   const { accounts } = useAccounts();
   const { categories } = useCategories();
   const { addSubscription, updateSubscription, deleteSubscription } =
@@ -119,6 +123,8 @@ export function EditSubscriptionModal({
   accountsRef.current = accounts;
   const [endMonth, setEndMonth] = useState("");
   const [endYear, setEndYear] = useState("");
+  // SPENDLY-798: low-balance alert lead days; null follows the user's default.
+  const [leadDays, setLeadDays] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [step, setStep] = useState<WizardStep>(1);
 
@@ -140,6 +146,7 @@ export function EditSubscriptionModal({
       setStartYear(subscription.startMonth ? subscription.startMonth.slice(0, 4) : "");
       setEndMonth(subscription.endMonth ? String(subscription.endMonth) : "");
       setEndYear(subscription.endYear ? String(subscription.endYear) : "");
+      setLeadDays(isValidLeadDays(subscription.lowBalanceLeadDays) ? subscription.lowBalanceLeadDays : null);
     } else {
       setName("");
       setAmount("");
@@ -156,6 +163,7 @@ export function EditSubscriptionModal({
       setStartYear("");
       setEndMonth("");
       setEndYear("");
+      setLeadDays(null);
     }
     // `accounts` is read through a ref on purpose. It only seeds defaults, but
     // as a dependency it re-ran this whole reset every time the Firestore
@@ -249,6 +257,8 @@ export function EditSubscriptionModal({
         endMonth: type === "emi" && endMonth ? numEndMonth : undefined,
         endYear: type === "emi" && endYear ? numEndYear : undefined,
         source: subscription?.source,
+        // SPENDLY-798: undefined removes the override, so the default applies.
+        lowBalanceLeadDays: leadDays ?? undefined,
       };
 
       if (subscription?.id) {
@@ -653,6 +663,21 @@ export function EditSubscriptionModal({
                 </View>
               </View>
             )}
+
+            {/* SPENDLY-798: when to start low-balance alerts for this debit. */}
+            {accountId ? (
+              <View style={{ gap: 6 }}>
+                <Text style={[styles.fieldLabel, { color: theme.colors.mutedForeground }]}>
+                  LOW-BALANCE ALERT
+                </Text>
+                <LeadDaysChips
+                  helper="Days before the debit to start warning you if this account can't cover it."
+                  value={leadDays}
+                  defaultLeadDays={settings.lowBalanceAlerts.defaultLeadDays}
+                  onChange={setLeadDays}
+                />
+              </View>
+            ) : null}
 
               </>
             ) : null}

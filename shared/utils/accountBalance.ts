@@ -9,7 +9,11 @@ import type {
 } from "../types/expense";
 import { CASHBACK_SOURCE_ID, isCashbackPayment } from "../types/expense";
 import type { Borrowing, BorrowingRepayment } from "../types/borrowing";
-import type { Receivable, ReceivableRepayment } from "../types/receivable";
+import type {
+  Receivable,
+  ReceivableLend,
+  ReceivableRepayment,
+} from "../types/receivable";
 import { postingSortMs, resolveActivityClockTime } from "./activityDisplay";
 import { effectiveBalanceAsOfDate } from "./accountBaseline";
 import { getAccountKind } from "./accountKind";
@@ -104,6 +108,11 @@ export function receivablesPaidFrom(accountId: string, receivables: Receivable[]
   return receivables.filter((r) => r.sourceAccountId === accountId);
 }
 
+/** SPENDLY-792: later lends paid out of this account. */
+export function receivableLendsPaidFrom(accountId: string, lends: ReceivableLend[]) {
+  return lends.filter((l) => l.sourceAccountId === accountId);
+}
+
 /** Collections received into this account. Never ordinary income. */
 export function receivableRepaymentsInto(
   accountId: string,
@@ -168,7 +177,8 @@ export function computeBankBalance(
   borrowingRepayments: BorrowingRepayment[] = [],
   receivables: Receivable[] = [],
   receivableRepayments: ReceivableRepayment[] = [],
-  today: string = todayDateKey()
+  today: string = todayDateKey(),
+  receivableLends: ReceivableLend[] = []
 ): number {
   const opening = account.openingBalance ?? 0;
   const baseline = effectiveBalanceAsOfDate(
@@ -217,6 +227,9 @@ export function computeBankBalance(
   const lentOut = receivablesPaidFrom(account.id, receivables)
     .filter((receivable) => isOnOrAfter(receivable.lentDate, baseline))
     .reduce((sum, receivable) => sum + receivable.originalAmount, 0);
+  const lentMoreOut = receivableLendsPaidFrom(account.id, receivableLends)
+    .filter((lend) => isOnOrAfter(lend.date, baseline))
+    .reduce((sum, lend) => sum + lend.amount, 0);
   const collectionsIn = receivableRepaymentsInto(
     account.id,
     receivableRepayments
@@ -233,7 +246,8 @@ export function computeBankBalance(
     transfersIn +
     borrowedIn -
     repaymentsOut -
-    lentOut +
+    lentOut -
+    lentMoreOut +
     collectionsIn
   );
 }
@@ -427,6 +441,8 @@ export function buildAccountActivities(
   receivableFlows?: {
     receivables?: Receivable[];
     receivableRepayments?: ReceivableRepayment[];
+    /** SPENDLY-792 */
+    receivableLends?: ReceivableLend[];
   },
   options: AccountActivityOptions = {}
 ): AccountActivity[] {
@@ -457,6 +473,13 @@ export function buildAccountActivities(
   const outgoingLends = receivablesPaidFrom(
     account.id,
     receivableFlows?.receivables ?? []
+  );
+  const outgoingLendsMore = receivableLendsPaidFrom(
+    account.id,
+    receivableFlows?.receivableLends ?? []
+  );
+  const personNameByReceivable = new Map(
+    (receivableFlows?.receivables ?? []).map((r) => [r.id, r.personName])
   );
   const incomingCollections = receivableRepaymentsInto(
     account.id,
@@ -581,6 +604,17 @@ export function buildAccountActivities(
       linkedReceivableId: receivable.id,
       isReceivable: true,
       counterpartyName: receivable.personName,
+    })),
+    ...outgoingLendsMore.map((lend, idx) => ({
+      id: `receivable-lend-out-${lend.id ?? idx}`,
+      date: lend.date,
+      time: resolveActivityClockTime(undefined, lend.createdAt),
+      amount: lend.amount,
+      type: "debit" as const,
+      note: lend.note || "Money lent",
+      linkedReceivableId: lend.receivableId,
+      isReceivable: true,
+      counterpartyName: personNameByReceivable.get(lend.receivableId),
     })),
     ...incomingCollections.map((repayment, idx) => ({
       id: `receivable-repay-in-${repayment.id ?? idx}`,
@@ -711,6 +745,8 @@ export interface BalancePreviewOptions {
   };
   /** The draft's posting date; defaults to `today`. */
   draftDate?: string;
+  /** SPENDLY-792: later lends, for the replay when no stored balance exists. */
+  receivableLends?: ReceivableLend[];
 }
 
 export function previewBalanceAfterTransaction(
@@ -783,7 +819,8 @@ export function previewBalanceAfterTransaction(
       borrowingRepayments,
       receivables,
       receivableRepayments,
-      today
+      today,
+      options.receivableLends
     );
     if (transactionType === "expense") balance -= amount;
     else balance += amount;

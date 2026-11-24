@@ -7,7 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { Ban, CheckCircle2, Pencil, Trash2 } from "lucide-react-native";
+import { Ban, CheckCircle2, HandCoins, Pencil, Trash2 } from "lucide-react-native";
 
 import { Amount } from "@/components/common/Amount";
 import { Modal } from "@/components/common/Modal";
@@ -16,10 +16,17 @@ import { Input } from "@/components/ui/Input";
 import { Chip } from "@/components/ui/Chip";
 import { useAccounts } from "@/hooks/useAccounts";
 import { useSettings } from "@/providers/SettingsProvider";
-import type { AddReceivableRepaymentInput } from "@/hooks/useReceivables";
+import type {
+  AddReceivableLendInput,
+  AddReceivableRepaymentInput,
+} from "@/hooks/useReceivables";
 import { useSpaces } from "@/hooks/useSpaces";
 import { toast } from "@/lib/toast";
-import type { Receivable, ReceivableRepayment } from "@/shared/types/receivable";
+import type {
+  Receivable,
+  ReceivableLend,
+  ReceivableRepayment,
+} from "@/shared/types/receivable";
 import {
   INTEREST_BASIS_LABELS,
   PERSON_TYPE_LABELS,
@@ -28,6 +35,7 @@ import {
 import {
   allocateReceivableRepayment,
   describeInterest,
+  validateReceivableLend,
   validateReceivableRepayment,
   type ReceivableSummary,
 } from "@/shared/utils/receivableMath";
@@ -35,13 +43,18 @@ import { isValidDateKey, todayDateKey } from "@/shared/utils/dates";
 import { useTheme } from "@/theme/ThemeProvider";
 import { withAlpha } from "@/theme/surfaces";
 import { DateField } from "@/components/common/DateField";
-import { isAlreadyDeducted } from "@/shared/utils/receivableSource";
+import {
+  isAlreadyDeducted,
+  LEND_SOURCE_ALREADY_DEDUCTED,
+} from "@/shared/utils/receivableSource";
 
 export interface ReceivableDetailModalProps {
   visible: boolean;
   receivable: Receivable | null;
   summary: ReceivableSummary | null;
   repayments: ReceivableRepayment[];
+  /** SPENDLY-792: later lends to the same person. */
+  lends: ReceivableLend[];
   currency?: string;
   /** Open straight into the repayment form, for the card's primary action. */
   startRepaying?: boolean;
@@ -51,6 +64,8 @@ export interface ReceivableDetailModalProps {
     repaymentId: string,
     receivableId: string
   ) => Promise<boolean>;
+  onAddLend: (input: AddReceivableLendInput) => Promise<string | null>;
+  onDeleteLend: (lendId: string, receivableId: string) => Promise<boolean>;
   onUpdateReceivable: (
     id: string,
     updates: Partial<Receivable>
@@ -67,11 +82,14 @@ export function ReceivableDetailModal({
   receivable,
   summary,
   repayments,
+  lends,
   currency,
   startRepaying = false,
   onClose,
   onAddRepayment,
   onDeleteRepayment,
+  onAddLend,
+  onDeleteLend,
   onUpdateReceivable,
   onMarkSettled,
   onWaiveInterest,
@@ -83,6 +101,10 @@ export function ReceivableDetailModal({
   const { spaces } = useSpaces();
 
   const [isRepaying, setIsRepaying] = useState(false);
+  const [isLending, setIsLending] = useState(false);
+  const [lendAmount, setLendAmount] = useState("");
+  const [lendSource, setLendSource] = useState("");
+  const [lendNote, setLendNote] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [amount, setAmount] = useState("");
   const [receivedAccountId, setReceivedAccountId] = useState("");
@@ -92,6 +114,7 @@ export function ReceivableDetailModal({
   const today = todayDateKey(settings.timezone);
   const [repaymentDate, setRepaymentDate] = useState(today);
   const [repaymentNote, setRepaymentNote] = useState("");
+  const [lendDate, setLendDate] = useState(today);
   const [editPersonName, setEditPersonName] = useState("");
   const [editPurpose, setEditPurpose] = useState("");
   const [editNote, setEditNote] = useState("");
@@ -106,6 +129,7 @@ export function ReceivableDetailModal({
   useEffect(() => {
     if (!visible) {
       setIsRepaying(false);
+      setIsLending(false);
       return;
     }
     if (startRepaying) setIsRepaying(true);
@@ -145,10 +169,31 @@ export function ReceivableDetailModal({
   );
 
   const hasRepayments = repayments.length > 0;
+  // SPENDLY-792: later lends also cover what has been received, so the first
+  // lend only has to cover the rest.
+  const editFloor =
+    summary == null
+      ? 0
+      : Math.max(
+          0,
+          Math.round((summary.principalReceived - summary.additionalLent) * 100) /
+            100
+        );
   const canEditAmount =
     summary != null &&
-    (editOriginalAmount === "" ||
-      Number(editOriginalAmount) >= summary.principalReceived);
+    (editOriginalAmount === "" || Number(editOriginalAmount) >= editFloor);
+
+  // Lends and repayments on one timeline, newest first.
+  const history = useMemo(
+    () =>
+      [
+        ...repayments.map((row) => ({ kind: "repayment" as const, row })),
+        ...lends.map((row) => ({ kind: "lend" as const, row })),
+      ].sort((a, b) =>
+        a.row.date < b.row.date ? 1 : a.row.date > b.row.date ? -1 : 0
+      ),
+    [repayments, lends]
+  );
 
   if (!receivable || !summary) {
     return (
@@ -160,6 +205,7 @@ export function ReceivableDetailModal({
 
   const isSettled =
     summary.status === "FULLY_SETTLED" || summary.status === "CANCELLED";
+  const canLendMore = summary.status !== "CANCELLED";
 
   const resetRepaymentForm = () => {
     setAmount("");
@@ -167,6 +213,58 @@ export function ReceivableDetailModal({
     setRepaymentDate(today);
     setRepaymentNote("");
     setIsRepaying(false);
+  };
+
+  const startLending = () => {
+    // Default to where the first lend came from; the user can change it.
+    setLendSource(
+      receivable.sourceAccountId ??
+        (isAlreadyDeducted(receivable) ? LEND_SOURCE_ALREADY_DEDUCTED : "")
+    );
+    setIsLending(true);
+    setIsRepaying(false);
+    setIsEditing(false);
+  };
+
+  const resetLendForm = () => {
+    setLendAmount("");
+    setLendSource("");
+    setLendDate(today);
+    setLendNote("");
+    setIsLending(false);
+  };
+
+  const handleLend = async () => {
+    if (!receivable.id) return;
+    const numeric = Number(lendAmount);
+    const validation = validateReceivableLend(
+      { amount: numeric, date: lendDate },
+      receivable,
+      today
+    );
+    if (!validation.ok) {
+      toast.error(validation.error ?? "Invalid amount");
+      return;
+    }
+    if (!lendSource) {
+      toast.error(
+        "Select the account the money was paid from, or None if it was already deducted"
+      );
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const created = await onAddLend({
+        receivableId: receivable.id,
+        amount: numeric,
+        date: lendDate,
+        source: lendSource,
+        note: lendNote.trim(),
+      });
+      if (created) resetLendForm();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const startEditing = () => {
@@ -178,6 +276,7 @@ export function ReceivableDetailModal({
     setEditSpaceId(receivable.spaceId ?? "");
     setIsEditing(true);
     setIsRepaying(false);
+    setIsLending(false);
   };
 
   const resetEditForm = () => {
@@ -233,9 +332,9 @@ export function ReceivableDetailModal({
 
     // Principal, not total: once interest is collected the two diverge, and
     // measuring against the total would refuse a legitimate edit (SPENDLY-160).
-    if (numAmount < summary.principalReceived) {
+    if (numAmount < editFloor) {
       toast.error(
-        `Original amount cannot be less than ${summary.principalReceived} already received`
+        `Original amount cannot be less than ${editFloor} already received`
       );
       return;
     }
@@ -282,7 +381,7 @@ export function ReceivableDetailModal({
     if (!receivable.id) return;
     appDialog.alert(
       "Delete receivable?",
-      "This removes the receivable and all of its repayment records. Expenses and accounts are not affected.",
+      "This removes the receivable with all of its repayments and later lends. Account balances move back. Expenses are not affected.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -328,9 +427,32 @@ export function ReceivableDetailModal({
     ]);
   };
 
-  const rows: { label: string; value: number }[] = [
-    { label: "Original amount", value: summary.originalAmount },
-  ];
+  const confirmDeleteLend = (lendId: string) => {
+    if (!receivable.id) return;
+    appDialog.alert(
+      "Remove this lend?",
+      "The outstanding balance will go down, and the money goes back to the account it was paid from.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => {
+            void onDeleteLend(lendId, receivable.id as string);
+          },
+        },
+      ]
+    );
+  };
+
+  const rows: { label: string; value: number }[] =
+    summary.additionalLent > 0
+      ? [
+          { label: "First lend", value: summary.originalAmount },
+          { label: "Lent later", value: summary.additionalLent },
+          { label: "Total lent", value: summary.principalLent },
+        ]
+      : [{ label: "Original amount", value: summary.originalAmount }];
 
   if (summary.interestAccrued > 0) {
     rows.push({ label: "Interest accrued", value: summary.interestAccrued });
@@ -477,7 +599,115 @@ export function ReceivableDetailModal({
           </Text>
         </View>
 
-        {isSettled ? null : isEditing ? (
+        {isLending ? (
+          <View style={styles.formSection}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>
+              Lend More
+            </Text>
+            <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
+              {receivable.personName} borrowed more. This adds to what they owe.
+            </Text>
+
+            <View style={styles.group}>
+              <Text style={[styles.label, { color: theme.colors.foreground }]}>
+                Amount Lent
+              </Text>
+              <Input
+                value={lendAmount}
+                onChangeText={setLendAmount}
+                placeholder="0"
+                keyboardType="decimal-pad"
+                autoFocus
+              />
+            </View>
+
+            <View style={styles.group}>
+              <Text style={[styles.label, { color: theme.colors.foreground }]}>
+                Paid From Account
+              </Text>
+              <View style={[styles.pillRow, styles.chipWrap]}>
+                {accounts.map((account) => (
+                  <Chip
+                    key={account.id}
+                    label={account.name}
+                    selected={lendSource === account.id}
+                    onPress={() => setLendSource(account.id)}
+                    accessibilityLabel={`Paid from ${account.name}`}
+                  />
+                ))}
+                <Chip
+                  label="None — already deducted"
+                  selected={lendSource === LEND_SOURCE_ALREADY_DEDUCTED}
+                  onPress={() => setLendSource(LEND_SOURCE_ALREADY_DEDUCTED)}
+                  accessibilityLabel="None, already deducted. No account balance change."
+                />
+              </View>
+              <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
+                {lendSource === LEND_SOURCE_ALREADY_DEDUCTED
+                  ? "No account balance change. Use when this amount was already recorded elsewhere."
+                  : "Decreases this account’s balance once. Not counted as an expense."}
+              </Text>
+            </View>
+
+            <View style={styles.group}>
+              <Text style={[styles.label, { color: theme.colors.foreground }]}>
+                Date
+              </Text>
+              <DateField
+                value={lendDate}
+                onChange={setLendDate}
+                minDate={receivable.lentDate}
+                maxDate={today}
+                accessibilityLabel="Date lent"
+              />
+              {receivable.interestType && receivable.interestType !== "NONE" ? (
+                <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
+                  Interest on this amount starts from this date.
+                </Text>
+              ) : null}
+            </View>
+
+            <View style={styles.group}>
+              <Text style={[styles.label, { color: theme.colors.foreground }]}>
+                Note (optional)
+              </Text>
+              <Input
+                value={lendNote}
+                onChangeText={setLendNote}
+                placeholder="e.g. Borrowed again for rent"
+              />
+            </View>
+
+            <View style={styles.actionRow}>
+              <Button
+                onPress={handleLend}
+                loading={isSubmitting}
+                disabled={!lendAmount || !lendSource || isSubmitting}
+                style={{ flex: 1 }}
+              >
+                <Text
+                  style={{ fontWeight: "800", color: theme.colors.primaryForeground }}
+                >
+                  Save
+                </Text>
+              </Button>
+              <Button variant="outline" onPress={resetLendForm}>
+                <Text style={{ fontWeight: "700", color: theme.colors.foreground }}>
+                  Cancel
+                </Text>
+              </Button>
+            </View>
+          </View>
+        ) : isSettled ? (
+          canLendMore ? (
+            <Button variant="outline" onPress={startLending}>
+              <HandCoins size={16} color={theme.colors.foreground} />
+              <Text style={{ fontWeight: "700", color: theme.colors.foreground }}>
+                Lend More
+              </Text>
+            </Button>
+          ) : null
+        ) : isEditing ? (
           <View style={styles.formSection}>
             <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>
               Edit Receivable
@@ -498,11 +728,17 @@ export function ReceivableDetailModal({
                 value={editOriginalAmount}
                 onChangeText={setEditOriginalAmount}
                 keyboardType="decimal-pad"
-                placeholder={`Min ${summary.principalReceived}`}
+                placeholder={`Min ${editFloor}`}
               />
               {!canEditAmount ? (
                 <Text style={[styles.meta, { color: theme.colors.destructive }]}>
-                  Cannot be less than {summary.principalReceived} already received
+                  Cannot be less than {editFloor} already received
+                </Text>
+              ) : null}
+              {summary.additionalLent > 0 ? (
+                <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
+                  This is the first lend only. Later lends are listed in the
+                  history below.
                 </Text>
               ) : null}
             </View>
@@ -685,6 +921,12 @@ export function ReceivableDetailModal({
                 Record Repayment
               </Text>
             </Button>
+            <Button variant="outline" onPress={startLending}>
+              <HandCoins size={16} color={theme.colors.foreground} />
+              <Text style={{ fontWeight: "700", color: theme.colors.foreground }}>
+                Lend More
+              </Text>
+            </Button>
             <Button variant="outline" onPress={startEditing}>
               <Pencil size={16} color={theme.colors.foreground} />
               <Text style={{ fontWeight: "700", color: theme.colors.foreground }}>
@@ -700,6 +942,7 @@ export function ReceivableDetailModal({
           the amount as forgiven, never as received.
         */}
         {!isEditing &&
+        !isLending &&
         receivable.status !== "FULLY_SETTLED" &&
         receivable.status !== "CANCELLED" &&
         summary.outstandingPrincipal <= 0 &&
@@ -713,6 +956,7 @@ export function ReceivableDetailModal({
         ) : null}
 
         {!isEditing &&
+        !isLending &&
         receivable.status !== "FULLY_SETTLED" &&
         receivable.status !== "CANCELLED" &&
         summary.outstandingAmount <= 0 ? (
@@ -731,65 +975,122 @@ export function ReceivableDetailModal({
 
         <View style={styles.group}>
           <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>
-            Repayment History
+            {lends.length > 0 ? "History" : "Repayment History"}
           </Text>
 
-          {repayments.length === 0 ? (
+          {history.length === 0 ? (
             <Text style={[styles.meta, { color: theme.colors.mutedForeground }]}>
               No repayments recorded yet.
             </Text>
           ) : (
             <View style={{ gap: 8 }}>
-              {repayments.map((repayment) => (
-                <View
-                  key={repayment.id}
-                  style={[
-                    styles.historyRow,
-                    { borderColor: theme.colors.border },
-                  ]}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Amount ghostable
-                      value={repayment.amount}
-                      currency={currency}
-                      style={{
-                        fontSize: 14,
-                        fontWeight: "800",
-                        color: theme.colors.foreground,
-                      }}
-                    />
-                    <Text
-                      style={[styles.meta, { color: theme.colors.mutedForeground }]}
+              {history.map((item) => {
+                if (item.kind === "lend") {
+                  return (
+                    <View
+                      key={`lend-${item.row.id}`}
+                      style={[
+                        styles.historyRow,
+                        { borderColor: theme.colors.border },
+                      ]}
                     >
-                      {repayment.date}
-                      {repayment.receivedAccountId
-                        ? ` · ${accountNameById.get(repayment.receivedAccountId) ?? "Account"}`
-                        : ""}
-                      {repayment.interestComponent
-                        ? ` · ${repayment.interestComponent} interest`
-                        : ""}
-                    </Text>
-                    {repayment.note ? (
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[styles.historyKind, { color: theme.colors.mutedForeground }]}
+                        >
+                          Lent more
+                        </Text>
+                        <Amount ghostable
+                          value={item.row.amount}
+                          currency={currency}
+                          style={{
+                            fontSize: 14,
+                            fontWeight: "800",
+                            color: theme.colors.foreground,
+                          }}
+                        />
+                        <Text
+                          style={[styles.meta, { color: theme.colors.mutedForeground }]}
+                        >
+                          {item.row.date}
+                          {item.row.sourceAccountId
+                            ? ` · from ${accountNameById.get(item.row.sourceAccountId) ?? "Account"}`
+                            : " · already deducted"}
+                        </Text>
+                        {item.row.note ? (
+                          <Text
+                            style={[styles.meta, { color: theme.colors.mutedForeground }]}
+                          >
+                            {item.row.note}
+                          </Text>
+                        ) : null}
+                      </View>
+
+                      {summary.status === "CANCELLED" ? null : (
+                        <Pressable
+                          onPress={() => confirmDeleteLend(item.row.id as string)}
+                          hitSlop={8}
+                          accessibilityLabel="Remove lend"
+                          accessibilityRole="button"
+                        >
+                          <Trash2 size={16} color={theme.colors.mutedForeground} />
+                        </Pressable>
+                      )}
+                    </View>
+                  );
+                }
+                const repayment = item.row;
+                return (
+                  <View
+                    key={repayment.id}
+                    style={[
+                      styles.historyRow,
+                      { borderColor: theme.colors.border },
+                    ]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Amount ghostable
+                        value={repayment.amount}
+                        currency={currency}
+                        style={{
+                          fontSize: 14,
+                          fontWeight: "800",
+                          color: theme.colors.foreground,
+                        }}
+                      />
                       <Text
                         style={[styles.meta, { color: theme.colors.mutedForeground }]}
                       >
-                        {repayment.note}
+                        {repayment.date}
+                        {repayment.receivedAccountId
+                          ? ` · ${accountNameById.get(repayment.receivedAccountId) ?? "Account"}`
+                          : ""}
+                        {repayment.interestComponent
+                          ? ` · ${repayment.interestComponent} interest`
+                          : ""}
                       </Text>
-                    ) : null}
-                  </View>
+                      {repayment.note ? (
+                        <Text
+                          style={[styles.meta, { color: theme.colors.mutedForeground }]}
+                        >
+                          {repayment.note}
+                        </Text>
+                      ) : null}
+                    </View>
 
-                  {isSettled ? null : (
-                    <Pressable
-                      onPress={() => confirmDeleteRepayment(repayment.id as string)}
-                      hitSlop={8}
-                      accessibilityLabel="Remove repayment"
-                      accessibilityRole="button"
-                    >
-                      <Trash2 size={16} color={theme.colors.mutedForeground} />
-                    </Pressable>
-                  )}
-                </View>
-              ))}
+                    {isSettled ? null : (
+                      <Pressable
+                        onPress={() => confirmDeleteRepayment(repayment.id as string)}
+                        hitSlop={8}
+                        accessibilityLabel="Remove repayment"
+                        accessibilityRole="button"
+                      >
+                        <Trash2 size={16} color={theme.colors.mutedForeground} />
+                      </Pressable>
+                    )}
+                  </View>
+                );
+              })}
             </View>
           )}
         </View>
@@ -896,6 +1197,12 @@ const styles = StyleSheet.create({
   },
   pillText: {
     fontSize: 12,
+  },
+  historyKind: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
   historyRow: {
     flexDirection: "row",

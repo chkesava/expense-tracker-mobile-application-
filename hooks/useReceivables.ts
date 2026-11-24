@@ -4,6 +4,7 @@ import { useReceivablesContext } from "@/providers/BorrowingsReceivablesProvider
 export type {
   CreateReceivableInput,
   AddReceivableRepaymentInput,
+  AddReceivableLendInput,
 } from "@/providers/BorrowingsReceivablesProvider";
 
 /** Reads the shared receivables listener — see BorrowingsReceivablesProvider. */

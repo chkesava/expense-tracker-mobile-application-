@@ -11,7 +11,7 @@ begin
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
-    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'receivable_lends', 'subscriptions',
     'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
     'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
@@ -61,7 +61,7 @@ begin
           'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
           'account_transfers', 'account_entries', 'account_payments',
           'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
-    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'receivable_lends', 'subscriptions',
     'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
     'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
@@ -115,8 +115,8 @@ begin
     raise exception 'unexpected policies: %', bad;
   end if;
   select count(*) into n from pg_policies where schemaname = 'public';
-  if n <> 68 then  -- 10 Wave 1 + sync_status + SPENDLY-609 goals (2) + SPENDLY-589 Wave 2 (5) + SPENDLY-590 Wave 3 (14) + SPENDLY-591 (21) + SPENDLY-592 (1) + SPENDLY-685 group funds (2) + SPENDLY-224 devices (1) + SPENDLY-230 notifications (1) + SPENDLY-744 recurring suggestions (1) + SPENDLY-747 server results (1) + SPENDLY-709 tax (5) + SPENDLY-325 salary (3)
-    raise exception 'expected 68 owner-read policies, found %', n;
+  if n <> 69 then  -- 10 Wave 1 + sync_status + SPENDLY-609 goals (2) + SPENDLY-589 Wave 2 (5) + SPENDLY-590 Wave 3 (14) + SPENDLY-591 (21) + SPENDLY-592 (1) + SPENDLY-685 group funds (2) + SPENDLY-224 devices (1) + SPENDLY-230 notifications (1) + SPENDLY-744 recurring suggestions (1) + SPENDLY-747 server results (1) + SPENDLY-709 tax (5) + SPENDLY-325 salary (3) + SPENDLY-792 receivable lends (1)
+    raise exception 'expected 69 owner-read policies, found %', n;
   end if;
   if exists (
     select 1 from pg_policies
@@ -164,7 +164,7 @@ begin
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
-    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'receivable_lends', 'subscriptions',
     'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
     'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
@@ -239,7 +239,7 @@ begin
     'expenses', 'incomes', 'ledger_events', 'accounts', 'account_types',
     'account_transfers', 'account_entries', 'account_payments',
     'credit_card_bills', 'categories', 'financial_goals', 'goal_events',
-    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'subscriptions',
+    'borrowings', 'borrowing_repayments', 'receivables', 'receivable_repayments', 'receivable_lends', 'subscriptions',
     'investments', 'holdings', 'portfolio_transactions', 'investment_cash_transactions', 'portfolio_settings',
     'epf_profile', 'epf_establishments', 'epf_contributions', 'epf_contribution_events', 'epf_transfers',
     'epf_transfer_events', 'epf_interest_entries', 'epf_reconciliations', 'epf_wage_history',
@@ -388,6 +388,39 @@ begin
   ) <> 2;
   if missing is not null then
     raise exception 'EPF inputs without both epf-run triggers: %', missing;
+  end if;
+end
+$$;
+
+-- 13. SPENDLY-791: the Spaces run functions are definers with an empty
+--     search_path that no client role can execute; spaces and expenses carry
+--     both space-run triggers.
+do $$
+declare
+  fn regprocedure;
+  missing text;
+begin
+  foreach fn in array array[
+    'public.server_run_queue_space_owners(text[])'::regprocedure,
+    'public.server_run_note_spaces()'::regprocedure,
+    'public.server_run_note_space_expense_ins()'::regprocedure,
+    'public.server_run_note_space_expense_upd()'::regprocedure
+  ] loop
+    if not (select p.prosecdef and p.proconfig @> array['search_path=""'] from pg_proc p where p.oid = fn) then
+      raise exception '% must be security definer with an empty search_path', fn;
+    end if;
+    if has_function_privilege('authenticated', fn, 'execute') or has_function_privilege('anon', fn, 'execute') then
+      raise exception '% must not be executable by client roles', fn;
+    end if;
+  end loop;
+  select string_agg(x, ', ') into missing
+  from unnest(array['spaces', 'expenses']) as x
+  where (
+    select count(*) from pg_trigger g join pg_class c on c.oid = g.tgrelid
+    where c.relname = x and g.tgname in (x || '_space_run_ins', x || '_space_run_upd') and not g.tgisinternal
+  ) <> 2;
+  if missing is not null then
+    raise exception 'tables without both space-run triggers: %', missing;
   end if;
 end
 $$;

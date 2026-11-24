@@ -4,6 +4,11 @@ import {
   buildAccountActivities,
   computeBankBalance,
 } from "@/shared/utils/accountBalance";
+import {
+  accountBalanceContributions,
+  balanceFromContributions,
+  type LedgerRow,
+} from "@/shared/utils/ledgerAccountDeltas";
 import { summarizeBorrowings } from "@/shared/utils/borrowingMath";
 import { summarizeReceivables } from "@/shared/utils/receivableMath";
 import { createMemoryLedger, resetMemoryLedgerIds } from "./memoryLedger";
@@ -482,5 +487,200 @@ describe("SPENDLY-668 — a lend already deducted elsewhere", () => {
     expect(ledger.listReceivables()[0].status).toBe("PARTIALLY_SETTLED");
     // Only the repayment moves money; the lend itself never did.
     expect(balanceOf(ledger, account)).toBe(55000);
+  });
+});
+
+describe("SPENDLY-792 — lend more to the same person end to end", () => {
+  beforeEach(() => {
+    resetMemoryLedgerIds();
+  });
+
+  const wallet: Account = {
+    id: "wallet",
+    name: "Wallet",
+    typeId: "cash",
+    openingBalance: 5000,
+    balanceAsOfDate: "2026-01-01",
+  };
+
+  it("lend → part repay → lend more → repay all, and balances match a rebuild", () => {
+    const today = "2026-04-01";
+    const ledger = createMemoryLedger("user-1");
+    const account = ledger.addAccount(bank);
+    const cash = ledger.addAccount(wallet);
+    const balanceOf = (a: Account) =>
+      computeBankBalance(
+        a,
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        ledger.listReceivables(),
+        ledger.listReceivableRepayments(),
+        today,
+        ledger.listReceivableLends()
+      );
+    const balances = () => ({ bank: balanceOf(account), cash: balanceOf(cash) });
+    const rows = (): LedgerRow[] => [
+      ...ledger.listReceivables().map((row) => ({ kind: "receivable", row }) as LedgerRow),
+      ...ledger.listReceivableRepayments().map((row) => ({ kind: "receivableRepayment", row }) as LedgerRow),
+      ...ledger.listReceivableLends().map((row) => ({ kind: "receivableLend", row }) as LedgerRow),
+    ];
+    // The incremental path (one leg per row) must equal the full replay.
+    const replayed = (a: Account) =>
+      balanceFromContributions(a, accountBalanceContributions(a, rows(), today));
+
+    const receivable = ledger.addReceivable({
+      personType: "FRIEND",
+      personName: "Rahul",
+      originalAmount: 20000,
+      lentDate: "2026-01-10",
+      sourceAccountId: account.id!,
+      sourceMode: "account",
+      status: "ACTIVE",
+    });
+    expect(ledger.addReceivableRepayment({
+      receivableId: receivable.id!,
+      amount: 8000,
+      receivedAccountId: account.id!,
+      date: "2026-02-01",
+    }).ok).toBe(true);
+
+    // Rahul borrows again: 5000 in cash, then 3000 already recorded elsewhere.
+    expect(ledger.addReceivableLend({
+      receivableId: receivable.id!,
+      amount: 5000,
+      date: "2026-02-15",
+      sourceMode: "account",
+      sourceAccountId: cash.id!,
+    }, today).ok).toBe(true);
+    expect(ledger.addReceivableLend({
+      receivableId: receivable.id!,
+      amount: 3000,
+      date: "2026-03-01",
+      sourceMode: "already_deducted",
+      sourceAccountId: null,
+    }, today).ok).toBe(true);
+
+    const stored = ledger.listReceivables()[0];
+    expect(stored.additionalLent).toBe(8000);
+    expect(stored.outstandingAmount).toBe(20000);
+    expect(stored.status).toBe("PARTIALLY_SETTLED");
+    expect(ledger.listExpenses()).toHaveLength(0);
+
+    // 50000 − 20000 + 8000 on the bank; 5000 − 5000 on the wallet; the
+    // already-deducted lend moves nothing.
+    expect(balances()).toEqual({ bank: 38000, cash: 0 });
+    expect(replayed(account)).toBe(38000);
+    expect(replayed(cash)).toBe(0);
+
+    // A repayment can now cover the larger amount, and settles it.
+    expect(ledger.addReceivableRepayment({
+      receivableId: receivable.id!,
+      amount: 20000,
+      receivedAccountId: account.id!,
+      date: "2026-03-20",
+    }).ok).toBe(true);
+    const settled = ledger.listReceivables()[0];
+    expect(settled.outstandingAmount).toBe(0);
+    expect(settled.status).toBe("FULLY_SETTLED");
+    expect(balances().bank).toBe(58000);
+    expect(replayed(account)).toBe(58000);
+
+    const portfolio = summarizeReceivables(
+      ledger.listReceivables(),
+      ledger.listReceivableRepayments(),
+      today,
+      ledger.listReceivableLends()
+    );
+    expect(portfolio.totalLent).toBe(28000);
+    expect(portfolio.totalReceived).toBe(28000);
+    expect(portfolio.totalOutstanding).toBe(0);
+  });
+
+  it("refuses removing a lend the repayments already used, and cascades on delete", () => {
+    const today = "2026-04-01";
+    const ledger = createMemoryLedger("user-1");
+    const account = ledger.addAccount(bank);
+    const receivable = ledger.addReceivable({
+      personType: "FRIEND",
+      personName: "Rahul",
+      originalAmount: 10000,
+      lentDate: "2026-01-10",
+      sourceAccountId: account.id!,
+      status: "ACTIVE",
+    });
+    const lend = ledger.addReceivableLend({
+      receivableId: receivable.id!,
+      amount: 5000,
+      date: "2026-02-01",
+      sourceMode: "account",
+      sourceAccountId: account.id!,
+    }, today);
+    if (!lend.ok) throw new Error(lend.error);
+    ledger.addReceivableRepayment({
+      receivableId: receivable.id!,
+      amount: 12000,
+      receivedAccountId: account.id!,
+      date: "2026-03-01",
+    });
+
+    expect(ledger.deleteReceivableLend(lend.lend.id!, today).ok).toBe(false);
+    expect(ledger.listReceivableLends()).toHaveLength(1);
+
+    expect(ledger.deleteReceivable(receivable.id!)).toBe(true);
+    expect(ledger.listReceivableLends()).toHaveLength(0);
+  });
+
+  it("shows a later lend as a debit in the account feed", () => {
+    const today = "2026-04-01";
+    const ledger = createMemoryLedger("user-1");
+    const account = ledger.addAccount(bank);
+    const receivable = ledger.addReceivable({
+      personType: "FRIEND",
+      personName: "Rahul",
+      originalAmount: 10000,
+      lentDate: "2026-01-10",
+      sourceAccountId: account.id!,
+      status: "ACTIVE",
+    });
+    ledger.addReceivableLend({
+      receivableId: receivable.id!,
+      amount: 2500,
+      date: "2026-02-01",
+      sourceMode: "account",
+      sourceAccountId: account.id!,
+      note: "Rent",
+    }, today);
+
+    const feed = buildAccountActivities(
+      account,
+      "Bank Account",
+      [],
+      [],
+      [],
+      [],
+      [],
+      undefined,
+      undefined,
+      {
+        receivables: ledger.listReceivables(),
+        receivableRepayments: [],
+        receivableLends: ledger.listReceivableLends(),
+      }
+    );
+    const lendRow = feed.find((a) => a.id.startsWith("receivable-lend-out-"));
+    expect(lendRow).toMatchObject({
+      amount: 2500,
+      type: "debit",
+      date: "2026-02-01",
+      note: "Rent",
+      isReceivable: true,
+      counterpartyName: "Rahul",
+      linkedReceivableId: receivable.id,
+    });
   });
 });

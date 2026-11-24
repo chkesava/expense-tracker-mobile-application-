@@ -5,6 +5,7 @@ import type {
 import type { Account, Expense, Income } from "@/shared/types/expense";
 import type {
   Receivable,
+  ReceivableLend,
   ReceivableRepayment,
 } from "@/shared/types/receivable";
 import type { Space } from "@/shared/types/space";
@@ -17,6 +18,8 @@ import {
 import {
   allocateReceivableRepayment,
   summarizeReceivable,
+  validateReceivableLend,
+  validateReceivableLendDelete,
   validateReceivableRepayment,
 } from "@/shared/utils/receivableMath";
 
@@ -67,9 +70,19 @@ export type MemoryLedger = {
   ) =>
     | { ok: true; repayment: ReceivableRepayment }
     | { ok: false; error: string };
+  /** SPENDLY-792: mirrors the provider's "Lend more". */
+  addReceivableLend: (
+    input: Omit<ReceivableLend, "id" | "month" | "createdAt" | "updatedAt">,
+    today: string
+  ) => { ok: true; lend: ReceivableLend } | { ok: false; error: string };
+  deleteReceivableLend: (
+    lendId: string,
+    today: string
+  ) => { ok: true } | { ok: false; error: string };
   deleteReceivable: (id: string) => boolean;
   listReceivables: () => Receivable[];
   listReceivableRepayments: () => ReceivableRepayment[];
+  listReceivableLends: () => ReceivableLend[];
 
   addSpace: (
     input: Omit<Space, "id" | "userId" | "createdAt" | "updatedAt"> &
@@ -102,6 +115,7 @@ export function createMemoryLedger(uid: string): MemoryLedger {
   const repayments = new Map<string, BorrowingRepayment>();
   const receivables = new Map<string, Receivable>();
   const receivableRepayments = new Map<string, ReceivableRepayment>();
+  const receivableLends = new Map<string, ReceivableLend>();
   const spaces = new Map<string, Space>();
   const pendingByCollection = new Map<string, number>();
 
@@ -133,12 +147,14 @@ export function createMemoryLedger(uid: string): MemoryLedger {
     const summary = summarizeReceivable(
       receivable,
       [...receivableRepayments.values()],
-      asOfDate
+      asOfDate,
+      [...receivableLends.values()]
     );
 
     receivables.set(receivableId, {
       ...receivable,
       totalReceived: summary.totalReceived,
+      additionalLent: summary.additionalLent,
       outstandingAmount: summary.outstandingAmount,
       accruedInterest: summary.interestAccrued,
       status: summary.status,
@@ -308,7 +324,8 @@ export function createMemoryLedger(uid: string): MemoryLedger {
       const summary = summarizeReceivable(
         receivable,
         [...receivableRepayments.values()],
-        input.date
+        input.date,
+        [...receivableLends.values()]
       );
 
       const validation = validateReceivableRepayment(
@@ -338,11 +355,52 @@ export function createMemoryLedger(uid: string): MemoryLedger {
       return { ok: true, repayment: row };
     },
 
+    addReceivableLend(input, today) {
+      const receivable = receivables.get(input.receivableId);
+      if (!receivable) return { ok: false, error: "Receivable not found." };
+      const validation = validateReceivableLend(input, receivable, today);
+      if (!validation.ok) {
+        return { ok: false, error: validation.error ?? "Invalid lend." };
+      }
+      const lendId = id("rln");
+      const row: ReceivableLend = {
+        ...input,
+        id: lendId,
+        month: monthFromDateKey(input.date),
+        createdAt: input.date,
+      };
+      receivableLends.set(lendId, row);
+      syncReceivableSummary(input.receivableId, today);
+      return { ok: true, lend: row };
+    },
+
+    deleteReceivableLend(lendId, today) {
+      const lend = receivableLends.get(lendId);
+      if (!lend) return { ok: false, error: "Lend not found." };
+      const receivable = receivables.get(lend.receivableId);
+      if (receivable) {
+        const check = validateReceivableLendDelete(
+          receivable,
+          lendId,
+          [...receivableRepayments.values()],
+          [...receivableLends.values()],
+          today
+        );
+        if (!check.ok) return { ok: false, error: check.error ?? "Invalid." };
+      }
+      receivableLends.delete(lendId);
+      syncReceivableSummary(lend.receivableId, today);
+      return { ok: true };
+    },
+
     deleteReceivable(receivableId) {
       if (!receivables.has(receivableId)) return false;
       [...receivableRepayments.values()]
         .filter((r) => r.receivableId === receivableId)
         .forEach((r) => receivableRepayments.delete(r.id!));
+      [...receivableLends.values()]
+        .filter((l) => l.receivableId === receivableId)
+        .forEach((l) => receivableLends.delete(l.id!));
       receivables.delete(receivableId);
       return true;
     },
@@ -353,6 +411,10 @@ export function createMemoryLedger(uid: string): MemoryLedger {
 
     listReceivableRepayments() {
       return [...receivableRepayments.values()];
+    },
+
+    listReceivableLends() {
+      return [...receivableLends.values()];
     },
 
     addSpace(input) {

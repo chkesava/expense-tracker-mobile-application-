@@ -94,6 +94,21 @@ jobs:
         # queue mode. Server writes and duress never queue; deletes queue;
         # unknown jobs refused; a purge clears every job.
         run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/epf_run_queue.sql
+
+      - name: Space-run queue (SPENDLY-791)
+        # An app save to a Space, or to an expense in a Space (now or before),
+        # queues its owner for space-daily; other expenses don't. Once a
+        # minute, one dispatch to space-daily.yml in queue mode, no uid.
+        # Server writes and duress never queue; a purge clears it.
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/space_run_queue.sql
+
+      - name: Auto-debit-run queue (SPENDLY-796)
+        # An app save to a recurring item that debits an account (now or
+        # before), or to an account, card bill or group fund of a user with
+        # auto-debits, queues its owner for autodebit-daily. Once a minute, one
+        # dispatch to autodebit-daily.yml in queue mode, no uid. Server writes,
+        # users without auto-debits and duress never queue; a purge clears it.
+        run: psql -v ON_ERROR_STOP=1 -f supabase-readmodel/tests/autodebit_run_queue.sql
       - name: Account purge (SPENDLY-508)
         # Deletes every row and all sync bookkeeping for the uid and its duress
         # twin; idempotent; a late sync cannot resurrect it; client roles can't call it.

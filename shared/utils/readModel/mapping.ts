@@ -316,6 +316,8 @@ export const READ_MODEL_TABLES: TableSpec[] = [
       f("outstanding_amount", "outstandingAmount", "money"),
       f("status", "status", "text"),
       f("settled_date", "settledDate", "date"),
+      // SPENDLY-792: the cached sum of the later lends.
+      f("additional_lent", "additionalLent", "money"),
     ],
   },
   {
@@ -328,6 +330,20 @@ export const READ_MODEL_TABLES: TableSpec[] = [
       f("principal_component", "principalComponent", "money"),
       f("interest_component", "interestComponent", "money"),
       f("received_account_id", "receivedAccountId", "text"),
+      f("date", "date", "date"),
+    ],
+  },
+  // SPENDLY-792: more money lent later on an existing receivable. Like the
+  // receivable, "already_deducted" has no `sourceAccountId`.
+  {
+    table: "receivable_lends",
+    collection: "receivableLends",
+    derivedMonth: true,
+    fields: [
+      f("receivable_id", "receivableId", "text"),
+      f("amount", "amount", "money"),
+      f("source_mode", "sourceMode", "text"),
+      f("source_account_id", "sourceAccountId", "text"),
       f("date", "date", "date"),
     ],
   },

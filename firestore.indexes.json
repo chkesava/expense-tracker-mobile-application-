@@ -1,6 +1,20 @@
 {
   "indexes": [
     {
+      "collectionGroup": "serverResults",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "hasShortfall",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "assetAudits",
       "queryScope": "COLLECTION",
       "fields": [
@@ -132,6 +146,20 @@
     },
     {
       "collectionGroup": "receivableRepayments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "receivableId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "receivableLends",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -1970,6 +1998,50 @@
     },
     {
       "collectionGroup": "receivableRepayments",
+      "fieldPath": "updatedAt",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "receivableLends",
+      "fieldPath": "createdAt",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "receivableLends",
       "fieldPath": "updatedAt",
       "indexes": [
         {

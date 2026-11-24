@@ -71,6 +71,9 @@ import { useCreditCardLedger, useCreditCardLiveUsage } from "@/hooks/useCreditCa
 import { creditCardBillView } from "@/shared/utils/creditCardBillView";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useGroupFunds } from "@/hooks/useGroupFunds";
+import { useLowBalanceAlerts } from "@/hooks/useLowBalanceAlerts";
+import { LowBalanceBanner } from "@/components/lowBalance/LowBalanceBanner";
+import { lowBalanceForCard, lowBalanceForPayingAccount } from "@/shared/utils/lowBalanceDisplay";
 import { summarizeGroupFundsHeld } from "@/shared/utils/groupFundMath";
 import { useIncomes } from "@/hooks/useIncomes";
 import { useReceivables } from "@/hooks/useReceivables";
@@ -1176,6 +1179,9 @@ export default function AccountDetailScreen() {
   // actually need `account` itself (only `isCreditCard`, `systemSettings`, and
   // `accountDocuments`, all already computed above), so hoisting them costs
   // nothing.
+  // SPENDLY-798: the server's stored low-balance result (hook kept above the early return).
+  const lowBalance = useLowBalanceAlerts();
+
   const onRunAccountAction = useCallback(
     (action: AccountActionId) => {
       switch (action) {
@@ -1288,6 +1294,20 @@ export default function AccountDetailScreen() {
 
       {section === "overview" ? (
         <>
+        {/* SPENDLY-798: a card's autopay, or the debits this account pays, may fall short. */}
+        {(() => {
+          const shortfall = isCreditCard
+            ? lowBalanceForCard(lowBalance.view, account.id)
+            : lowBalanceForPayingAccount(lowBalance.view, account.id);
+          return (
+            <LowBalanceBanner
+              short={shortfall.short}
+              unverified={shortfall.unverified}
+              today={lowBalance.today}
+              showItemName={!isCreditCard}
+            />
+          );
+        })()}
         {isCreditCard && creditUsage ? (
           <AccountCreditHero
             usedThisCycle={creditUsage.unbilledSpend}

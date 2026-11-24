@@ -78,6 +78,8 @@ type SettingsContextType = {
   setPushNotifications: (val: Partial<Omit<UserSettings["pushNotifications"], "deliveryWindow">>) => void;
   /** SPENDLY-226: the one delivery window, kept in step with the older bill and calendar quiet hours. */
   setDeliveryWindow: (window: DeliveryWindow) => void;
+  /** SPENDLY-797: low-balance alerts before auto-debits (on/off, default lead days). */
+  setLowBalanceAlerts: (val: Partial<UserSettings["lowBalanceAlerts"]>) => void;
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -252,6 +254,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       },
       setPushNotifications: (val) => {
         void updateSettings({ pushNotifications: { ...settings.pushNotifications, ...val } });
+      },
+      setLowBalanceAlerts: (val) => {
+        void updateSettings({ lowBalanceAlerts: { ...settings.lowBalanceAlerts, ...val } });
       },
       setDeliveryWindow: (window) => {
         // One save: the local bill and calendar schedulers still read their own

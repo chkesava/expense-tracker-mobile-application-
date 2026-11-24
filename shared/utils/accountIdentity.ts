@@ -23,6 +23,10 @@ const ACCOUNT_EXTRA_KEYS = [
   "accountTypeId",
   "last4",
   "cashDenominations",
+  // SPENDLY-794: card autopay link (null clears it).
+  "autopayFromAccountId",
+  "autopayAmountMode",
+  "autopayLeadDays",
 ] as const;
 
 export function normalizeLast4(raw?: string | null): string | undefined {

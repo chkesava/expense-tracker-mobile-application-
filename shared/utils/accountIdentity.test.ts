@@ -126,6 +126,27 @@ describe("buildAccountWritePayload", () => {
     });
   });
 
+  it("persists the card autopay link, and null clears it (SPENDLY-794)", () => {
+    const linked = buildAccountWritePayload({
+      name: "HDFC Card",
+      typeId: "type-cc",
+      typeName: "Credit Card",
+      extras: { autopayFromAccountId: "bank-1", autopayAmountMode: "minimum", autopayLeadDays: 5 },
+    });
+    expect(linked).toMatchObject({ autopayFromAccountId: "bank-1", autopayAmountMode: "minimum", autopayLeadDays: 5 });
+
+    const cleared = buildAccountWritePayload({
+      name: "HDFC Card",
+      typeId: "type-cc",
+      typeName: "Credit Card",
+      extras: { autopayFromAccountId: null, autopayAmountMode: null, autopayLeadDays: null },
+    });
+    expect(cleared).toMatchObject({ autopayFromAccountId: null, autopayAmountMode: null, autopayLeadDays: null });
+
+    const untouched = buildAccountWritePayload({ name: "HDFC Card", typeId: "type-cc", typeName: "Credit Card" });
+    expect(untouched).not.toHaveProperty("autopayFromAccountId");
+  });
+
   it("never persists a full card number", () => {
     const payload = buildAccountWritePayload({
       name: "Travel card",

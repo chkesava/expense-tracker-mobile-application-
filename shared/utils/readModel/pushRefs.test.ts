@@ -14,7 +14,7 @@ describe("push refs (SPENDLY-583)", () => {
       "goalFundingPlans", "groupFundEvents", "groupFunds", "holdings", "incomes", "investmentCashTransactions", "investments",
       "investments/interestCredits",
       "ledgerEvents", "merchantOverrides", "netWorthHistory", "notifications", "portfolioSettings",
-      "portfolioTransactions", "receivableRepayments", "receivables", "recurringDismissals", "recurringSuggestions",
+      "portfolioTransactions", "receivableLends", "receivableRepayments", "receivables", "recurringDismissals", "recurringSuggestions",
       "runwayOverrides", "runwaySettings", "salaryProfiles", "salaryRecords", "salaryReviews", "serverResults", "sipPlans", "sipTransactions", "spaces",
       "subscriptions", "taxDocuments", "taxEntries", "taxProfiles", "taxReviews", "taxSnapshots",
       "trips", "userSettings", "virtualPositions", "watchlists", "watchlists/items", "whatIfScenarios",

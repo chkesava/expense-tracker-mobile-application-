@@ -45,6 +45,7 @@ const WAVE_2 = [
   "borrowingRepayments",
   "receivables",
   "receivableRepayments",
+  "receivableLends",
   "subscriptions",
 ];
 const WAVE_3 = [

@@ -14,8 +14,9 @@ import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useSpaces } from "@/hooks/useSpaces";
+import { useSpacesSummary } from "@/hooks/useSpacesSummary";
 import type { Space } from "@/shared/types/space";
-import { summarizeSpace, summarizeSpaces } from "@/shared/utils/spaceMath";
+import { spaceSummaryFromStored, summarizeStoredSpaces } from "@/shared/utils/spaceMath";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useDisplayCurrency } from "@/hooks/useDisplayCurrency";
 import { HorizontalSwipeBoundary } from "@/components/navigation/HorizontalSwipeBoundary";
@@ -32,7 +33,10 @@ export function SpacesList() {
   const { theme } = useTheme();
   const displayCurrency = useDisplayCurrency();
 
-  const { expenses } = useExpenses();
+  // SPENDLY-791: totals come from the server (every expense in a Space, any
+  // month); `expenses` only feeds the open Space's list, which loads its own rows.
+  const { expenses, loadSpace } = useExpenses();
+  const { totals: storedTotals } = useSpacesSummary();
   const {
     spaces,
     loading,
@@ -51,13 +55,13 @@ export function SpacesList() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const summaries = useMemo(() => {
-    const map = new Map<string, ReturnType<typeof summarizeSpace>>();
+    const map = new Map<string, ReturnType<typeof spaceSummaryFromStored>>();
     for (const space of spaces) {
       if (!space.id) continue;
-      map.set(space.id, summarizeSpace(space, expenses));
+      map.set(space.id, spaceSummaryFromStored(space, storedTotals[space.id]));
     }
     return map;
-  }, [spaces, expenses]);
+  }, [spaces, storedTotals]);
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -72,8 +76,8 @@ export function SpacesList() {
   }, [spaces, statusFilter, searchQuery]);
 
   const totals = useMemo(
-    () => summarizeSpaces(filtered, expenses),
-    [filtered, expenses]
+    () => summarizeStoredSpaces(filtered, storedTotals),
+    [filtered, storedTotals]
   );
 
   const selectedSpace = useMemo(
@@ -111,6 +115,12 @@ export function SpacesList() {
               </Text>
             </View>
           </View>
+
+          {totals.pendingCount > 0 ? (
+            <Text style={[styles.note, { color: theme.colors.mutedForeground }]}>
+              {totals.pendingCount === 1 ? "1 space is" : `${totals.pendingCount} spaces are`} still being totalled on the server
+            </Text>
+          ) : null}
 
           {totals.overBudgetCount > 0 ? (
             <Text style={[styles.warning, { color: theme.colors.destructive }]}>
@@ -181,8 +191,8 @@ export function SpacesList() {
       ) : (
         <View style={{ gap: 12 }}>
           {filtered.map((space) => {
-            const summary = space.id ? summaries.get(space.id) : null;
-            if (!space.id || !summary) return null;
+            if (!space.id) return null;
+            const summary = summaries.get(space.id) ?? null;
             return (
               <SpaceCard
                 key={space.id}
@@ -211,6 +221,8 @@ export function SpacesList() {
         visible={!!selectedSpace}
         space={selectedSpace}
         expenses={expenses}
+        storedTotals={selectedSpace?.id ? storedTotals[selectedSpace.id] : undefined}
+        onLoadExpenses={loadSpace}
         currency={displayCurrency}
         onClose={() => setSelectedId(null)}
         onEdit={(space) => {
@@ -259,6 +271,10 @@ const styles = StyleSheet.create({
   summaryValue: {
     fontSize: 20,
     fontWeight: "900",
+  },
+  note: {
+    fontSize: 11,
+    marginTop: 12,
   },
   warning: {
     fontSize: 11,

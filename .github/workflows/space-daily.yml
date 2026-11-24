@@ -1,0 +1,90 @@
+name: Space daily
+
+# SPENDLY-791: every Space's totals, from every expense assigned to it in any
+# month (scripts/space-daily.ts), stored at financialSummaries/spaces. The app
+# only shows them, so a Space no longer depends on which months are loaded.
+#
+# The Cloudflare Worker `spendly-push-trigger` dispatches this workflow on its
+# daily 03:00 UTC tick (08:30 IST) with `trigger: cron`. The read model
+# (Supabase migration 20261119000000) dispatches it with `trigger: queue`
+# about a minute after an app save to a Space, or to an expense of a user who
+# has a Space; queue runs serve only the queued users, read from the
+# server-only queue table, so no uid is ever an input. Both obey
+# SPACE_DAILY_ENABLED. A manual dispatch always runs (dry run by default).
+#
+# Secrets: FIREBASE_SERVICE_ACCOUNT (or SPACE_FIREBASE_SERVICE_ACCOUNT),
+#          READMODEL_SUPABASE_SERVICE_ROLE_KEY (queue + read-model push)
+# Variables: SPACE_DAILY_ENABLED, READMODEL_SUPABASE_URL, SPACE_MAX_READS_PER_RUN
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Decide and log, write nothing"
+        required: true
+        default: true
+        type: boolean
+      trigger:
+        description: "Who started the run. The Cloudflare Worker sends cron, the read model sends queue (SPENDLY-791); both obey SPACE_DAILY_ENABLED."
+        required: false
+        default: manual
+        type: choice
+        options:
+          - manual
+          - cron
+          - queue
+
+concurrency:
+  group: space-daily
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: Space totals
+    if: vars.SPACE_DAILY_ENABLED == 'true' || (inputs.trigger != 'cron' && inputs.trigger != 'queue')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The job never pushes; don't leave the token in git config.
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run
+        env:
+          SPACE_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.SPACE_FIREBASE_SERVICE_ACCOUNT || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          READMODEL_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.READMODEL_SUPABASE_SERVICE_ROLE_KEY }}
+          READMODEL_SUPABASE_URL: ${{ vars.READMODEL_SUPABASE_URL }}
+          SPACE_MAX_READS_PER_RUN: ${{ vars.SPACE_MAX_READS_PER_RUN || '5000' }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          TRIGGER: ${{ inputs.trigger }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SPACE_FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT (or SPACE_FIREBASE_SERVICE_ACCOUNT) is not set."
+            exit 1
+          fi
+          args=""
+          if [ "$DRY_RUN" = "true" ]; then args="--dry-run"; fi
+          if [ "$TRIGGER" = "queue" ]; then args="$args --queue"; fi
+          npx --no-install tsx scripts/space-daily.ts $args | tee space-daily.log
+          {
+            echo "## Space daily"
+            echo '```json'
+            sed -n '/^{/,/^}/p' space-daily.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -18,7 +18,7 @@ const ROOT = join(__dirname, "..", "..");
 /** The collections read through the switch (596–599, 673, 674, 600). */
 const MIGRATED = new Set([
   "accountEntries", "accountPayments", "accountTransfers", "accountTypes", "accounts",
-  "borrowingRepayments", "borrowings", "receivableRepayments", "receivables",
+  "borrowingRepayments", "borrowings", "receivableRepayments", "receivables", "receivableLends",
   "categoryBudgets", "creditCardBills", "expenses", "incomes", "investments",
   "holdings", "investmentCashTransactions", "portfolioSettings", "portfolioTransactions",
   "sipPlans", "sipTransactions", "virtualPositions", "subscriptions", "watchlists", "watchlists/items",

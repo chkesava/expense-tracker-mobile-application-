@@ -573,8 +573,10 @@ function buildDemoData(today = new Date(), { months = 3 } = {}) {
     });
   }
 
+  const { receivables, receivableRepayments, receivableLends } = buildReceivables(start, today, accountId);
+
   const financialSummaries = buildDashboardSummaries(expenses, incomes, today);
-  applyStoredBalances(accounts, expenses, incomes);
+  applyStoredBalances(accounts, expenses, incomes, { receivables, receivableRepayments, receivableLends });
   const netWorthHistory = buildNetWorthHistory(accounts, holdings, investments, start, today, rand);
 
   return {
@@ -596,9 +598,99 @@ function buildDemoData(today = new Date(), { months = 3 } = {}) {
       salaryProfiles,
       salaryRecords,
       netWorthHistory,
+      receivables,
+      receivableRepayments,
+      receivableLends,
     },
     portfolioSettings,
   };
+}
+
+/**
+ * SPENDLY-792: money lent, with partial repayments and later lends ("Lend
+ * more"), so the Receivables screen has every state to look at:
+ * - Ravi: 20000 from the bank, 8000 back, then 5000 more in cash and 3000
+ *   more already deducted elsewhere — 20000 still owed;
+ * - Priya: 10000 at 1% a month, 4000 more from the bank later, 3000 back —
+ *   interest on the 4000 runs from its own date;
+ * - Arjun: 6000 lent and fully repaid, ready for "Lend more" to reopen it.
+ * No cached totals are written: the app derives them from the rows (and
+ * stamps them on the first write), exactly as for a pre-SPENDLY-434 record.
+ */
+function buildReceivables(start, today, accountId) {
+  const on = (days) => {
+    const d = new Date(start.getTime() + days * 24 * 3600 * 1000);
+    return ymd(d.getTime() > today.getTime() ? today : d);
+  };
+  const monthOf = (date) => date.slice(0, 7);
+  const base = (personName, personType, extra) => ({
+    userId: DEMO_UID,
+    personType,
+    personName,
+    personId: null,
+    dueDate: null,
+    purpose: '',
+    note: '',
+    interestRate: 0,
+    interestType: 'NONE',
+    interestFrequency: 'NONE',
+    interestBasis: 'OUTSTANDING_PRINCIPAL',
+    interestStoppedDate: null,
+    waivedInterest: 0,
+    status: 'ACTIVE',
+    settledDate: null,
+    sourceMode: 'account',
+    createdAt: start,
+    updatedAt: start,
+    ...extra,
+  });
+  const receivables = [
+    { id: 'rcv-ravi', data: base('Ravi', 'FRIEND', { originalAmount: 20000, lentDate: on(3), sourceAccountId: accountId('bank'), purpose: 'Bike repair', dueDate: on(120) }) },
+    {
+      id: 'rcv-priya',
+      data: base('Priya', 'FAMILY', {
+        originalAmount: 10000,
+        lentDate: on(1),
+        sourceAccountId: accountId('bank'),
+        purpose: 'Course fees',
+        interestRate: 1,
+        interestType: 'SIMPLE',
+        interestFrequency: 'MONTHLY',
+      }),
+    },
+    { id: 'rcv-arjun', data: base('Arjun', 'COLLEAGUE', { originalAmount: 6000, lentDate: on(5), sourceAccountId: accountId('cash'), purpose: 'Trip share', status: 'FULLY_SETTLED', settledDate: on(25) }) },
+  ];
+  const repayment = (id, receivableId, amount, date, receivedAccountId, note) => ({
+    id,
+    data: { receivableId, amount, principalComponent: amount, interestComponent: 0, receivedAccountId, date, month: monthOf(date), note, createdAt: start },
+  });
+  const receivableRepayments = [
+    repayment('rrp-ravi-1', 'rcv-ravi', 8000, on(20), accountId('bank'), 'Part payment'),
+    repayment('rrp-arjun-1', 'rcv-arjun', 6000, on(25), accountId('cash'), 'Paid back in full'),
+  ];
+  // Priya repaid before any interest-first split mattered: on her lend date
+  // nothing had accrued, so the whole amount is principal.
+  receivableRepayments.push(repayment('rrp-priya-1', 'rcv-priya', 3000, on(1), accountId('bank'), 'Same-day part payment'));
+  const lend = (id, receivableId, amount, date, sourceAccountId, note) => ({
+    id,
+    data: {
+      receivableId,
+      amount,
+      date,
+      month: monthOf(date),
+      sourceMode: sourceAccountId ? 'account' : 'already_deducted',
+      sourceAccountId,
+      note,
+      createdAt: start,
+      updatedAt: start,
+    },
+  });
+  const receivableLends = [
+    lend('rln-ravi-1', 'rcv-ravi', 5000, on(35), accountId('cash'), 'Borrowed again for rent'),
+    lend('rln-ravi-2', 'rcv-ravi', 3000, on(50), null, 'Paid his card bill (already recorded)'),
+    lend('rln-priya-1', 'rcv-priya', 4000, on(30), accountId('bank'), 'Exam fee'),
+  ];
+  return { receivables, receivableRepayments, receivableLends };
 }
 
 /**
@@ -740,8 +832,9 @@ async function seed() {
  * after `balanceAsOfDate`, so this is the same figure an in-app Rebuild gives
  * (pinned by lib/localTestMode.test.ts).
  */
-function applyStoredBalances(accounts, expenses, incomes) {
-  const sumFor = (rows, id) => rows.reduce((total, row) => total + (row.data.accountId === id ? row.data.amount : 0), 0);
+function applyStoredBalances(accounts, expenses, incomes, lent = {}) {
+  const sumFor = (rows, id, field = 'accountId', amount = 'amount') =>
+    (rows || []).reduce((total, row) => total + (row.data[field] === id ? row.data[amount] : 0), 0);
   const round = (n) => Math.round(n * 100) / 100;
   for (const account of accounts) {
     const spent = sumFor(expenses, account.id);
@@ -749,7 +842,14 @@ function applyStoredBalances(accounts, expenses, incomes) {
       account.data.currentOutstanding = round(spent);
       account.data.summaryReconciliationStatus = 'healthy';
     } else {
-      account.data.currentBalance = round(account.data.openingBalance + sumFor(incomes, account.id) - spent);
+      // SPENDLY-792: money lent leaves the account, collections come back in.
+      const lentOut =
+        sumFor(lent.receivables, account.id, 'sourceAccountId', 'originalAmount') +
+        sumFor(lent.receivableLends, account.id, 'sourceAccountId');
+      const collected = sumFor(lent.receivableRepayments, account.id, 'receivedAccountId');
+      account.data.currentBalance = round(
+        account.data.openingBalance + sumFor(incomes, account.id) - spent - lentOut + collected
+      );
       account.data.balanceReconciliationStatus = 'healthy';
     }
   }
