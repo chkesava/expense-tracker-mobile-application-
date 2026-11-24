@@ -21,7 +21,7 @@ import {
   getEffectiveAsOf,
 } from "../../shared/utils/investmentInterest";
 import { roundMoney } from "../../shared/utils/money";
-import { shiftDateKey } from "../../shared/utils/dates";
+import { daysBetweenDateKeys, shiftDateKey } from "../../shared/utils/dates";
 import {
   applyJobWrites,
   bump,
@@ -53,9 +53,31 @@ function eligible(investment: Investment): boolean {
   );
 }
 
+function valuationAsOf(investment: Investment, asOf: string) {
+  return computeInterestValuation(
+    investment.principal,
+    investment.annualInterestRate as number,
+    "compound",
+    "daily",
+    investment.startDate,
+    getEffectiveAsOf(investment, asOf),
+    investment.maturityDate
+  );
+}
+
 /**
- * What today's run would write for one user: one `interestCredits/{today}`
- * log entry and one `lastInterestCreditedDate` update per FD that grew today.
+ * A run normally finds yesterday already credited and posts just today. If
+ * the job was paused or missed days, this recovers each missed date instead
+ * of silently folding the gap into one lump "today" entry, so the per-day
+ * log has no holes. Capped per investment (JOB_BATCH_LIMIT is a shared,
+ * per-user ceiling across every investment's writes in the same call).
+ */
+const MAX_BACKFILL_DAYS = 60;
+
+/**
+ * What today's run would write for one user: one `interestCredits/{date}`
+ * log entry per day the FD grew since it was last credited (capped — see
+ * `MAX_BACKFILL_DAYS`), and one `lastInterestCreditedDate` update per FD.
  * Pure — no Firestore/env imports — so every rule here is provable in Vitest.
  */
 export function planFdInterestWrites(
@@ -70,50 +92,50 @@ export function planFdInterestWrites(
     if (!eligible(investment)) continue;
     if (today < investment.startDate) continue;
 
-    const yesterday = shiftDateKey(today, -1);
-    const effectiveToday = getEffectiveAsOf(investment, today);
-    const effectiveYesterday = getEffectiveAsOf(investment, yesterday);
+    const lastCredited =
+      investment.lastInterestCreditedDate && investment.lastInterestCreditedDate >= investment.startDate
+        ? investment.lastInterestCreditedDate
+        : investment.startDate;
+    const daysBehind = daysBetweenDateKeys(lastCredited, today);
+    if (daysBehind <= 0) continue;
 
-    const rate = investment.annualInterestRate as number;
-    const valuationToday = computeInterestValuation(
-      investment.principal,
-      rate,
-      "compound",
-      "daily",
-      investment.startDate,
-      effectiveToday,
-      investment.maturityDate
-    );
-    const valuationYesterday = computeInterestValuation(
-      investment.principal,
-      rate,
-      "compound",
-      "daily",
-      investment.startDate,
-      effectiveYesterday,
-      investment.maturityDate
+    const firstMissedDate = shiftDateKey(
+      lastCredited,
+      Math.max(1, daysBehind - MAX_BACKFILL_DAYS + 1)
     );
 
-    const amount = roundMoney(valuationToday.totalValue - valuationYesterday.totalValue);
-    if (amount <= 0) continue;
+    let date = firstMissedDate;
+    let previousValuation = valuationAsOf(investment, shiftDateKey(date, -1));
+    let lastWrittenDate: string | null = null;
+    while (date <= today) {
+      const valuation = valuationAsOf(investment, date);
+      const amount = roundMoney(valuation.totalValue - previousValuation.totalValue);
+      if (amount > 0) {
+        writes.push({
+          kind: "set",
+          path: `users/${uid}/investments/${id}/interestCredits/${date}`,
+          data: {
+            date,
+            amount,
+            balanceAfter: roundMoney(valuation.totalValue),
+          },
+          merge: true,
+          stampCreatedAt: true,
+        });
+        lastWrittenDate = date;
+      }
+      previousValuation = valuation;
+      date = shiftDateKey(date, 1);
+    }
 
-    writes.push({
-      kind: "set",
-      path: `users/${uid}/investments/${id}/interestCredits/${today}`,
-      data: {
-        date: today,
-        amount,
-        balanceAfter: roundMoney(valuationToday.totalValue),
-      },
-      merge: true,
-      stampCreatedAt: true,
-    });
-    writes.push({
-      kind: "update",
-      path: `users/${uid}/investments/${id}`,
-      data: { lastInterestCreditedDate: today },
-    });
-    credited += 1;
+    if (lastWrittenDate) {
+      writes.push({
+        kind: "update",
+        path: `users/${uid}/investments/${id}`,
+        data: { lastInterestCreditedDate: lastWrittenDate },
+      });
+      credited += 1;
+    }
   }
 
   return { writes, credited };

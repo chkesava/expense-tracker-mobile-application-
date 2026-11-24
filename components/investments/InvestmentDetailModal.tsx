@@ -1,4 +1,5 @@
 import { appDialog } from "@/lib/appDialog";
+import { logWarning } from "@/lib/errors";
 import React, { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
@@ -64,14 +65,22 @@ export function InvestmentDetailModal({
   // read, not a listener, same reasoning as account notes.
   const [interestCredits, setInterestCredits] = useState<InterestCreditEvent[]>([]);
   useEffect(() => {
+    // Cleared synchronously on every dependency change (not just the early
+    // return below) so switching from one investment to another never shows
+    // the previous investment's credits under the new one's title while the
+    // new request is in flight.
+    setInterestCredits([]);
     if (!visible || !user?.uid || !investment?.id || investment.interestMethod !== "compound") {
-      setInterestCredits([]);
       return;
     }
     let cancelled = false;
-    void listInterestCredits(user.uid, investment.id).then((events) => {
-      if (!cancelled) setInterestCredits(events);
-    });
+    listInterestCredits(user.uid, investment.id)
+      .then((events) => {
+        if (!cancelled) setInterestCredits(events);
+      })
+      .catch((error) => {
+        if (!cancelled) logWarning("investmentDetailModal.listInterestCredits", error);
+      });
     return () => {
       cancelled = true;
     };

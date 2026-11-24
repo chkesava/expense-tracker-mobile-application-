@@ -680,6 +680,7 @@ export function EditAccountModal({
                     }
                     keyboardType="number-pad"
                     placeholder="0"
+                    accessibilityLabel={`Number of ₹${d} notes`}
                   />
                 </View>
               ))}

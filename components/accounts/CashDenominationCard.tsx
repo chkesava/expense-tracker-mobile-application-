@@ -16,14 +16,15 @@ import type { Account } from "@/shared/types/expense";
  * `EditAccountModal`'s "Cash Denominations" section, which is where it's
  * edited.
  */
+/** Denomination notes are always INR — never the account's display currency. */
+const DENOMINATION_CURRENCY = "INR";
+
 export function CashDenominationCard({
   denominations,
-  currency,
   balance,
   onEdit,
 }: {
   denominations: Account["cashDenominations"];
-  currency: string;
   balance: number;
   onEdit: () => void;
 }) {
@@ -89,7 +90,7 @@ export function CashDenominationCard({
               </Text>
               <Amount
                 value={d * count}
-                currency={currency}
+                currency={DENOMINATION_CURRENCY}
                 style={styles.tileValue}
               />
             </View>
@@ -101,7 +102,7 @@ export function CashDenominationCard({
         <Text style={{ color: theme.colors.mutedForeground, fontSize: 13 }}>
           Counted total
         </Text>
-        <Amount value={total} currency={currency} style={styles.totalValue} />
+        <Amount value={total} currency={DENOMINATION_CURRENCY} style={styles.totalValue} />
       </View>
 
       {mismatch ? (

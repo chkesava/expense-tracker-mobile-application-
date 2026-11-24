@@ -18,6 +18,19 @@ function fd(overrides: Partial<Investment> = {}): Investment {
   };
 }
 
+function valuationDelta(investment: Investment, from: string, to: string): number {
+  const base = (asOf: string) =>
+    computeInterestValuation(
+      investment.principal,
+      investment.annualInterestRate!,
+      "compound",
+      "daily",
+      investment.startDate,
+      asOf
+    ).totalValue;
+  return Math.round((base(to) - base(from)) * 100) / 100;
+}
+
 describe("planFdInterestWrites", () => {
   it("credits nothing on the FD's own start day", () => {
     const { writes, credited } = planFdInterestWrites(
@@ -29,58 +42,76 @@ describe("planFdInterestWrites", () => {
     expect(credited).toBe(0);
   });
 
-  it("credits a day's growth, matching computeInterestValuation's own delta", () => {
-    const investment = fd();
+  it("credits just one day's growth when already up to date through yesterday", () => {
+    const investment = fd({ lastInterestCreditedDate: "2026-01-09" });
     const { writes, credited } = planFdInterestWrites(
       "u1",
       [{ id: "fd1", data: investment }],
       "2026-01-10"
     );
     expect(credited).toBe(1);
-    const today = computeInterestValuation(
-      investment.principal,
-      investment.annualInterestRate!,
-      "compound",
-      "daily",
-      investment.startDate,
-      "2026-01-10"
-    );
-    const yesterday = computeInterestValuation(
-      investment.principal,
-      investment.annualInterestRate!,
-      "compound",
-      "daily",
-      investment.startDate,
-      "2026-01-09"
-    );
-    const expectedAmount = Math.round((today.totalValue - yesterday.totalValue) * 100) / 100;
+    const expectedAmount = valuationDelta(investment, "2026-01-09", "2026-01-10");
 
     const logWrite = writes.find((w) => w.path === "users/u1/investments/fd1/interestCredits/2026-01-10");
-    expect(logWrite).toBeDefined();
-    expect(logWrite).toMatchObject({
-      kind: "set",
-      data: { date: "2026-01-10", amount: expectedAmount },
-    });
+    expect(logWrite).toMatchObject({ kind: "set", data: { date: "2026-01-10", amount: expectedAmount } });
+    expect(writes.filter((w) => w.kind === "set")).toHaveLength(1);
+
     const accountWrite = writes.find((w) => w.path === "users/u1/investments/fd1");
     expect(accountWrite).toMatchObject({ kind: "update", data: { lastInterestCreditedDate: "2026-01-10" } });
   });
 
-  it("still credits correctly after a multi-day gap since the last run", () => {
-    // Job didn't run for 3 days; today vs yesterday is still a correct, pure
-    // function of elapsed days from startDate, so a stale rerun self-heals.
+  it("backfills every missed day instead of folding the gap into one lump entry", () => {
+    // No lastInterestCreditedDate at all: first-ever run, 9 days after start.
     const investment = fd();
-    const { writes } = planFdInterestWrites("u1", [{ id: "fd1", data: investment }], "2026-01-20");
-    const logWrite = writes.find((w) => w.path === "users/u1/investments/fd1/interestCredits/2026-01-20");
-    expect(logWrite).toBeDefined();
-    expect((logWrite as { data: { amount: number } }).data.amount).toBeGreaterThan(0);
+    const { writes } = planFdInterestWrites("u1", [{ id: "fd1", data: investment }], "2026-01-10");
+    const logWrites = writes.filter((w) => w.kind === "set");
+    // One entry per day from 01-02 through 01-10.
+    expect(logWrites.map((w) => w.path).sort()).toEqual(
+      [
+        "2026-01-02", "2026-01-03", "2026-01-04", "2026-01-05", "2026-01-06",
+        "2026-01-07", "2026-01-08", "2026-01-09", "2026-01-10",
+      ].map((d) => `users/u1/investments/fd1/interestCredits/${d}`)
+    );
+    for (const w of logWrites) {
+      expect((w.data as { amount: number }).amount).toBeGreaterThan(0);
+    }
+    // The total credited across every entry is within a rounding cent of the
+    // single-shot delta from start to today — backfilling never meaningfully
+    // changes the total, only the day-by-day breakdown of it (each day's
+    // amount rounds independently, so a few cents of drift is expected).
+    const total = logWrites.reduce((sum, w) => sum + (w.data as { amount: number }).amount, 0);
+    expect(total).toBeCloseTo(valuationDelta(investment, "2026-01-01", "2026-01-10"), 1);
   });
 
-  it("stops crediting a matured FD past its maturity date", () => {
+  it("caps backfill at 60 days so a very old first run doesn't blow the batch limit", () => {
+    const investment = fd({ startDate: "2025-01-01" });
+    const { writes } = planFdInterestWrites("u1", [{ id: "fd1", data: investment }], "2026-06-01");
+    const logWrites = writes.filter((w) => w.kind === "set");
+    expect(logWrites.length).toBeLessThanOrEqual(60);
+    // The most recent day is still covered.
+    expect(writes.some((w) => w.path === "users/u1/investments/fd1/interestCredits/2026-06-01")).toBe(true);
+  });
+
+  it("backfills up to maturity, then stops crediting growth past it", () => {
     const investment = fd({ maturityDate: "2026-01-15" });
     const { writes, credited } = planFdInterestWrites(
       "u1",
       [{ id: "fd1", data: investment }],
       "2026-02-01"
+    );
+    expect(credited).toBe(1);
+    const dates = writes.filter((w) => w.kind === "set").map((w) => w.path.split("/").pop());
+    expect(Math.max(...dates!.map((d) => new Date(d!).getTime()))).toBe(new Date("2026-01-15").getTime());
+    const accountWrite = writes.find((w) => w.path === "users/u1/investments/fd1");
+    expect(accountWrite).toMatchObject({ data: { lastInterestCreditedDate: "2026-01-15" } });
+  });
+
+  it("does nothing once already credited through today", () => {
+    const investment = fd({ lastInterestCreditedDate: "2026-01-10" });
+    const { writes, credited } = planFdInterestWrites(
+      "u1",
+      [{ id: "fd1", data: investment }],
+      "2026-01-10"
     );
     expect(writes).toEqual([]);
     expect(credited).toBe(0);

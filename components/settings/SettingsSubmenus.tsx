@@ -838,6 +838,8 @@ export function AccountTypesManager() {
                   <Pressable
                     key={entry.id}
                     onPress={() => handleAddCatalogEntry(entry.label)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Add ${entry.label}`}
                     style={[
                       styles.catalogChip,
                       {

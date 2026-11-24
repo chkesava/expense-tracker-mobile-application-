@@ -1360,7 +1360,6 @@ export default function AccountDetailScreen() {
         {isCash ? (
           <CashDenominationCard
             denominations={account.cashDenominations}
-            currency={currency}
             balance={bankBalance}
             onEdit={() => setIsEditModalOpen(true)}
           />

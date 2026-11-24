@@ -104,5 +104,17 @@ export function matchCatalogEntry(typeName: string): AccountTypeCatalogEntry {
     (candidate) =>
       candidate.canonicalAccountTypeId === bucket && candidate.id !== "other"
   );
-  return entry ?? OTHER_ENTRY;
+  if (entry) return entry;
+
+  // accountKind.ts's bucket came back "other" (e.g. a name like "UPI" alone,
+  // with none of its keywords), but one of the catalog's own declared hints
+  // still recognizes it -- check those before giving up to the Other entry,
+  // so an existing custom type isn't both shown with the wrong icon AND left
+  // addable a second time under its real catalog entry.
+  const n = typeName.toLowerCase();
+  const hinted = ACCOUNT_TYPE_CATALOG.find(
+    (candidate) =>
+      candidate.id !== "other" && candidate.matchHints.some((hint) => n.includes(hint))
+  );
+  return hinted ?? OTHER_ENTRY;
 }

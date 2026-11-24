@@ -13,6 +13,13 @@ describe("matchCatalogEntry", () => {
     expect(matchCatalogEntry("upi wallet").id).toBe("upi_wallet");
   });
 
+  it("checks a catalog entry's own hints before falling back to Other, even when accountKind.ts's bucket alone would say other", () => {
+    // "UPI" alone has none of accountKind.ts's own keywords ("wallet", "cash",
+    // etc.) so canonicalAccountTypeId returns "other" for it -- the catalog's
+    // own "upi" hint on the UPI/Wallet entry must still catch it.
+    expect(matchCatalogEntry("UPI").id).toBe("upi_wallet");
+  });
+
   it("falls back to Other for unrecognized text", () => {
     expect(matchCatalogEntry("Crypto").id).toBe("other");
     expect(matchCatalogEntry("").id).toBe("other");
